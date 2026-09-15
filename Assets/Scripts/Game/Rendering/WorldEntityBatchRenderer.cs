@@ -7,6 +7,8 @@ using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
 using Fodinae.World;
+using Fodinae.World.Lighting;
+using Fodinae.World.Streaming;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -14,7 +16,7 @@ using VContainer;
 
 namespace Fodinae.Game
 {
-    public class WorldEntityBatchRenderer : MonoBehaviour
+    public class WorldEntityBatchRenderer : MonoBehaviour, ILightingGeometryContributor
     {
         // Matches the five-point tail used by the stable June implementation.
         public const int POINT_COUNT = 5;
@@ -24,7 +26,8 @@ namespace Fodinae.Game
         private const int BATCH_SORTING_ORDER = -1;
         private const int OVERLAY_BATCH_SORTING_ORDER = 600;
         private const int TENTACLE_SORTING_ORDER = -1;
-        private const float VisibleMargin = 36.0f;
+        private static readonly float VisibilityPrefetchMargin =
+            StreamingPolicy.Default.AllocationQuantumCells;
 
         private static readonly ProfilerMarker _LateUpdateMarker =
             new("Fodinae.WorldEntities.LateUpdate");
@@ -54,6 +57,8 @@ namespace Fodinae.Game
         private float _lastCameraOrthographicSize;
         private float _lastCameraAspect;
         private bool _hasCameraState;
+        private Rect _cachedVisibleRect;
+        private bool _hasCachedVisibleRect;
 
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
@@ -61,18 +66,40 @@ namespace Fodinae.Game
         private ISharedMaterialCache _sharedMaterials = null!;
         [Inject]
         private IGameplayCamera? _gameplayCamera;
+        [Inject]
+        private LightingGeometryRegistry? _lightingGeometryRegistry;
+
+        // Light-emitting sprites are drawn into the lighting fields from their
+        // own mesh. The revision follows only their state — camera motion
+        // rebuilds the visible batch every frame and must not re-solve light.
+        private Material? _batchMaterial;
+        private Mesh? _lightingMesh;
+        private Vector3[] _lightingVerts = new Vector3[4];
+        private Vector2[] _lightingUvs = new Vector2[4];
+        private Color32[] _lightingColors = new Color32[4];
+        private int[] _lightingTris = new int[6];
+        private ulong _lightingGeometryRevision = 1;
+        private int _emissiveStateHash = EmptyEmissiveStateHash;
+        private bool _lightingContributorRegistered;
+        private const int EmptyEmissiveStateHash = 17;
+
+        public ulong LightingGeometryRevision => _lightingGeometryRevision;
 
         public sealed class SpriteHandle : WorldEntitySpriteHandle
         {
-            internal SpriteHandle(Transform transform, int sortingOrder, bool isStatic = false)
-                : base(transform, sortingOrder, isStatic)
+            internal SpriteHandle(Transform transform, int sortingOrder, bool isStatic, bool emitsLight)
+                : base(transform, sortingOrder, isStatic, emitsLight)
             {
             }
         }
 
-        public SpriteHandle RegisterSprite(Transform spriteTransform, int sortingOrder, bool isStatic = false)
+        public SpriteHandle RegisterSprite(
+            Transform spriteTransform,
+            int sortingOrder,
+            bool isStatic = false,
+            bool emitsLight = false)
         {
-            var handle = new SpriteHandle(spriteTransform, sortingOrder, isStatic);
+            var handle = new SpriteHandle(spriteTransform, sortingOrder, isStatic, emitsLight);
             _sprites.Add(handle);
             _sprites.Sort(static (left, right) => left.SortingOrder.CompareTo(right.SortingOrder));
             _spatialGrid.Insert(handle, spriteTransform.position);
@@ -139,6 +166,15 @@ namespace Fodinae.Game
                 "World-entity atlas is not initialized.");
         }
 
+        protected void Start()
+        {
+            if (_lightingGeometryRegistry != null && !_lightingContributorRegistered)
+            {
+                _lightingGeometryRegistry.Register(this);
+                _lightingContributorRegistered = true;
+            }
+        }
+
         protected void LateUpdate()
         {
             using var marker = _LateUpdateMarker.Auto();
@@ -153,18 +189,28 @@ namespace Fodinae.Game
                 }
             }
 
+            UpdateEmissiveRevision();
+
             Camera? camera = _gameplayCamera?.Camera;
             if (camera != null)
             {
                 Vector3 camPos = camera.transform.position;
                 float orthoSize = camera.orthographicSize;
                 float aspect = camera.aspect;
-                if (!_hasCameraState ||
+                bool cameraChanged = !_hasCameraState ||
                     (camPos - _lastCameraPosition).sqrMagnitude > 0.0001f ||
                     Mathf.Abs(orthoSize - _lastCameraOrthographicSize) > 0.001f ||
-                    Mathf.Abs(aspect - _lastCameraAspect) > 0.001f)
+                    Mathf.Abs(aspect - _lastCameraAspect) > 0.001f;
+                if (cameraChanged &&
+                    (!TryGetVisibleRect(camera, out Rect currentVisibleRect) ||
+                    !_hasCachedVisibleRect ||
+                    !Contains(_cachedVisibleRect, currentVisibleRect)))
                 {
                     _geometryDirty = true;
+                }
+
+                if (cameraChanged)
+                {
                     _lastCameraPosition = camPos;
                     _lastCameraOrthographicSize = orthoSize;
                     _lastCameraAspect = aspect;
@@ -221,6 +267,12 @@ namespace Fodinae.Game
                 source = _sprites;
             }
 
+            if (hasCamera)
+            {
+                _cachedVisibleRect = visibleRect;
+                _hasCachedVisibleRect = true;
+            }
+
             for (int i = 0; i < source.Count; i++)
             {
                 SpriteHandle handle = source[i];
@@ -259,15 +311,21 @@ namespace Fodinae.Game
             float halfWidth = halfHeight * camera.aspect;
 
             visibleRect = new Rect(
-                camPos.x - halfWidth - VisibleMargin,
-                camPos.y - halfHeight - VisibleMargin,
-                (halfWidth + VisibleMargin) * 2f,
-                (halfHeight + VisibleMargin) * 2f);
+                camPos.x - halfWidth - VisibilityPrefetchMargin,
+                camPos.y - halfHeight - VisibilityPrefetchMargin,
+                (halfWidth + VisibilityPrefetchMargin) * 2f,
+                (halfHeight + VisibilityPrefetchMargin) * 2f);
             return true;
         }
 
         private static bool IsInView(SpriteHandle handle, bool hasCamera, in Rect visibleRect) =>
             !hasCamera || visibleRect.Contains((Vector2)handle.GetWorldPosition());
+
+        private static bool Contains(in Rect outer, in Rect inner) =>
+            inner.xMin >= outer.xMin &&
+            inner.xMax <= outer.xMax &&
+            inner.yMin >= outer.yMin &&
+            inner.yMax <= outer.yMax;
 
         private static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect) =>
             !hasCamera || visibleRect.Contains((Vector2)tentacle.RootPosition);
@@ -295,6 +353,7 @@ namespace Fodinae.Game
 
             var renderer = renderObject.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = _sharedMaterials.GetForTexture(_atlas.Texture);
+            _batchMaterial = renderer.sharedMaterial;
             renderer.sortingOrder = BATCH_SORTING_ORDER;
 
             _overlayBatch = new WorldEntityOverlayBatch(
@@ -429,6 +488,114 @@ namespace Fodinae.Game
             return handle.Enabled && handle.FrameAlive && handle.Sprite != null;
         }
 
+        private void UpdateEmissiveRevision()
+        {
+            int hash = EmptyEmissiveStateHash;
+            for (int i = 0; i < _sprites.Count; i++)
+            {
+                SpriteHandle handle = _sprites[i];
+                if (!handle.EmitsLight || !IsRenderable(handle))
+                {
+                    continue;
+                }
+
+                hash = HashCode.Combine(
+                    hash,
+                    handle.Sprite!,
+                    handle.FrameLocalToWorld,
+                    handle.Color);
+            }
+
+            if (hash != _emissiveStateHash)
+            {
+                _emissiveStateHash = hash;
+                _lightingGeometryRevision++;
+            }
+        }
+
+        public void RenderLightingFields(CommandBuffer commandBuffer, in LightingFieldContext context)
+        {
+            if (_batchMaterial == null || _atlas == null)
+            {
+                return;
+            }
+
+            int emissiveCount = 0;
+            for (int i = 0; i < _sprites.Count; i++)
+            {
+                if (_sprites[i].EmitsLight && IsRenderable(_sprites[i]))
+                {
+                    emissiveCount++;
+                }
+            }
+
+            if (emissiveCount == 0)
+            {
+                return;
+            }
+
+            int pass = _batchMaterial.FindPass(ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField);
+            if (pass < 0)
+            {
+                throw new InvalidOperationException(
+                    $"World-entity material '{_batchMaterial.name}' is missing the LightingMaterialField pass.");
+            }
+
+            int vertexCount = emissiveCount * 4;
+            int indexCount = emissiveCount * 6;
+            if (_lightingVerts.Length < vertexCount)
+            {
+                Array.Resize(ref _lightingVerts, vertexCount);
+                Array.Resize(ref _lightingUvs, vertexCount);
+                Array.Resize(ref _lightingColors, vertexCount);
+            }
+
+            if (_lightingTris.Length < indexCount)
+            {
+                Array.Resize(ref _lightingTris, indexCount);
+            }
+
+            int vertexCursor = 0;
+            int indexCursor = 0;
+            for (int i = 0; i < _sprites.Count; i++)
+            {
+                SpriteHandle handle = _sprites[i];
+                if (!handle.EmitsLight || !IsRenderable(handle))
+                {
+                    continue;
+                }
+
+                WorldEntityGeometry.WriteSprite(
+                    _lightingVerts,
+                    _lightingUvs,
+                    _lightingColors,
+                    _lightingTris,
+                    handle,
+                    GetAtlasRect(handle.Sprite!.texture),
+                    vertexCursor,
+                    indexCursor);
+                vertexCursor += 4;
+                indexCursor += 6;
+            }
+
+            if (_lightingMesh == null)
+            {
+                _lightingMesh = new Mesh
+                {
+                    name = "WorldEntityLightingField",
+                    indexFormat = IndexFormat.UInt32,
+                };
+                _lightingMesh.MarkDynamic();
+            }
+
+            _lightingMesh.Clear(keepVertexLayout: true);
+            _lightingMesh.SetVertices(_lightingVerts, 0, vertexCount, MeshUpdateFlags.DontRecalculateBounds);
+            _lightingMesh.SetUVs(0, _lightingUvs, 0, vertexCount, MeshUpdateFlags.DontRecalculateBounds);
+            _lightingMesh.SetColors(_lightingColors, 0, vertexCount, MeshUpdateFlags.DontRecalculateBounds);
+            _lightingMesh.SetIndices(_lightingTris, 0, indexCount, MeshTopology.Triangles, 0, calculateBounds: false);
+            commandBuffer.DrawMesh(_lightingMesh, Matrix4x4.identity, _batchMaterial, 0, pass);
+        }
+
         private void WriteSprites(
             List<SpriteHandle> handles,
             ref int vertexCursor,
@@ -472,6 +639,18 @@ namespace Fodinae.Game
 
         protected void OnDestroy()
         {
+            if (_lightingContributorRegistered)
+            {
+                _lightingGeometryRegistry?.Unregister(this);
+                _lightingContributorRegistered = false;
+            }
+
+            if (_lightingMesh != null)
+            {
+                Destroy(_lightingMesh);
+                _lightingMesh = null;
+            }
+
             if (_mesh != null)
             {
                 Destroy(_mesh);

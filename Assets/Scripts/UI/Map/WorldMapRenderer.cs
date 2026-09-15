@@ -17,7 +17,7 @@ namespace Fodinae.UI
         [SerializeField]
         private float _renderInterval = 0.1f;
         [SerializeField]
-        private float _dragSpeed = 0.5f;
+        private float _dragSpeed = 1f;
 
         private const int MaxChunkCacheEntries = 4096;
 
@@ -120,10 +120,14 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (!TryBindUI())
+            {
+                return;
+            }
+
             _playerTracker ??= new MapPlayerTracker(_localPlayer);
             _playerTracker.EnsureBinding();
 
-            BindUI();
             InitTexture();
             ResetWorldViewState(_storage);
 
@@ -133,6 +137,37 @@ namespace Fodinae.UI
             }
 
             _initialized = true;
+        }
+
+        private bool TryBindUI()
+        {
+            if (_mapOverlay != null && _mapImage != null)
+            {
+                return true;
+            }
+
+            _document = _injectedDocument;
+            if (_document == null || _document.rootVisualElement == null)
+            {
+                return false;
+            }
+
+            VisualElement? overlay = _document.rootVisualElement.Q<VisualElement>("WorldMapOverlay");
+            if (overlay == null)
+            {
+                return false;
+            }
+
+            Image? image = overlay.Q<Image>("WorldMapImage");
+            if (image == null)
+            {
+                return false;
+            }
+
+            _mapOverlay = overlay;
+            _mapImage = image;
+            _mapImage.image = null;
+            return true;
         }
 
         private void ResetWorldViewState(IWorldDataStorage storage)
@@ -331,6 +366,11 @@ namespace Fodinae.UI
 
         public void Show()
         {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+
             if (_storage == null || _manager == null || _mapOverlay == null)
             {
                 return;
@@ -368,21 +408,6 @@ namespace Fodinae.UI
             _viewCenterX = worldX;
             _viewCenterY = worldY;
             ClampViewCenter();
-        }
-
-        private void BindUI()
-        {
-            _document = _injectedDocument;
-            VisualElement overlay = _document.rootVisualElement.Q<VisualElement>("WorldMapOverlay") ??
-                throw new InvalidOperationException(
-                    "[WorldMapRenderer] WorldMapOverlay is missing from the gameplay UIDocument.");
-            Image image = overlay.Q<Image>("WorldMapImage") ??
-                throw new InvalidOperationException(
-                    "[WorldMapRenderer] WorldMapImage is missing from the gameplay UIDocument.");
-
-            _mapOverlay = overlay;
-            _mapImage = image;
-            _mapImage.image = null;
         }
 
         private void InitTexture()

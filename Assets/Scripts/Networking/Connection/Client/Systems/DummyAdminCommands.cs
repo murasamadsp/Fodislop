@@ -83,7 +83,7 @@ internal sealed class DummyAdminCommands(
         }
 
         playerState.SetPosition(x, y);
-        worldState.SendChunksAround(x, y, sendPacket);
+        worldState.QueueChunksAround(x, y, sendPacket);
         sendPacket(new ServerPacket(new TeleportPacket(x, y, false)));
         Reply($"Телепорт в ({x}, {y}).");
     }

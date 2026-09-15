@@ -34,6 +34,8 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
     private readonly object _loadingLock = new object();
     private readonly IAsyncOperationSupervisor _operations;
     private bool _disposed;
+    private int _chunkLoadBatchDepth;
+    private readonly List<RectInt> _batchedChunkRegions = new(8);
 
     // A failing disk would otherwise warn once per chunk per streaming
     // pass and flood the console within seconds.
@@ -105,7 +107,9 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         _chunkOffsets = new long[totalChunks];
         Array.Fill(_chunkOffsets, -1);
 
-        _cache = new ChunkLruCache<T>(maxRamChunks, SaveChunkToDisk);
+        _cache = new ChunkLruCache<T>(
+            maxRamChunks,
+            allowDirtyEviction: false);
         _loadingChunks = new HashSet<int>();
 
         WorldLayerFileHeader.MigrateLegacyFormatIfRequired(_filePath, _widthChunks, _heightChunks, _chunkSize);
@@ -121,6 +125,34 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
     public int MaxChunksInMemory => _maxChunksInMemory;
 
     public event Action<int, int, int, int>? ChunkLoaded;
+
+    public bool LastSetRegionOnlyMaterializedNewChunks { get; private set; }
+
+    public void BeginChunkLoadBatch()
+    {
+        _chunkLoadBatchDepth++;
+    }
+
+    public void EndChunkLoadBatch()
+    {
+        if (_chunkLoadBatchDepth <= 0)
+        {
+            throw new InvalidOperationException("[WorldLayer] Chunk load batch is not active.");
+        }
+
+        _chunkLoadBatchDepth--;
+        if (_chunkLoadBatchDepth != 0 || _batchedChunkRegions.Count == 0)
+        {
+            return;
+        }
+
+        foreach (RectInt region in _batchedChunkRegions)
+        {
+            ChunkLoaded?.Invoke(region.x, region.y, region.width, region.height);
+        }
+
+        _batchedChunkRegions.Clear();
+    }
 
     public void NotifyRegionLoaded(int startX, int startY, int width, int height)
     {
@@ -248,6 +280,7 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
 
         if (!EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
         {
+            chunk = _cache.PrepareForWrite(chunkIndex, chunk);
             chunk[localIndex] = value;
             MarkDirty(chunkIndex);
         }
@@ -284,6 +317,7 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         ReadOnlySpan<T> cells,
         int cellsOffset = 0)
     {
+        LastSetRegionOnlyMaterializedNewChunks = false;
         int worldWidth = _widthChunks * _chunkSize;
         int worldHeight = _heightChunks * _chunkSize;
         if (startX < 0 || startY < 0 || startX >= worldWidth || startY >= worldHeight)
@@ -310,17 +344,46 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         int lastChunkY = (endY - 1) / _chunkSize;
 
         int changedCount = 0;
+        int touchedChunkCount = 0;
+        int newChunkCount = 0;
         for (int chunkX = firstChunkX; chunkX <= lastChunkX; chunkX++)
         {
             for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
             {
                 int chunkIndex = chunkY + (chunkX * _heightChunks);
-                T[] chunk = GetOrCreateChunk(chunkIndex, touchLru: true);
+                bool wasLoaded = _cache.Contains(chunkIndex);
+                touchedChunkCount++;
+                if (!wasLoaded)
+                {
+                    newChunkCount++;
+                }
 
                 int regionX0 = Math.Max(startX, chunkX * _chunkSize);
                 int regionX1 = Math.Min(endX, (chunkX + 1) * _chunkSize);
                 int regionY0 = Math.Max(startY, chunkY * _chunkSize);
                 int regionY1 = Math.Min(endY, (chunkY + 1) * _chunkSize);
+                bool overwritesWholeChunk =
+                    regionX0 == chunkX * _chunkSize &&
+                    regionX1 == (chunkX + 1) * _chunkSize &&
+                    regionY0 == chunkY * _chunkSize &&
+                    regionY1 == (chunkY + 1) * _chunkSize;
+
+                // A full network chunk is authoritative for every cell in the
+                // chunk. Loading the old RLE payload first only adds a
+                // synchronous disk decode to the packet path and can stall
+                // the frame exactly when the player crosses a stream boundary.
+                // Partial regions still use GetOrCreateChunk so cells outside
+                // the packet remain intact.
+                T[] chunk;
+                if (!wasLoaded && overwritesWholeChunk)
+                {
+                    chunk = new T[_chunkArea];
+                    AddToCache(chunkIndex, chunk);
+                }
+                else
+                {
+                    chunk = GetOrCreateChunk(chunkIndex, touchLru: true);
+                }
 
                 bool chunkChanged = false;
                 for (int x = regionX0; x < regionX1; x++)
@@ -331,11 +394,20 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                         int payloadIndex = cellsOffset + ((y - startY) * width) + (x - startX);
                         T value = cells[payloadIndex];
                         int localIndex = (y - (chunkY * _chunkSize)) + (localX * _chunkSize);
-                        if (!EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
+                        if ((overwritesWholeChunk && !wasLoaded) ||
+                            !EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
                         {
+                            if (wasLoaded)
+                            {
+                                chunk = _cache.PrepareForWrite(chunkIndex, chunk);
+                            }
+
                             chunk[localIndex] = value;
                             chunkChanged = true;
-                            changedCount++;
+                            if (!overwritesWholeChunk || wasLoaded)
+                            {
+                                changedCount++;
+                            }
                         }
                     }
                 }
@@ -344,9 +416,32 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                 {
                     MarkDirty(chunkIndex);
                 }
+
+                // SetRegion is also the network streaming path. Notify only
+                // when this call actually materialized a previously missing
+                // chunk; repeated packets for an already loaded chunk are
+                // ordinary data changes and are covered by RegionChanged.
+                if (!wasLoaded)
+                {
+                    int loadedMinX = chunkX * _chunkSize;
+                    int loadedMinY = chunkY * _chunkSize;
+                    int loadedMaxX = loadedMinX + _chunkSize;
+                    int loadedMaxY = loadedMinY + _chunkSize;
+                    if (_chunkLoadBatchDepth > 0)
+                    {
+                        _batchedChunkRegions.Add(
+                            new RectInt(loadedMinX, loadedMinY, _chunkSize, _chunkSize));
+                    }
+                    else
+                    {
+                        ChunkLoaded?.Invoke(loadedMinX, loadedMinY, _chunkSize, _chunkSize);
+                    }
+                }
             }
         }
 
+        LastSetRegionOnlyMaterializedNewChunks =
+            touchedChunkCount > 0 && touchedChunkCount == newChunkCount;
         return changedCount;
     }
 
@@ -461,61 +556,67 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         }
     }
 
-    // Снимок грязных чанков берётся на том потоке, который меняет кэш, — на
-    // главном. Раньше MapStorage.FlushAsync перебирал грязные индексы и читал
-    // словарь чанков прямо в пуле потоков, пока главный поток писал клетки и
-    // грузил чанки: перебор падал с «Collection was modified», а ClearDirty
-    // после записи снимал отметку и с чанков, изменённых во время записи, —
-    // такие правки молча не доходили до диска. Массивы копируются, поэтому на
-    // диск уходит целое состояние, а не чанк посреди перезаписи.
+    // Снимок берётся на главном потоке, пока кэш не меняется параллельно.
+    // Массивы не клонируются здесь: они отсоединяются от dirty-набора, а при
+    // следующей записи в такой чанк PrepareForWrite делает ровно одну копию.
+    // Поэтому запись видит стабильное состояние, а изменения после снимка
+    // остаются отдельной dirty-версией.
     public List<(int Index, T[] Chunk)> TakeDirtySnapshot()
     {
-        var snapshot = new List<(int Index, T[] Chunk)>(_cache.DirtyCount);
-        foreach (int index in _cache.DirtyIndices)
-        {
-            if (_cache.TryGet(index, out T[]? chunk) && chunk != null)
-            {
-                snapshot.Add((index, (T[])chunk.Clone()));
-            }
-        }
-
-        _cache.ClearDirty();
-        return snapshot;
+        return _cache.DetachDirtySnapshot();
     }
 
     // Запись не удалась — отметки возвращаются, следующее сохранение повторит.
     // Вызывать на главном потоке, как и TakeDirtySnapshot.
     public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot)
     {
-        foreach ((int index, _) in snapshot)
-        {
-            _cache.MarkDirty(index);
-        }
+        _cache.RestoreDirtySnapshot(EnumerateSnapshotIndices(snapshot));
     }
 
-    // Можно из любого потока: снимок ни с кем не разделён, файл — под _ioLock.
+    // Можно из любого потока: снимок стабилен благодаря copy-on-write, файл —
+    // под _ioLock. После успешной записи detached-состояние снимается.
     public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk)
     {
-        foreach ((int index, T[] chunk) in snapshot)
+        try
         {
-            SaveChunkToDisk(index, chunk);
+            foreach ((int index, T[] chunk) in snapshot)
+            {
+                SaveChunkToDisk(index, chunk);
+            }
+
+            lock (_ioLock)
+            {
+                if (_fileStream == null)
+                {
+                    _cache.CompleteDirtySnapshot(EnumerateSnapshotIndices(snapshot));
+                    return;
+                }
+
+                if (flushToDisk)
+                {
+                    _fileStream.Flush(true);
+                }
+                else
+                {
+                    _fileStream.Flush();
+                }
+            }
+        }
+        catch
+        {
+            RestoreDirty(snapshot);
+            throw;
         }
 
-        lock (_ioLock)
-        {
-            if (_fileStream == null)
-            {
-                return;
-            }
+        _cache.CompleteDirtySnapshot(EnumerateSnapshotIndices(snapshot));
+    }
 
-            if (flushToDisk)
-            {
-                _fileStream.Flush(true);
-            }
-            else
-            {
-                _fileStream.Flush();
-            }
+    private static IEnumerable<int> EnumerateSnapshotIndices(
+        IEnumerable<(int Index, T[] Chunk)> snapshot)
+    {
+        foreach ((int index, _) in snapshot)
+        {
+            yield return index;
         }
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

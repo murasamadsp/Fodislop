@@ -99,7 +99,7 @@ public sealed class LightingCostWindow : ToolWindow
             $"{lighting.FieldWidth}×{lighting.FieldHeight} при {lighting.EffectivePixelsPerCell:F2} пикс/клетку";
         if (lighting.ActiveLightingQuality == LightingQualityMode.PerBlock)
         {
-            _cascadeDetail = "каскады отключены (клеточный BFS)";
+            _cascadeDetail = "static cascade cache, результат усреднён по клетке";
             _atlasDetail = $"источников {lighting.DynamicLightCount}";
         }
         else
@@ -118,9 +118,9 @@ public sealed class LightingCostWindow : ToolWindow
 
         if (_lighting?.ActiveLightingQuality == LightingQualityMode.PerBlock)
         {
-            _summary = "Режим: По блокам (клеточный BFS на GPU, каскады лучей обойдены)";
+            _summary = "Режим: По блокам (cascade cache + targeted dynamic light)";
             _solveMix = $"за секунду: {_telemetry.LightingStaticSolveCount} решений";
-            _rows.Add("Клеточная заливка: 16 итераций по 4 соседа (0 шагов луча)");
+            _rows.Add("Динамика: только изменившиеся lamp tiles");
             _rows.Add("Разрешение: ровно 1 тексель на блок (Point sampling)");
             return;
         }
@@ -171,6 +171,7 @@ public sealed class LightingCostWindow : ToolWindow
             ToolChrome.SectionHeader("КАСКАДЫ");
             DrawCascadeRows();
             DrawLimits();
+            DrawDiagnostics();
         }
     }
 
@@ -214,5 +215,30 @@ public sealed class LightingCostWindow : ToolWindow
         }
 
         GUILayout.Space(3f);
+    }
+
+    private void DrawDiagnostics()
+    {
+        ToolChrome.SectionHeader("ДАМП КАДРА");
+        if (GUILayout.Button("Dump Lighting Frame"))
+        {
+            _lighting?.DumpCurrentFrame();
+        }
+
+        if (_lighting != null && _lighting.Journal.Count > 0)
+        {
+            ToolChrome.SectionHeader("ЖУРНАЛ ИНВАЛИДАЦИИ (ПОСЛЕДНИЕ СОБЫТИЯ)");
+            var recent = _lighting.Journal.GetRecent(3);
+            foreach (var rec in recent)
+            {
+                GUILayout.Label($"Кадр #{rec.FrameIndex}: {rec.Reason}", WrappedLabelStyle);
+                GUILayout.Label($"  Запущено: {string.Join(", ", rec.ExecutedPasses)}", MutedLabelStyle);
+                if (rec.SkippedPasses.Length > 0)
+                {
+                    GUILayout.Label($"  Пропущено: {string.Join(", ", rec.SkippedPasses)}", MutedLabelStyle);
+                }
+                GUILayout.Space(2f);
+            }
+        }
     }
 }

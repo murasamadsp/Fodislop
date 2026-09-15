@@ -253,6 +253,11 @@ public class PlayerMovementValidatorTests
         public void SetRegion(int startX, int startY, int width, int height, CellType[] cells) { }
         public void SetRegion(int startX, int startY, int width, int height, ReadOnlySpan<CellType> cells) { }
         public CellType GetCell(int x, int y) => defaultCell;
+        public bool TryGetCell(int x, int y, out CellType cellType)
+        {
+            cellType = defaultCell;
+            return cellLayerAvailable;
+        }
         public void InitWorld(string worldCodeName, int width, int height) { }
         public void Dispose() { }
         public UniTask DisposeAsync(CancellationToken cancellationToken = default) => UniTask.CompletedTask;

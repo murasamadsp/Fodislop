@@ -149,7 +149,7 @@ internal sealed class DummyGameplayActionResponder(
         ushort effectY = playerState.Y;
         playerState.Respawn(SpawnX, SpawnY);
         movementResponder.CancelPath();
-        worldState.SendChunksAround(playerState.X, playerState.Y, sendPacket);
+        worldState.QueueChunksAround(playerState.X, playerState.Y, sendPacket);
         sendPacket(new ServerPacket(new HealthPacket(500, 500)));
         sendPacket(new ServerPacket(new TeleportPacket(SpawnX, SpawnY, false)));
         sendPacket(new ServerPacket(new HBPacket([

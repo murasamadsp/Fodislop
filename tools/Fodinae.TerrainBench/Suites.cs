@@ -465,15 +465,13 @@ public static class Suites
         });
     }
 
-    // ── Сдвиг 2D-массивов кэша (настоящий TerrainCacheArrayScroller) ──────
+    // ── Кольцевой сдвиг кэша ───────────────────────────────────────────────
     private static void CacheScroll(BenchRunner runner, int width, int height)
     {
         runner.Suite = "cache-scroll";
-        var cells = new CachedCellData[width + 2, height + 2];
-        var types = new CellType[width, height];
-        runner.Run("CachedCellData[,] сдвиг x", () => TerrainCacheArrayScroller.Scroll(cells, width + 2, height + 2, 1, 0));
-        runner.Run("CachedCellData[,] сдвиг диагональ", () => TerrainCacheArrayScroller.Scroll(cells, width + 2, height + 2, 1, 1));
-        runner.Run("CellType[,] сдвиг x", () => TerrainCacheArrayScroller.Scroll(types, width, height, 1, 0));
+        var ring = new TerrainRingGrid<CachedCellData>();
+        ring.EnsureSize(width + 2, height + 2);
+        runner.Run("TerrainRingGrid сдвиг x", () => ring.Scroll(1, 0));
         runner.Metric("размер CachedCellData", Marshal.SizeOf<CachedCellData>(), "Б");
         runner.Metric("кэш клеток целиком", Marshal.SizeOf<CachedCellData>() * (width + 2) * (height + 2) / 1048576.0, "МБ");
     }
@@ -488,6 +486,8 @@ public static class Suites
         runner.Run("ComputeFull", () => fill.ComputeFull(provider));
         runner.Run("ComputeScrolled +1,0", () => fill.ComputeScrolled(1, 0, provider));
         runner.Run("ComputeScrolled +1,+1", () => fill.ComputeScrolled(1, 1, provider));
+        runner.Run("ComputeScrolled +13,0", () => fill.ComputeScrolled(13, 0, provider));
+        runner.Run("ComputeScrolled +29,+29", () => fill.ComputeScrolled(29, 29, provider));
         runner.Run("UpdateLocalRegion 3×3", () => fill.UpdateLocalRegion(width / 2, height / 2, 3, 3, provider));
         runner.Run("UpdateLocalRegion 16×16", () => fill.UpdateLocalRegion(width / 3, height / 3, 16, 16, provider));
     }

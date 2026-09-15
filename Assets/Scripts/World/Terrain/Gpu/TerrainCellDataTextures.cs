@@ -21,6 +21,11 @@ namespace Fodinae.World.Terrain;
 // прежняя частичная заливка вершин.
 public sealed class TerrainCellDataTextures : IDisposable
 {
+    // UploadRect() always applies at least a 16x16 patch. Treat that fixed
+    // setup/copy cost as texel work when choosing between many patches and
+    // one full upload; this is a cost governor, not a patch-count cutoff.
+    private const long PatchSetupEquivalentTexels = 16L * 16L;
+
     public static readonly int ColorId = Shader.PropertyToID("_TerrainCellColor");
     public static readonly int MetaId = Shader.PropertyToID("_TerrainCellMeta");
     public static readonly int AtlasRectId = Shader.PropertyToID("_TerrainCellAtlasRect");
@@ -94,6 +99,7 @@ public sealed class TerrainCellDataTextures : IDisposable
     private readonly Channel<Vector4> _gridOffsets = new(TextureFormat.RGBAFloat, "TerrainGridOffsets");
 
     private readonly TerrainDirtyRegion _dirty = new();
+    private readonly TerrainDirtyRegion _gridOffsetsDirty = new();
     private bool _offsetsDirty;
 
     public int MeshWidth { get; private set; }
@@ -129,6 +135,7 @@ public sealed class TerrainCellDataTextures : IDisposable
         _gridOffsets.Allocate(meshWidth + 1, meshHeight + 1);
         _offsetsDirty = true;
         _dirty.Reset(meshWidth, meshHeight);
+        _gridOffsetsDirty.Reset(meshWidth + 1, meshHeight + 1);
     }
 
     // Полная сборка пишет клетки из нескольких потоков: прямоугольник по
@@ -154,7 +161,7 @@ public sealed class TerrainCellDataTextures : IDisposable
     }
 
     // offsets — локальные узлы окна [0, W] × [0, H], minX/minY — мировой узел (0, 0).
-    public void WriteGridOffsets(Vector3[,] offsets, int minX, int minY)
+    public void WriteGridOffsets(TerrainRingGrid<Vector3> offsets, int minX, int minY)
     {
         if (!IsAllocated)
         {
@@ -163,8 +170,8 @@ public sealed class TerrainCellDataTextures : IDisposable
 
         int nodesWide = MeshWidth + 1;
         int nodesHigh = MeshHeight + 1;
-        int width = Math.Min(offsets.GetLength(0), nodesWide);
-        int height = Math.Min(offsets.GetLength(1), nodesHigh);
+        int width = Math.Min(offsets.Width, nodesWide);
+        int height = Math.Min(offsets.Height, nodesHigh);
         for (int x = 0; x < width; x++)
         {
             int ringX = Ring(minX + x, nodesWide);
@@ -174,6 +181,66 @@ public sealed class TerrainCellDataTextures : IDisposable
                 _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
                     new Vector4(offset.x, offset.y, offset.z, 0f);
             }
+        }
+
+        _offsetsDirty = true;
+        _gridOffsetsDirty.MarkAll();
+    }
+
+    public void WriteGridOffsetsIncremental(TerrainRingGrid<Vector3> offsets, int minX, int minY, int dx, int dy)
+    {
+        if (!IsAllocated)
+        {
+            return;
+        }
+
+        int nodesWide = MeshWidth + 1;
+        int nodesHigh = MeshHeight + 1;
+        int xStart = 0;
+        int xLength = 0;
+        int yStart = 0;
+        int yLength = 0;
+
+        if (dx > 0)
+        {
+            xStart = Mathf.Max(0, nodesWide - dx - 1);
+            xLength = nodesWide - xStart;
+        }
+        else if (dx < 0)
+        {
+            xLength = Mathf.Min(nodesWide, -dx + 1);
+        }
+
+        if (dy > 0)
+        {
+            yStart = Mathf.Max(0, nodesHigh - dy - 1);
+            yLength = nodesHigh - yStart;
+        }
+        else if (dy < 0)
+        {
+            yLength = Mathf.Min(nodesHigh, -dy + 1);
+        }
+
+        if (xLength > 0)
+        {
+            WriteGridOffsetRect(offsets, minX, minY, xStart, 0, xLength, nodesHigh);
+            _gridOffsetsDirty.MarkRect(
+                Ring(minX + xStart, nodesWide),
+                Ring(minY, nodesHigh),
+                xLength,
+                nodesHigh);
+        }
+
+        if (yLength > 0 && xLength < nodesWide)
+        {
+            int remainingStart = dx > 0 ? 0 : xLength;
+            int remainingWidth = nodesWide - xLength;
+            WriteGridOffsetRect(offsets, minX, minY, remainingStart, yStart, remainingWidth, yLength);
+            _gridOffsetsDirty.MarkRect(
+                Ring(minX + remainingStart, nodesWide),
+                Ring(minY + yStart, nodesHigh),
+                remainingWidth,
+                yLength);
         }
 
         _offsetsDirty = true;
@@ -189,7 +256,26 @@ public sealed class TerrainCellDataTextures : IDisposable
         if (_offsetsDirty)
         {
             _offsetsDirty = false;
-            _gridOffsets.UploadAll();
+            long gridOffsetArea = (long)(MeshWidth + 1) * (MeshHeight + 1);
+            long gridOffsetPatchWork = _gridOffsetsDirty.Area +
+                (_gridOffsetsDirty.Count * PatchSetupEquivalentTexels);
+            bool fullGridOffsetUpload = _gridOffsetsDirty.IsAll ||
+                SystemInfo.copyTextureSupport == CopyTextureSupport.None ||
+                gridOffsetPatchWork >= gridOffsetArea;
+            if (fullGridOffsetUpload)
+            {
+                _gridOffsets.UploadAll();
+            }
+            else
+            {
+                for (int i = 0; i < _gridOffsetsDirty.Count; i++)
+                {
+                    RectInt rect = _gridOffsetsDirty[i];
+                    _gridOffsets.UploadRect(rect.x, rect.y, rect.width, rect.height);
+                }
+            }
+
+            _gridOffsetsDirty.Clear();
         }
 
         if (_dirty.IsEmpty)
@@ -198,11 +284,12 @@ public sealed class TerrainCellDataTextures : IDisposable
         }
 
         int textureHeight = MeshHeight * TerrainCellDataPacker.LayersPerCell;
+        long patchWork = _dirty.Area + (_dirty.Count * PatchSetupEquivalentTexels);
 
-        // Изменённое больше половины текстуры выгружается целиком: копии по
-        // кускам тогда дороже одной полной выгрузки.
+        // Area includes both changed texels and the fixed setup cost of each
+        // patch command, so a full upload is selected when it is cheaper.
         bool full = _dirty.IsAll ||
-            _dirty.Area * 2 >= (long)MeshWidth * textureHeight ||
+            patchWork >= (long)MeshWidth * textureHeight ||
             SystemInfo.copyTextureSupport == CopyTextureSupport.None;
         if (full)
         {
@@ -263,8 +350,32 @@ public sealed class TerrainCellDataTextures : IDisposable
         _world.Destroy();
         _glow.Destroy();
         _gridOffsets.Destroy();
+        _gridOffsetsDirty.Clear();
         MeshWidth = 0;
         MeshHeight = 0;
+    }
+
+    private void WriteGridOffsetRect(
+        TerrainRingGrid<Vector3> offsets,
+        int minX,
+        int minY,
+        int startX,
+        int startY,
+        int width,
+        int height)
+    {
+        int nodesWide = MeshWidth + 1;
+        int nodesHigh = MeshHeight + 1;
+        for (int x = startX; x < startX + width; x++)
+        {
+            int ringX = Ring(minX + x, nodesWide);
+            for (int y = startY; y < startY + height; y++)
+            {
+                Vector3 offset = offsets[x, y];
+                _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
+                    new Vector4(offset.x, offset.y, offset.z, 0f);
+            }
+        }
     }
 
     private static Texture2D Create(int width, int height, TextureFormat format, string name) =>

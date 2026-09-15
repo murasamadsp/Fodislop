@@ -44,5 +44,36 @@ Fodinae — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.
 - `VolumeProfile.Add<T>()` створює компонент лише в пам'яті; editor-код має додати його через `AssetDatabase.AddObjectToAsset()` перед збереженням.
 - Не маскуйте дефекти очищенням Unity cache, повторною компіляцією, FPS-cap, frame skipping або throttling. Зміни гарячих шляхів робіть лише після відтворення чи строгого підтвердження причини.
 - Освітлення ЗАБОРОНЕНО обмежувати частотою оновлення (герцовкою, таймером на кшталт «20 разів на секунду», налаштуванням частоти solve) — ні для ламп, ні для геометрії. Динамічне світло (лампи роботів) заборонено й прив'язувати до переходу в нову клітинку. Світло лампи перераховується щокадру разом із плавним рухом робота, джерело центроване на його точній позиції. Дорогий прохід треба здешевлювати, а не пропускати.
+- Якщо після власної зміни агента продуктивність погіршилась або не покращилась, агент ЗОБОВ'ЯЗАНИЙ сам пояснити причину з коду цієї зміни: що саме вона додала на кадр (кількість dispatch-ів і потоків, кроків марширування, записів і читань текстур, розміри нових текстур і буферів) і чому це не дало виграшу. ЗАБОРОНЕНО відповідати «не можна сказати», «невідомо, що гальмує» чи перекладати пошук причини на користувача замірами, коли зміну щойно зробив сам агент. До зміни гарячого шляху GPU агент рахує її вартість на кадр у тих самих одиницях, порівнює з тим, що вона замінює, і враховує, що дешевше в CPU-моделі не означає дешевше на GPU (запис у великі текстури, вкладені динамічні цикли, відсутність раннього виходу).
 - VSync НІКОЛИ не пояснює продуктивність. Заборонено в будь-якій формі: як причину низького FPS, як «стелю» чи «очікування екрана» в замірах, як застереження «заміри були з синхронізацією», як пораду для заміру, у коментарях до коду й у звітах. Число часу кадру чи відеокарти пояснюйте лише роботою коду проєкту. Якщо користувач сам повідомляє про дефект перемикача VSync — це окремий баг налаштувань: виправте його й звітуйте лише про налаштування, не пов'язуючи з FPS чи замірами.
 - «Editor overhead» (EditorLoop, Scene view GPU, PlayerConnection сокет) НІКОЛИ не є поясненням низького FPS у грі. Ці категорії у Profiler — артефакти вимірювання в Play Mode всередині Editor, а не гальма гри. Якщо у Profiler видно `EditorLoop`, `CFRunLoopRun`, `Socket.Accept` — це шум замірів, ігноруй їх і шукай причину в категоріях `Scripts`, `Rendering`, `Physics`, `GarbageCollector` або конкретних маркерах ігрового коду. Закрита Scene view у Editor знижує GPU-шум, але не є обов'язковою умовою аналізу.
+
+## Lighting
+
+Перед редагуванням lighting кода (shaders або C#):
+
+1. Прочитай [LIGHTING_ARCHITECTURE.md](../LIGHTING_ARCHITECTURE.md) — там dataflow и контракты стадий.
+2. Определи, к какой стадии относится изменение:
+   - `LightingTypes.hlsl`, `Extinction.hlsl`, `GeometryField.hlsl`, `DDA.hlsl` — общие примитивы
+   - `GeometryCache/GeometryCache.hlsl` — `BuildCellSolidMask`
+   - `Cascades/CascadeTrace.hlsl` — `SolveCascade` (DDA traversal)
+   - `Cascades/CascadeResolve.hlsl` — `ResolveDirect` (atlas lookup)
+   - `Dynamic/LampPolar.hlsl` — `TraceLampPolar`, `LampRadianceFromPolar` (DDA)
+   - `Dynamic/DynamicLightTrace.hlsl` — `SolveDynamicLighting`, `ComposeDynamicLighting`
+   - `Bounce/BounceCache.hlsl` — `BuildBounceTaps`, `BuildBounceFilter` (DDA)
+   - `Bounce/BounceSolve.hlsl` — `SolveDiffuseBounce`
+   - `Composite/CompositeLighting.hlsl` — `CompositeLighting`
+   - `Block/BlockLighting.hlsl` — PerBlock tier
+3. **Запрещено** добавлять вызовы DDA (`TraceLightSegment`, `TraceRadianceSegment`) в:
+   - `CascadeResolve`
+   - `DynamicLightTrace`
+   - `BounceSolve`
+   - `CompositeLighting`
+   - `BlockLighting`
+4. Любое изменение transport стадий (CascadeTrace, LampPolar, BounceCache) должно увеличивать `LightingDdaSegments` или `LightingDdaTexelVisits` в `IFrameTelemetry` — это ключевые метрики стоимости.
+5. После изменения transport math проверь:
+   - Все debug views (0–10) показывают ожидаемую картину
+   - `LightingDdaSegments` / `LightingDdaTexelVisits` не выросли неожиданно
+   - FPS не упал (сравни с baseline)
+6. Не добавляй «quality step budget» или frame skipping в DDA — стены должны быть точными.
+7. Static/dynamic split сохраняется: каскады кэшируются до изменения terrain/emission, динамический свет решается per-frame.

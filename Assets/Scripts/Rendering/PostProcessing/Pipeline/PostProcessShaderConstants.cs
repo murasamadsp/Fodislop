@@ -104,14 +104,34 @@ internal static class PostProcessShaderConstants
 
     public static readonly int HistoryTexID = Shader.PropertyToID("_HistoryTex");
     public static readonly int MotionBlurHistoryID = Shader.PropertyToID("_MotionBlurHistory");
+    public static readonly int HistoryReprojectionID = Shader.PropertyToID("_HistoryReprojection");
 
+    // Ключевое слово отладочных видов и шторки сравнения. Вне инструмента
+    // колориста вариант не включается, и весь этот код в kernel не попадает.
+    public const string DiagnosticsKeyword = "FODINAE_POST_DIAGNOSTICS";
+
+    // Глубина пирамиды блума. Уровней было по одному: цепочка «половина ->
+    // четверть -> обратно» давала охват порядка радиуса на четверти
+    // разрешения, то есть около десятка пикселей полного кадра. Такой блум
+    // физически не мог дать ореола — его нечем было раздуть, сколько ни
+    // крути радиус.
+    //
+    // Длины обоих массивов обязаны совпадать: проход строит цепочку так, что
+    // источник для уровня подъёма i лежит на уровне i+1, и последний спуск
+    // должен попасть ровно под первый подъём.
     public static readonly string[] BloomDownNames =
     [
         "_PPBloomDown_0",
+        "_PPBloomDown_1",
+        "_PPBloomDown_2",
+        "_PPBloomDown_3",
     ];
 
     public static readonly string[] BloomUpNames =
     [
         "_PPBloomUp_0",
+        "_PPBloomUp_1",
+        "_PPBloomUp_2",
+        "_PPBloomUp_3",
     ];
 }

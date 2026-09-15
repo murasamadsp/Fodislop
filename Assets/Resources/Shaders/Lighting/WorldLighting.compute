@@ -1,27 +1,59 @@
 #pragma kernel SolveCascade
+#pragma kernel ScrollRadianceAtlas
 #pragma kernel ResolveDirect
+#pragma kernel ResolveTransmissionDebug
 #pragma kernel SolveDynamicLighting
+#pragma kernel ComposeDynamicLighting
+#pragma kernel TraceLampPolar
+#pragma kernel ClearDynamicDirect
 #pragma kernel SolveDiffuseBounce
 #pragma kernel CompositeLighting
-#pragma kernel SeedBlockLighting
-#pragma kernel PropagateBlockLighting
-#pragma kernel ResolveBlockLighting
 #pragma kernel BuildCellSolidMask
 #pragma kernel BuildBounceTaps
 #pragma kernel BuildBounceFilter
 
 #pragma target 5.0
 
-#define PI 3.14159265359
-#define PI2 6.28318530718
+// ============================================================================
+// Lighting Architecture
+// ============================================================================
+//
+// This file is the entry point for the lighting compute shader.
+// All stage implementations are in separate .hlsl files included below.
+//
+// Architecture documentation: LIGHTING_ARCHITECTURE.md
+//
+// Stage dependency flow:
+//
+//   GeometryCache → Cascades → CascadeResolve → Composite
+//       ↓              ↓                         ↑
+//       └─────────────→ DynamicLight →──────────┘
+//       ↓
+//       └─────────────→ Bounce →────────────────┘
+//                      ↑
+//
+// ============================================================================
+// Types & Constants
+// ============================================================================
 
-// Lamp light below this absolute radiance cannot move any display level
-// (see TraceLightSegment). Not a tuning value: derived from output precision.
-static const float InvisibleLampRadiance = 1e-6;
+#include "Assets/Resources/Shaders/Lighting/LightingTypes.hlsl"
+
+// ============================================================================
+// Shared Variable Declarations
+// ============================================================================
+//
+// All variables used by lighting stages are declared here before includes.
+// Each stage accesses only its declared inputs/outputs (see LIGHTING_ARCHITECTURE.md).
+
+// ============================================================================
+// Field Textures
+// ============================================================================
 
 Texture2D<float4> _MaterialField;
 Texture2D<float4> _EmissionField;
 RWStructuredBuffer<uint3> _RadianceAtlas;
+StructuredBuffer<uint3> _RadianceAtlasInput;
+RWStructuredBuffer<uint3> _RadianceAtlasOutput;
 RWTexture2D<float4> _DirectTexture;
 Texture2D<float4> _DirectInput;
 
@@ -38,33 +70,55 @@ Texture2D<float4> _StaticDirectInput;
 RWTexture2D<float4> _BounceTexture;
 Texture2D<float4> _BounceInput;
 RWTexture2D<float4> _Result;
-Texture2D<float4> _BlockLightInput;
-RWTexture2D<float4> _BlockLightOutput;
 
-// Geometry caches. Each holds values that depend only on the material field
-// and are rebuilt with it, so per-frame kernels read the stored result instead
-// of repeating the same marching. They are caches, not approximations: every
-// entry is computed by the same expressions the uncached path used.
+// ============================================================================
+// Geometry Caches
+// ============================================================================
 //
-// _CellSolidMask: one texel per world cell, 1 where the cell counts as solid
-// for the closed-diagonal rule.
+// Each holds values that depend only on the material field and are rebuilt with
+// it, so per-frame kernels read the stored result instead of repeating the same
+// marching. They are caches, not approximations: every entry is computed by the
+// same expressions the uncached path used.
+
 Texture2D<float4> _CellSolidMask;
 RWTexture2D<float4> _CellSolidMaskOutput;
-// _BounceTaps: 16 entries per bounce texel, two per gather direction:
-// (albedo.rgb, hit step index; 0 = no hit) and (transmission.rgb, unused).
 RWStructuredBuffer<float4> _BounceTaps;
-// _BounceFilterWeights: 4 entries per field texel, one per bilinear tap:
-// (transmission to the tap .rgb, bilinear weight).
 RWStructuredBuffer<float4> _BounceFilterWeights;
+RWStructuredBuffer<uint> _LightingCounters;
+int _LightingCountersEnabled;
+StructuredBuffer<int4> _DirtyRegions;
+RWStructuredBuffer<uint> _CascadeChangedMask;
+int _DirtyRegionCount;
+int _CascadeMaskEnabled;
 
-struct DynamicLight
-{
-    float4 positionRadius;
-    float4 colorIntensity;
-};
+// ============================================================================
+// Dynamic Lights
+// ============================================================================
 
 StructuredBuffer<DynamicLight> _DynamicLights;
 int _DynamicLightCount;
+
+int2 _DynamicDispatchOrigin;
+int2 _DynamicDispatchSize;
+int _DynamicLightIndex;
+int _WriteDynamicDirect;
+int2 _LampTileOffset;
+RWTexture2D<float4> _LampTiles;
+Texture2D<float4> _LampTilesInput;
+
+StructuredBuffer<LampTileInfo> _LampTileInfos;
+int _LampTileCount;
+int2 _ComposeOrigin;
+int2 _ComposeSize;
+
+int2 _LampPolarSize;
+int _LampPolarPoint;
+RWTexture2D<float4> _LampPolar;
+Texture2D<float4> _LampPolarInput;
+
+// ============================================================================
+// Shared Parameters
+// ============================================================================
 
 int2 _FieldSize;
 int2 _BounceSize;
@@ -82,13 +136,17 @@ int _DebugView;
 int _MaterialYFlip;
 int _EnableDiffuseBounce;
 
-// PerBlock quality tier: when nonzero, ResolveDirect
-// samples the radiance atlas at the field pixel nearest each world cell's
-// center instead of the dispatch thread's own pixel, so every pixel inside
-// one cell reads the identical resolved value - flat per-block shading
-// instead of PerPixel's smooth per-texel gradient. Reuses the same cascade
-// solve and atlas; only the read position for the final resolve changes.
+// PerBlock quality tier: when nonzero, ResolveDirect samples the radiance atlas
+// at the field pixel nearest each world cell's center instead of the dispatch
+// thread's own pixel, so every pixel inside one cell reads the identical
+// resolved value - flat per-block shading instead of PerPixel's smooth per-texel
+// gradient. Reuses the same cascade solve and atlas; only the read position for
+// the final resolve changes.
 int _BlockAveraged;
+
+// ============================================================================
+// Cascade Parameters
+// ============================================================================
 
 int _CascadeOffset;
 int2 _CascadeProbeSize;
@@ -103,1191 +161,70 @@ int _FarCascadeDirectionCount;
 int _HasFarCascade;
 int _CascadeEntryCount;
 int _CascadeDispatchRowWidth;
+int2 _CascadeDispatchOrigin;
+int2 _CascadeDispatchSize;
+int _ScrollCascadeOffset;
+int _ScrollCascadeEntryCount;
+int2 _ScrollProbeSize;
+int _ScrollProbeSpacing;
+int _ScrollDirectionCount;
+int2 _ScrollDeltaProbes;
+
+// ============================================================================
+// Samplers
+// ============================================================================
 
 SamplerState sampler_LinearClamp;
 
-uint2 PackRadiance(float3 radiance)
-{
-    return uint2(
-        f32tof16(radiance.r) | (f32tof16(radiance.g) << 16),
-        f32tof16(radiance.b));
-}
-
-float3 UnpackRadiance(uint2 packedRadiance)
-{
-    return float3(
-        f16tof32(packedRadiance.x & 0xffff),
-        f16tof32(packedRadiance.x >> 16),
-        f16tof32(packedRadiance.y & 0xffff));
-}
-
-uint3 PackInterval(float3 radiance, float3 transmittance)
-{
-    return uint3(
-        f32tof16(radiance.r) | (f32tof16(radiance.g) << 16),
-        f32tof16(radiance.b) | (f32tof16(transmittance.r) << 16),
-        f32tof16(transmittance.g) | (f32tof16(transmittance.b) << 16));
-}
-
-float3 UnpackTransmittance(uint3 packedInterval)
-{
-    return float3(
-        f16tof32(packedInterval.y >> 16),
-        f16tof32(packedInterval.z & 0xffff),
-        f16tof32(packedInterval.z >> 16));
-}
-
-// Extinction per cell, per RGB channel. Only physical occupancy mixes media.
-float3 SegmentExtinction(float solid)
-{
-    return lerp(max(_EmptyExtinctionRGB.rgb, 0.0), max(_SolidExtinctionRGB.rgb, 0.0), solid);
-}
-
-float3 SegmentTransmission(float solid, float physicalLength)
-{
-    return exp(-SegmentExtinction(solid) * physicalLength);
-}
-
-
+// ============================================================================
+// Terrain AO (shared with TerrainLook)
+// ============================================================================
+//
 // Числа окклюзии приезжают из TerrainLook — теми же, что уходят в террейн.
 // Дублировать их здесь нельзя: отладочный вид разошёлся бы с картинкой молча,
 // и врал бы ровно тогда, когда им проверяют подобранное значение.
+
 float _TerrainAmbientOcclusionMip;
 float _TerrainAmbientOcclusionStrength;
 
-float Max3(float3 value)
-{
-    return max(value.x, max(value.y, value.z));
-}
+// ============================================================================
+// Primitives & Coordinate Math
+// ============================================================================
 
-float2 OutputUv(float2 pixelPosition)
-{
-    return saturate(pixelPosition / float2(_FieldSize));
-}
+#include "Assets/Resources/Shaders/Lighting/LightingCoordinates.hlsl"
+#include "Assets/Resources/Shaders/Lighting/Extinction.hlsl"
+#include "Assets/Resources/Shaders/Lighting/GeometryField.hlsl"
+#include "Assets/Resources/Shaders/Lighting/DDA.hlsl"
 
-float InterleavedGradientNoise(float2 pixelCoord)
-{
-    float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
-    return frac(magic.z * frac(dot(pixelCoord, magic.xy)));
-}
+// ============================================================================
+// Geometry Cache
+// ============================================================================
 
-// Nearest field pixel to the center of the world cell containing `pixel`.
-// Used by the PerBlock tier so every pixel inside one cell reads the same
-// atlas probe, regardless of how many field pixels the cell actually spans.
-void GetBlockSnappedPixel(int2 pixel, out int2 result)
-{
-    result = pixel;
-    if (_BlockAveraged != 0)
-    {
-        float safeCellSize = max(_CellSize, 0.0001);
-        float2 safeFieldSize = max(float2(_FieldSize), float2(1.0, 1.0));
-        float2 regionCellCount = max(_WorldRect.zw / safeCellSize, float2(0.0001, 0.0001));
-        float2 cell = floor((float2(pixel) + 0.5) * regionCellCount / safeFieldSize);
-        float2 cellCenterFieldPos = (cell + 0.5) * safeFieldSize / regionCellCount;
-        result = clamp(int2(floor(cellCenterFieldPos)), int2(0, 0), _FieldSize - 1);
-    }
+#include "Assets/Resources/Shaders/Lighting/GeometryCache/GeometryCache.hlsl"
 
-}
+// ============================================================================
+// Radiance Cascades
+// ============================================================================
 
-float2 MaterialUv(float2 pixelPosition)
-{
-    float2 uv = OutputUv(pixelPosition);
-    if (_MaterialYFlip != 0)
-    {
-        uv.y = 1.0 - uv.y;
-    }
+#include "Assets/Resources/Shaders/Lighting/Cascades/CascadeTrace.hlsl"
+#include "Assets/Resources/Shaders/Lighting/Cascades/CascadeResolve.hlsl"
 
-    return uv;
-}
+// ============================================================================
+// Dynamic Lights
+// ============================================================================
 
-float SampleOccupancy(float2 pixelPosition, float mipLevel)
-{
-    float4 material = 0.0;
-    material = _MaterialField.SampleLevel(
-        sampler_LinearClamp,
-        MaterialUv(pixelPosition),
-        mipLevel);
-    return material.a;
-}
+#include "Assets/Resources/Shaders/Lighting/Dynamic/LampPolar.hlsl"
+#include "Assets/Resources/Shaders/Lighting/Dynamic/DynamicLightTrace.hlsl"
 
-float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
-{
-    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
-    return length(rayDirection * cellsPerPixel * pathLengthInPixels);
-}
+// ============================================================================
+// Diffuse Bounce
+// ============================================================================
 
-// Reference rule, evaluated once per cell by BuildCellSolidMask.
-void SampleCellSolid(int2 cellCoord, float2 cellsPerPixel, out bool isSolid)
-{
-    isSolid = false;
-    float2 centerPixel = (float2(cellCoord) + 0.5) / cellsPerPixel;
-    if (all(centerPixel >= 0.0) && all(centerPixel < float2(_FieldSize)))
-    {
-        isSolid = (SampleOccupancy(centerPixel, 0.0) >= 0.4);
-    }
-}
+#include "Assets/Resources/Shaders/Lighting/Bounce/BounceCache.hlsl"
+#include "Assets/Resources/Shaders/Lighting/Bounce/BounceSolve.hlsl"
 
-// Same answer as SampleCellSolid, read from the mask: one point load instead
-// of a bilinear sample in the hot marching loops.
-void CheckCellSolid(int2 cellCoord, float2 cellsPerPixel, out bool isSolid)
-{
-    isSolid = false;
-    float2 centerPixel = (float2(cellCoord) + 0.5) / cellsPerPixel;
-    if (all(centerPixel >= 0.0) && all(centerPixel < float2(_FieldSize)) &&
-        all(cellCoord < _CellGridSize))
-    {
-        isSolid = _CellSolidMask.Load(int3(cellCoord, 0)).r >= 0.5;
-    }
-}
+// ============================================================================
+// Composite
+// ============================================================================
 
-[numthreads(8, 8, 1)]
-void BuildCellSolidMask(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_CellGridSize))
-    {
-        return;
-    }
-
-    int2 cell = int2(dispatchId.xy);
-    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
-    bool isSolid = false;
-    SampleCellSolid(cell, cellsPerPixel, isSolid);
-    _CellSolidMaskOutput[cell] = float4(isSolid ? 1.0 : 0.0, 0.0, 0.0, 0.0);
-}
-
-// Blocks sharing a single common vertex (touching diagonally) must not transmit light between them.
-void CheckDiagonalStepOccluded(int2 prevCell, int2 currentCell, float2 cellsPerPixel, out bool isOccluded)
-{
-    isOccluded = false;
-    int dx = currentCell.x - prevCell.x;
-    int dy = currentCell.y - prevCell.y;
-    if (dx != 0 && dy != 0)
-    {
-        int stepX = clamp(dx, -1, 1);
-        int stepY = clamp(dy, -1, 1);
-        int2 cornerA = int2(prevCell.x + stepX, prevCell.y);
-        int2 cornerB = int2(prevCell.x, prevCell.y + stepY);
-        bool solidA = false;
-        bool solidB = false;
-        CheckCellSolid(cornerA, cellsPerPixel, solidA);
-        CheckCellSolid(cornerB, cellsPerPixel, solidB);
-
-        // Только пара углов у ИСХОДНОЙ клетки. Вторая пара, у клетки
-        // назначения, стоила ещё двух выборок и срабатывала ровно тогда,
-        // когда шаг перепрыгнул клетку — а перепрыгнувший луч прошёл не
-        // через названный угол, а мимо. Две выборки за догадку.
-        isOccluded = solidA && solidB;
-    }
-}
-
-
-// Stable 1 - exp(-x), including nearly transparent media.
-float AbsorbedFraction(float opticalDepth)
-{
-    float result = 0.0;
-    if (opticalDepth < 0.001)
-    {
-        result = opticalDepth * (1.0 - opticalDepth * 0.5 + opticalDepth * opticalDepth / 6.0);
-    }
-    else
-    {
-        result = 1.0 - exp(-opticalDepth);
-    }
-
-    return result;
-}
-
-// EmissionField is the radiance emitted by one cell. Normalizing by the
-// one-cell integral keeps glowing rock bright without bypassing intervening
-// rock, and makes splitting a segment leave the answer unchanged.
-float CellEmissionWeight(float extinction, float distanceCells)
-{
-    float result = distanceCells;
-    if (extinction > 0.0)
-    {
-        result = AbsorbedFraction(extinction * distanceCells) / AbsorbedFraction(extinction);
-    }
-
-    return result;
-}
-
-void TraceLightSegment(
-    float2 segmentStart,
-    float2 segmentEnd,
-    bool collectEmission,
-    bool isolateSource,
-    float4 sourceRect,
-    float3 sourceRadiance,
-    out float3 radiance,
-    out float3 transmittance)
-{
-    radiance = 0.0;
-    transmittance = 1.0;
-    float2 segment = segmentEnd - segmentStart;
-    float intervalLength = length(segment);
-    if (intervalLength <= 0.0)
-    {
-        return;
-    }
-
-    float2 direction = segment / intervalLength;
-    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
-    float cellsPerDistance = length(direction * cellsPerPixel);
-
-    // Clip traversal to the field. Space outside it is empty and non-emissive.
-    float2 inverseDirection = float2(
-        abs(direction.x) > 1e-20 ? 1.0 / direction.x : 1e20,
-        abs(direction.y) > 1e-20 ? 1.0 / direction.y : 1e20);
-    float2 slabA = -segmentStart * inverseDirection;
-    float2 slabB = (float2(_FieldSize) - segmentStart) * inverseDirection;
-    float2 slabNear = min(slabA, slabB);
-    float2 slabFar = max(slabA, slabB);
-    float entry = max(0.0, max(slabNear.x, slabNear.y));
-    float exitDistance = min(intervalLength, min(slabFar.x, slabFar.y));
-    if (exitDistance <= entry)
-    {
-        transmittance = SegmentTransmission(0.0, intervalLength * cellsPerDistance);
-        return;
-    }
-
-    transmittance = SegmentTransmission(0.0, entry * cellsPerDistance);
-    float2 start = segmentStart + direction * entry;
-    int2 texel = int2(floor(start));
-    int2 step = int2(sign(direction));
-    // A ray starting on a boundary and travelling backwards enters the
-    // preceding texel. No positional epsilon that could skip thin blockers.
-    texel.x -= direction.x < 0.0 && start.x == floor(start.x) ? 1 : 0;
-    texel.y -= direction.y < 0.0 && start.y == floor(start.y) ? 1 : 0;
-    texel = clamp(texel, int2(0, 0), _FieldSize - 1);
-    float2 boundary = float2(texel) + float2(direction.x > 0.0 ? 1.0 : 0.0, direction.y > 0.0 ? 1.0 : 0.0);
-    float2 next = float2(
-        step.x != 0 ? (boundary.x - segmentStart.x) / direction.x : 1e20,
-        step.y != 0 ? (boundary.y - segmentStart.y) / direction.y : 1e20);
-    float2 stride = abs(inverseDirection);
-    float distance = entry;
-    int2 previousCell = int2(floor((float2(texel) + 0.5) * cellsPerPixel));
-
-    // An isolated source emits only from texels whose centres lie inside
-    // sourceRect: the integer box [ceil(min - 0.5), ceil(max - 0.5)). Once the
-    // ray has left that box it can never re-enter it, so every later texel
-    // adds exactly zero radiance. Stopping there leaves radiance unchanged;
-    // only the transmittance output is then partial, and callers isolating a
-    // source ignore it.
-    float emissionExit = 1e30;
-    if (collectEmission && isolateSource)
-    {
-        float2 emissiveBoxA = (ceil(sourceRect.xy - 0.5) - segmentStart) * inverseDirection;
-        float2 emissiveBoxB = (ceil(sourceRect.zw - 0.5) - segmentStart) * inverseDirection;
-        float2 emissiveBoxFar = max(emissiveBoxA, emissiveBoxB);
-        emissionExit = min(emissiveBoxFar.x, emissiveBoxFar.y);
-    }
-
-    // DDA visits EVERY crossed base-level texel. A quality step budget must
-    // never turn a wall into an averaged mip or jump over it.
-    [loop]
-    while (distance < exitDistance)
-    {
-        // Accumulated boundary distances can differ from slab clipping by an
-        // ulp at the field edge. Never issue an out-of-range texture load.
-        if (any(texel < 0) || any(texel >= _FieldSize))
-        {
-            transmittance *= SegmentTransmission(0.0, max(0.0, exitDistance - distance) * cellsPerDistance);
-            break;
-        }
-
-        float end = min(exitDistance, min(next.x, next.y));
-        float distanceCells = max(0.0, end - distance) * cellsPerDistance;
-        int2 materialPixel = texel;
-        if (_MaterialYFlip != 0)
-        {
-            materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
-        }
-
-        float solid = saturate(_MaterialField.Load(int3(materialPixel, 0)).a);
-        int2 cell = int2(floor((float2(texel) + 0.5) * cellsPerPixel));
-        bool diagonalOccluded = false;
-        CheckDiagonalStepOccluded(previousCell, cell, cellsPerPixel, diagonalOccluded);
-        if (diagonalOccluded)
-        {
-            // The closed corner is before this texel, including its emitter.
-            transmittance *= SegmentTransmission(1.0, distanceCells);
-        }
-
-        previousCell = cell;
-        float3 extinction = SegmentExtinction(solid);
-        float3 transmission = exp(-extinction * distanceCells);
-        if (collectEmission)
-        {
-            float3 emission = 0.0;
-            if (isolateSource)
-            {
-                float2 samplePosition = float2(texel) + 0.5;
-                if (all(samplePosition >= sourceRect.xy) && all(samplePosition < sourceRect.zw))
-                {
-                    emission = sourceRadiance;
-                }
-            }
-            else
-            {
-                emission = max(_EmissionField.Load(int3(materialPixel, 0)).rgb, 0.0) * _EmissionScale;
-            }
-
-            if (Max3(emission) > 0.0)
-            {
-                float3 emissionWeight = float3(
-                    CellEmissionWeight(extinction.r, distanceCells),
-                    CellEmissionWeight(extinction.g, distanceCells),
-                    CellEmissionWeight(extinction.b, distanceCells));
-                radiance += transmittance * emission * emissionWeight;
-            }
-        }
-
-        transmittance *= transmission;
-        distance = end;
-        // A lamp ray also stops once everything it could still bring is below
-        // what any display can show. The rest of the path is bounded by
-        // transmittance * source radiance * the largest single-cell emission
-        // weight (a cell crossed diagonally, ~1.42 < 1.5). The bound is
-        // absolute radiance, where 1.0 is exposure-0 white: 1e-6 sits two
-        // orders below half an 8-bit sRGB step at black (1.5e-4), so even the
-        // tails of dozens of lamps meeting in one pixel stay below one level.
-        bool lampTailInvisible = collectEmission && isolateSource &&
-            Max3(transmittance * sourceRadiance) * 1.5 < InvisibleLampRadiance;
-        if (distance >= exitDistance || distance >= emissionExit || Max3(transmittance) == 0.0 ||
-            lampTailInvisible)
-        {
-            break;
-        }
-
-        bool crossX = next.x <= next.y;
-        bool crossY = next.y <= next.x;
-        if (crossX)
-        {
-            texel.x += step.x;
-            next.x += stride.x;
-        }
-
-        if (crossY)
-        {
-            texel.y += step.y;
-            next.y += stride.y;
-        }
-    }
-
-    transmittance *= SegmentTransmission(0.0, (intervalLength - exitDistance) * cellsPerDistance);
-}
-
-void TraceRadianceSegment(
-    float2 segmentStart,
-    float2 segmentEnd,
-    bool collectEmission,
-    out float3 radiance,
-    out float3 transmittance)
-{
-    TraceLightSegment(segmentStart, segmentEnd, collectEmission, false,
-        float4(0.0, 0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0), radiance, transmittance);
-}
-
-// Integrate only the angular interval subtended by this emitting cell. All
-// paths use the same DDA and emission integral as the terrain cascades.
-float3 GatherDynamicSource(float2 origin, DynamicLight light, int sampleCount)
-{
-    // One-cell square centred on the robot, moving continuously with it.
-    float2 worldCellMin = light.positionRadius.xy - 0.5 * _CellSize;
-    float2 sourceMin = (worldCellMin - _WorldRect.xy) / _WorldRect.zw * float2(_FieldSize);
-    float2 sourceSize = _CellSize / _WorldRect.zw * float2(_FieldSize);
-    float2 sourceMax = sourceMin + sourceSize;
-    if (any(sourceMax <= 0.0) || any(sourceMin >= float2(_FieldSize)))
-    {
-        return float3(0.0, 0.0, 0.0);
-    }
-    float2 toCenter = (sourceMin + sourceMax) * 0.5 - origin;
-    float centerAngle = atan2(toCenter.y, toCenter.x);
-    float minAngle = -PI;
-    float maxAngle = PI;
-    bool inside = all(origin >= sourceMin) && all(origin < sourceMax);
-    if (!inside)
-    {
-        minAngle = PI;
-        maxAngle = -PI;
-        [unroll]
-        for (int corner = 0; corner < 4; corner++)
-        {
-            float2 cornerPosition = float2(
-                (corner & 1) != 0 ? sourceMax.x : sourceMin.x,
-                (corner & 2) != 0 ? sourceMax.y : sourceMin.y);
-            float2 toCorner = cornerPosition - origin;
-            float angle = atan2(
-                toCenter.x * toCorner.y - toCenter.y * toCorner.x,
-                dot(toCenter, toCorner));
-            minAngle = min(minAngle, angle);
-            maxAngle = max(maxAngle, angle);
-        }
-    }
-
-    float angularWidth = maxAngle - minAngle;
-    float rayLength = length(toCenter) + length(sourceSize);
-    float3 sourceRadiance = max(light.colorIntensity.rgb * light.colorIntensity.a, 0.0) * _EmissionScale;
-    float3 radiance = 0.0;
-    [loop]
-    for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
-    {
-        float angle = centerAngle + minAngle + (float(sampleIndex) + 0.5) * angularWidth / float(sampleCount);
-        float raySin;
-        float rayCos;
-        sincos(angle, raySin, rayCos);
-        float3 sampleRadiance = 0.0;
-        float3 transmission = 1.0;
-        TraceLightSegment(
-            origin,
-            origin + float2(rayCos, raySin) * rayLength,
-            true,
-            true,
-            float4(sourceMin, sourceMax),
-            sourceRadiance,
-            sampleRadiance,
-            transmission);
-        radiance += sampleRadiance;
-    }
-
-    return radiance * (angularWidth / (float(sampleCount) * PI2));
-}
-
-[numthreads(8, 8, 1)]
-void SolveDynamicLighting(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    if (_DebugView == 4)
-    {
-        // ResolveDirect already computes material transmission for the static
-        // half; CompositeLighting takes the maximum of the two debug inputs.
-        _DirectTexture[pixel] = float4(0.0, 0.0, 0.0, 1.0);
-        return;
-    }
-
-    float2 origin = float2(pixel) + 0.5;
-    float3 radiance = 0.0;
-    [loop]
-    for (int lightIndex = 0; lightIndex < _DynamicLightCount; lightIndex++)
-    {
-        radiance += GatherDynamicSource(origin, _DynamicLights[lightIndex], 8);
-    }
-
-    _DirectTexture[pixel] = float4(radiance, 1.0);
-}
-
-[numthreads(8, 8, 1)]
-void BuildBounceFilter(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float2 uv = (float2(pixel) + 0.5) / float2(_FieldSize);
-    float2 position = uv * float2(_BounceSize) - 0.5;
-    int2 basePixel = int2(floor(position));
-    float2 blend = frac(position);
-    uint baseIndex = ((uint)pixel.y * (uint)_FieldSize.x + (uint)pixel.x) * 4u;
-    [unroll]
-    for (int y = 0; y < 2; y++)
-    {
-        [unroll]
-        for (int x = 0; x < 2; x++)
-        {
-            int2 tap = clamp(basePixel + int2(x, y), int2(0, 0), _BounceSize - 1);
-            float weight = (x == 0 ? 1.0 - blend.x : blend.x) * (y == 0 ? 1.0 - blend.y : blend.y);
-            float2 tapPosition = (float2(tap) + 0.5) * float2(_FieldSize) / float2(_BounceSize);
-            float3 unusedRadiance;
-            float3 transmission;
-            TraceRadianceSegment(uv * float2(_FieldSize), tapPosition, false, unusedRadiance, transmission);
-            _BounceFilterWeights[baseIndex + (uint)(y * 2 + x)] = float4(transmission, weight);
-        }
-    }
-}
-
-// Wall-aware bilinear read of the half-resolution bounce. The taps are the
-// same every frame; their transmission-weighted coefficients come from
-// BuildBounceFilter.
-float3 SampleBounceFiltered(int2 pixel, float2 uv)
-{
-    float2 position = uv * float2(_BounceSize) - 0.5;
-    int2 basePixel = int2(floor(position));
-    uint baseIndex = ((uint)pixel.y * (uint)_FieldSize.x + (uint)pixel.x) * 4u;
-    float3 result = 0.0;
-    [unroll]
-    for (int y = 0; y < 2; y++)
-    {
-        [unroll]
-        for (int x = 0; x < 2; x++)
-        {
-            int2 tap = clamp(basePixel + int2(x, y), int2(0, 0), _BounceSize - 1);
-            float4 tapFilter = _BounceFilterWeights[baseIndex + (uint)(y * 2 + x)];
-            result += _BounceInput.Load(int3(tap, 0)).rgb * tapFilter.rgb * tapFilter.a;
-        }
-    }
-
-    return result;
-}
-
-[numthreads(64, 1, 1)]
-void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
-{
-    uint localIndex = dispatchId.x + dispatchId.y * (uint)_CascadeDispatchRowWidth;
-    if (localIndex >= (uint)_CascadeEntryCount)
-    {
-        return;
-    }
-
-    uint directionIndex = localIndex % (uint)_CascadeDirectionCount;
-    uint probeIndex = localIndex / (uint)_CascadeDirectionCount;
-    int2 probe = int2(
-        probeIndex % (uint)_CascadeProbeSize.x,
-        probeIndex / (uint)_CascadeProbeSize.x);
-    float2 origin = (float2(probe) + 0.5) * _CascadeProbeSpacing;
-    float angle = (float(directionIndex) + 0.5) * PI2 /
-        float(_CascadeDirectionCount);
-    float raySine;
-    float rayCosine;
-    sincos(angle, raySine, rayCosine);
-    float2 rayDirection = float2(rayCosine, raySine);
-    float2 intervalStart = origin + rayDirection * _CascadeInterval.x;
-    float2 intervalEnd = origin + rayDirection * _CascadeInterval.y;
-    float3 radiance = 0.0;
-    float3 transmittance = 1.0;
-
-    // Each interpolated far interval needs its own continuous near path.
-    // Otherwise a far probe across a wall contributes without crossing it.
-    if (_HasFarCascade == 0)
-    {
-        TraceRadianceSegment(
-            intervalStart,
-            intervalEnd,
-            true,
-            radiance,
-            transmittance);
-    }
-
-    if (_HasFarCascade != 0)
-    {
-        // Every cascade stores the next contiguous radial interval from the
-        // same receiver position. Interpolate the coarser probe field at this
-        // probe's position; offsetting the lookup to the near interval end
-        // would apply the far cascade's interval start twice and leave gaps.
-        float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
-        int2 farProbeBase = int2(floor(farProbePosition));
-        float2 farProbeBlend = frac(farProbePosition);
-        uint directionBranchCount = clamp(
-            (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
-            1u,
-            4u);
-        uint farDirectionBase = directionIndex * directionBranchCount;
-        float3 fixedRadiance = 0.0;
-        float3 fixedTransmittance = 0.0;
-
-        [loop]
-        for (uint farDirectionBranch = 0u; farDirectionBranch < directionBranchCount;
-            farDirectionBranch++)
-        {
-            uint farDirection = (farDirectionBase + farDirectionBranch) %
-                (uint)_FarCascadeDirectionCount;
-
-            [unroll]
-            for (int farY = 0; farY < 2; farY++)
-            {
-                [unroll]
-                for (int farX = 0; farX < 2; farX++)
-                {
-                    int2 farProbe = clamp(
-                        farProbeBase + int2(farX, farY),
-                        int2(0, 0),
-                        _FarCascadeProbeSize - 1);
-                    int farIndex = _FarCascadeOffset +
-                        (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
-                        _FarCascadeDirectionCount + (int)farDirection;
-                    float probeWeight =
-                        (farX == 0 ? 1.0 - farProbeBlend.x : farProbeBlend.x) *
-                        (farY == 0 ? 1.0 - farProbeBlend.y : farProbeBlend.y) /
-                        float(directionBranchCount);
-                    // Угол с нулевым билинейным весом не входит в сумму
-                    // ничем. Его выборка из атласа и, главное, его марш —
-                    // работа целиком в пустоту. На краю каскада clamp
-                    // схлопывает соседние углы в один и тот же зонд, и тогда
-                    // нулевых весов становится половина.
-                    if (probeWeight <= 0.0)
-                    {
-                        continue;
-                    }
-
-                    uint3 farPackedInterval = _RadianceAtlas[farIndex];
-                    float3 sampledFarRadiance =
-                        UnpackRadiance(farPackedInterval.xy);
-                    float3 sampledFarTransmittance =
-                        UnpackTransmittance(farPackedInterval);
-                    float farAngle = (float(farDirection) + 0.5) * PI2 /
-                        float(_FarCascadeDirectionCount);
-                    float farSine;
-                    float farCosine;
-                    sincos(farAngle, farSine, farCosine);
-                    float2 farDirectionVector = float2(farCosine, farSine);
-                    float2 farOrigin =
-                        (float2(farProbe) + 0.5) * _FarCascadeProbeSpacing;
-                    float2 childIntervalStart = farOrigin +
-                        farDirectionVector * _FarCascadeInterval.x;
-                    float3 childNearRadiance;
-                    float3 childNearTransmittance;
-                    TraceRadianceSegment(
-                        intervalStart,
-                        childIntervalStart,
-                        true,
-                        childNearRadiance,
-                        childNearTransmittance);
-                    fixedRadiance += (childNearRadiance +
-                        childNearTransmittance * sampledFarRadiance) * probeWeight;
-                    fixedTransmittance +=
-                        childNearTransmittance * sampledFarTransmittance * probeWeight;
-                }
-            }
-        }
-
-        radiance = fixedRadiance;
-        transmittance = fixedTransmittance;
-    }
-
-    int atlasIndex = _CascadeOffset + (int)localIndex;
-    _RadianceAtlas[atlasIndex] = PackInterval(
-        radiance,
-        transmittance);
-}
-
-[numthreads(8, 8, 1)]
-void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    int2 samplePixel = pixel;
-    GetBlockSnappedPixel(pixel, samplePixel);
-    int probeIndex = samplePixel.y * _FieldSize.x + samplePixel.x;
-    float3 radiance = 0.0;
-
-    if (_DebugView == 4)
-    {
-        float3 localTransmission = 0.0;
-        float2 origin = float2(pixel) + 0.5;
-        float2 regionCellCount = _WorldRect.zw / _CellSize;
-
-        [loop]
-        for (int debugDirection = 0; debugDirection < 32; debugDirection++)
-        {
-            float debugAngle = (float(debugDirection) + 0.5) * PI2 / 32.0;
-            float debugSine;
-            float debugCosine;
-            sincos(debugAngle, debugSine, debugCosine);
-            float2 debugRay = float2(debugCosine, debugSine);
-            float pixelsPerCell = length(float2(_FieldSize) / regionCellCount * debugRay);
-            float3 unusedRadiance;
-            float3 transmission;
-            TraceRadianceSegment(
-                origin,
-                origin + debugRay * (_TransmittanceDebugDistanceCells * pixelsPerCell),
-                false,
-                unusedRadiance,
-                transmission);
-            localTransmission += transmission;
-        }
-
-        _DirectTexture[pixel] = float4(localTransmission / 32.0, 1.0);
-        return;
-    }
-
-    [unroll]
-    for (int direction = 0; direction < 4; direction++)
-    {
-        int atlasIndex = _CascadeOffset + probeIndex * 4 + direction;
-        uint3 packedInterval = _RadianceAtlas[atlasIndex];
-        radiance += UnpackRadiance(packedInterval.xy);
-    }
-
-    float3 directOutput = radiance * 0.25;
-    _DirectTexture[pixel] = float4(directOutput, 1.0);
-}
-
-// The gather geometry of SolveDiffuseBounce: where each of the 8 rotated rays
-// first strikes a surface and how much of that surface's reflection reaches
-// the receiver. Depends only on the material field, never on light.
-[numthreads(8, 8, 1)]
-void BuildBounceTaps(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_BounceSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float2 fieldPosition = (float2(pixel) + 0.5) * float2(_FieldSize) / float2(_BounceSize);
-
-    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
-    float pixelsPerCell = 1.0 / max(cellsPerPixel.x, 0.0001);
-
-    // Rotate the eight directions per receiver; reconstruction checks visibility.
-    float jitter = InterleavedGradientNoise(float2(pixel));
-    float baseAngle = jitter * (PI2 / 8.0);
-    uint baseIndex = ((uint)pixel.y * (uint)_BounceSize.x + (uint)pixel.x) * 16u;
-
-    // The hit branch traces a variable-length DDA path. Keep both loops
-    // dynamic so the Metal cross-compiler does not expand that path 8 x 16 times.
-    [loop]
-    for (int d = 0; d < 8; d++)
-    {
-        float4 bounceAlbedo = 0.0;
-        float4 bounceTransmission = 0.0;
-        float angle = baseAngle + float(d) * (PI2 / 8.0);
-        float raySin;
-        float rayCos;
-        sincos(angle, raySin, rayCos);
-        float2 rayDir = float2(rayCos, raySin);
-
-        float2 prevPos = fieldPosition;
-        int2 prevCell = int2(floor(fieldPosition * cellsPerPixel));
-
-        [loop]
-        for (int stepIdx = 1; stepIdx <= 16; stepIdx++)
-        {
-            float distCells = float(stepIdx) * 0.25;
-            float2 samplePos = fieldPosition + rayDir * (distCells * pixelsPerCell);
-            if (any(samplePos < 0.0) || any(samplePos >= float2(_FieldSize)))
-            {
-                break;
-            }
-
-            int2 currentCell = int2(floor(samplePos * cellsPerPixel));
-            bool diagonalOccluded = false;
-            CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
-            if (diagonalOccluded)
-            {
-                break;
-            }
-
-            prevCell = currentCell;
-
-            float4 mat = _MaterialField.SampleLevel(sampler_LinearClamp, MaterialUv(samplePos), 0);
-            float solid = saturate(mat.a);
-
-            if (solid > 0.2) // Struck an illuminated solid surface
-            {
-                float3 unusedRadiance;
-                float3 transmission;
-                TraceRadianceSegment(fieldPosition, prevPos, false, unusedRadiance, transmission);
-
-                float mCh = max(mat.r, max(mat.g, mat.b));
-                float3 albedo = mCh > 0.04
-                    ? (mat.rgb / mCh) * max(mCh, 0.4)
-                    : float3(0.4, 0.38, 0.36);
-                albedo = min(albedo, 0.75);
-
-                // Factors are stored separately so the runtime multiplies them
-                // in the original order: bit-identical, not merely close.
-                bounceAlbedo = float4(albedo, float(stepIdx));
-                bounceTransmission = float4(transmission, 0.0);
-                break; // Opaque surface occludes further ray travel
-            }
-
-            prevPos = samplePos;
-        }
-
-        _BounceTaps[baseIndex + (uint)d * 2u] = bounceAlbedo;
-        _BounceTaps[baseIndex + (uint)d * 2u + 1u] = bounceTransmission;
-    }
-}
-
-[numthreads(8, 8, 1)]
-void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_BounceSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float bounceStrength = (_DebugView == 8) ? max(_BounceStrength, 1.0) : _BounceStrength;
-    if (_EnableDiffuseBounce == 0 && _DebugView != 9)
-    {
-        _BounceTexture[pixel] = 0.0;
-        return;
-    }
-
-    if (bounceStrength <= 0.0001)
-    {
-        _BounceTexture[pixel] = 0.0;
-        return;
-    }
-
-    float2 fieldPosition = (float2(pixel) + 0.5) * float2(_FieldSize) / float2(_BounceSize);
-
-    float4 centerMat = _MaterialField.SampleLevel(sampler_LinearClamp, MaterialUv(fieldPosition), 0);
-    float centerSolid = saturate(centerMat.a);
-
-    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
-    float pixelsPerCell = 1.0 / max(cellsPerPixel.x, 0.0001);
-    float jitter = InterleavedGradientNoise(float2(pixel));
-    float baseAngle = jitter * (PI2 / 8.0);
-    uint baseIndex = ((uint)pixel.y * (uint)_BounceSize.x + (uint)pixel.x) * 16u;
-
-    float3 gatheredBounce = 0.0;
-
-    [loop]
-    for (int d = 0; d < 8; d++)
-    {
-        float4 bounceAlbedo = _BounceTaps[baseIndex + (uint)d * 2u];
-        if (bounceAlbedo.a <= 0.0)
-        {
-            continue;
-        }
-
-        float angle = baseAngle + float(d) * (PI2 / 8.0);
-        float raySin;
-        float rayCos;
-        sincos(angle, raySin, rayCos);
-        float2 rayDir = float2(rayCos, raySin);
-
-        // The same position the march stood on one step before the hit.
-        int hitStep = int(bounceAlbedo.a);
-        float2 prevPos = fieldPosition;
-        if (hitStep > 1)
-        {
-            float distCells = float(hitStep - 1) * 0.25;
-            prevPos = fieldPosition + rayDir * (distCells * pixelsPerCell);
-        }
-
-        // The air immediately in front of the hit is the incident side.
-        // Reading the solid's averaged lighting imports its opposite face.
-        float2 uvPrev = OutputUv(prevPos);
-        float3 incident =
-            _DirectInput.SampleLevel(sampler_LinearClamp, uvPrev, 0).rgb +
-            _StaticDirectInput.SampleLevel(sampler_LinearClamp, uvPrev, 0).rgb;
-        float3 transmission = _BounceTaps[baseIndex + (uint)d * 2u + 1u].rgb;
-        gatheredBounce += incident * bounceAlbedo.rgb * transmission;
-    }
-
-    // Equal angular weights. Absorption is never divided out by normalization.
-    float3 scatteredInAir = gatheredBounce / 8.0;
-    _BounceTexture[pixel] = float4(scatteredInAir * (1.0 - centerSolid) * bounceStrength, 1.0);
-}
-
-float3 SurfaceReflection(float2 position, float3 albedo)
-{
-    float2 uv = OutputUv(position);
-    float3 incident = _DirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb +
-        _StaticDirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
-    float2 pixelsPerCell = float2(_FieldSize) * _CellSize / _WorldRect.zw;
-    int2 pixel = int2(floor(position));
-    static const int2 offsets[4] =
-    {
-        int2(-1, 0),
-        int2(1, 0),
-        int2(0, -1),
-        int2(0, 1),
-    };
-    [unroll]
-    for (int i = 0; i < 4; i++)
-    {
-        // Reach stays one cell, but the light is read at the first air texel
-        // on this row or column - the face itself. Sampling a fixed cell away
-        // gave every texel of a one-cell block the same point in front of the
-        // face, so whole blocks lit as flat squares.
-        int reach = max(1, (int)ceil(abs(dot(float2(offsets[i]), pixelsPerCell))));
-        [loop]
-        for (int stepIndex = 1; stepIndex <= reach; stepIndex++)
-        {
-            int2 neighbor = pixel + offsets[i] * stepIndex;
-            if (any(neighbor < 0) || any(neighbor >= _FieldSize))
-            {
-                break;
-            }
-
-            int2 materialNeighbor = neighbor;
-            if (_MaterialYFlip != 0)
-            {
-                materialNeighbor.y = _FieldSize.y - 1 - materialNeighbor.y;
-            }
-
-            if (_MaterialField.Load(int3(materialNeighbor, 0)).a >= 0.5)
-            {
-                continue;
-            }
-
-            float3 light = _DirectInput.Load(int3(neighbor, 0)).rgb +
-                _StaticDirectInput.Load(int3(neighbor, 0)).rgb;
-            // Incident light reaches the exposed face through half an air cell.
-            // Surface reflection is presentation only; it is never transmitted
-            // through the wall or used as light on its opposite face.
-            incident = max(incident, light * SegmentTransmission(0.0, 0.5));
-            break;
-        }
-    }
-
-    return incident * saturate(albedo) * _BounceStrength;
-}
-
-[numthreads(8, 8, 1)]
-void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float2 uv = (float2(pixel) + 0.5) / float2(_FieldSize);
-    int2 materialPixel = pixel;
-    if (_MaterialYFlip != 0)
-    {
-        materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
-    }
-
-    float4 material = _MaterialField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
-    float4 emission = _EmissionField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
-    if (_DebugView == 1) // Occupancy
-    {
-        _Result[pixel] = float4(material.aaa, 1.0);
-        return;
-    }
-
-    // Тот же мип занятости, из которого террейн строит AO вокруг блоков.
-    // Радиус держится здесь и в Terrain.shader порознь: там он в пикселях
-    // экрана, тут в текселях поля, и сводить их в одну константу нечем.
-    // Вид показывает источник, а не готовую тень.
-    if (_DebugView == 10) // AmbientOcclusion
-    {
-        float nearby = SampleOccupancy(float2(pixel) + 0.5, _TerrainAmbientOcclusionMip);
-        float occlusion = saturate(sqrt(nearby) * _TerrainAmbientOcclusionStrength);
-        _Result[pixel] = float4(occlusion, occlusion, occlusion, 1.0);
-        return;
-    }
-
-    if (_DebugView == 2) // Albedo
-    {
-        _Result[pixel] = float4(material.rgb, 1.0);
-        return;
-    }
-
-    if (_DebugView == 3) // Emission
-    {
-        _Result[pixel] = float4(emission.rgb, 1.0);
-        return;
-    }
-
-    float4 dynamicDirect = _DirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
-    float4 staticDirect = _StaticDirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
-
-    // Прозрачность среды берётся из статической половины, а не из
-    // динамической.
-    //
-    // ЗАЧЕМ. В этом отладочном виде ResolveDirect выходит раньше и пишет одну
-    // прозрачность, без всякой эмиссии, — обе половины содержат одно и то же,
-    // и опасаться загрязнения статикой здесь не от чего. Зато динамическая
-    // половина решается только когда в кадре есть хоть один динамический
-    // источник, а иначе её текстуру просто обнуляют (ClearDynamicDirect). Вид
-    // выходил чёрным ровно там, где рядом нет ни одной лампы, — то есть почти
-    // всегда. Статическая половина пересчитывается при каждой смене
-    // отладочного вида и потому заполнена всегда.
-    if (_DebugView == 4) // Transmission
-    {
-        // Берётся та половина, которая в этом кадре решалась.
-        //
-        // В этом отладочном виде ResolveDirect выходит раньше и пишет одну
-        // прозрачность, без эмиссии, — обе половины содержат одно и то же,
-        // и выбирать между ними по смыслу не из чего. Зато пропущена может
-        // быть любая: динамическая не решается, когда в кадре нет ни одного
-        // динамического источника (её текстуру тогда обнуляют), а статическая
-        // — когда геометрия не менялась. Максимум переживает пропуск любой из
-        // них, тогда как жёсткая привязка к одной давала чёрный экран.
-        _Result[pixel] = float4(max(staticDirect.rgb, dynamicDirect.rgb), 1.0);
-        return;
-    }
-
-    if (_DebugView == 5) // StaticDirect
-    {
-        _Result[pixel] = float4(staticDirect.rgb, 1.0);
-        return;
-    }
-
-    if (_DebugView == 6) // DynamicDirect
-    {
-        _Result[pixel] = float4(dynamicDirect.rgb, 1.0);
-        return;
-    }
-
-    if (_BlockAveraged != 0 && _DebugView == 0)
-    {
-        _Result[pixel] = float4(max(dynamicDirect.rgb, 0.0), 1.0);
-        return;
-    }
-
-    float4 combinedDirect = dynamicDirect + staticDirect;
-
-    if (_DebugView == 7) // DirectRadiance (combined)
-    {
-        _Result[pixel] = float4(combinedDirect.rgb, 1.0);
-        return;
-    }
-
-    float solid = saturate(material.a);
-    float3 bounce = (1.0 - solid) * SampleBounceFiltered(pixel, uv);
-    if (solid > 0.0)
-    {
-        bounce += solid * SurfaceReflection(float2(pixel) + 0.5, material.rgb);
-    }
-
-    if (_DebugView == 8) // DiffuseBounce
-    {
-        _Result[pixel] = float4(bounce, 1.0);
-        return;
-    }
-
-    float3 bounceTerm = _EnableDiffuseBounce != 0 ? bounce : 0.0;
-
-    float3 directAndBounce = bounceTerm + combinedDirect.rgb;
-    float3 ambient = _AmbientColor.rgb;
-
-    if (_DebugView == 9) // Exposure (false-color zebras)
-    {
-        float maximumLight = max(_MaximumLightMultiplier, 0.0001);
-        float3 result = ambient + directAndBounce;
-        float peak = Max3(result);
-        float3 falseColor = float3(0.0, 0.0, 0.0);
-        if (peak > maximumLight)
-        {
-            // Overexposed / clipped -> bright red
-            falseColor = float3(1.0, 0.1, 0.1);
-        }
-        else if (peak > 1.0)
-        {
-            // High dynamic range (1.0 to maximumLight) -> yellow-orange
-            float t = (peak - 1.0) / max(maximumLight - 1.0, 0.0001);
-            falseColor = lerp(float3(0.3, 0.9, 0.2), float3(1.0, 0.7, 0.0), saturate(t));
-        }
-        else if (peak > 0.05)
-        {
-            // Well-exposed (< 1.0) -> green gradient
-            float t = (peak - 0.05) / 0.95;
-            falseColor = lerp(float3(0.05, 0.3, 0.1), float3(0.3, 0.9, 0.2), saturate(t));
-        }
-        else
-        {
-            // Deep shadow (< 0.05) -> dark blue
-            float t = peak / 0.05;
-            falseColor = lerp(float3(0.02, 0.04, 0.15), float3(0.05, 0.3, 0.1), saturate(t));
-        }
-
-        _Result[pixel] = float4(falseColor, 1.0);
-        return;
-    }
-
-    float3 output = max(directAndBounce, 0.0);
-    _Result[pixel] = float4(ambient + output, 1.0);
-}
-
-[numthreads(8, 8, 1)]
-void SeedBlockLighting(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    int2 materialPixel = pixel;
-    if (_MaterialYFlip != 0)
-    {
-        materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
-    }
-
-    float solid = step(0.5, _MaterialField.Load(int3(materialPixel, 0)).a);
-    float3 initialLight = max(_EmissionField.Load(int3(materialPixel, 0)).rgb, 0.0) * _EmissionScale;
-
-    // Seed only the cell containing the lamp. A radius-shaped emission field
-    // would create sources on the other side of walls before transport starts.
-    for (int i = 0; i < _DynamicLightCount; ++i)
-    {
-        DynamicLight light = _DynamicLights[i];
-        int2 lightPixel = int2(floor(
-            (light.positionRadius.xy - _WorldRect.xy) / _WorldRect.zw * float2(_FieldSize)));
-        if (solid == 0.0 && all(pixel == lightPixel))
-        {
-            initialLight += max(light.colorIntensity.rgb * light.colorIntensity.a, 0.0);
-        }
-    }
-
-    // RGB is incident light at the cell entrance. Alpha is physical occupancy.
-    // Ambient is added at presentation, never propagated as a source.
-    _BlockLightOutput[pixel] = float4(initialLight, solid);
-}
-
-[numthreads(8, 8, 1)]
-void PropagateBlockLighting(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float4 current = _BlockLightInput.Load(int3(pixel, 0));
-    float3 incident = current.rgb;
-    static const int2 offsets[4] =
-    {
-        int2(-1, 0),
-        int2(1, 0),
-        int2(0, -1),
-        int2(0, 1),
-    };
-
-    [unroll]
-    for (int k = 0; k < 4; ++k)
-    {
-        int2 neighborPixel = pixel + offsets[k];
-        if (any(neighborPixel < 0) || any(neighborPixel >= _FieldSize))
-        {
-            continue;
-        }
-
-        float4 neighbor = _BlockLightInput.Load(int3(neighborPixel, 0));
-        float distanceCells = PathLengthInCells(float2(offsets[k]), 1.0);
-        float3 transmitted = neighbor.rgb * SegmentTransmission(neighbor.a, distanceCells);
-        int2 materialPixel = neighborPixel;
-        if (_MaterialYFlip != 0)
-        {
-            materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
-        }
-
-        // A glowing solid emits at its surface; external light still has to
-        // traverse its mass. Only its own emission bypasses self-absorption.
-        float3 emission = max(_EmissionField.Load(int3(materialPixel, 0)).rgb, 0.0) * _EmissionScale;
-        incident = max(incident, max(transmitted, emission * neighbor.a));
-    }
-
-    _BlockLightOutput[pixel] = float4(incident, current.a);
-}
-
-[numthreads(8, 8, 1)]
-void ResolveBlockLighting(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    _Result[pixel] = float4(_BlockLightInput.Load(int3(pixel, 0)).rgb + _AmbientColor.rgb, 1.0);
-}
+#include "Assets/Resources/Shaders/Lighting/Composite/CompositeLighting.hlsl"

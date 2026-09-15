@@ -25,7 +25,7 @@ using VContainer;
 
 namespace Fodinae.Networking.Connection
 {
-    public class ConnectionManager : MonoBehaviour, IConnectionService
+    public class ConnectionManager : MonoBehaviour, IConnectionService, IWorldRegionRequester
     {
         private static readonly ProfilerMarker _PacketDrainMarker =
             new("Fodinae.Net.DrainPacketQueue");
@@ -44,6 +44,15 @@ namespace Fodinae.Networking.Connection
         public IServerConnection? Connection { get; private set; }
         public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
         public bool IsOffline => Connection is IOfflineConnection;
+
+        public void RequestWorldRegion(string worldCodeName, RectInt serverRegion)
+        {
+            if (IsConnected && Connection is IWorldRegionRequester requester)
+            {
+                requester.RequestWorldRegion(worldCodeName, serverRegion);
+            }
+        }
+
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;
         public event Action<string>? OnReconnectStatusChanged;

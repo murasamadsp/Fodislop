@@ -23,7 +23,7 @@ public sealed class DummyMovementResponderTests
         var player = new DummyPlayerSimulationState();
         player.SetPosition(10, 20);
         using var world = new DummyWorldSimulationState(supervisor, new Fodinae.Tests.Networking.UnavailableDummyWorldMapSource());
-        var teleports = new DummyTeleportManager(sent.Add, []);
+        var teleports = new DummyTeleportManager(sent.Add, [], supervisor);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             supervisor,
@@ -54,7 +54,7 @@ public sealed class DummyMovementResponderTests
         var player = new DummyPlayerSimulationState();
         player.SetPosition(10, 20);
         using var world = new DummyWorldSimulationState(supervisor, new Fodinae.Tests.Networking.UnavailableDummyWorldMapSource());
-        var teleports = new DummyTeleportManager(sent.Add, []);
+        var teleports = new DummyTeleportManager(sent.Add, [], supervisor);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             supervisor,

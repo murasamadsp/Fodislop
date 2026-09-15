@@ -33,6 +33,7 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         float cellSize)
     {
         EnsureObjects(parent, sceneObjects);
+        _gameObject!.transform.localPosition = Vector3.zero;
         // Вершины и индексы дверей приходят уже компактными из сборщика клеток.
         EnsureSubMeshLists(subMeshIndices.Length);
         _vertices.Clear();
@@ -100,6 +101,24 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         _renderer.sharedMaterials = materials;
         _renderer.sortingLayerName = sortingLayerName;
         _renderer.sortingOrder = sortingOrder;
+    }
+
+    public void Hide()
+    {
+        if (_gameObject != null)
+        {
+            _gameObject.SetActive(false);
+        }
+    }
+
+    public void CompensateParentTranslation(Vector3 parentDelta)
+    {
+        if (_gameObject == null || !_gameObject.activeSelf || parentDelta == Vector3.zero)
+        {
+            return;
+        }
+
+        _gameObject.transform.localPosition -= parentDelta;
     }
 
     public void Dispose()

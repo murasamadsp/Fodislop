@@ -27,3 +27,9 @@ public interface IOfflineConnection
     void TriggerDisconnect(string reason);
     void TriggerReconnect(string reason);
 }
+
+// Optional transport capability; coordinates are server cells, Y down.
+public interface IWorldRegionRequester
+{
+    void RequestWorldRegion(string worldCodeName, UnityEngine.RectInt serverRegion);
+}

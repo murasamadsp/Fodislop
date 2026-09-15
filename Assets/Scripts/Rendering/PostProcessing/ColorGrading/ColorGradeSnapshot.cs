@@ -323,6 +323,39 @@ public readonly record struct ColorGradeSnapshot
     // девять новых кривых и квалификатор при каждом вызове.
     public static ColorGradeSnapshot Look => LookDefaults.Value;
 
+    // Нейтральность грейда живёт здесь, рядом с полями, а не в проходе.
+    //
+    // Раньше эти два списка полей стояли в PostProcessRenderPass, третий их
+    // список — в ключе запекания, и все три обязаны были согласовываться
+    // вручную. Они уже разошлись: ключ учитывал интерполяцию кривых, проверка
+    // нейтральности — нет. Добавление поля в снимок тихо ломало либо кэш,
+    // либо ранний выход прохода, и компилятор об этом молчал.
+
+    // Входы творческого прохода (всё, что запекается в таблицу) в нейтрали:
+    // композит тогда возвращает тот же цвет, и проход не нужен.
+    public bool IsCreativeNeutral =>
+        Temperature == 0f && Tint == 0f &&
+        Slope == Vector3.one && Offset == Vector3.zero && Power == Vector3.one &&
+        CdlMaster == new Vector3(1f, 0f, 1f) && CdlSaturation == 1f &&
+        PrimaryLift == Vector3.zero && PrimaryGamma == Vector3.one &&
+        PrimaryGain == Vector3.one && PrimaryOffset == Vector3.zero &&
+        PrimaryMaster == new Vector4(0f, 1f, 1f, 0f) &&
+        Vibrance == 0f && Hue == 0f &&
+        Shadows == 0f && Highlights == 0f && Blacks == 0f &&
+        Whites == 0f && Toe == 0f && Shoulder == 0f &&
+        !Qualifier.Enabled &&
+        HueVsHueCurve.IsNeutral && HueVsSaturationCurve.IsNeutral &&
+        HueVsLuminanceCurve.IsNeutral && LuminanceVsSaturationCurve.IsNeutral &&
+        SaturationVsSaturationCurve.IsNeutral;
+
+    // Точечные операции прохода дисплея в нейтрали.
+    public bool IsDisplayNeutral =>
+        Transform == DisplayTransform.None &&
+        (Lut == null || LutIntensity <= 0f) &&
+        (!GamutCompressionEnabled || GamutCompressionStrength <= 0f) &&
+        MasterCurve.IsNeutral && RedCurve.IsNeutral &&
+        GreenCurve.IsNeutral && BlueCurve.IsNeutral;
+
     public ColorGradeSnapshot Sanitized() => SanitizedReusing(null);
 
     // Кривые и квалификатор, совпадающие по содержимому с уже санитизированным

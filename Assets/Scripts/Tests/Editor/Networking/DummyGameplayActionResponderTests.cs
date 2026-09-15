@@ -23,7 +23,7 @@ public sealed class DummyGameplayActionResponderTests
         var player = new DummyPlayerSimulationState();
         player.SetHealth(400);
         using var world = new DummyWorldSimulationState(operations, new Fodinae.Tests.Networking.UnavailableDummyWorldMapSource());
-        var teleports = new DummyTeleportManager(sent.Add, []);
+        var teleports = new DummyTeleportManager(sent.Add, [], operations);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             operations,

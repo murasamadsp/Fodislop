@@ -519,7 +519,7 @@ public static class Program
 
         // Проверяем, что смена AntiAliasing изменяет равенство и хэш GraphicsQualitySettings
         _checks++;
-        var baseSettings = new GraphicsQualitySettings(2, 512, 128, 16, 20f, 1024, 1f, 0);
+        var baseSettings = new GraphicsQualitySettings(2, 512, 128, 16, 1024, 1f, 0);
         var changedSettings = baseSettings;
         changedSettings.AntiAliasing = 4;
         if (baseSettings == changedSettings || baseSettings.GetHashCode() == changedSettings.GetHashCode())

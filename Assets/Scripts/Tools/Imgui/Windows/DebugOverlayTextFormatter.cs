@@ -137,6 +137,13 @@ internal static class DebugOverlayTextFormatter
           .Append(telemetry.GcCollectionCount).Append("\n\n");
 
         sb.Append("<b>Террейн</b>\n")
+          .Append("Окно: ").Append(StreamingPlanLabel(telemetry.StreamingPlanKind))
+          .Append(" @ ").Append(telemetry.StreamingWindowOriginX).Append(",")
+          .Append(telemetry.StreamingWindowOriginY).Append(" ")
+          .Append(telemetry.StreamingWindowWidth).Append("×")
+          .Append(telemetry.StreamingWindowHeight)
+          .Append("  Δ").Append(telemetry.StreamingDeltaX).Append(",")
+          .Append(telemetry.StreamingDeltaY).Append("\n")
           .Append("Меш: ").Append(telemetry.TerrainMeshTimeMs.ToString("F2")).Append(" мс  ·  заливка: ")
           .Append(telemetry.TerrainFloodFillTimeMs.ToString("F2")).Append(" мс\n")
           .Append("Кэш: ").Append(telemetry.TerrainCacheTimeMs.ToString("F2")).Append(" мс  ·  GPU: ")
@@ -156,7 +163,16 @@ internal static class DebugOverlayTextFormatter
           .Append(telemetry.LightingExecuteCommandsTimeMs.ToString("F2")).Append(" мс\n")
           .Append("Статические: ").Append(telemetry.LightingStaticSolveCount)
           .Append("  ·  динамические: ").Append(telemetry.LightingDynamicSolveCount)
-          .Append("  ·  инвалид.: ").Append(telemetry.LightingRegionInvalidationCount).Append("\n\n");
+          .Append("  ·  инвалид.: ").Append(telemetry.LightingRegionInvalidationCount).Append("\n")
+          .Append("Стоимость cascade: ").Append(telemetry.LightingEstimatedCascadeRayWorkUnits)
+          .Append(" шагов  ·  dispatch: ").Append(telemetry.LightingEstimatedCascadeDispatchThreads)
+          .Append(" потоков\n")
+          .Append("Лампы перетрассированы: ").Append(telemetry.LightingLampTraceCount)
+          .Append("  ·  в среднем за решение: ")
+          .Append(telemetry.LightingDynamicSolveCount > 0
+              ? (telemetry.LightingLampTraceCount / (float)telemetry.LightingDynamicSolveCount).ToString("F1")
+              : "—")
+          .Append("\n\n");
 
         // Постпроцесс из этого списка изъят намеренно: его нельзя
         // выключить ничем. Без тонмапа света срезаются в плоский белый,
@@ -166,4 +182,15 @@ internal static class DebugOverlayTextFormatter
           .Append("  ·  террейн: ").Append(terrainDrawState)
           .Append("  ·  меш: ").Append(cpuMeshState);
     }
+
+    private static string StreamingPlanLabel(int kind) => kind switch
+    {
+        0 => "Keep",
+        1 => "ScrollTerrain",
+        2 => "BuildPrefetch",
+        3 => "SwapPrefetch",
+        4 => "FullRebuild",
+        5 => "Resize",
+        _ => "Unknown",
+    };
 }

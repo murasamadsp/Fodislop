@@ -36,7 +36,7 @@
     <Compile Include="../../Assets/Scripts/World/Terrain/Gpu/TerrainCellDataPacker.cs" Link="Game/TerrainCellDataPacker.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Gpu/TerrainDirtyRegion.cs" Link="Game/TerrainDirtyRegion.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/DirtyRectSet.cs" Link="Game/DirtyRectSet.cs" />
-    <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainCacheArrayScroller.cs" Link="Game/TerrainCacheArrayScroller.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainRingGrid.cs" Link="Game/TerrainRingGrid.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainMetadata.cs" Link="Game/TerrainMetadata.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Background/BackgroundFloodFill.cs" Link="Game/BackgroundFloodFill.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/Contracts/ISpatialIndex.cs" Link="Game/ISpatialIndex.cs" />

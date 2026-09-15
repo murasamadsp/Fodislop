@@ -59,7 +59,7 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(new BasketPacket(50000, basketContents)));
         sendPacket(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
         sendPacket(new ServerPacket(new LevelPacket(level)));
-        worldState.SendChunksAround(playerState.X, playerState.Y, sendPacket);
+        await worldState.SendChunksAroundAsync(playerState.X, playerState.Y, sendPacket);
 
         SendSkillProgress();
         chatSimulator.SendChatMock();

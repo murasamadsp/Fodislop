@@ -1,0 +1,456 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using UnityEngine;
+using UnityEngine.Rendering;
+using Unity.Profiling;
+using Fodinae.Core;
+
+namespace Fodinae.World.Lighting;
+
+/// <summary>
+/// Records static radiance cascade tracing and atlas resolve commands.
+/// Resource lifetime remains owned by <see cref="LightingResourceManager"/>.
+/// </summary>
+internal sealed class StaticLightingSolver
+{
+    private const int MaximumDispatchGroupsPerDimension = 65535;
+
+    private static readonly ProfilerMarker CascadeMarker =
+        new("Fodinae.Lighting.Cascades.Record.CPU");
+    private static readonly ProfilerMarker ResolveMarker =
+        new("Fodinae.Lighting.Resolve.Record.CPU");
+
+    private readonly LightingResourceManager _resources;
+    private readonly IFrameTelemetry _telemetry;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct DirtyRegionGpu
+    {
+        public readonly int MinX;
+        public readonly int MinY;
+        public readonly int MaxX;
+        public readonly int MaxY;
+
+        public DirtyRegionGpu(int minX, int minY, int maxX, int maxY)
+        {
+            MinX = minX;
+            MinY = minY;
+            MaxX = maxX;
+            MaxY = maxY;
+        }
+    }
+
+    public StaticLightingSolver(
+        LightingResourceManager resources,
+        IFrameTelemetry telemetry)
+    {
+        _resources = resources;
+        _telemetry = telemetry;
+    }
+
+    public void RecordTrace(
+        CommandBuffer commandBuffer,
+        RenderTexture emissionField,
+        bool reuseOverlap,
+        Vector2Int regionDelta,
+        IReadOnlyList<RectInt> dirtyRegions,
+        bool allowDependencyMask,
+        Vector4 worldRect)
+    {
+        using var cascadeMarker = CascadeMarker.Auto();
+        commandBuffer.BeginSample("Fodinae.Lighting.RadianceCascades");
+        ComputeShader compute = _resources.LightingCompute!;
+        int solveKernel = _resources.SolveCascadeKernel;
+        bool useDependencyMask = allowDependencyMask &&
+            !reuseOverlap &&
+            ShouldUseDependencyMask(dirtyRegions, worldRect);
+        if (useDependencyMask)
+        {
+            _telemetry.LightingStaticDependencyMaskSolveCount++;
+        }
+        else if (dirtyRegions.Count > 0)
+        {
+            _telemetry.LightingStaticDenseFallbackCount++;
+        }
+        DirtyRegionGpu[] dirtyFieldRegions = useDependencyMask
+            ? ConvertDirtyRegions(dirtyRegions, worldRect)
+            : Array.Empty<DirtyRegionGpu>();
+        _resources.EnsureDirtyRegionCapacity(Mathf.Max(1, dirtyFieldRegions.Length));
+        if (useDependencyMask)
+        {
+            _resources.DirtyRegions!.SetData(dirtyFieldRegions);
+        }
+
+        if (reuseOverlap)
+        {
+            RecordScroll(commandBuffer, compute, regionDelta);
+            _resources.SwapRadianceAtlases();
+        }
+
+        commandBuffer.SetComputeBufferParam(compute, solveKernel,
+            LightingComputeBinder.RadianceAtlasID, _resources.RadianceAtlas!);
+
+        for (int cascadeIndex = _resources.Cascades.Count - 1;
+             cascadeIndex >= 0;
+             cascadeIndex--)
+        {
+            CascadeLayout cascade = _resources.Cascades[cascadeIndex];
+            if (reuseOverlap)
+            {
+                RecordCascadeStrips(
+                    commandBuffer,
+                    compute,
+                    solveKernel,
+                    cascadeIndex,
+                    emissionField,
+                    regionDelta,
+                    useDependencyMask,
+                    dirtyFieldRegions.Length);
+            }
+            else
+            {
+                RecordCascade(
+                    commandBuffer,
+                    compute,
+                    solveKernel,
+                    cascadeIndex,
+                    emissionField,
+                    new RectInt(0, 0, cascade.ProbeWidth, cascade.ProbeHeight),
+                    useDependencyMask,
+                    dirtyFieldRegions.Length);
+            }
+        }
+
+        commandBuffer.EndSample("Fodinae.Lighting.RadianceCascades");
+    }
+
+    private void RecordScroll(
+        CommandBuffer commandBuffer,
+        ComputeShader compute,
+        Vector2Int regionDelta)
+    {
+        _telemetry.LightingAtlasScrollCount++;
+        ComputeBuffer input = _resources.RadianceAtlas!;
+        ComputeBuffer output = _resources.RadianceScratchAtlas!;
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            _resources.ScrollRadianceAtlasKernel,
+            LightingComputeBinder.RadianceAtlasInputID,
+            input);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            _resources.ScrollRadianceAtlasKernel,
+            LightingComputeBinder.RadianceAtlasOutputID,
+            output);
+
+        foreach (CascadeLayout cascade in _resources.Cascades)
+        {
+            int deltaX = LightingComputeBinder.ResolveCascadeScrollDelta(
+                regionDelta.x, _resources.FieldWidth, _resources.CellGridWidth, cascade.ProbeSpacing);
+            int deltaY = LightingComputeBinder.ResolveCascadeScrollDelta(
+                regionDelta.y, _resources.FieldHeight, _resources.CellGridHeight, cascade.ProbeSpacing);
+            int overlapWidth = Mathf.Max(0, cascade.ProbeWidth - Mathf.Abs(deltaX));
+            int overlapHeight = Mathf.Max(0, cascade.ProbeHeight - Mathf.Abs(deltaY));
+            long reusedEntries = (long)overlapWidth * overlapHeight * cascade.DirectionCount;
+            _telemetry.LightingAtlasReusedEntries += reusedEntries;
+            _telemetry.LightingAtlasClearedEntries += cascade.EntryCount - reusedEntries;
+            commandBuffer.SetComputeIntParam(
+                compute,
+                LightingComputeBinder.ScrollCascadeOffsetID,
+                cascade.Offset);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                LightingComputeBinder.ScrollCascadeEntryCountID,
+                cascade.EntryCount);
+            commandBuffer.SetComputeIntParams(
+                compute,
+                LightingComputeBinder.ScrollProbeSizeID,
+                cascade.ProbeWidth,
+                cascade.ProbeHeight);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                LightingComputeBinder.ScrollProbeSpacingID,
+                cascade.ProbeSpacing);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                LightingComputeBinder.ScrollDirectionCountID,
+                cascade.DirectionCount);
+            commandBuffer.SetComputeIntParams(
+                compute,
+                LightingComputeBinder.ScrollDeltaProbesID,
+                deltaX,
+                deltaY);
+
+            int groups = Mathf.CeilToInt(cascade.EntryCount / 64f);
+            int groupCountX = Mathf.Min(MaximumDispatchGroupsPerDimension, groups);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                LightingComputeBinder.CascadeDispatchRowWidthID,
+                groupCountX * 64);
+            commandBuffer.DispatchCompute(
+                compute,
+                _resources.ScrollRadianceAtlasKernel,
+                groupCountX,
+                Mathf.CeilToInt(groups / (float)groupCountX),
+                1);
+        }
+    }
+
+    private void RecordCascadeStrips(
+        CommandBuffer commandBuffer,
+        ComputeShader compute,
+        int solveKernel,
+        int cascadeIndex,
+        RenderTexture emissionField,
+        Vector2Int regionDelta,
+        bool useDependencyMask,
+        int dirtyRegionCount)
+    {
+        CascadeLayout cascade = _resources.Cascades[cascadeIndex];
+        int deltaX = LightingComputeBinder.ResolveCascadeScrollDelta(
+            regionDelta.x, _resources.FieldWidth, _resources.CellGridWidth, cascade.ProbeSpacing);
+        int deltaY = LightingComputeBinder.ResolveCascadeScrollDelta(
+            regionDelta.y, _resources.FieldHeight, _resources.CellGridHeight, cascade.ProbeSpacing);
+        if (deltaX == 0 && deltaY == 0)
+        {
+            return;
+        }
+
+        if (deltaX != 0)
+        {
+            int width = Mathf.Min(Mathf.Abs(deltaX), cascade.ProbeWidth);
+            int x = deltaX > 0 ? cascade.ProbeWidth - width : 0;
+            RecordCascade(
+                commandBuffer,
+                compute,
+                solveKernel,
+                cascadeIndex,
+                emissionField,
+                new RectInt(x, 0, width, cascade.ProbeHeight),
+                useDependencyMask,
+                dirtyRegionCount);
+        }
+
+        if (deltaY != 0)
+        {
+            int height = Mathf.Min(Mathf.Abs(deltaY), cascade.ProbeHeight);
+            int y = deltaY > 0 ? cascade.ProbeHeight - height : 0;
+            RecordCascade(
+                commandBuffer,
+                compute,
+                solveKernel,
+                cascadeIndex,
+                emissionField,
+                new RectInt(0, y, cascade.ProbeWidth, height),
+                useDependencyMask,
+                dirtyRegionCount);
+        }
+    }
+
+    public void RecordResolve(
+        CommandBuffer commandBuffer,
+        LightingEngine.DebugView debugView,
+        RenderTexture emissionField,
+        RenderTexture directTarget)
+    {
+        using var resolveMarker = ResolveMarker.Auto();
+        ComputeShader compute = _resources.LightingCompute!;
+        bool transmissionDebug = debugView == LightingEngine.DebugView.Transmission;
+        int resolveKernel = transmissionDebug
+            ? _resources.ResolveTransmissionDebugKernel
+            : _resources.ResolveDirectKernel;
+
+        commandBuffer.SetComputeIntParam(
+            compute,
+            LightingComputeBinder.CascadeOffsetID,
+            _resources.Cascades[0].Offset);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            resolveKernel,
+            LightingComputeBinder.RadianceAtlasID,
+            _resources.RadianceAtlas!);
+        commandBuffer.SetComputeTextureParam(
+            compute,
+            resolveKernel,
+            LightingComputeBinder.DirectTextureID,
+            directTarget);
+        if (transmissionDebug)
+        {
+            BindFieldTextures(commandBuffer, compute, resolveKernel, emissionField);
+            commandBuffer.SetComputeTextureParam(
+                compute,
+                resolveKernel,
+                LightingComputeBinder.CellSolidMaskID,
+                _resources.CellSolidMask!);
+        }
+
+        commandBuffer.DispatchCompute(
+            compute,
+            resolveKernel,
+            LightingComputeBinder.DispatchGroups(_resources.FieldWidth),
+            LightingComputeBinder.DispatchGroups(_resources.FieldHeight),
+            1);
+    }
+
+    private void RecordCascade(
+        CommandBuffer commandBuffer,
+        ComputeShader compute,
+        int solveKernel,
+        int cascadeIndex,
+        RenderTexture emissionField,
+        RectInt probeRect,
+        bool useDependencyMask,
+        int dirtyRegionCount)
+    {
+        string sampleName = cascadeIndex switch
+        {
+            3 => "Fodinae.Lighting.Cascade_3",
+            2 => "Fodinae.Lighting.Cascade_2",
+            1 => "Fodinae.Lighting.Cascade_1",
+            _ => "Fodinae.Lighting.Cascade_0",
+        };
+        commandBuffer.BeginSample(sampleName);
+        CascadeLayout cascade = _resources.Cascades[cascadeIndex];
+        bool hasFarCascade = cascadeIndex + 1 < _resources.Cascades.Count;
+        CascadeLayout farCascade = hasFarCascade
+            ? _resources.Cascades[cascadeIndex + 1]
+            : cascade;
+        LightingComputeBinder.BindCascadeParameters(
+            commandBuffer,
+            compute,
+            cascade,
+            farCascade,
+            hasFarCascade);
+        BindFieldTextures(commandBuffer, compute, solveKernel, emissionField);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            solveKernel,
+            LightingComputeBinder.DirtyRegionsID,
+            _resources.DirtyRegions!);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            solveKernel,
+            LightingComputeBinder.CascadeChangedMaskID,
+            _resources.CascadeChangedMask!);
+        commandBuffer.SetComputeIntParam(
+            compute,
+            LightingComputeBinder.DirtyRegionCountID,
+            dirtyRegionCount);
+        commandBuffer.SetComputeIntParam(
+            compute,
+            LightingComputeBinder.CascadeMaskEnabledID,
+            useDependencyMask ? 1 : 0);
+
+        LightingComputeBinder.BindCascadeDispatch(
+            commandBuffer,
+            compute,
+            probeRect.x,
+            probeRect.y,
+            probeRect.width,
+            probeRect.height,
+            cascade.DirectionCount);
+        int dispatchEntryCount = checked(
+            probeRect.width * probeRect.height * cascade.DirectionCount);
+        int totalGroupCount = Mathf.CeilToInt(dispatchEntryCount / 64f);
+        int groupCountX = Mathf.Min(
+            MaximumDispatchGroupsPerDimension,
+            totalGroupCount);
+        int groupCountY = Mathf.CeilToInt(totalGroupCount / (float)groupCountX);
+        commandBuffer.SetComputeIntParam(
+            compute,
+            LightingComputeBinder.CascadeDispatchRowWidthID,
+            groupCountX * 64);
+        commandBuffer.DispatchCompute(compute, solveKernel, groupCountX, groupCountY, 1);
+        long dispatchEntries = (long)probeRect.width * probeRect.height * cascade.DirectionCount;
+        if (probeRect.x == 0 && probeRect.y == 0 &&
+            probeRect.width == cascade.ProbeWidth &&
+            probeRect.height == cascade.ProbeHeight)
+        {
+            _telemetry.LightingCascadeFullEntries += dispatchEntries;
+            _telemetry.LightingCascadeFullEntriesFrame += dispatchEntries;
+        }
+        else
+        {
+            _telemetry.LightingCascadePartialEntries += dispatchEntries;
+            _telemetry.LightingCascadePartialEntriesFrame += dispatchEntries;
+        }
+        commandBuffer.EndSample(sampleName);
+    }
+
+    private bool ShouldUseDependencyMask(
+        IReadOnlyList<RectInt> dirtyRegions,
+        Vector4 worldRect)
+    {
+        if (dirtyRegions.Count == 0 || worldRect.z <= 0f || worldRect.w <= 0f)
+        {
+            return false;
+        }
+
+        long dirtyArea = 0;
+        foreach (RectInt region in dirtyRegions)
+        {
+            dirtyArea += (long)region.width * region.height;
+        }
+
+        float fieldArea = (worldRect.z / ProjectRuntimeContracts.World.CellSize) *
+            (worldRect.w / ProjectRuntimeContracts.World.CellSize);
+        // Convert the changed world area directly to a candidate estimate.
+        // ConvertDirtyRegions already expands every region for rasterization
+        // and diagonal-cell dependencies; multiplying this estimate again
+        // made a narrow streaming strip fall back to a dense solve too early.
+        float candidateFraction = Mathf.Min(
+            1f,
+            dirtyArea / Mathf.Max(1f, fieldArea));
+        long maskOverhead = _resources.EstimatedCascadeDispatchThreads;
+        long estimatedPartialCost = (long)(_resources.EstimatedCascadeRayWorkUnits * candidateFraction) +
+            maskOverhead;
+        return estimatedPartialCost < _resources.EstimatedCascadeRayWorkUnits;
+    }
+
+    private DirtyRegionGpu[] ConvertDirtyRegions(
+        IReadOnlyList<RectInt> dirtyRegions,
+        Vector4 worldRect)
+    {
+        float cellSize = ProjectRuntimeContracts.World.CellSize;
+        float worldOriginX = worldRect.x / cellSize;
+        float worldOriginY = worldRect.y / cellSize;
+        float cellsWidth = worldRect.z / cellSize;
+        float cellsHeight = worldRect.w / cellSize;
+        float pixelsPerCellX = _resources.FieldWidth / Mathf.Max(1f, cellsWidth);
+        float pixelsPerCellY = _resources.FieldHeight / Mathf.Max(1f, cellsHeight);
+        var result = new DirtyRegionGpu[dirtyRegions.Count];
+        for (int index = 0; index < dirtyRegions.Count; index++)
+        {
+            RectInt region = dirtyRegions[index];
+            int minX = Mathf.FloorToInt((region.xMin - worldOriginX) * pixelsPerCellX) - 2;
+            int minY = Mathf.FloorToInt((region.yMin - worldOriginY) * pixelsPerCellY) - 2;
+            int maxX = Mathf.CeilToInt((region.xMax - worldOriginX) * pixelsPerCellX) + 2;
+            int maxY = Mathf.CeilToInt((region.yMax - worldOriginY) * pixelsPerCellY) + 2;
+            result[index] = new DirtyRegionGpu(
+                Mathf.Clamp(minX, 0, _resources.FieldWidth),
+                Mathf.Clamp(minY, 0, _resources.FieldHeight),
+                Mathf.Clamp(maxX, 0, _resources.FieldWidth),
+                Mathf.Clamp(maxY, 0, _resources.FieldHeight));
+        }
+
+        return result;
+    }
+
+    private void BindFieldTextures(
+        CommandBuffer commandBuffer,
+        ComputeShader compute,
+        int kernel,
+        RenderTexture emissionField)
+    {
+        LightingComputeBinder.BindFieldTextures(
+            commandBuffer,
+            compute,
+            kernel,
+            _resources.MaterialField!,
+            emissionField,
+            _resources.LightingCounters);
+    }
+}

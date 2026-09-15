@@ -68,6 +68,10 @@ public sealed class PacketHandler(
 
     public void Dispose() => Unsubscribe();
 
+    private void BeginPacketBatch() => _mapRegion.BeginBatch();
+
+    private void EndPacketBatch() => _mapRegion.EndBatch();
+
     // Protocol packets may be value types, so this helper must remain unconstrained.
     private void On<T>(Action<T> handler)
     {
@@ -81,6 +85,11 @@ public sealed class PacketHandler(
         {
             return;
         }
+
+        _networkService.PacketBatchStarted += BeginPacketBatch;
+        _networkService.PacketBatchCompleted += EndPacketBatch;
+        _unsubscribers.Add(() => _networkService.PacketBatchStarted -= BeginPacketBatch);
+        _unsubscribers.Add(() => _networkService.PacketBatchCompleted -= EndPacketBatch);
 
         On<WorldInitPacket>(_worldInit.Process);
         On<RobotInfoPacket>(_playerInfo.Process);

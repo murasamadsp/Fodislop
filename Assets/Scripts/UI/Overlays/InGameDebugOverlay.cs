@@ -118,7 +118,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            var toolbar = new ToolbarWindow();
+            var toolbar = new ToolbarWindow(_lighting);
             var stats = new FrameStatsWindow(_telemetry, _lighting);
             var world = new WorldInfoWindow(
                 _telemetry,

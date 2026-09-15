@@ -57,6 +57,87 @@ public class WorldLayerRleTests
     }
 
     [Test]
+    public void SetRegion_NotifiesOnlyWhenAChunkIsMaterialized()
+    {
+        using var layer = new WorldLayer<ushort>(
+            _tempFilePath,
+            WIDTH_CHUNKS: 2,
+            HEIGHT_CHUNKS: 2,
+            operations: _operations,
+            CHUNK_SIZE: 32);
+        int notifications = 0;
+        layer.ChunkLoaded += (_, _, _, _) => notifications++;
+        ushort[] payload = new ushort[32 * 32];
+
+        layer.SetRegion(0, 0, 32, 32, payload);
+        layer.SetRegion(0, 0, 32, 32, payload);
+
+        Assert.That(notifications, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void SetRegion_FullChunkPacketReplacesPersistedChunk()
+    {
+        const ushort persistedValue = 11;
+        const ushort streamedValue = 22;
+
+        using (var layer = new WorldLayer<ushort>(
+            _tempFilePath,
+            WIDTH_CHUNKS: 1,
+            HEIGHT_CHUNKS: 1,
+            operations: _operations,
+            CHUNK_SIZE: 32))
+        {
+            layer.SetCell(0, 0, persistedValue);
+            layer.Flush();
+        }
+
+        using var reopenedLayer = new WorldLayer<ushort>(
+            _tempFilePath,
+            WIDTH_CHUNKS: 1,
+            HEIGHT_CHUNKS: 1,
+            operations: _operations,
+            CHUNK_SIZE: 32);
+        ushort[] payload = new ushort[32 * 32];
+        Array.Fill(payload, streamedValue);
+
+        reopenedLayer.SetRegion(0, 0, 32, 32, payload);
+
+        Assert.That(reopenedLayer.GetCellSync(0, 0), Is.EqualTo(streamedValue));
+        Assert.That(reopenedLayer.GetCellSync(31, 31), Is.EqualTo(streamedValue));
+    }
+
+    [Test]
+    public void SetRegion_PartialPacketPreservesPersistedCells()
+    {
+        const ushort persistedValue = 31;
+        const ushort streamedValue = 41;
+
+        using (var layer = new WorldLayer<ushort>(
+            _tempFilePath,
+            WIDTH_CHUNKS: 1,
+            HEIGHT_CHUNKS: 1,
+            operations: _operations,
+            CHUNK_SIZE: 32))
+        {
+            layer.SetCell(0, 0, persistedValue);
+            layer.Flush();
+        }
+
+        using var reopenedLayer = new WorldLayer<ushort>(
+            _tempFilePath,
+            WIDTH_CHUNKS: 1,
+            HEIGHT_CHUNKS: 1,
+            operations: _operations,
+            CHUNK_SIZE: 32);
+
+        reopenedLayer.SetRegion(1, 1, 1, 1, [streamedValue]);
+
+        Assert.That(reopenedLayer.GetCellSync(0, 0), Is.EqualTo(persistedValue));
+        Assert.That(reopenedLayer.GetCellSync(1, 1), Is.EqualTo(streamedValue));
+    }
+
+    [Test]
     public void FlushAndReopen_PersistsRLEEncodedData()
     {
         const ushort tileTypeA = 101;

@@ -183,7 +183,7 @@ public class CascadeLayoutBuilderFuzzTests
                     Describe(world, i, seed));
                 Assert.That(
                     cascades[i].DirectionCount,
-                    Is.LessThanOrEqualTo(256),
+                    Is.LessThanOrEqualTo(64),
                     Describe(world, i, seed));
 
                 if (i == 0)

@@ -11,9 +11,21 @@ using UnityEngine.Rendering;
 
 internal static class LightingComputeBinder
 {
+    // All lighting kernels use [numthreads(8, 8, 1)]. Keep the GPU execution
+    // detail here so a cell-space policy cannot be mistaken for a dispatch
+    // threshold.
+    public const int ThreadGroupSize = 8;
+
+    public static int DispatchGroups(int extent)
+    {
+        return (extent + ThreadGroupSize - 1) / ThreadGroupSize;
+    }
+
     public static readonly int MaterialFieldID = Shader.PropertyToID("_MaterialField");
     public static readonly int EmissionFieldID = Shader.PropertyToID("_EmissionField");
     public static readonly int RadianceAtlasID = Shader.PropertyToID("_RadianceAtlas");
+    public static readonly int RadianceAtlasInputID = Shader.PropertyToID("_RadianceAtlasInput");
+    public static readonly int RadianceAtlasOutputID = Shader.PropertyToID("_RadianceAtlasOutput");
     public static readonly int DirectTextureID = Shader.PropertyToID("_DirectTexture");
     public static readonly int DirectInputID = Shader.PropertyToID("_DirectInput");
     public static readonly int StaticDirectInputID = Shader.PropertyToID("_StaticDirectInput");
@@ -51,16 +63,60 @@ internal static class LightingComputeBinder
     public static readonly int HasFarCascadeID = Shader.PropertyToID("_HasFarCascade");
     public static readonly int CascadeEntryCountID = Shader.PropertyToID("_CascadeEntryCount");
     public static readonly int CascadeDispatchRowWidthID = Shader.PropertyToID("_CascadeDispatchRowWidth");
+    public static readonly int CascadeDispatchOriginID = Shader.PropertyToID("_CascadeDispatchOrigin");
+    public static readonly int CascadeDispatchSizeID = Shader.PropertyToID("_CascadeDispatchSize");
+    public static readonly int ScrollCascadeOffsetID = Shader.PropertyToID("_ScrollCascadeOffset");
+    public static readonly int ScrollCascadeEntryCountID = Shader.PropertyToID("_ScrollCascadeEntryCount");
+    public static readonly int ScrollProbeSizeID = Shader.PropertyToID("_ScrollProbeSize");
+    public static readonly int ScrollProbeSpacingID = Shader.PropertyToID("_ScrollProbeSpacing");
+    public static readonly int ScrollDirectionCountID = Shader.PropertyToID("_ScrollDirectionCount");
+    public static readonly int ScrollDeltaProbesID = Shader.PropertyToID("_ScrollDeltaProbes");
+    public static readonly int DirtyRegionsID = Shader.PropertyToID("_DirtyRegions");
+    public static readonly int DirtyRegionCountID = Shader.PropertyToID("_DirtyRegionCount");
+    public static readonly int CascadeChangedMaskID = Shader.PropertyToID("_CascadeChangedMask");
+    public static readonly int CascadeMaskEnabledID = Shader.PropertyToID("_CascadeMaskEnabled");
     public static readonly int BlockAveragedID = Shader.PropertyToID("_BlockAveraged");
     public static readonly int DynamicLightsID = Shader.PropertyToID("_DynamicLights");
     public static readonly int DynamicLightCountID = Shader.PropertyToID("_DynamicLightCount");
-    public static readonly int BlockLightInputID = Shader.PropertyToID("_BlockLightInput");
-    public static readonly int BlockLightOutputID = Shader.PropertyToID("_BlockLightOutput");
+    public static readonly int DynamicDispatchOriginID = Shader.PropertyToID("_DynamicDispatchOrigin");
+    public static readonly int DynamicDispatchSizeID = Shader.PropertyToID("_DynamicDispatchSize");
+    public static readonly int DynamicLightIndexID = Shader.PropertyToID("_DynamicLightIndex");
+    public static readonly int WriteDynamicDirectID = Shader.PropertyToID("_WriteDynamicDirect");
+    public static readonly int LampTileOffsetID = Shader.PropertyToID("_LampTileOffset");
+    public static readonly int LampTilesID = Shader.PropertyToID("_LampTiles");
+    public static readonly int LampTilesInputID = Shader.PropertyToID("_LampTilesInput");
+    public static readonly int LampTileInfosID = Shader.PropertyToID("_LampTileInfos");
+    public static readonly int LampTileCountID = Shader.PropertyToID("_LampTileCount");
+    public static readonly int ComposeOriginID = Shader.PropertyToID("_ComposeOrigin");
+    public static readonly int ComposeSizeID = Shader.PropertyToID("_ComposeSize");
+    public static readonly int LampPolarID = Shader.PropertyToID("_LampPolar");
+    public static readonly int LampPolarInputID = Shader.PropertyToID("_LampPolarInput");
+    public static readonly int LampPolarSizeID = Shader.PropertyToID("_LampPolarSize");
+    public static readonly int LampPolarPointID = Shader.PropertyToID("_LampPolarPoint");
+
+    // LampEmitterPointsPerAxis squared in WorldLighting.compute: ray fans
+    // traced per lamp, one band of rows each in the lamp ray texture.
+    public const int LampEmitterPointCount = 9;
+
+    // Must match InvisibleLampRadiance in WorldLighting.compute: absolute
+    // radiance below which lamp light cannot move any display level.
+    public const float InvisibleLampRadiance = 1e-6f;
     public static readonly int CellGridSizeID = Shader.PropertyToID("_CellGridSize");
     public static readonly int CellSolidMaskID = Shader.PropertyToID("_CellSolidMask");
     public static readonly int CellSolidMaskOutputID = Shader.PropertyToID("_CellSolidMaskOutput");
     public static readonly int BounceTapsID = Shader.PropertyToID("_BounceTaps");
     public static readonly int BounceFilterWeightsID = Shader.PropertyToID("_BounceFilterWeights");
+    public static readonly int LightingCountersID = Shader.PropertyToID("_LightingCounters");
+    public static readonly int LightingCountersEnabledID = Shader.PropertyToID("_LightingCountersEnabled");
+
+    public static void BindLightingCounters(
+        CommandBuffer commandBuffer,
+        ComputeShader compute,
+        int kernel,
+        ComputeBuffer counters)
+    {
+        commandBuffer.SetComputeBufferParam(compute, kernel, LightingCountersID, counters);
+    }
 
     public static float ResolveTransmittanceDebugDistance()
     {
@@ -81,24 +137,15 @@ internal static class LightingComputeBinder
             LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier);
     }
 
-    // Relative tail tolerance, not an artistic light radius. The weakest RGB
-    // channel and least absorbing material determine the required path length.
-    public static int ResolveBlockPropagationIterations(int width, int height)
+    // Weakest extinction of any medium and RGB channel, per cell. Every path
+    // is attenuated at least this much per cell of length.
+    public static float ResolveMinimumExtinction()
     {
         Color empty = LightingConfigHolder.EmptyExtinctionRGB * LightingConfigHolder.EmptyExtinctionMultiplier;
         Color solid = LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier;
-        float weakest = Mathf.Max(0f, Mathf.Min(
+        return Mathf.Max(0f, Mathf.Min(
             Mathf.Min(empty.r, Mathf.Min(empty.g, empty.b)),
             Mathf.Min(solid.r, Mathf.Min(solid.g, solid.b))));
-        int maximumPath = checked(width * height - 1);
-        if (weakest <= 0f)
-        {
-            // A lossless maze can require visiting every cell; a fixed radius
-            // would introduce a visible cutoff unrelated to absorption.
-            return maximumPath;
-        }
-
-        return Mathf.CeilToInt(Mathf.Min(maximumPath, -Mathf.Log(1e-6f) / weakest + 1f));
     }
 
     public static void BindFieldTextures(
@@ -106,7 +153,8 @@ internal static class LightingComputeBinder
         ComputeShader compute,
         int kernel,
         RenderTexture materialField,
-        RenderTexture emissionField)
+        RenderTexture emissionField,
+        ComputeBuffer? lightingCounters = null)
     {
         commandBuffer.SetComputeTextureParam(
             compute,
@@ -118,6 +166,10 @@ internal static class LightingComputeBinder
             kernel,
             EmissionFieldID,
             emissionField);
+        if (lightingCounters != null)
+        {
+            BindLightingCounters(commandBuffer, compute, kernel, lightingCounters);
+        }
     }
 
     public static void BindSharedParameters(
@@ -157,6 +209,7 @@ internal static class LightingComputeBinder
             Fodinae.World.Terrain.TerrainLook.AmbientOcclusionStrength);
         commandBuffer.SetComputeFloatParam(compute, EmissionScaleID, LightingConfigHolder.EmissionScale);
         commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierID, LightingConfigHolder.MaximumLightMultiplier);
+        commandBuffer.SetComputeIntParam(compute, LightingCountersEnabledID, 0);
         commandBuffer.SetComputeFloatParam(compute, CellSizeID, cellSize);
         commandBuffer.SetComputeFloatParam(
             compute,
@@ -180,6 +233,22 @@ internal static class LightingComputeBinder
         BindFieldTextures(commandBuffer, compute, resolveDirectKernel, materialField, emissionField);
         BindFieldTextures(commandBuffer, compute, solveDiffuseBounceKernel, materialField, emissionField);
         BindFieldTextures(commandBuffer, compute, compositeLightingKernel, materialField, emissionField);
+    }
+
+    public static int ResolveCascadeScrollDelta(int cellDelta, int fieldSize, int cellGridSize, int probeSpacing)
+    {
+        if (cellGridSize <= 0 || fieldSize <= 0 || fieldSize % cellGridSize != 0 || probeSpacing <= 0)
+        {
+            throw new ArgumentException("Atlas scrolling requires an integer texel scale and positive probe spacing.");
+        }
+
+        long texelDelta = (long)cellDelta * (fieldSize / cellGridSize);
+        if (texelDelta % probeSpacing != 0)
+        {
+            throw new ArgumentException("Atlas scrolling cannot reuse probes with a different world-space phase.");
+        }
+
+        return checked((int)(texelDelta / probeSpacing));
     }
 
     public static void BindCascadeParameters(
@@ -230,6 +299,34 @@ internal static class LightingComputeBinder
                 0f,
                 0f));
         commandBuffer.SetComputeIntParam(compute, HasFarCascadeID, hasFarCascade ? 1 : 0);
-        commandBuffer.SetComputeIntParam(compute, CascadeEntryCountID, cascade.EntryCount);
+    }
+
+    public static void BindCascadeDispatch(
+        CommandBuffer commandBuffer,
+        ComputeShader compute,
+        int originX,
+        int originY,
+        int width,
+        int height,
+        int directionCount)
+    {
+        commandBuffer.SetComputeIntParams(
+            compute,
+            CascadeDispatchOriginID,
+            originX,
+            originY);
+        commandBuffer.SetComputeIntParams(
+            compute,
+            CascadeDispatchSizeID,
+            width,
+            height);
+        commandBuffer.SetComputeIntParam(
+            compute,
+            CascadeEntryCountID,
+            checked(width * height * directionCount));
+        commandBuffer.SetComputeIntParam(
+            compute,
+            CascadeDispatchRowWidthID,
+            checked(width * directionCount));
     }
 }

@@ -17,7 +17,6 @@ public sealed class ShaderWarmupService : IShaderWarmupService
         (ProjectRuntimeContracts.ShaderNames.Terrain, ["FODINAE_WORLD_LIGHTING"]),
         (ProjectRuntimeContracts.ShaderNames.WorldSurface, ["FODINAE_SURFACE_REDROCK", "FODINAE_SURFACE_TRANSIT", "FODINAE_SURFACE_PERSPECTIVE"]),
         (ProjectRuntimeContracts.ShaderNames.WorldEntity, ["FODINAE_WORLD_LIGHTING"]),
-        (ProjectRuntimeContracts.ShaderNames.DynamicEmission, null),
         (ProjectRuntimeContracts.ShaderNames.PlanetSurface, null),
         (ProjectRuntimeContracts.ShaderNames.PlanetAtmosphere, null),
         (ProjectRuntimeContracts.ShaderNames.Starfield, null),
@@ -28,7 +27,9 @@ public sealed class ShaderWarmupService : IShaderWarmupService
     private static readonly string[] _WorldLightingKernels =
     [
         "SolveCascade",
+        "ScrollRadianceAtlas",
         "ResolveDirect",
+        "ResolveTransmissionDebug",
         "SolveDiffuseBounce",
         "CompositeLighting",
     ];
@@ -39,6 +40,11 @@ public sealed class ShaderWarmupService : IShaderWarmupService
         "BloomDownsample",
         "BloomUpsample",
         "CompositeFinal",
+        // Прогревались не все: проход дисплея и запекание таблицы грейда
+        // отсутствовали, то есть два из шести ядер постпроцесса впервые
+        // разрешались прямо в первом кадре игры.
+        "DisplayFinal",
+        "BakeGradeLut",
     ];
 
     public async UniTask WarmupAsync(

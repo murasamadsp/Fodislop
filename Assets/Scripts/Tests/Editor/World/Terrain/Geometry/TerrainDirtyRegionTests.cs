@@ -73,7 +73,7 @@ public class TerrainDirtyRegionTests
     }
 
     [Test]
-    public void ScatteredPatches_StayWithinLimitAndCoverEveryMarkedCell([Values(1, 7, 42, 1337)] int seed)
+    public void ScatteredPatches_DoNotInflateAreaAndCoverEveryMarkedCell([Values(1, 7, 42, 1337)] int seed)
     {
         TerrainDirtyRegion region = Fresh();
         var random = new Random(seed);
@@ -84,8 +84,9 @@ public class TerrainDirtyRegionTests
             int y = random.Next(Height);
             marked.Add((x, y));
             region.MarkCells(x, y, 1, 1);
-            Assert.That(region.Count, Is.LessThanOrEqualTo(TerrainDirtyRegion.MaxRects));
         }
+
+        Assert.That(region.Area, Is.LessThanOrEqualTo(60L * TerrainCellDataPacker.LayersPerCell));
 
         foreach ((int x, int y) in marked)
         {

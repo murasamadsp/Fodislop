@@ -502,6 +502,9 @@ Assets/_Recovery.meta
 diagnostic.txt
 memory_growth.txt
 
+# Lighting frame dumps are local diagnostic output and are rotated at runtime.
+/LightingDumps/
+
 # AI tools files
 .omo/
 .commandcode/

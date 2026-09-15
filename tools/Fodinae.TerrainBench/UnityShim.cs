@@ -32,10 +32,28 @@ namespace UnityEngine
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct Vector2Int(int x, int y)
+    public struct Vector2Int(int x, int y) : IEquatable<Vector2Int>
     {
         public int x = x;
         public int y = y;
+
+        public static Vector2Int zero => default;
+
+        public static Vector2Int operator +(Vector2Int a, Vector2Int b) =>
+            new(a.x + b.x, a.y + b.y);
+
+        public static Vector2Int operator -(Vector2Int a, Vector2Int b) =>
+            new(a.x - b.x, a.y - b.y);
+
+        public static bool operator ==(Vector2Int a, Vector2Int b) => a.Equals(b);
+
+        public static bool operator !=(Vector2Int a, Vector2Int b) => !a.Equals(b);
+
+        public bool Equals(Vector2Int other) => x == other.x && y == other.y;
+
+        public override bool Equals(object? obj) => obj is Vector2Int other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(x, y);
     }
 
     [StructLayout(LayoutKind.Sequential)]

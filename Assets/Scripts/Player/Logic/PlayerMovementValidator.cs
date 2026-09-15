@@ -68,9 +68,10 @@ public static class PlayerMovementValidator
         ushort targetServerX = (ushort)targetPosition.x;
         ushort targetServerY = (ushort)targetPosition.y;
 
-        cellType = storage.GetCell(targetServerX, targetServerY);
-        if (cellType == CellType.Unloaded)
+        if (!storage.TryGetCell(targetServerX, targetServerY, out cellType) ||
+            cellType == CellType.Unloaded)
         {
+            cellType = CellType.Unloaded;
             return false;
         }
 

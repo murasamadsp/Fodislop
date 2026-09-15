@@ -9,12 +9,20 @@ namespace Fodinae.Rendering.PostProcessing
     {
         public static class Bloom
         {
-            public const float Intensity = 0.35f;
+            public const float Intensity = 0.7f;
 
-            public const float Threshold = 1.1f;
+            // Во сколько раз пиксель обязан превзойти свой локальный фон.
+            // Абсолютного порога здесь больше нет: освещённость не ограничена
+            // сверху (CompositeLighting пишет `ambient + directAndBounce` без
+            // потолка), и любое абсолютное число резало кадр по линии равной
+            // освещённости — светилась «половина блоков», а порог ниже 1.0
+            // зажигал весь освещённый кадр.
+            public const float Threshold = 1.6f;
             public const float SoftKnee = 0.5f;
             public const float Radius = 3f;
-            public const float Scatter = 0.55f;
+            // Шире прежнего: пирамида стала глубже, и рассеяние теперь
+            // распределяет свет по пяти уровням, а не по двум.
+            public const float Scatter = 0.7f;
 
             public static Color Tint => Color.white;
         }
@@ -87,9 +95,27 @@ namespace Fodinae.Rendering.PostProcessing
 
 namespace Fodinae.World.Lighting
 {
+    [System.Flags]
+    public enum LightingFeatureFlags
+    {
+        None = 0,
+        StaticRC = 1 << 0,
+        DynamicLights = 1 << 1,
+        DiffuseBounce = 1 << 2,
+        VisibilityAwareMerge = 1 << 3,
+        WallAwareUpsample = 1 << 4,
+        All = StaticRC | DynamicLights | DiffuseBounce | VisibilityAwareMerge | WallAwareUpsample,
+    }
+
     public static class LightingConfigHolder
     {
-        public const float AmbientIntensity = 0.25f;
+        public static LightingFeatureFlags EnabledFeatures { get; set; } =
+            LightingFeatureFlags.StaticRC |
+            LightingFeatureFlags.DynamicLights |
+            LightingFeatureFlags.VisibilityAwareMerge |
+            LightingFeatureFlags.WallAwareUpsample;
+
+        public const float AmbientIntensity = 0.0f;
         public const float EmissionScale = 16.0f;
         public static readonly Color AmbientColor = Color.white;
         // Per RGB channel: sigma = ExtinctionRGB * ExtinctionMultiplier.
@@ -98,16 +124,16 @@ namespace Fodinae.World.Lighting
         // Solid affects transmission through the wall, not illumination of its front surface.
         public static readonly Color EmptyExtinctionRGB = Color.white;
         public static readonly Color SolidExtinctionRGB = Color.white;
-        public const float EmptyExtinctionMultiplier = 0.5f;
-        public const float SolidExtinctionMultiplier = 2.0f;
+        public const float EmptyExtinctionMultiplier = 0.2f;
+        public const float SolidExtinctionMultiplier = 1.0f;
         // false выключает отскок целиком: проход не считается, в свет не входит.
-        public const bool BounceEnabled = false;
+        public static bool BounceEnabled => (EnabledFeatures & LightingFeatureFlags.DiffuseBounce) != 0;
         public const float BounceStrength = 1.0f;
         public const float MaximumLightMultiplier = 1.0f;
 
         // Legacy diagnostic value; transport no longer stops at this threshold.
         public const float MinimumTransmission = 0.008f;
-        public const bool DynamicLightEnabled = true;
+        public static bool DynamicLightEnabled => (EnabledFeatures & LightingFeatureFlags.DynamicLights) != 0;
         public const float DynamicLightIntensity = 1.0f;
         public static readonly Color DynamicLightColor = Color.white;
     }

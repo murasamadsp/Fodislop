@@ -5,8 +5,6 @@ using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Rendering;
-using Fodinae.World.Lighting.Pipeline;
-using Fodinae.World.Lighting.Pipeline.Stages;
 using Fodinae.World.Lighting.Quality;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -14,27 +12,43 @@ using UnityEngine.Rendering;
 namespace Fodinae.World.Lighting;
 internal sealed class LightingResourceManager
 {
+    // Static solves happen as one frame-sized burst when the lighting region
+    // reanchors. Bound the complete cascade ray-step cost before allocating
+    // the field, then use the largest quality that fits that bound.
+    private const int MaximumStaticCascadeDirections = 64;
+    // A region reanchor records the complete static transport graph in one
+    // command buffer. Keep that burst below the shared conservative DDA
+    // budget; the quality selector lowers pixels-per-cell before it lowers
+    // angular resolution further.
+    private const long MaximumStaticCascadeRayWork =
+        LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits;
+
+    private static readonly uint[] EmptyLightingCounters = new uint[3];
+    private readonly ComputeBuffer?[] _lightingCounterBuffers = new ComputeBuffer?[2];
+    private int _activeLightingCounterBuffer;
     private RenderTexture? _materialField;
     private RenderTexture? _staticEmissionField;
-    private RenderTexture? _dynamicEmissionField;
     private RenderTexture? _directTexture;
     private RenderTexture? _staticDirectTexture;
     private RenderTexture? _bounceTexture;
     private RenderTexture? _lightmapTexture;
     private RenderTexture? _cellSolidMask;
 
+    public LightingResources Registry { get; } = new();
     public ComputeShader? LightingCompute { get; private set; }
     public CommandBuffer? LightingCommandBuffer { get; private set; }
     public RenderTexture? MaterialField => _materialField;
     public RenderTexture? StaticEmissionField => _staticEmissionField;
-    public RenderTexture? DynamicEmissionField => _dynamicEmissionField;
-    public Material? DynamicEmissionMaterial { get; private set; }
     public RenderTexture? DirectTexture => _directTexture;
     public RenderTexture? StaticDirectTexture => _staticDirectTexture;
     public RenderTexture? BounceTexture => _bounceTexture;
     public RenderTexture? LightmapTexture => _lightmapTexture;
     public ComputeBuffer? RadianceAtlas { get; private set; }
+    public ComputeBuffer? RadianceScratchAtlas { get; private set; }
+    public ComputeBuffer? DirtyRegions { get; private set; }
+    public ComputeBuffer? CascadeChangedMask { get; private set; }
     public ComputeBuffer? DynamicLightBuffer { get; private set; }
+    public ComputeBuffer? LightingCounters => _lightingCounterBuffers[_activeLightingCounterBuffer];
 
     // Geometry caches: depend only on the material field and are rebuilt with
     // it (see WorldLighting.compute). Recreated together with the field
@@ -47,13 +61,15 @@ internal sealed class LightingResourceManager
     public int CellGridHeight { get; private set; }
 
     public int SolveCascadeKernel { get; private set; }
+    public int ScrollRadianceAtlasKernel { get; private set; }
     public int SolveDynamicLightingKernel { get; private set; }
+    public int ComposeDynamicLightingKernel { get; private set; }
+    public int TraceLampPolarKernel { get; private set; }
+    public int ClearDynamicDirectKernel { get; private set; }
     public int ResolveDirectKernel { get; private set; }
+    public int ResolveTransmissionDebugKernel { get; private set; }
     public int SolveDiffuseBounceKernel { get; private set; }
     public int CompositeLightingKernel { get; private set; }
-    public int SeedBlockLightingKernel { get; private set; }
-    public int PropagateBlockLightingKernel { get; private set; }
-    public int ResolveBlockLightingKernel { get; private set; }
     public int BuildCellSolidMaskKernel { get; private set; }
     public int BuildBounceTapsKernel { get; private set; }
     public int BuildBounceFilterKernel { get; private set; }
@@ -64,15 +80,12 @@ internal sealed class LightingResourceManager
     public int BounceHeight { get; private set; }
     public int AtlasCapacity { get; private set; }
     public int AtlasEntryCount { get; private set; }
+    public long EstimatedCascadeRayWorkUnits { get; private set; }
+    public long EstimatedCascadeDispatchThreads { get; private set; }
 
     public readonly List<CascadeLayout> Cascades = new();
-    public LightingPipeline? CompositePipeline { get; private set; }
-    public LightingPipeline? DiffuseBouncePipeline { get; private set; }
-    public LightingPipeline? DynamicEmissionCompositionPipeline { get; private set; }
-    public LightingPipeline? MaterialFieldPipeline { get; private set; }
 
     public bool GpuPipelineInitialized { get; set; }
-    public bool LightingDisabledStatePublished { get; set; }
 
     public void EnsureGpuPipelineInitialized()
     {
@@ -89,7 +102,6 @@ internal sealed class LightingResourceManager
             name = "Fodinae Radiance Cascades",
         };
         GpuPipelineInitialized = true;
-        LightingDisabledStatePublished = false;
         Shader.EnableKeyword("FODINAE_WORLD_LIGHTING");
     }
 
@@ -97,19 +109,9 @@ internal sealed class LightingResourceManager
     {
         ReleaseResources();
 
-        if (DynamicEmissionMaterial != null)
-        {
-            DestroyLightingObject(DynamicEmissionMaterial);
-            DynamicEmissionMaterial = null;
-        }
-
         LightingCommandBuffer?.Release();
         LightingCommandBuffer = null;
         LightingCompute = null;
-        CompositePipeline = null;
-        DiffuseBouncePipeline = null;
-        DynamicEmissionCompositionPipeline = null;
-        MaterialFieldPipeline = null;
         GpuPipelineInitialized = false;
     }
 
@@ -148,13 +150,15 @@ internal sealed class LightingResourceManager
             gridHeight,
             requestedScale,
             qualitySettings.LightingMaximumTextureDimension,
-            qualitySettings.LightingCascadeAtlasLimit);
+            qualitySettings.LightingCascadeAtlasLimit,
+            MaximumStaticCascadeDirections,
+            MaximumStaticCascadeRayWork);
 
         int maximumTextureScale = Mathf.Max(
             0,
             Mathf.Min(
                 qualitySettings.LightingMaximumTextureDimension / gridWidth,
-                qualitySettings.LightingMaximumTextureDimension / gridHeight));
+            qualitySettings.LightingMaximumTextureDimension / gridHeight));
 
         textureDimensionLimited = maximumTextureScale < requestedScale;
         cascadeBudgetLimited = scale < Mathf.Min(requestedScale, maximumTextureScale);
@@ -162,6 +166,12 @@ internal sealed class LightingResourceManager
 
         int fieldWidth = gridWidth * scale;
         int fieldHeight = gridHeight * scale;
+        int maximumCascadeDirections = CascadeLayoutBuilder.SelectMaximumCascadeDirections(
+            fieldWidth,
+            fieldHeight,
+            qualitySettings.LightingCascadeAtlasLimit,
+            MaximumStaticCascadeDirections,
+            MaximumStaticCascadeRayWork);
         int bounceWidth = Mathf.Max(1, Mathf.CeilToInt(fieldWidth * 0.5f));
         int bounceHeight = Mathf.Max(1, Mathf.CeilToInt(fieldHeight * 0.5f));
 
@@ -203,14 +213,6 @@ internal sealed class LightingResourceManager
             randomWrite: false,
             FilterMode.Bilinear,
             "_StaticEmissionField",
-            useMipMap: false);
-        _dynamicEmissionField = CreateTexture(
-            fieldWidth,
-            fieldHeight,
-            RenderTextureFormat.ARGBHalf,
-            randomWrite: false,
-            FilterMode.Bilinear,
-            "_DynamicEmissionField",
             useMipMap: false);
         _directTexture = CreateTexture(
             fieldWidth,
@@ -263,29 +265,84 @@ internal sealed class LightingResourceManager
             fieldWidth,
             fieldHeight,
             qualitySettings.LightingCascadeAtlasLimit,
-            Cascades);
+            Cascades,
+            maximumCascadeDirections);
         AtlasEntryCount = Cascades[^1].Offset + Cascades[^1].EntryCount;
+        EstimatedCascadeRayWorkUnits = CascadeCostCalculator.EstimateRayWorkUnits(Cascades);
+        EstimatedCascadeDispatchThreads = 0;
+        foreach (CascadeLayout cascade in Cascades)
+        {
+            EstimatedCascadeDispatchThreads += cascade.EntryCount;
+        }
         EnsurePersistentBuffers(
             qualitySettings.LightingCascadeAtlasLimit,
             qualitySettings.LightingMaximumLightCount);
+        SyncRegistry();
     }
 
     public void ReleaseResources()
     {
         DynamicLightBuffer?.Release();
         DynamicLightBuffer = null;
+        for (int index = 0; index < _lightingCounterBuffers.Length; index++)
+        {
+            _lightingCounterBuffers[index]?.Release();
+            _lightingCounterBuffers[index] = null;
+        }
+        _activeLightingCounterBuffer = 0;
         RadianceAtlas?.Release();
         RadianceAtlas = null;
+        RadianceScratchAtlas?.Release();
+        RadianceScratchAtlas = null;
+        DirtyRegions?.Release();
+        DirtyRegions = null;
+        CascadeChangedMask?.Release();
+        CascadeChangedMask = null;
         AtlasCapacity = 0;
         AtlasEntryCount = 0;
+        EstimatedCascadeRayWorkUnits = 0;
+        EstimatedCascadeDispatchThreads = 0;
         ReleaseFieldTextures();
+        Registry.ClearReferences();
+    }
+
+    private void SyncRegistry()
+    {
+        Registry.Compute = LightingCompute;
+        Registry.CommandBuffer = LightingCommandBuffer;
+        Registry.FieldWidth = FieldWidth;
+        Registry.FieldHeight = FieldHeight;
+
+        Registry.Geometry.Material = _materialField;
+        Registry.Geometry.StaticEmission = _staticEmissionField;
+        Registry.Geometry.CellSolidMask = _cellSolidMask;
+        Registry.Geometry.CellGridWidth = CellGridWidth;
+        Registry.Geometry.CellGridHeight = CellGridHeight;
+        Registry.Geometry.CachesValid = GeometryCachesValid;
+
+        Registry.Cascade.Atlas = RadianceAtlas;
+        Registry.Cascade.AtlasCapacity = AtlasCapacity;
+        Registry.Cascade.AtlasEntryCount = AtlasEntryCount;
+        Registry.Cascade.Layouts.Clear();
+        Registry.Cascade.Layouts.AddRange(Cascades);
+
+        Registry.Direct.Static = _staticDirectTexture;
+        Registry.Direct.Dynamic = _directTexture;
+        Registry.Direct.DynamicLightsBuffer = DynamicLightBuffer;
+
+        Registry.Bounce.Texture = _bounceTexture;
+        Registry.Bounce.Taps = BounceTaps;
+        Registry.Bounce.FilterWeights = BounceFilterWeights;
+        Registry.Bounce.Width = BounceWidth;
+        Registry.Bounce.Height = BounceHeight;
+
+        Registry.Output.Lightmap = _lightmapTexture;
     }
 
     public void ReleaseFieldTextures()
     {
         ReleaseTexture(ref _materialField);
         ReleaseTexture(ref _staticEmissionField);
-        ReleaseTexture(ref _dynamicEmissionField);
         ReleaseTexture(ref _directTexture);
         ReleaseTexture(ref _staticDirectTexture);
         ReleaseTexture(ref _bounceTexture);
@@ -323,14 +380,30 @@ internal sealed class LightingResourceManager
 
         int requiredCapacity = Mathf.Max(1, AtlasEntryCount);
 
-        if (RadianceAtlas == null || AtlasCapacity < requiredCapacity)
+        if (RadianceAtlas == null ||
+            RadianceScratchAtlas == null ||
+            AtlasCapacity < requiredCapacity)
         {
             RadianceAtlas?.Release();
+            RadianceScratchAtlas?.Release();
             RadianceAtlas = new ComputeBuffer(
                 requiredCapacity,
                 sizeof(uint) * 3,
                 ComputeBufferType.Structured);
+            RadianceScratchAtlas = new ComputeBuffer(
+                requiredCapacity,
+                sizeof(uint) * 3,
+                ComputeBufferType.Structured);
             AtlasCapacity = requiredCapacity;
+        }
+
+        if (CascadeChangedMask == null || CascadeChangedMask.count < requiredCapacity)
+        {
+            CascadeChangedMask?.Release();
+            CascadeChangedMask = new ComputeBuffer(
+                requiredCapacity,
+                sizeof(uint),
+                ComputeBufferType.Structured);
         }
 
         int clampedLightCount = Mathf.Max(1, maximumLightCount);
@@ -343,6 +416,41 @@ internal sealed class LightingResourceManager
                 sizeof(float) * 8,
                 ComputeBufferType.Structured);
         }
+
+        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != 3 ||
+            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != 3)
+        {
+            for (int index = 0; index < _lightingCounterBuffers.Length; index++)
+            {
+                _lightingCounterBuffers[index]?.Release();
+                _lightingCounterBuffers[index] = new ComputeBuffer(
+                    3,
+                    sizeof(uint),
+                    ComputeBufferType.Structured);
+            }
+        }
+    }
+
+    public void EnsureDirtyRegionCapacity(int capacity)
+    {
+        int requiredCapacity = Mathf.Max(1, capacity);
+        if (DirtyRegions != null && DirtyRegions.count >= requiredCapacity)
+        {
+            return;
+        }
+
+        DirtyRegions?.Release();
+        DirtyRegions = new ComputeBuffer(
+            requiredCapacity,
+            sizeof(int) * 4,
+            ComputeBufferType.Structured);
+    }
+
+    public void SwapRadianceAtlases()
+    {
+        (RadianceAtlas, RadianceScratchAtlas) =
+            (RadianceScratchAtlas, RadianceAtlas);
+        Registry.Cascade.Atlas = RadianceAtlas;
     }
 
     private static RenderTexture CreateTexture(
@@ -417,13 +525,15 @@ internal sealed class LightingResourceManager
         (string Name, Action<int> SetIndex)[] requiredKernels =
         [
             (ProjectRuntimeContracts.ComputeKernelNames.SolveCascade, k => SolveCascadeKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.ScrollRadianceAtlas, k => ScrollRadianceAtlasKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.SolveDynamicLighting, k => SolveDynamicLightingKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.ComposeDynamicLighting, k => ComposeDynamicLightingKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.TraceLampPolar, k => TraceLampPolarKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.ClearDynamicDirect, k => ClearDynamicDirectKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.ResolveDirect, k => ResolveDirectKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.ResolveTransmissionDebug, k => ResolveTransmissionDebugKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.SolveDiffuseBounce, k => SolveDiffuseBounceKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.CompositeLighting, k => CompositeLightingKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.SeedBlockLighting, k => SeedBlockLightingKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.PropagateBlockLighting, k => PropagateBlockLightingKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.ResolveBlockLighting, k => ResolveBlockLightingKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.BuildCellSolidMask, k => BuildCellSolidMaskKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.BuildBounceTaps, k => BuildBounceTapsKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.BuildBounceFilter, k => BuildBounceFilterKernel = k),
@@ -442,35 +552,6 @@ internal sealed class LightingResourceManager
             setIndex(kernelIndex);
         }
 
-        CompositePipeline = new LightingPipeline(
-            new CompositeStage(CompositeLightingKernel));
-        DiffuseBouncePipeline = new LightingPipeline(
-            new DiffuseBounceStage(SolveDiffuseBounceKernel));
-        DynamicEmissionCompositionPipeline = new LightingPipeline(
-            new DynamicEmissionCompositionStage());
-        MaterialFieldPipeline = new LightingPipeline(
-            new MaterialFieldStage());
-
-        LoadDynamicEmissionMaterialOrThrow();
-    }
-
-    private void LoadDynamicEmissionMaterialOrThrow()
-    {
-        if (DynamicEmissionMaterial != null)
-        {
-            return;
-        }
-
-        Shader shader = Shader.Find(ProjectRuntimeContracts.ShaderNames.DynamicEmission) ??
-            throw new InvalidOperationException(
-                $"Required shader '{ProjectRuntimeContracts.ShaderNames.DynamicEmission}' is missing. " +
-                "Dynamic light sources cannot be rasterized into the emission field.");
-
-        DynamicEmissionMaterial = new Material(shader)
-        {
-            name = "FodinaeDynamicEmission",
-            hideFlags = HideFlags.HideAndDontSave,
-        };
     }
 
     private void ValidateKernelSupportOrThrow(string kernelName, int kernelIndex)

@@ -219,15 +219,23 @@ namespace Fodinae.Networking
 
             if (payload is HBPacket hbPacket && hbPacket.Payload != null)
             {
+                PacketBatchStarted?.Invoke();
                 // Размер пачки считается перебором, а не свойством длины:
                 // тип полезной нагрузки задан протоколом, и обращаться к его
                 // внутреннему устройству ради одного числа значит привязать
                 // учёт к тому, что клиенту не принадлежит.
                 int batched = 0;
-                foreach (var innerPacket in hbPacket.Payload)
+                try
                 {
-                    batched++;
-                    Dispatch(innerPacket);
+                    foreach (var innerPacket in hbPacket.Payload)
+                    {
+                        batched++;
+                        Dispatch(innerPacket);
+                    }
+                }
+                finally
+                {
+                    PacketBatchCompleted?.Invoke();
                 }
 
                 PacketTelemetry.RecordBatch(batched);
@@ -237,6 +245,9 @@ namespace Fodinae.Networking
                 Dispatch(payload);
             }
         }
+
+        public event Action? PacketBatchStarted;
+        public event Action? PacketBatchCompleted;
 
         private void Dispatch(object packet)
         {

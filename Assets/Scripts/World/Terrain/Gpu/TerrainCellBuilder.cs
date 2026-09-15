@@ -42,8 +42,20 @@ public sealed class TerrainCellBuilder : IDisposable
 
     private readonly TerrainCellDataTextures _textures = new();
     private readonly Scratch _mainScratch = new();
-    private int[] _foregroundAtlases = [];
-    private bool[] _doorFlags = [];
+    private readonly TerrainRingGrid<int> _foregroundAtlases = new();
+    private readonly TerrainRingGrid<bool> _doorFlags = new();
+    private readonly HashSet<int> _doorQuads = [];
+    private int[] _doorQuadScratch = [];
+    private readonly Dictionary<CellType, HashSet<long>> _backgroundQuadsByType = [];
+    private readonly Dictionary<CellType, HashSet<long>> _foregroundQuadsByType = [];
+    private readonly Dictionary<long, CellType> _backgroundTypeByCoordinate = [];
+    private readonly Dictionary<long, CellType> _foregroundTypeByCoordinate = [];
+    private readonly List<int> _textureRefreshQuads = [];
+    private readonly HashSet<long> _textureRefreshMarks = [];
+    private bool _trackDoorQuads;
+    private bool _trackTextureIndex;
+    private int _textureRefreshWindowX;
+    private int _textureRefreshWindowY;
     private int _width;
     private int _height;
     private float _cellSize;
@@ -53,6 +65,8 @@ public sealed class TerrainCellBuilder : IDisposable
 
     // Последняя сборка задела двери: накладку надо пересобрать.
     public bool DoorsTouched => _doorsTouched;
+
+    public bool HasDoors => _doorQuads.Count > 0;
 
     public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
     {
@@ -64,9 +78,13 @@ public sealed class TerrainCellBuilder : IDisposable
 
         _width = meshWidth;
         _height = meshHeight;
-        _foregroundAtlases = new int[meshWidth * meshHeight];
-        _doorFlags = new bool[meshWidth * meshHeight];
-        Array.Fill(_foregroundAtlases, -1);
+        _foregroundAtlases.EnsureSize(meshWidth, meshHeight);
+        _doorFlags.EnsureSize(meshWidth, meshHeight);
+        _doorQuads.Clear();
+        _backgroundQuadsByType.Clear();
+        _foregroundQuadsByType.Clear();
+        _backgroundTypeByCoordinate.Clear();
+        _foregroundTypeByCoordinate.Clear();
         _textures.EnsureCapacity(meshWidth, meshHeight);
     }
 
@@ -78,6 +96,9 @@ public sealed class TerrainCellBuilder : IDisposable
         }
 
         _doorsTouched = true;
+        _doorQuads.Clear();
+        _trackDoorQuads = false;
+        _trackTextureIndex = false;
         _textures.MarkAllDirty();
         Parallel.For(
             0,
@@ -93,6 +114,10 @@ public sealed class TerrainCellBuilder : IDisposable
                 return scratch;
             },
             static _ => { });
+        _trackDoorQuads = true;
+        RebuildDoorQuadIndex();
+        _trackTextureIndex = true;
+        RebuildTextureIndex(sources, minX, minY);
     }
 
     public void ScrollAndBuildBand(TerrainCellSources sources, int minX, int minY, int dx, int dy)
@@ -112,11 +137,17 @@ public sealed class TerrainCellBuilder : IDisposable
 
         // Тексели по кольцевому адресу не двигаются. Двигаются только
         // локальные массивы дверей, и накладка встаёт на новые координаты.
-        _doorsTouched = true;
+        // Если состав дверей не изменился, renderer может компенсировать
+        // сдвиг родителя без повторной выгрузки всех дверных квадов.
+        _doorsTouched = false;
+        int previousDoorCount = _doorQuads.Count;
         if (dx != 0 || dy != 0)
         {
-            TerrainMeshScroller.Scroll(_foregroundAtlases, _width, _height, 1, dx, dy);
-            TerrainMeshScroller.Scroll(_doorFlags, _width, _height, 1, dx, dy);
+            _foregroundAtlases.Scroll(dx, dy);
+            _doorFlags.Scroll(dx, dy);
+            ScrollDoorQuads(dx, dy);
+            _doorsTouched = _doorQuads.Count != previousDoorCount;
+            RemoveScrolledOutTextureCells(minX, minY, dx, dy);
         }
 
         TerrainMeshScroller.GetBandExtents(_width, dx, out int bandXStart, out int bandXLength);
@@ -173,21 +204,91 @@ public sealed class TerrainCellBuilder : IDisposable
             return;
         }
 
-        for (int x = 0; x < _width; x++)
+        _textureRefreshQuads.Clear();
+        _textureRefreshMarks.Clear();
+        _textureRefreshWindowX = minX;
+        _textureRefreshWindowY = minY;
+        foreach (CellType cellType in cellTypes)
         {
-            for (int y = 0; y < _height; y++)
+            AddTextureRefreshQuads(_backgroundQuadsByType, cellType);
+            AddTextureRefreshQuads(_foregroundQuadsByType, cellType);
+        }
+
+        _textureRefreshQuads.Sort();
+        bool trackTextureIndex = _trackTextureIndex;
+        _trackTextureIndex = false;
+        try
+        {
+            for (int index = 0; index < _textureRefreshQuads.Count; index++)
             {
-                CellType foregroundType = sources.CellCache.GetCellData(x + 1, y + 1).Type;
-                CellType backgroundType = sources.FloodFill.Buffer[x, y];
-                if (cellTypes.Contains(foregroundType) || cellTypes.Contains(backgroundType))
+                int quad = _textureRefreshQuads[index];
+                int x = quad / _height;
+                int y = quad % _height;
+                FillCell(x, y, minX, minY, sources, _mainScratch);
+            }
+        }
+        finally
+        {
+            _trackTextureIndex = trackTextureIndex;
+        }
+
+        MarkTextureRefreshRuns(minX, minY);
+    }
+
+    private void MarkTextureRefreshRuns(int minX, int minY)
+    {
+        int index = 0;
+        while (index < _textureRefreshQuads.Count)
+        {
+            int firstQuad = _textureRefreshQuads[index];
+            int x = firstQuad / _height;
+            int firstY = firstQuad % _height;
+            int lastY = firstY;
+            index++;
+
+            while (index < _textureRefreshQuads.Count)
+            {
+                int nextQuad = _textureRefreshQuads[index];
+                if (nextQuad / _height != x || nextQuad % _height != lastY + 1)
                 {
-                    FillCell(x, y, minX, minY, sources, _mainScratch);
-                    _textures.MarkCells(
-                        TerrainCellDataTextures.Ring(minX + x, _width),
-                        TerrainCellDataTextures.Ring(minY + y, _height),
-                        1,
-                        1);
+                    break;
                 }
+
+                lastY++;
+                index++;
+            }
+
+            _textures.MarkCells(
+                TerrainCellDataTextures.Ring(minX + x, _width),
+                TerrainCellDataTextures.Ring(minY + firstY, _height),
+                1,
+                lastY - firstY + 1);
+        }
+    }
+
+    private void AddTextureRefreshQuads(
+        Dictionary<CellType, HashSet<long>> quadsByType,
+        CellType cellType)
+    {
+        if (!quadsByType.TryGetValue(cellType, out HashSet<long>? quads))
+        {
+            return;
+        }
+
+        foreach (long key in quads)
+        {
+            int worldX = UnpackX(key);
+            int worldY = UnpackY(key);
+            if ((uint)(worldX - _textureRefreshWindowX) >= (uint)_width ||
+                (uint)(worldY - _textureRefreshWindowY) >= (uint)_height)
+            {
+                continue;
+            }
+
+            int quad = ((worldX - _textureRefreshWindowX) * _height) + (worldY - _textureRefreshWindowY);
+            if (_textureRefreshMarks.Add(key))
+            {
+                _textureRefreshQuads.Add(quad);
             }
         }
     }
@@ -207,16 +308,16 @@ public sealed class TerrainCellBuilder : IDisposable
             indices.Clear();
         }
 
-        for (int quad = 0; quad < _doorFlags.Length; quad++)
+        foreach (int quad in _doorQuads)
         {
-            int atlas = _foregroundAtlases[quad];
-            if (!_doorFlags[quad] || atlas < 0 || atlas >= indicesPerAtlas.Length)
+            int x = quad / _height;
+            int y = quad % _height;
+            int atlas = _foregroundAtlases[x, y];
+            if (atlas < 0 || atlas >= indicesPerAtlas.Length)
             {
                 continue;
             }
 
-            int x = quad / _height;
-            int y = quad % _height;
             TerrainQuadBuilder.FillQuadData(
                 _mainScratch.Vertices, _mainScratch.Door, _cellSize,
                 x, y, minX + x, minY + y, sources.CellCache, sources.Precalc, sources.FloodFill,
@@ -239,13 +340,26 @@ public sealed class TerrainCellBuilder : IDisposable
         }
     }
 
-    // Выгрузка на GPU и адрес окна для шейдера. Смещения искажения
-    // переписываются целиком: предрасчёт двигает их вместе с окном.
-    public void Commit(TerrainPrecalculator precalc, int minX, int minY)
+    // Выгрузка на GPU и адрес окна для шейдера. При scroll переписываются
+    // только новые узлы; полный upload остаётся для первого build и resize.
+    public void Commit(
+        TerrainPrecalculator precalc,
+        int minX,
+        int minY,
+        bool incrementalGridOffsets = false,
+        int dx = 0,
+        int dy = 0)
     {
         if (precalc.EnableDistortion)
         {
-            _textures.WriteGridOffsets(precalc.GridVertexOffsets, minX, minY);
+            if (incrementalGridOffsets)
+            {
+                _textures.WriteGridOffsetsIncremental(precalc.GridVertexOffsets, minX, minY, dx, dy);
+            }
+            else
+            {
+                _textures.WriteGridOffsets(precalc.GridVertexOffsets, minX, minY);
+            }
         }
 
         _textures.Apply();
@@ -326,13 +440,34 @@ public sealed class TerrainCellBuilder : IDisposable
             sources.MapManager, sources.TextureService);
 
         bool door = scratch.Door[0];
-        if (door || _doorFlags[quad])
+        if (door || _doorFlags[x, y])
         {
             _doorsTouched = true;
         }
 
-        _foregroundAtlases[quad] = foreground;
-        _doorFlags[quad] = door;
+        _foregroundAtlases[x, y] = foreground;
+        _doorFlags[x, y] = door;
+        if (_trackTextureIndex)
+        {
+            UpdateTextureIndex(
+                _backgroundQuadsByType,
+                PackCoordinate(gridX, unityY),
+                sources.FloodFill.Buffer[x, y],
+                _backgroundTypeByCoordinate);
+            UpdateTextureIndex(
+                _foregroundQuadsByType,
+                PackCoordinate(gridX, unityY),
+                sources.CellCache.GetCellData(x + 1, y + 1).Type,
+                _foregroundTypeByCoordinate);
+        }
+        if (_trackDoorQuads && door)
+        {
+            _doorQuads.Add(quad);
+        }
+        else if (_trackDoorQuads)
+        {
+            _doorQuads.Remove(quad);
+        }
 
         int ringX = TerrainCellDataTextures.Ring(gridX, _width);
         int ringY = TerrainCellDataTextures.Ring(unityY, _height);
@@ -351,4 +486,157 @@ public sealed class TerrainCellBuilder : IDisposable
             ringX, ringY, TerrainCellDataPacker.ForegroundLayer,
             TerrainCellDataPacker.PackQuad(scratch.Vertices.AsSpan(4, 4), foreground));
     }
+
+    private void ScrollDoorQuads(int dx, int dy)
+    {
+        if (_doorQuads.Count == 0)
+        {
+            return;
+        }
+
+        if (_doorQuadScratch.Length < _doorQuads.Count)
+        {
+            _doorQuadScratch = new int[_doorQuads.Count];
+        }
+
+        _doorQuads.CopyTo(_doorQuadScratch);
+        int previousCount = _doorQuads.Count;
+        _doorQuads.Clear();
+
+        for (int index = 0; index < previousCount; index++)
+        {
+            int quad = _doorQuadScratch[index];
+            int x = (quad / _height) - dx;
+            int y = (quad % _height) - dy;
+            if ((uint)x < (uint)_width && (uint)y < (uint)_height)
+            {
+                _doorQuads.Add((x * _height) + y);
+            }
+        }
+    }
+
+    private void RebuildDoorQuadIndex()
+    {
+        _doorQuads.Clear();
+        for (int x = 0; x < _width; x++)
+        {
+            for (int y = 0; y < _height; y++)
+            {
+                if (_doorFlags[x, y])
+                {
+                    _doorQuads.Add((x * _height) + y);
+                }
+            }
+        }
+    }
+
+    private void RebuildTextureIndex(TerrainCellSources sources, int minX, int minY)
+    {
+        _backgroundQuadsByType.Clear();
+        _foregroundQuadsByType.Clear();
+        _backgroundTypeByCoordinate.Clear();
+        _foregroundTypeByCoordinate.Clear();
+        for (int x = 0; x < _width; x++)
+        {
+            for (int y = 0; y < _height; y++)
+            {
+                UpdateTextureIndex(
+                    _backgroundQuadsByType,
+                    PackCoordinate(minX + x, minY + y),
+                    sources.FloodFill.Buffer[x, y],
+                    _backgroundTypeByCoordinate);
+                UpdateTextureIndex(
+                    _foregroundQuadsByType,
+                    PackCoordinate(minX + x, minY + y),
+                    sources.CellCache.GetCellData(x + 1, y + 1).Type,
+                    _foregroundTypeByCoordinate);
+            }
+        }
+    }
+
+    private static void UpdateTextureIndex(
+        Dictionary<CellType, HashSet<long>> quadsByType,
+        long key,
+        CellType type,
+        Dictionary<long, CellType> typeByCoordinate)
+    {
+        if (typeByCoordinate.Remove(key, out CellType previousType) &&
+            quadsByType.TryGetValue(previousType, out HashSet<long>? previousQuads))
+        {
+            previousQuads.Remove(key);
+            if (previousQuads.Count == 0)
+            {
+                quadsByType.Remove(previousType);
+            }
+        }
+
+        if (!quadsByType.TryGetValue(type, out HashSet<long>? currentQuads))
+        {
+            currentQuads = [];
+            quadsByType.Add(type, currentQuads);
+        }
+
+        currentQuads.Add(key);
+        typeByCoordinate[key] = type;
+    }
+
+    private void RemoveScrolledOutTextureCells(int minX, int minY, int dx, int dy)
+    {
+        int oldMinX = minX - dx;
+        int oldMinY = minY - dy;
+        if (dx > 0)
+        {
+            RemoveTextureIndexRect(oldMinX, oldMinX + dx, oldMinY, oldMinY + _height);
+        }
+        else if (dx < 0)
+        {
+            RemoveTextureIndexRect(minX + _width, oldMinX + _width, oldMinY, oldMinY + _height);
+        }
+
+        if (dy > 0)
+        {
+            RemoveTextureIndexRect(minX, minX + _width, oldMinY, oldMinY + dy);
+        }
+        else if (dy < 0)
+        {
+            RemoveTextureIndexRect(minX, minX + _width, minY + _height, oldMinY + _height);
+        }
+    }
+
+    private void RemoveTextureIndexRect(int startX, int endX, int startY, int endY)
+    {
+        for (int x = startX; x < endX; x++)
+        {
+            for (int y = startY; y < endY; y++)
+            {
+                long key = PackCoordinate(x, y);
+                RemoveTextureIndexKey(_backgroundQuadsByType, _backgroundTypeByCoordinate, key);
+                RemoveTextureIndexKey(_foregroundQuadsByType, _foregroundTypeByCoordinate, key);
+            }
+        }
+    }
+
+    private static void RemoveTextureIndexKey(
+        Dictionary<CellType, HashSet<long>> quadsByType,
+        Dictionary<long, CellType> typeByCoordinate,
+        long key)
+    {
+        if (!typeByCoordinate.Remove(key, out CellType previousType) ||
+            !quadsByType.TryGetValue(previousType, out HashSet<long>? previousQuads))
+        {
+            return;
+        }
+
+        previousQuads.Remove(key);
+        if (previousQuads.Count == 0)
+        {
+            quadsByType.Remove(previousType);
+        }
+    }
+
+    private static long PackCoordinate(int x, int y) => ((long)x << 32) | (uint)y;
+
+    private static int UnpackX(long key) => (int)(key >> 32);
+
+    private static int UnpackY(long key) => (int)key;
 }

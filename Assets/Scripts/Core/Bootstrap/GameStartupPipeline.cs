@@ -189,7 +189,6 @@ public sealed class GamePresentationStartup
         report.RunCritical("inventory", _inventory.EnsureInitialized);
 
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.Terrain);
-        ValidateShader(report, ProjectRuntimeContracts.ShaderNames.DynamicEmission);
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.WorldSurface);
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.WorldEntity);
 

@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae;
 using Fodinae.Audio;
@@ -34,13 +35,18 @@ using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
-public class DummyConnection : IServerConnection, IOfflineConnection
+public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegionRequester
 {
     private readonly ITextureStorageService _textureStorage;
     private readonly IAsyncOperationSupervisor _operations;
     private readonly IRuntimeDebugSettings _debugSettings;
     private readonly DummyConnectionSession _session = new();
     private readonly DummyScenarioController _scenario;
+
+    public void RequestWorldRegion(string worldCodeName, RectInt serverRegion)
+    {
+        _worldState.QueueTerrainRegion(worldCodeName, serverRegion, SendPacket);
+    }
 
     public DummyConnection(
         ITextureStorageService textureStorage,
@@ -71,10 +77,15 @@ public class DummyConnection : IServerConnection, IOfflineConnection
         _teleportManager = new DummyTeleportManager(
             SendPacket,
             _teleportPositions,
-            (destX, destY) =>
+            operations,
+            async (destX, destY) =>
             {
+                await _worldState.SendChunksAroundAsync(
+                    destX,
+                    destY,
+                    SendPacket,
+                    CancellationToken.None);
                 _playerState.SetPosition(destX, destY);
-                _worldState.SendChunksAround(destX, destY, SendPacket);
             });
         // LoopAlive привязан к жизненному циклу соединения: чат-петля
         // умирает вместе с коннектом (раньше она жила вечно и текла

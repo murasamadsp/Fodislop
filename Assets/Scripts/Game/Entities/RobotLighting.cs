@@ -25,8 +25,6 @@ public sealed class RobotLighting
     private Color _lastDynamicLightColor;
     private float _lastDynamicLightIntensity;
 
-    private const float DynamicLightPositionEpsilon = 0.00390625f;
-
     public RobotLighting()
     {
         _dynamicLightID = Interlocked.Increment(ref _nextDynamicLightID);
@@ -110,10 +108,9 @@ public sealed class RobotLighting
         if (_hasSubmittedDynamicLight &&
             ReferenceEquals(_lastDynamicLightEngine, lighting) &&
             _lastDynamicLightGeneration == generation &&
-            (_lastDynamicLightPosition - pos2D).sqrMagnitude <=
-                DynamicLightPositionEpsilon * DynamicLightPositionEpsilon &&
+            _lastDynamicLightPosition == pos2D &&
             _lastDynamicLightColor == _dynamicLightColor &&
-            Mathf.Approximately(_lastDynamicLightIntensity, _dynamicLightIntensity))
+            _lastDynamicLightIntensity == _dynamicLightIntensity)
         {
             return;
         }

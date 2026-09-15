@@ -347,7 +347,12 @@ namespace Fodinae.Player.Logic
             // сервер, и он же решает, можно ли идти. Ранний выход здесь
             // оставлял клиент без MovePacket, пока не придёт регион, а
             // настоящий сервер регион без движения не шлёт.
-            var currentCellType = storage.GetCell(currentX, currentServerY);
+            CellType currentCellType = storage.TryGetCell(
+                currentX,
+                currentServerY,
+                out CellType residentCurrentCellType)
+                ? residentCurrentCellType
+                : CellType.Unloaded;
 
             var mapDataProvider = _mapDataProvider ?? throw new InvalidOperationException(
                 "[PlayerMovementController] IMapDataProvider is required for movement validation.");
@@ -398,7 +403,11 @@ namespace Fodinae.Player.Logic
                         targetPosition,
                         mapDataProvider.WorldWidth,
                         mapDataProvider.WorldHeight) &&
-                    storage.GetCell((ushort)targetPosition.x, (ushort)targetPosition.y) == CellType.Unloaded)
+                    (!storage.TryGetCell(
+                        (ushort)targetPosition.x,
+                        (ushort)targetPosition.y,
+                        out CellType residentTargetCellType) ||
+                        residentTargetCellType == CellType.Unloaded))
                 {
                     _lastMoveTime = Time.time;
                     _networkService?.SendAction(new MovePacket((ushort)targetPosition.x, (ushort)targetPosition.y));
@@ -412,7 +421,11 @@ namespace Fodinae.Player.Logic
 
             if (isPassable || _ignoreCollision)
             {
-                _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(targetServerX, targetServerY, mapDataProvider.WorldHeight, transform.position.z);
+                _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(
+                    targetServerX,
+                    targetServerY,
+                    mapDataProvider.WorldHeight,
+                    transform.position.z);
                 Vector2Int oldPos = Position;
                 Position = targetPosition;
                 OnPlayerMoved?.Invoke(oldPos, Position);

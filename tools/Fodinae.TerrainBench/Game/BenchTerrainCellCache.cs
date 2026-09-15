@@ -12,7 +12,7 @@ namespace Fodinae.World.Terrain;
 // стороны, как настоящий.
 public class TerrainCellCache
 {
-    private CachedCellData[,] _cells = new CachedCellData[0, 0];
+    private readonly TerrainRingGrid<CachedCellData> _cells = new();
 
     public int CacheMinX { get; private set; }
 
@@ -32,10 +32,6 @@ public class TerrainCellCache
         return _cells[x, y];
     }
 
-    // Как настоящий: калькуляторы сдвигают свои массивы через кэш.
-    public static void Scroll2DArray<T>(T[,] buffer, int w, int h, int dx, int dy) =>
-        TerrainCacheArrayScroller.Scroll(buffer, w, h, dx, dy);
-
     // Пещеры: шум из хеша, сплошные массы с полостями и дорогами.
     public void FillCaves(int meshWidth, int meshHeight, int minX, int minY, int seed)
     {
@@ -43,7 +39,7 @@ public class TerrainCellCache
         CacheHeight = meshHeight + 2;
         CacheMinX = minX - 1;
         CacheMinY = minY - 1;
-        _cells = new CachedCellData[CacheWidth, CacheHeight];
+        _cells.EnsureSize(CacheWidth, CacheHeight);
         for (int x = 0; x < CacheWidth; x++)
         {
             for (int y = 0; y < CacheHeight; y++)
@@ -64,7 +60,7 @@ public class TerrainCellCache
             return;
         }
 
-        TerrainCacheArrayScroller.Scroll(_cells, CacheWidth, CacheHeight, dx, dy);
+        _cells.Scroll(dx, dy);
         CacheMinX += dx;
         CacheMinY += dy;
         int columnStart = dx > 0 ? CacheWidth - dx : 0;

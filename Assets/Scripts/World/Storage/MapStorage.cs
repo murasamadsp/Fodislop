@@ -13,7 +13,7 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.World;
-public class MapStorage : IWorldDataStorage, IWorldPersistence
+public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStorage
 {
     private WorldLayer<CellType>? _cellLayer;
     private string? _mapFilePath;
@@ -33,6 +33,12 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
     private int _worldWidth;
     private int _worldHeight;
     private bool _clippedRegionWarningLogged;
+    private int _regionBatchDepth;
+    private bool _batchedRegionChanged;
+    private int _batchedRegionMinX;
+    private int _batchedRegionMinY;
+    private int _batchedRegionMaxX;
+    private int _batchedRegionMaxY;
 
     public IWorldLayer<CellType>? CellLayer => _cellLayer;
 
@@ -51,6 +57,40 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
 
     public event Action<int, int>? CellChanged;
     public event Action<int, int, int, int>? RegionChanged;
+
+    public void BeginRegionBatch()
+    {
+        _regionBatchDepth++;
+        if (_regionBatchDepth == 1)
+        {
+            _cellLayer?.BeginChunkLoadBatch();
+        }
+    }
+
+    public void EndRegionBatch()
+    {
+        if (_regionBatchDepth <= 0)
+        {
+            throw new InvalidOperationException("[MapStorage] Region batch is not active.");
+        }
+
+        _regionBatchDepth--;
+        if (_regionBatchDepth != 0)
+        {
+            return;
+        }
+
+        _cellLayer?.EndChunkLoadBatch();
+        if (_batchedRegionChanged)
+        {
+            _batchedRegionChanged = false;
+            RegionChanged?.Invoke(
+                _batchedRegionMinX,
+                _batchedRegionMinY,
+                _batchedRegionMaxX - _batchedRegionMinX,
+                _batchedRegionMaxY - _batchedRegionMinY);
+        }
+    }
 
     public void EnsureEditorInitialized()
     {
@@ -115,7 +155,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
                 heightChunks,
                 _operations,
                 ProjectRuntimeContracts.World.ChunkSize,
-                maxRamChunks: 2000);
+                maxRamChunks: ProjectRuntimeContracts.World.ResidentChunkCacheCapacity);
             IsDisposed = false;
             Revision++;
         }
@@ -179,6 +219,14 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
         return _cellLayer.GetCell(x, y, touchLru: true);
     }
 
+    public bool TryGetCell(int x, int y, out CellType cellType)
+    {
+        cellType = CellType.Unloaded;
+        return _isInitialized &&
+            _cellLayer != null &&
+            _cellLayer.TryGetCell(x, y, out cellType);
+    }
+
     public void SetCell(int x, int y, CellType type)
     {
         if (!_isInitialized || _cellLayer == null)
@@ -187,7 +235,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
                 $"[MapStorage] SetCell called before world initialization: ({x},{y}).");
         }
 
-        if (_cellLayer.GetCellSync(x, y, touchLru: true) == type)
+        if (_cellLayer.TryGetCell(x, y, out CellType current) && current == type)
         {
             return;
         }
@@ -277,14 +325,35 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
         if (changedCells > 0)
         {
             Revision++;
-            RegionChanged?.Invoke(startX, startY, width, height);
+            bool onlyMaterializedNewChunks =
+                _cellLayer.LastSetRegionOnlyMaterializedNewChunks;
+            if (_regionBatchDepth > 0 && !onlyMaterializedNewChunks)
+            {
+                if (!_batchedRegionChanged)
+                {
+                    _batchedRegionMinX = startX;
+                    _batchedRegionMinY = startY;
+                    _batchedRegionMaxX = startX + appliedWidth;
+                    _batchedRegionMaxY = startY + appliedHeight;
+                    _batchedRegionChanged = true;
+                }
+                else
+                {
+                    _batchedRegionMinX = Math.Min(_batchedRegionMinX, startX);
+                    _batchedRegionMinY = Math.Min(_batchedRegionMinY, startY);
+                    _batchedRegionMaxX = Math.Max(_batchedRegionMaxX, startX + appliedWidth);
+                    _batchedRegionMaxY = Math.Max(_batchedRegionMaxY, startY + appliedHeight);
+                }
+            }
+            else if (!onlyMaterializedNewChunks)
+            {
+                RegionChanged?.Invoke(startX, startY, width, height);
+            }
         }
 
-        // SetRegion materializes chunks synchronously, so WorldLayer's
-        // asynchronous disk-load notification is not emitted. Consumers
-        // such as the minimap may already have cached these chunks as
-        // unavailable; notify them after the packet has been applied.
-        _cellLayer.NotifyRegionLoaded(startX, startY, appliedWidth, appliedHeight);
+        // SetRegion emits ChunkLoaded only for chunks that were missing before
+        // this packet. Repeated packets stay on the RegionChanged path and do
+        // not invalidate terrain and static lighting as if a new chunk arrived.
     }
 
     public void Flush()

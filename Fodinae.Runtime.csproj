@@ -55,7 +55,6 @@
   <ItemGroup>
     <Compile Include="Assets/Scripts/Networking/Connection/Client/Systems/DummyMissionRunner.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Inventory/View/InventoryView.cs" />
-    <Compile Include="Assets/Scripts/World/Lighting/Pipeline/Stages/CompositeStage.cs" />
     <Compile Include="Assets\Scripts\World\Common\TileBitmaskConverter.cs" />
     <Compile Include="Assets/Scripts/Core/Bootstrap/BootstrapLifetimeScope.cs" />
     <Compile Include="Assets/Scripts/Core/Bootstrap/ApplicationBootstrap.cs" />
@@ -102,7 +101,6 @@
     <Compile Include="Assets\Scripts\Player\Logic\PlayerMovementMath.cs" />
     <Compile Include="Assets\\Scripts\\UI\\Common\\Interaction\\UIInputManager.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/CappedArrayPool.cs" />
-    <Compile Include="Assets/Scripts/World/Lighting/Pipeline/LightingFrameContext.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/IPostTickable.cs" />
     <Compile Include="Assets\Scripts\UI\Gateway\AuthGate.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Player/Model/PlayerStatsModel.cs" />
@@ -217,7 +215,6 @@
     <Compile Include="Assets/Scripts/World/Common/Contracts/RenderingConstants.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/RuntimeTypeCache.cs" />
     <Compile Include="Assets\\Scripts\\World\\Terrain\\Cache\\DirtyRectSet.cs" />
-    <Compile Include="Assets/Scripts/World/Lighting/Pipeline/Stages/DynamicEmissionCompositionStage.cs" />
     <Compile Include="Assets\Scripts\UI\Overlays\FPSCounter.cs" />
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/Components/MotionBlurComponent.cs" />
     <Compile Include="Assets\\Scripts\\World\\Terrain\\Mesh\\TerrainVertex.cs" />
@@ -244,7 +241,6 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/ContainerBuilder.cs" />
     <Compile Include="Assets\Scripts\World\Rendering\BackgroundFloodFill.cs" />
     <Compile Include="Assets\\Scripts\\AssetPipeline\\Animation\\AnimationContainerDecoder.cs" />
-    <Compile Include="Assets/Scripts/World/Lighting/Pipeline/Stages/DiffuseBounceStage.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/FindComponentProvider.cs" />
     <Compile Include="Assets\Scripts\UI\Map\MapModeState.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/ITickable.cs" />
@@ -255,7 +251,6 @@
     <Compile Include="Assets\\Scripts\\AssetPipeline\\Animation\\Contracts\\AnimatedSpriteData.cs" />
     <Compile Include="Assets\\Scripts\\AssetPipeline\\Loading\\Contracts\\IRuntimeAssetPaths.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/Audio/IServerAudioService.cs" />
-    <Compile Include="Assets/Scripts/World/Lighting/Pipeline/LightingPipeline.cs" />
     <Compile Include="Assets\Scripts\World\Common\FrameTelemetry.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/ListPool.cs" />
     <Compile Include="Assets/Scripts/Game/Managers/ServerConfig.cs" />
@@ -335,7 +330,6 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceRegistrationBuilder.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Inventory/Model/InventoryModel.cs" />
     <Compile Include="Assets\\Scripts\\World\\Terrain\\Core\\TerrainRenderer.cs" />
-    <Compile Include="Assets/Scripts/World/Lighting/Pipeline/Stages/MaterialFieldStage.cs" />
     <Compile Include="Assets/Scripts/Networking/Connection/ConnectionTransportConfig.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/CompositeDisposable.cs" />
     <Compile Include="Assets/Scripts/Effekseer/RuntimeEffekseerLoader.cs" />
@@ -405,7 +399,6 @@
     <Compile Include="Assets/Scripts/Core/Lifecycle/SceneObjectFactory.cs" />
     <Compile Include="Assets\\Scripts\\UI\\Programmator\\Model\\ProgrammatorProgramStore.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Player/View/PlayerHUDView.cs" />
-    <Compile Include="Assets/Scripts/World/Lighting/Pipeline/ILightingStage.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/Rendering/ITextureService.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/Networking/INetworkService.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/EntryPointExceptionHandler.cs" />

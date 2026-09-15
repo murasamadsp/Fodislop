@@ -27,8 +27,10 @@ namespace Fodinae.Rendering.PostProcessing
         public const int BakedGradeLutSize = 33;
         private RenderTexture? _bakedGradeLut;
         private readonly BakedGradeLutCache _gradeLutCache = new();
-        private readonly TextureHandle[] _bloomDownTextures = new TextureHandle[1];
-        private readonly TextureHandle[] _bloomUpTextures = new TextureHandle[1];
+        // Размеры берутся из списков имён: две константы, обязанные совпадать,
+        // разъезжались бы молча.
+        private readonly TextureHandle[] _bloomDownTextures = new TextureHandle[BloomDownNames.Length];
+        private readonly TextureHandle[] _bloomUpTextures = new TextureHandle[BloomUpNames.Length];
         private VolumeStack? _cachedVolumeStack;
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -126,16 +128,28 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
+            // Сдвиг камеры больше не обесценивает историю — он из неё
+            // вычитается.
+            //
+            // Раньше здесь стоял сброс _historyValid при любом изменении
+            // view-projection, потому что репроекции не было и переиспользование
+            // истории давало шлейфы. Но камера следует за игроком, то есть
+            // условие выполнялось каждый кадр движения: смаз выключался ровно
+            // тогда, когда он нужен, а полноэкранная текстура истории и её
+            // копия оплачивались всё равно.
+            //
+            // Матрица VP_prev * inverse(VP_cur) переводит точку текущего кадра
+            // в тот же пиксель прошлого. Камера проекта ортографическая, и при
+            // ортографии результат по x и y не зависит от глубины — одной
+            // матрицы достаточно для всей статичной геометрии, без буфера
+            // векторов движения.
             Matrix4x4 viewProjection =
                 cameraData.camera.projectionMatrix * cameraData.camera.worldToCameraMatrix;
-            if (!_hasViewProjection || _lastViewProjection != viewProjection)
+            Matrix4x4 historyReprojection = _hasViewProjection
+                ? _lastViewProjection * viewProjection.inverse
+                : Matrix4x4.identity;
+            if (!_hasViewProjection)
             {
-                // History has no motion-vector reprojection. Reusing it after
-                // the camera moves blends unrelated screen pixels and produces
-                // full-frame trails, especially around high-contrast UI and
-                // terrain edges.
-                _lastViewProjection = viewProjection;
-                _hasViewProjection = true;
                 _historyValid = false;
             }
 
@@ -268,11 +282,29 @@ namespace Fodinae.Rendering.PostProcessing
                 : PostProcessRuntimeState.ColorGrade;
             bool diagnosticsActive = PostProcessRuntimeState.DebugView != PostProcessDebugView.None ||
                 PostProcessRuntimeState.CompareMode != CompareMode.Off;
+            // Глубина пирамиды блума считается ДО раннего выхода: на
+            // вырожденном размере окна уровней не остаётся, блум отключается, и
+            // тогда творческий проход может оказаться не нужен вовсе. Нижние
+            // уровни вырождаются в несколько пикселей и ореола не добавляют,
+            // зато продолжают стоить dispatch и барьер.
+            int bloomLevels = 0;
+            if (bloomActive)
+            {
+                int smallestSide = Mathf.Max(1, Mathf.Min(width, height) / 2);
+                while (bloomLevels < _bloomDownTextures.Length &&
+                    (smallestSide >> (bloomLevels + 1)) >= 8)
+                {
+                    bloomLevels++;
+                }
+
+                bloomActive = bloomLevels > 0;
+            }
+
             bool passNeeded = _displayPass
                 ? diagnosticsActive || vignetteActive || eigengrauActive || temporalActive ||
                     (!hdrOutput && Mathf.Abs(displayGamma - DisplaySettings.DefaultGamma) > 0.001f) ||
-                    !IsDisplayGradeNeutral(activeGrade)
-                : diagnosticsActive || bloomActive || cgActive || !IsCreativeGradeNeutral(activeGrade);
+                    !activeGrade.IsDisplayNeutral
+                : diagnosticsActive || bloomActive || cgActive || !activeGrade.IsCreativeNeutral;
             if (!passNeeded)
             {
                 return;
@@ -301,7 +333,7 @@ namespace Fodinae.Rendering.PostProcessing
                 bloomDesc.filterMode = FilterMode.Bilinear;
                 bloomPrefilterTexture = renderGraph.CreateTexture(bloomDesc);
 
-                for (int i = 0; i < _bloomDownTextures.Length; i++)
+                for (int i = 0; i < bloomLevels; i++)
                 {
                     bloomDesc.width = Mathf.Max(1, bloomDesc.width / 2);
                     bloomDesc.height = Mathf.Max(1, bloomDesc.height / 2);
@@ -309,7 +341,7 @@ namespace Fodinae.Rendering.PostProcessing
                     _bloomDownTextures[i] = renderGraph.CreateTexture(bloomDesc);
                 }
 
-                for (int i = 0; i < _bloomUpTextures.Length; i++)
+                for (int i = 0; i < bloomLevels; i++)
                 {
                     var bloomUpDesc = desc;
                     bloomUpDesc.width = Mathf.Max(1, bloomUpDesc.width >> (i + 1));
@@ -340,7 +372,13 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.Height = height;
                 passData.HistoryTexture = historyTexture;
 
+                passData.IsDisplayPass = _displayPass;
+                passData.DiagnosticsActive = diagnosticsActive;
+                passData.GradeGeneration = PostProcessRuntimeState.PipelineGeneration;
+                passData.HistoryReprojection = historyReprojection;
+
                 passData.BloomActive = bloomActive;
+                passData.BloomLevels = bloomLevels;
                 passData.BloomThreshold = bloom.threshold.value;
                 passData.BloomSoftKnee = bloom.softKnee.value;
                 passData.BloomRadius = bloom.radius.value;
@@ -520,13 +558,9 @@ namespace Fodinae.Rendering.PostProcessing
                 if (passData.BloomActive)
                 {
                     builder.UseTexture(passData.BloomPrefilterTexture, AccessFlags.ReadWrite);
-                    for (int i = 0; i < passData.BloomDownTextures.Length; i++)
+                    for (int i = 0; i < passData.BloomLevels; i++)
                     {
                         builder.UseTexture(passData.BloomDownTextures[i], AccessFlags.ReadWrite);
-                    }
-
-                    for (int i = 0; i < passData.BloomUpTextures.Length; i++)
-                    {
                         builder.UseTexture(passData.BloomUpTextures[i], AccessFlags.ReadWrite);
                     }
                 }
@@ -542,33 +576,17 @@ namespace Fodinae.Rendering.PostProcessing
             if (temporalActive)
             {
                 _historyValid = true;
+                // Ракурс запоминается только когда история действительно
+                // переписана этим кадром: иначе матрица репроекции ссылалась бы
+                // на кадр, которого в текстуре нет.
+                _lastViewProjection = viewProjection;
+                _hasViewProjection = true;
             }
         }
 
-        // Входы запечённой таблицы (BakedGradeLutCache) в нейтральном положении:
-        // композит тогда возвращает тот же цвет.
-        private static bool IsCreativeGradeNeutral(in ColorGradeSnapshot grade) =>
-            grade.Temperature == 0f && grade.Tint == 0f &&
-            grade.Slope == Vector3.one && grade.Offset == Vector3.zero && grade.Power == Vector3.one &&
-            grade.CdlMaster == new Vector3(1f, 0f, 1f) && grade.CdlSaturation == 1f &&
-            grade.PrimaryLift == Vector3.zero && grade.PrimaryGamma == Vector3.one &&
-            grade.PrimaryGain == Vector3.one && grade.PrimaryOffset == Vector3.zero &&
-            grade.PrimaryMaster == new Vector4(0f, 1f, 1f, 0f) &&
-            grade.Vibrance == 0f && grade.Hue == 0f &&
-            grade.Shadows == 0f && grade.Highlights == 0f && grade.Blacks == 0f &&
-            grade.Whites == 0f && grade.Toe == 0f && grade.Shoulder == 0f &&
-            !grade.Qualifier.Enabled &&
-            grade.HueVsHueCurve.IsNeutral && grade.HueVsSaturationCurve.IsNeutral &&
-            grade.HueVsLuminanceCurve.IsNeutral && grade.LuminanceVsSaturationCurve.IsNeutral &&
-            grade.SaturationVsSaturationCurve.IsNeutral;
-
-        // Точечные операции прохода дисплея в нейтральном положении.
-        private static bool IsDisplayGradeNeutral(in ColorGradeSnapshot grade) =>
-            grade.Transform == DisplayTransform.None &&
-            (grade.Lut == null || grade.LutIntensity <= 0f) &&
-            (!grade.GamutCompressionEnabled || grade.GamutCompressionStrength <= 0f) &&
-            grade.MasterCurve.IsNeutral && grade.RedCurve.IsNeutral &&
-            grade.GreenCurve.IsNeutral && grade.BlueCurve.IsNeutral;
+        // Нейтральность грейда переехала в ColorGradeSnapshot: списки полей
+        // обязаны согласовываться с самим снимком, и держать их врозь значило
+        // держать три копии одного знания.
 
         private RenderTexture EnsureBakedGradeLut()
         {

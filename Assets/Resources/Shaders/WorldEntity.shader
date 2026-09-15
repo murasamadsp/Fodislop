@@ -166,6 +166,80 @@ Shader "Fodinae/World Entity"
             }
             ENDHLSL
         }
+
+        // Light-emitting sprites (buildings) in the lighting fields. Emission
+        // is the sprite's own colour, the way glowing terrain emits its
+        // albedo. Material output stays zero: with Max blending it keeps the
+        // occupancy and albedo the terrain wrote, so a building glows without
+        // becoming a wall.
+        Pass
+        {
+            Name "LightingMaterialField"
+            Tags { "LightMode" = "FodinaeLightingMaterialField" }
+
+            Blend One One
+            BlendOp Max
+            ZWrite Off
+            ZTest Always
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma vertex LightingFieldVert
+            #pragma fragment LightingFieldFrag
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float2 uv         : TEXCOORD0;
+                float4 color      : COLOR;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv         : TEXCOORD0;
+                float4 color      : COLOR;
+            };
+
+            struct LightingFieldOutput
+            {
+                half4 material : SV_Target0;
+                half4 emission : SV_Target1;
+            };
+
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _Color;
+                float4 _MainTex_TexelSize;
+            CBUFFER_END
+
+            Varyings LightingFieldVert(Attributes input)
+            {
+                Varyings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.uv = input.uv;
+                output.color = input.color;
+                return output;
+            }
+
+            LightingFieldOutput LightingFieldFrag(Varyings input)
+            {
+                half4 color = SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_PointClamp, input.uv, 0) *
+                    input.color * _Color;
+                float strength = step(0.05, color.a) * color.a;
+
+                LightingFieldOutput output;
+                output.material = half4(0.0, 0.0, 0.0, 0.0);
+                output.emission = half4(color.rgb * strength, strength);
+                return output;
+            }
+            ENDHLSL
+        }
     }
 
     FallBack "Sprites/Default"

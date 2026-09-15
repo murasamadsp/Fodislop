@@ -8,6 +8,7 @@ public static class ProjectRuntimeContracts
     {
         public const float CellSize = 1f;
         public const int ChunkSize = 32;
+        public const int ResidentChunkCacheCapacity = 2000;
     }
 
     public static class Camera
@@ -104,7 +105,6 @@ public static class ProjectRuntimeContracts
     public static class ShaderNames
     {
         public const string Terrain = "Universal Render Pipeline/Custom/Terrain";
-        public const string DynamicEmission = "Hidden/Fodinae/DynamicEmission";
         public const string WorldSurface = "Fodinae/World Surface";
         public const string WorldEntity = "Fodinae/World Entity";
         public const string PlanetSurface = "Fodinae/UI/PlanetSurface";
@@ -122,13 +122,15 @@ public static class ProjectRuntimeContracts
     public static class ComputeKernelNames
     {
         public const string SolveCascade = "SolveCascade";
+        public const string ScrollRadianceAtlas = "ScrollRadianceAtlas";
         public const string SolveDynamicLighting = "SolveDynamicLighting";
+        public const string ComposeDynamicLighting = "ComposeDynamicLighting";
+        public const string TraceLampPolar = "TraceLampPolar";
+        public const string ClearDynamicDirect = "ClearDynamicDirect";
         public const string ResolveDirect = "ResolveDirect";
+        public const string ResolveTransmissionDebug = "ResolveTransmissionDebug";
         public const string SolveDiffuseBounce = "SolveDiffuseBounce";
         public const string CompositeLighting = "CompositeLighting";
-        public const string SeedBlockLighting = "SeedBlockLighting";
-        public const string PropagateBlockLighting = "PropagateBlockLighting";
-        public const string ResolveBlockLighting = "ResolveBlockLighting";
         public const string BuildCellSolidMask = "BuildCellSolidMask";
         public const string BuildBounceTaps = "BuildBounceTaps";
         public const string BuildBounceFilter = "BuildBounceFilter";

@@ -28,9 +28,6 @@ public readonly record struct DynamicLightSource(
 
 public sealed class DynamicLightManager
 {
-    private const float DynamicLightPositionEpsilon = 0.00390625f;
-    private const float MaximumDynamicLightPositionEpsilon = 0.0625f;
-
     private readonly SortedDictionary<int, DynamicLightSource> _externalLights = new();
     private readonly List<int> _lastDroppedDynamicLightIds = new();
     private DynamicLightGpuData[] _dynamicLights = new DynamicLightGpuData[1];
@@ -42,6 +39,16 @@ public sealed class DynamicLightManager
     public int Count => _externalLights.Count;
     public uint Generation => _dynamicLightGeneration;
     public int UploadedCount => _lastDynamicLightCount;
+
+    // Same lamps, in the same order, as the last GPU upload.
+    public System.ReadOnlySpan<DynamicLightGpuData> UploadedLights =>
+        new(_dynamicLights, 0, _lastDynamicLightCount);
+
+    // Caller ids of UploadedLights, index for index.
+    public System.ReadOnlySpan<int> UploadedLightIds =>
+        new(_uploadedLightIds, 0, _lastDynamicLightCount);
+
+    private int[] _uploadedLightIds = new int[1];
     public int DroppedCount => _lastDroppedDynamicLightCount;
     public IReadOnlyList<int> DroppedLightIds => _lastDroppedDynamicLightIds;
     public bool IsDirty => _externalLightsDirty;
@@ -56,8 +63,7 @@ public sealed class DynamicLightManager
         int id,
         Vector2 position,
         Color color,
-        float intensity,
-        float effectivePixelsPerCell)
+        float intensity)
     {
         if (Mathf.Max(0f, intensity) <= 0f)
         {
@@ -67,7 +73,7 @@ public sealed class DynamicLightManager
 
         var source = new DynamicLightSource(position, color, intensity);
         if (_externalLights.TryGetValue(id, out DynamicLightSource previous) &&
-            DynamicLightSourceApproximatelyEquals(previous, source, effectivePixelsPerCell))
+            previous == source)
         {
             return;
         }
@@ -101,6 +107,7 @@ public sealed class DynamicLightManager
         if (_dynamicLights.Length != capacity)
         {
             _dynamicLights = new DynamicLightGpuData[capacity];
+            _uploadedLightIds = new int[capacity];
         }
     }
 
@@ -156,6 +163,7 @@ public sealed class DynamicLightManager
                 uploadedLightsChanged = true;
             }
 
+            _uploadedLightIds[dynamicLightCount] = pair.Key;
             _dynamicLights[dynamicLightCount++] = dynamicLight;
         }
 
@@ -186,20 +194,6 @@ public sealed class DynamicLightManager
     {
         return left.PositionRadius == right.PositionRadius &&
             left.ColorIntensity == right.ColorIntensity;
-    }
-
-    private static bool DynamicLightSourceApproximatelyEquals(
-        DynamicLightSource left,
-        DynamicLightSource right,
-        float effectivePixelsPerCell)
-    {
-        float epsilon = effectivePixelsPerCell > 0f
-            ? Mathf.Min(0.5f / effectivePixelsPerCell, MaximumDynamicLightPositionEpsilon)
-            : DynamicLightPositionEpsilon;
-
-        return (left.Position - right.Position).sqrMagnitude <= epsilon * epsilon &&
-            left.Color == right.Color &&
-            Mathf.Approximately(left.Intensity, right.Intensity);
     }
 
     private static bool IntersectsWorldRect(

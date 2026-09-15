@@ -19,6 +19,25 @@ public readonly record struct CascadeCostSample(
 
 public static class CascadeCostCalculator
 {
+    public static long EstimateRayWorkUnits(IReadOnlyList<CascadeLayout> cascades)
+    {
+        if (cascades == null)
+        {
+            throw new ArgumentNullException(nameof(cascades));
+        }
+
+        var samples = new List<CascadeCostSample>(cascades.Count);
+        CollectCascadeCosts(cascades, int.MaxValue, samples);
+
+        long total = 0;
+        foreach (CascadeCostSample sample in samples)
+        {
+            total = checked(total + sample.RayStepCount);
+        }
+
+        return total;
+    }
+
     public static void CollectCascadeCosts(
         IReadOnlyList<CascadeLayout> cascades,
         int maximumSteps,

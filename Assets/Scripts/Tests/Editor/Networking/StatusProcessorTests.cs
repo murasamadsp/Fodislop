@@ -57,6 +57,9 @@ public class StatusProcessorTests
 
     private sealed class StubNetworkService : INetworkService
     {
+        public event Action? PacketBatchStarted;
+        public event Action? PacketBatchCompleted;
+
         public bool SentPong { get; private set; }
 
         public void Subscribe<T>(Action<T> handler)
