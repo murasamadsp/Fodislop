@@ -9,14 +9,11 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Manages dynamic emission light source for a Robot entity in the LightingEngine.
-/// </summary>
 public sealed class RobotLighting
 {
-    private static int _nextDynamicLightId;
+    private static int _nextDynamicLightID;
 
-    private readonly int _dynamicLightId;
+    private readonly int _dynamicLightID;
     private bool _dynamicLightEnabled;
     private float _dynamicLightIntensity;
     private Color _dynamicLightColor;
@@ -30,47 +27,53 @@ public sealed class RobotLighting
 
     private const float DynamicLightPositionEpsilon = 0.00390625f;
 
-    public RobotLighting(bool emitsDynamicLight, float defaultIntensity, Color defaultColor)
+    public RobotLighting()
     {
-        _dynamicLightId = Interlocked.Increment(ref _nextDynamicLightId);
-        _dynamicLightEnabled = emitsDynamicLight;
-        _dynamicLightIntensity = defaultIntensity;
-        _dynamicLightColor = defaultColor;
+        _dynamicLightID = Interlocked.Increment(ref _nextDynamicLightID);
+        _dynamicLightEnabled = LightingConfigHolder.DynamicLightEnabled;
+        _dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity;
+        _dynamicLightColor = LightingConfigHolder.DynamicLightColor;
     }
 
     public float DynamicLightIntensity => _dynamicLightIntensity;
     public Color DynamicLightColor => _dynamicLightColor;
 
-    public void InitializeSettings(IProjectDefaults projectDefaults, LightingEngine? lightingEngine)
+    public void InitializeSettings(LightingEngine? lightingEngine)
     {
-        if (_dynamicLightSettingsLoaded || projectDefaults == null)
+        if (_dynamicLightSettingsLoaded)
         {
             return;
         }
 
-        LightingDefaultsSnapshot defaults = projectDefaults.Lighting;
-        _dynamicLightIntensity = lightingEngine?.IsRuntimeConfigReady == true
-            ? lightingEngine.DynamicLightIntensity
-            : defaults.DynamicLightIntensity;
-        _dynamicLightColor = lightingEngine?.IsRuntimeConfigReady == true
-            ? lightingEngine.DynamicLightColor
-            : defaults.DynamicLightColor;
-        _dynamicLightSettingsLoaded = lightingEngine?.IsRuntimeConfigReady == true;
+        _dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity;
+        _dynamicLightColor = LightingConfigHolder.DynamicLightColor;
+        _dynamicLightSettingsLoaded = true;
     }
 
-    public void ResetPreferences(IProjectDefaults projectDefaults, LightingEngine? lightingEngine)
+    public void ResetPreferences(LightingEngine? lightingEngine)
     {
-        _dynamicLightIntensity = lightingEngine?.DynamicLightIntensity ??
-            projectDefaults.Lighting.DynamicLightIntensity;
-        _dynamicLightColor = lightingEngine?.DynamicLightColor ??
-            projectDefaults.Lighting.DynamicLightColor;
+        _dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity;
+        _dynamicLightColor = LightingConfigHolder.DynamicLightColor;
         _dynamicLightSettingsLoaded = true;
+    }
+
+    public void SetEnabled(bool enabled, LightingEngine? lightingEngine)
+    {
+        if (_dynamicLightEnabled == enabled)
+        {
+            return;
+        }
+
+        _dynamicLightEnabled = enabled;
+        if (!enabled)
+        {
+            Remove(lightingEngine);
+        }
     }
 
     public void SetIntensity(float intensity, LightingEngine? lightingEngine)
     {
         _dynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
-        lightingEngine?.SetDynamicLightSettings(_dynamicLightIntensity, _dynamicLightColor);
     }
 
     public void SetColor(Color color, LightingEngine? lightingEngine)
@@ -80,7 +83,6 @@ public sealed class RobotLighting
             Mathf.Max(0f, color.g),
             Mathf.Max(0f, color.b),
             1f);
-        lightingEngine?.SetDynamicLightSettings(_dynamicLightIntensity, _dynamicLightColor);
     }
 
     public void Update(Vector3 position, LightingEngine? lighting)
@@ -89,7 +91,7 @@ public sealed class RobotLighting
         {
             if (_hasSubmittedDynamicLight)
             {
-                lighting?.RemoveDynamicLight(_dynamicLightId);
+                lighting?.RemoveDynamicLight(_dynamicLightID);
             }
 
             _hasSubmittedDynamicLight = false;
@@ -117,7 +119,7 @@ public sealed class RobotLighting
         }
 
         lighting.SetDynamicLight(
-            _dynamicLightId,
+            _dynamicLightID,
             pos2D,
             _dynamicLightColor,
             _dynamicLightIntensity);
@@ -133,7 +135,7 @@ public sealed class RobotLighting
     {
         if (_hasSubmittedDynamicLight && lighting != null)
         {
-            lighting.RemoveDynamicLight(_dynamicLightId);
+            lighting.RemoveDynamicLight(_dynamicLightID);
             _hasSubmittedDynamicLight = false;
         }
     }

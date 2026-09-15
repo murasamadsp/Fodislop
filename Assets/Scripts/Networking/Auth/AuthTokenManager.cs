@@ -1,38 +1,36 @@
 #nullable enable
 
-using System;
 using UnityEngine;
 
-namespace Fodinae.Networking.Auth
+namespace Fodinae.Networking.Auth;
+public interface IGameTokenStore
 {
-    public static class AuthTokenManager
+    bool HasToken { get; }
+
+    string Load();
+
+    void Save(string token);
+
+    void Clear();
+}
+
+public sealed class GameTokenStore : IGameTokenStore
+{
+    private const string PlayerPrefsKey = "AuthToken6";
+
+    public bool HasToken => PlayerPrefs.HasKey(PlayerPrefsKey);
+
+    public string Load() => PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
+
+    public void Save(string token)
     {
-        private const string PlayerPrefsKey = "AuthToken6";
+        PlayerPrefs.SetString(PlayerPrefsKey, token);
+        PlayerPrefs.Save();
+    }
 
-        public static event Action<string>? OnTokenChanged;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            OnTokenChanged = null;
-        }
-
-        public static string LoadToken() => PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
-
-        public static bool HasToken => PlayerPrefs.HasKey(PlayerPrefsKey);
-
-        public static void SaveToken(string token)
-        {
-            PlayerPrefs.SetString(PlayerPrefsKey, token);
-            PlayerPrefs.Save();
-            OnTokenChanged?.Invoke(token);
-        }
-
-        public static void ClearToken()
-        {
-            PlayerPrefs.DeleteKey(PlayerPrefsKey);
-            PlayerPrefs.Save();
-            OnTokenChanged?.Invoke(string.Empty);
-        }
+    public void Clear()
+    {
+        PlayerPrefs.DeleteKey(PlayerPrefsKey);
+        PlayerPrefs.Save();
     }
 }

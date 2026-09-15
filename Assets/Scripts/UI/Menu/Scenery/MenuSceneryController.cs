@@ -7,16 +7,12 @@ namespace Fodinae.UI
     [ExecuteAlways]
     public class MenuSceneryController : MonoBehaviour
     {
+        private const string ResolveShaderName = "Fodinae/UI/UnpremultiplyAlpha";
+
         private Camera? _sceneryCamera;
         private OrbitalStationMotion? _station;
         private Transform? _planet;
         private Transform? _occluder;
-
-        /// <summary>
-        /// На сколько пикселей должен измениться размер, чтобы имело смысл
-        /// пересоздавать текстуры.
-        /// </summary>
-        private const int ResizeThresholdPixels = 24;
 
         // Потолок стороны offscreen-кадра.
         //
@@ -51,25 +47,16 @@ namespace Fodinae.UI
         private float _framingProgress;
         private Vector3 _framingDirection = Vector3.back;
 
-        /// <summary>
-        /// Действующий риг задника меню.
-        ///
-        /// Раньше потребители искали его опросом FindAnyObjectByType раз в
-        /// секунду. Если первая попытка приходилась на момент, когда сцена ещё
-        /// грузится, планета появлялась на секунду позже всего остального —
-        /// ровно на длину интервала опроса. Риг заявляет о себе сам, и ждать
-        /// больше нечего.
-        /// </summary>
         public RenderTexture? OutputTexture => _outputTexture;
 
         public void SetDisplaySize(int width, int height)
         {
-            int w = Mathf.Max(width, 64);
-            int h = Mathf.Max(height, 64);
+            int w = Mathf.Max(width, MenuSceneryDefaults.MinimumRenderTextureSide);
+            int h = Mathf.Max(height, MenuSceneryDefaults.MinimumRenderTextureSide);
 
             float scale = Mathf.Min(1f, MaxTargetSize / (float)Mathf.Max(w, h));
-            w = Mathf.Max(64, Mathf.RoundToInt(w * scale));
-            h = Mathf.Max(64, Mathf.RoundToInt(h * scale));
+            w = Mathf.Max(MenuSceneryDefaults.MinimumRenderTextureSide, Mathf.RoundToInt(w * scale));
+            h = Mathf.Max(MenuSceneryDefaults.MinimumRenderTextureSide, Mathf.RoundToInt(h * scale));
 
             // Пересоздание пары RenderTexture — не бесплатная операция, а
             // размер приходит сюда из Update каждый кадр и дрожит на пиксель
@@ -78,8 +65,8 @@ namespace Fodinae.UI
             // планета до ближайшей отрисовки. Порог убирает это, оставаясь
             // много меньше видимой разницы в чёткости.
             if (_cameraTarget != null &&
-                Mathf.Abs(_cameraTarget.width - w) <= ResizeThresholdPixels &&
-                Mathf.Abs(_cameraTarget.height - h) <= ResizeThresholdPixels)
+                Mathf.Abs(_cameraTarget.width - w) <= MenuSceneryDefaults.RenderTextureResizeThresholdPixels &&
+                Mathf.Abs(_cameraTarget.height - h) <= MenuSceneryDefaults.RenderTextureResizeThresholdPixels)
             {
                 return;
             }
@@ -161,6 +148,7 @@ namespace Fodinae.UI
                 return;
             }
 
+            _sceneryCamera.enabled = false;
             _sceneryCamera.allowHDR = false;
             _sceneryCamera.fieldOfView = MenuSceneryFraming.FieldOfView;
             _sceneryCamera.ResetAspect();
@@ -169,9 +157,6 @@ namespace Fodinae.UI
             RenderNow();
         }
 
-        /// <summary>
-        /// Принудительно обновляет статичный offscreen-кадр.
-        /// </summary>
         public void RenderNow()
         {
             if (!EnsureInitialized() || _sceneryCamera == null || _cameraTarget == null)
@@ -180,7 +165,16 @@ namespace Fodinae.UI
             }
 
             _sceneryCamera.targetTexture = _cameraTarget;
-            _sceneryCamera.Render();
+            _sceneryCamera.enabled = true;
+            try
+            {
+                _sceneryCamera.Render();
+            }
+            finally
+            {
+                _sceneryCamera.enabled = false;
+            }
+
             ResolveOutput();
             _renderDirty = false;
         }
@@ -227,6 +221,7 @@ namespace Fodinae.UI
                 return false;
             }
 
+            _sceneryCamera.enabled = false;
             EnsureTargets();
             EnsureResolveMaterial();
             return true;
@@ -245,10 +240,12 @@ namespace Fodinae.UI
                 return;
             }
 
-            Shader? resolve = Shader.Find("Fodinae/UI/UnpremultiplyAlpha");
+            Shader? resolve = Shader.Find(ResolveShaderName);
             if (resolve == null)
             {
-                Debug.LogWarning("[MenuSceneryController] Resolve shader 'Fodinae/UI/UnpremultiplyAlpha' is unavailable; scenery compositing is disabled.");
+                Debug.LogWarning(
+                    $"[MenuSceneryController] Resolve shader '{ResolveShaderName}' is unavailable; " +
+                    "scenery compositing is disabled.");
                 return;
             }
 
@@ -260,6 +257,7 @@ namespace Fodinae.UI
         {
             if (_sceneryCamera != null)
             {
+                _sceneryCamera.enabled = false;
                 _sceneryCamera.targetTexture = null;
             }
         }
@@ -287,15 +285,6 @@ namespace Fodinae.UI
             _ownsResolveMaterial = false;
         }
 
-        /// <summary>
-        /// Освобождает текстуру, предварительно отцепив её от камеры.
-        ///
-        /// Порядок значим. Уничтожение RenderTexture, которая ещё назначена в
-        /// Camera.targetTexture, даёт «Releasing render texture that is set as
-        /// Camera.targetTexture!» со стеком на каждое изменение размера окна:
-        /// камера остаётся с висячей ссылкой, и Unity вынуждена чинить это за
-        /// нас. Метод перестал быть статическим именно ради доступа к камере.
-        /// </summary>
         private void ReleaseTexture(ref RenderTexture? texture)
         {
             if (texture == null)
@@ -326,15 +315,6 @@ namespace Fodinae.UI
             texture = null;
         }
 
-        /// <summary>
-        /// Кадрирование спуска: камера подъезжает от обзорной точки к точке
-        /// высадки. Параметр — доля пройденной загрузки, 0 = обзор, 1 = вплотную.
-        ///
-        /// Планету при этом никто не вращает: точка высадки закреплена за
-        /// поверхностью, и разворачивать шар под камеру означало бы, что метка
-        /// на поверхности переезжает вместе с ним. Двигается камера — как и
-        /// должно быть при подлёте.
-        /// </summary>
         public void SetDescentFraming(float progress, Vector3 landingLocalDirection)
         {
             if (_sceneryCamera == null)
@@ -364,10 +344,6 @@ namespace Fodinae.UI
             _sceneryCamera.ResetProjectionMatrix();
             _renderDirty = true;
         }
-
-        /// <summary>Возвращает камеру в обзорное положение меню.</summary>
-        public void ResetFraming() => SetDescentFraming(0f, Vector3.back);
-
         // Reports the orbiting station's on-screen position as a 0..1 viewport
         // fraction (origin bottom-left, matching Camera.WorldToViewportPoint),
         // so UI Toolkit callers can convert it into their own panel space.
@@ -384,9 +360,6 @@ namespace Fodinae.UI
                 out viewportPosition);
         }
 
-        /// <summary>
-        /// Calculates the on-screen viewport position for a fixed point along the orbital ring.
-        /// </summary>
         public bool TryGetOrbitPointViewportPosition(float angleDegrees, out Vector2 viewportPosition)
         {
             Transform centerTransform = _planet != null ? _planet : transform;
@@ -397,9 +370,6 @@ namespace Fodinae.UI
                 out viewportPosition);
         }
 
-        /// <summary>
-        /// Calculates the on-screen viewport position for a fixed landing point on the planet's surface.
-        /// </summary>
         public bool TryGetPlanetSurfaceViewportPosition(Vector3 localSurfaceDir, out Vector2 viewportPosition)
         {
             return MenuSceneryProjection.TryGetSurfaceViewportPosition(

@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking;
 using Fodinae.UI.Binding;
@@ -64,30 +63,41 @@ public sealed class ServerWindowPresenter : IDisposable
         }
 
         _openWindows.Clear();
+        _commands.SetServerWindowVisibility(false);
     }
 
     private void Open(OpenWindowPacket packet)
     {
-        VisualElement element = new PacketUIBuilder(_assetLoader, _operations).Build(packet.Content) ??
-            throw new InvalidDataException($"Server window '{packet.WindowTag}' produced no UI element.");
+        // UIDocument може бути вимкненим (BypassGameUI). Серверне вікно потребує
+        // активного дерева — вмикаємо документ перед додаванням елемента.
+        if (!_document.enabled)
+        {
+            _document.enabled = true;
+        }
+
+        VisualElement element = new PacketUIBuilder(_assetLoader, _operations).Build(packet.Content);
+        // Размер приходит из пакета — он и остаётся инлайном. Центрирование
+        // же константа, и раньше оно тоже стояло инлайном: окно нельзя было
+        // сдвинуть ни темой, ни тиром, потому что инлайн бьёт любое правило.
         element.style.width = packet.Width;
         element.style.height = packet.Height;
-        element.style.position = Position.Absolute;
-        element.style.left = new Length(50, LengthUnit.Percent);
-        element.style.top = new Length(50, LengthUnit.Percent);
-        element.style.translate = new Translate(
-            new Length(-50, LengthUnit.Percent),
-            new Length(-50, LengthUnit.Percent));
+        element.AddToClassList("centered");
         element.AddToClassList("sci-fi-panel");
         element.AddToClassList("sci-fi-panel--tech");
         element.AddToClassList("sci-fi-window-anim");
         _document.rootVisualElement.Add(element);
+        // Только появление. Закрытие остаётся мгновенным: окно модальное, и
+        // отложенное снятие пустило бы клики мимо него, а протокол окон
+        // исполняется буквально — задержки в нём нет.
+        UIVisibilityAnimator.Show(element);
+        UILayoutTier.Attach(element);
         _uiInputManager.PushModal(element);
 
         var binding = new WindowBinding();
         binding.Bind(element);
         RegisterClickableElements(element, element, packet.WindowTag, 0);
         _openWindows.Add((packet.WindowTag, element, binding));
+        _commands.SetServerWindowVisibility(true);
     }
 
     private void Close(CloseWindowPacket packet)
@@ -102,6 +112,7 @@ public sealed class ServerWindowPresenter : IDisposable
         _uiInputManager.PopModal(root);
         root.RemoveFromHierarchy();
         _openWindows.RemoveAt(_openWindows.Count - 1);
+        _commands.SetServerWindowVisibility(_openWindows.Count > 0);
     }
 
     private void ShowModal(ModalWindowPacket packet)

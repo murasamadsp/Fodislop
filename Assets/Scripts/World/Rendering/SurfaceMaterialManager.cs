@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// Manages materials, shader keywords, and property updates for surface rendering bands.
-/// </summary>
 public sealed class SurfaceMaterialManager
 {
     private const string SurfaceShaderName = ProjectRuntimeContracts.ShaderNames.WorldSurface;
@@ -16,12 +13,12 @@ public sealed class SurfaceMaterialManager
     private const string TransitKeyword = "FODINAE_SURFACE_TRANSIT";
     private const string PerspectiveKeyword = "FODINAE_SURFACE_PERSPECTIVE";
 
-    private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
-    private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-    private static readonly int EmissionStrengthId = Shader.PropertyToID("_EmissionStrength");
-    private static readonly int OccupancyId = Shader.PropertyToID("_Occupancy");
-    private static readonly int BaseMapTileCountId = Shader.PropertyToID("_BaseMapTileCount");
-    private static readonly int WorldSizeId = Shader.PropertyToID("_WorldSize");
+    private static readonly int _BaseMapID = Shader.PropertyToID("_BaseMap");
+    private static readonly int _EmissionColorID = Shader.PropertyToID("_EmissionColor");
+    private static readonly int _EmissionStrengthID = Shader.PropertyToID("_EmissionStrength");
+    private static readonly int _OccupancyID = Shader.PropertyToID("_Occupancy");
+    private static readonly int _BaseMapTileCountID = Shader.PropertyToID("_BaseMapTileCount");
+    private static readonly int _WorldSizeID = Shader.PropertyToID("_WorldSize");
 
     public enum SurfaceKind
     {
@@ -53,15 +50,15 @@ public sealed class SurfaceMaterialManager
             hideFlags = HideFlags.DontSave,
         };
         RequireShaderProperties(material);
-        material.SetTexture(BaseMapId, texture);
-        material.SetColor(EmissionColorId, emissionColor);
-        material.SetFloat(EmissionStrengthId, emissionStrength);
-        material.SetFloat(OccupancyId, occupancy);
+        material.SetTexture(_BaseMapID, texture);
+        material.SetColor(_EmissionColorID, emissionColor);
+        material.SetFloat(_EmissionStrengthID, emissionStrength);
+        material.SetFloat(_OccupancyID, occupancy);
         material.SetVector(
-            BaseMapTileCountId,
+            _BaseMapTileCountID,
             new Vector4(baseMapTileCount.x, baseMapTileCount.y, 0f, 0f));
         material.SetVector(
-            WorldSizeId,
+            _WorldSizeID,
             new Vector4(worldSize.x, worldSize.y, 0f, 0f));
         material.EnableKeyword(kind switch
         {
@@ -79,9 +76,9 @@ public sealed class SurfaceMaterialManager
         float emissionStrength,
         float occupancy)
     {
-        material.SetColor(EmissionColorId, emissionColor);
-        material.SetFloat(EmissionStrengthId, emissionStrength);
-        material.SetFloat(OccupancyId, occupancy);
+        material.SetColor(_EmissionColorID, emissionColor);
+        material.SetFloat(_EmissionStrengthID, emissionStrength);
+        material.SetFloat(_OccupancyID, occupancy);
     }
 
     public void SetMaterialWorldSize(
@@ -97,9 +94,9 @@ public sealed class SurfaceMaterialManager
         }
 
         Vector4 worldSize = new(worldWidth, worldHeight, 0f, 0f);
-        transitMaterial.SetVector(WorldSizeId, worldSize);
-        perspectiveMaterial.SetVector(WorldSizeId, worldSize);
-        redRockMaterial.SetVector(WorldSizeId, worldSize);
+        transitMaterial.SetVector(_WorldSizeID, worldSize);
+        perspectiveMaterial.SetVector(_WorldSizeID, worldSize);
+        redRockMaterial.SetVector(_WorldSizeID, worldSize);
     }
 
     public Vector2 GetTerrainSheetTileCount(Texture2D texture)

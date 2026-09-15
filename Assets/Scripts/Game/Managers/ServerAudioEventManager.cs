@@ -2,6 +2,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Core;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -17,10 +19,12 @@ namespace Fodinae.Game.Managers
     public class ServerAudioEventManager : MonoBehaviour, IServerAudioService
     {
         private const string TAG = "[ServerAudioEventManager]";
+
+        private const string MusicEventName = "music/evil_huge";
         private readonly List<ServerAudioEvent> _activeEffects = new();
 
         [Inject]
-        private IVFXService _vfxService = null!;
+        private IVfxService _vfxService = null!;
 
         [Inject]
         private IRobotService _robotService = null!;
@@ -35,7 +39,7 @@ namespace Fodinae.Game.Managers
         private MapManager _mapManager = null!;
 
         [Inject]
-        private VFXPool _vfxPool = null!;
+        private VfxPool _vfxPool = null!;
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
 
@@ -43,12 +47,12 @@ namespace Fodinae.Game.Managers
         {
             if (packet.EffectType == global::MinesServer.Data.SFX.Music)
             {
-                _audioSystem.Play2D("music/evil_huge", AudioLayer.MusicDefault());
+                _operations.Run("play_server_music", PlayMusicWhenAudioReadyAsync);
                 return;
             }
 
             var vfxType = MapAudioToVFX(packet.EffectType);
-            IVFXSlot? slot = _vfxService.Acquire(vfxType);
+            IVfxSlot? slot = _vfxService.Acquire(vfxType);
 
             var effect = new ServerAudioEvent(
                 packet,
@@ -62,7 +66,16 @@ namespace Fodinae.Game.Managers
             _activeEffects.Add(effect);
         }
 
-        private static VFXType MapAudioToVFX(global::MinesServer.Data.SFX audioType)
+        private async UniTask PlayMusicWhenAudioReadyAsync(CancellationToken cancellationToken)
+        {
+            await _audioSystem.WaitUntilBanksReadyAsync(cancellationToken);
+            if (_audioSystem.Play2D(MusicEventName, AudioLayer.MusicDefault()) == null)
+            {
+                Debug.LogWarning($"{TAG} Музыка '{MusicEventName}' не запустилась.");
+            }
+        }
+
+        private static VfxType MapAudioToVFX(global::MinesServer.Data.SFX audioType)
         {
             // Enum is logically fixed on client, but server can extend it at any time.
             // Unknown values must NOT be silently dropped — they should flow through
@@ -70,10 +83,10 @@ namespace Fodinae.Game.Managers
             // treating them as "no effect".
             return audioType switch
             {
-                global::MinesServer.Data.SFX.Bz => VFXType.Bz,
-                global::MinesServer.Data.SFX.Destroy => VFXType.Destroy,
-                global::MinesServer.Data.SFX.Death => VFXType.Death,
-                _ => VFXType.Custom,
+                global::MinesServer.Data.SFX.Bz => VfxType.Bz,
+                global::MinesServer.Data.SFX.Destroy => VfxType.Destroy,
+                global::MinesServer.Data.SFX.Death => VfxType.Death,
+                _ => VfxType.Custom,
             };
         }
 

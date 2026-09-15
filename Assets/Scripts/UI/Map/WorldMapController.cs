@@ -19,7 +19,7 @@ namespace Fodinae.UI
         [Inject]
         private Fodinae.UI.HUD.Player.View.PlayerHUDView _playerHud = null!;
         [Inject]
-        private Fodinae.UI.HUD.Inventory.View.InventoryView _inventory = null!;
+        private Fodinae.UI.Inventory.InventoryView _inventory = null!;
         [Inject]
         private FPSCounter _fps = null!;
         [Inject]
@@ -31,13 +31,12 @@ namespace Fodinae.UI
 
         private bool _isInMapMode;
         private bool _playerSpawnSubscription;
-
-        public bool IsInMapMode => _isInMapMode;
-
         [Inject]
         private MapModeState _mapModeState = null!;
         [Inject]
         private ILocalPlayerState _localPlayer = null!;
+        [Inject]
+        private UIInputManager _uiInput = null!;
 
         protected void Start()
         {
@@ -60,7 +59,7 @@ namespace Fodinae.UI
 
             // Map toggle as a direct keyboard check (mirrors MinimapController's N key);
             // Ignore when typing in chat.
-            if (Keyboard.current != null && Keyboard.current.mKey.wasPressedThisFrame && !ChatInput.IsFocused)
+            if (Keyboard.current != null && Keyboard.current.mKey.wasPressedThisFrame && !_uiInput.IsChatFocused)
             {
                 ToggleMapMode();
             }
@@ -75,6 +74,12 @@ namespace Fodinae.UI
 
         protected void OnDisable()
         {
+            if (_isInMapMode)
+            {
+                ExitMapMode();
+                _mapModeState.SetOpen(false);
+            }
+
             UnsubscribeFromPlayerSpawn();
         }
 
@@ -107,30 +112,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_isInMapMode)
-            {
-                _mapModeState.SetOpen(false);
-            }
-            else
-            {
-                _mapModeState.SetOpen(true);
-            }
-        }
-
-        public void OpenMap()
-        {
-            if (!_isInMapMode)
-            {
-                _mapModeState.SetOpen(true);
-            }
-        }
-
-        public void CloseMap()
-        {
-            if (_isInMapMode)
-            {
-                _mapModeState.SetOpen(false);
-            }
+            _mapModeState.SetOpen(!_mapModeState.IsOpen);
         }
 
         private void OnMapModeChanged(bool open)
@@ -153,17 +135,13 @@ namespace Fodinae.UI
             }
 
             ILocalPlayer? player = _player ?? _localPlayer.Current;
-            if (player == null || !player.HasServerPosition)
+            if (player == null || !player.HasServerPosition || !_mapStorage.IsReady)
             {
+                _mapModeState.SetOpen(false);
                 return;
             }
 
             _player = player;
-
-            if (!_mapStorage.IsReady)
-            {
-                return;
-            }
 
             _isInMapMode = true;
             _cameraFollow.SetScrollEnabled(false);

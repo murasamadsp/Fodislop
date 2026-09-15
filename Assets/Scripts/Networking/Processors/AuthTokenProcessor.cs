@@ -7,21 +7,9 @@ using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Fodinae.Networking.Processors;
 
-/// <summary>
-/// Persists the server-issued authentication token and authorizes the game UI.
-/// An empty token is a rejected authentication response, not a client
-/// invariant failure: the auth window/reconnect flow stays alive without
-/// tripping the editor fail-fast logger.
-/// </summary>
-public sealed class AuthTokenProcessor
+public sealed class AuthTokenProcessor(ILocalPlayerState localPlayer, IGameTokenStore tokens)
 {
-    private readonly ILocalPlayerState _localPlayer;
     private bool _emptyAuthTokenWarningLogged;
-
-    public AuthTokenProcessor(ILocalPlayerState localPlayer)
-    {
-        _localPlayer = localPlayer;
-    }
 
     public void Process(AuthTokenPacket packet)
     {
@@ -38,7 +26,7 @@ public sealed class AuthTokenProcessor
         }
 
         _emptyAuthTokenWarningLogged = false;
-        AuthTokenManager.SaveToken(newToken);
-        _localPlayer.SetAuthenticated(true);
+        tokens.Save(newToken);
+        localPlayer.SetAuthenticated(true);
     }
 }

@@ -17,7 +17,6 @@ namespace Fodinae.UI
         private UIDocument _doc = null!;
         [Inject]
         private ILocalizationService _loc = null!;
-        [Inject]
         private IConnectionService _connection = null!;
 
         // Reconnect overlays must never float over the game scene before the
@@ -92,12 +91,13 @@ namespace Fodinae.UI
         {
             // Статическая структура (два оверлея с лейблами) живёт в Reconnect.uxml;
             // здесь только клон и биндинги. Видимость и enabled — рантайм-состояние.
-            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/Reconnect") ??
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>(
+                ProjectRuntimeContracts.ResourcePaths.ReconnectUxml) ??
                 throw new InvalidOperationException(
                     "[ReconnectUI] Resources/UI/Reconnect.uxml is required.");
             TemplateContainer tree = template.Instantiate();
 
-            // Статические ключи UXML резолвятся сразу при сборке (контракт
+            // Статические ключи Uxml резолвятся сразу при сборке (контракт
             // един для всех экранов; здесь их нет — тексты ставит код).
             UILocalizer.Apply(tree, _loc);
 
@@ -117,12 +117,6 @@ namespace Fodinae.UI
             _doc.rootVisualElement.Add(_disconnectOverlay);
         }
 
-        /// <summary>
-        /// Причины дисконнекта приходят от сервера как свободный текст — его
-        /// клиент переводить не может. Известные клиентские причины передаются
-        /// ключами словаря: если строка совпадает с ключом, резолвим перевод,
-        /// иначе показываем как есть.
-        /// </summary>
         private string Resolve(string text)
         {
             return _loc != null && _loc.HasKey(text) ? _loc.Get(text) : text;
@@ -145,7 +139,7 @@ namespace Fodinae.UI
             _reconnectLabel.text = Resolve(status);
 
             _reconnectStatusSet = true;
-            _reconnectOverlay.style.display = DisplayStyle.Flex;
+            UIState.Show(_reconnectOverlay);
             _reconnectOverlay.SetEnabled(true);
             _reconnectOverlay.pickingMode = PickingMode.Position;
         }
@@ -166,7 +160,7 @@ namespace Fodinae.UI
 
             _disconnectLabel.text = Resolve(reason);
 
-            _disconnectOverlay.style.display = DisplayStyle.Flex;
+            UIState.Show(_disconnectOverlay);
             _disconnectOverlay.SetEnabled(true);
             _disconnectOverlay.pickingMode = PickingMode.Position;
         }
@@ -178,7 +172,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_disconnectOverlay?.style.display == DisplayStyle.Flex)
+            if (!UIState.IsHidden(_disconnectOverlay))
             {
                 return;
             }
@@ -190,7 +184,7 @@ namespace Fodinae.UI
 
             if (!_reconnectStatusSet && _doc != null && _reconnectOverlay != null)
             {
-                _reconnectOverlay.style.display = DisplayStyle.Flex;
+                UIState.Show(_reconnectOverlay);
                 _reconnectOverlay.SetEnabled(true);
                 _reconnectOverlay.pickingMode = PickingMode.Position;
             }
@@ -223,7 +217,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            overlay.style.display = DisplayStyle.None;
+            UIState.Hide(overlay);
             overlay.SetEnabled(false);
             overlay.pickingMode = PickingMode.Ignore;
         }

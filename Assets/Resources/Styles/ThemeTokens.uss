@@ -1,6 +1,6 @@
 /* ФАЙЛ МАШИННЫЙ. Правки будут затёрты.
-   Источник истины: visual/main-menu-mirror/css/tokens.css
-   Генератор:       visual/main-menu-mirror/tools/emit-uss-tokens.py
+   Источник истины: visual/fodinae-ui-lab/css/tokens.css
+   Генератор:       visual/fodinae-ui-lab/tools/emit-uss-tokens.py
    Расхождение ловит CI (scripts/check-architecture.js). */
 
 :root {
@@ -74,6 +74,10 @@
     --order-mine-canvas: 1;
     --order-mine-robot: 5;
     --order-bead: 2;
+    --blur-sm: 6px;
+    --blur-md: 10px;
+    --blur-lg: 16px;
+    --blur-xl: 24px;
     --menu-column: 500px;
     --planet-disc: 860px;
     --menu-action-width: 380px;
@@ -189,4 +193,4 @@
     --planet-disc: 940px;
 }
 
-/* Не переносится в USS (71): blur-lg, blur-md, blur-sm, blur-xl, fit-lines, font-body, font-data, font-label, font-title, hex-abyss, hex-anomaly, hex-cyan, hex-cyan-deep, hex-cyan-lift, hex-danger, hex-danger-lift, hex-gold, hex-gold-lift, hex-ink-100, hex-ink-30, hex-ink-50, hex-ink-70, hex-magma, hex-ok, hex-slate, hex-void, layer-backdrop, layer-chrome, layer-content, layer-devtools, layer-gate, layer-modal, layer-overlay, layer-rail, layer-scene, layer-shade, layer-toast, mat-basalt-hi, mat-basalt-lo, mat-mined, mat-planet-hi, mat-planet-lo, mat-planet-mid, mat-planet-shadow, mat-redrock-hi, mat-redrock-lo, mat-space-hi, mat-space-lo, mat-space-mid, mat-strata-0, mat-strata-1, mat-strata-2, mat-strata-3, rgb-abyss, rgb-anomaly, rgb-crisis, rgb-cyan, rgb-danger, rgb-ember, rgb-gold, rgb-light, rgb-magma, rgb-ok, rgb-shadow, rgb-shelf, rgb-slate, rgb-steel, rgb-void, tracking-base, tracking-wide, tracking-widest */
+/* Не переносится в USS (67): fit-lines, font-body, font-data, font-label, font-title, hex-abyss, hex-anomaly, hex-cyan, hex-cyan-deep, hex-cyan-lift, hex-danger, hex-danger-lift, hex-gold, hex-gold-lift, hex-ink-100, hex-ink-30, hex-ink-50, hex-ink-70, hex-magma, hex-ok, hex-slate, hex-void, layer-backdrop, layer-chrome, layer-content, layer-devtools, layer-gate, layer-modal, layer-overlay, layer-rail, layer-scene, layer-shade, layer-toast, mat-basalt-hi, mat-basalt-lo, mat-mined, mat-planet-hi, mat-planet-lo, mat-planet-mid, mat-planet-shadow, mat-redrock-hi, mat-redrock-lo, mat-space-hi, mat-space-lo, mat-space-mid, mat-strata-0, mat-strata-1, mat-strata-2, mat-strata-3, rgb-abyss, rgb-anomaly, rgb-crisis, rgb-cyan, rgb-danger, rgb-ember, rgb-gold, rgb-light, rgb-magma, rgb-ok, rgb-shadow, rgb-shelf, rgb-slate, rgb-steel, rgb-void, tracking-base, tracking-wide, tracking-widest */

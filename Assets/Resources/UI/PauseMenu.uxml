@@ -1,7 +1,5 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
-    <ui:VisualElement name="PauseOverlay" class="pause-overlay ui-overlay ui-overlay--modal">
-        <ui:VisualElement name="Dimmer" class="pause-dimmer" />
-
+    <ui:VisualElement name="PauseOverlay" class="pause-overlay ui-overlay">
         <ui:VisualElement name="MainPage" class="pause-panel pause-page">
             <ui:Label name="PauseTitle"  text="" class="pause-title" />
             <ui:ScrollView name="MainPageScroll" class="pause-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
@@ -34,6 +32,13 @@
                         <ui:VisualElement name="DisplaySection" class="settings-section">
                             <ui:Label class="settings-section__title" text="settings.display.section_title" />
                             <ui:Label class="settings-section__description" text="settings.display.section_desc" />
+                            <ui:Label name="DisplaySyncContext" class="settings-section__description is-hidden" />
+                            <ui:VisualElement name="HDROutputGroup" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="settings.display.hdr_output" />
+                                <ui:Label name="HDRStatus" class="settings-section__description" />
+                                <ui:Toggle name="HDRToggle" />
+                                <ui:Button name="HDRRetry" class="pause-btn is-hidden" />
+                            </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:ScrollView>
                     <ui:ScrollView name="EffectsScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
@@ -45,21 +50,6 @@
                             </ui:VisualElement>
                             <ui:VisualElement name="EffectsGroupCamera" class="pause-subsection">
                                 <ui:Label class="pause-subsection-title" text="settings.post_process.camera_color" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="EffectsGroupDetail" class="pause-subsection">
-                                <ui:Label class="pause-subsection-title" text="settings.post_process.detail" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="EffectsGroupOptics" class="pause-subsection">
-                                <ui:Label class="pause-subsection-title" text="settings.post_process.optical" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="EffectsGroupAtmosphere" class="pause-subsection">
-                                <ui:Label class="pause-subsection-title" text="settings.post_process.atmosphere" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="EffectsGroupDisplay" class="pause-subsection">
-                                <ui:Label class="pause-subsection-title" text="settings.post_process.display_physics" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="EffectsGroupTemporal" class="pause-subsection">
-                                <ui:Label class="pause-subsection-title" text="Temporal" />
                             </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:ScrollView>
@@ -88,9 +78,6 @@
                             </ui:VisualElement>
                             <ui:VisualElement name="AdvancedGroupBounce" class="pause-subsection">
                                 <ui:Label class="pause-subsection-title" text="settings.lighting.bounce" />
-                            </ui:VisualElement>
-                            <ui:VisualElement name="AdvancedGroupAO" class="pause-subsection">
-                                <ui:Label class="pause-subsection-title" text="settings.lighting.ao" />
                             </ui:VisualElement>
                             <ui:VisualElement name="AdvancedGroupBounds" class="pause-subsection">
                                 <ui:Label class="pause-subsection-title" text="settings.lighting.bounds" />

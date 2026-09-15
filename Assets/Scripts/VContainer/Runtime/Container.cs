@@ -11,29 +11,11 @@ namespace VContainer
         object ApplicationOrigin { get; }
         DiagnosticsCollector Diagnostics { get; set; }
 
-        /// <summary>
-        /// Resolve from type with or without key
-        /// </summary>
-        /// <remarks>
-        /// This version of resolve looks for all of scopes
-        /// </remarks>
         object Resolve(Type type, object key = null);
 
-        /// <summary>
-        /// Try resolve from type with or without key
-        /// </summary>
-        /// <remarks>
-        /// This version of resolve looks for all of scopes
-        /// </remarks>
         /// <returns>Successfully resolved</returns>
         bool TryResolve(Type type, out object resolved, object key = null);
 
-        /// <summary>
-        /// Resolve from meta with registration
-        /// </summary>
-        /// <remarks>
-        /// This version of resolve will look for instances from only the registration information already founds.
-        /// </remarks>
         object Resolve(Registration registration);
 
         IScopedObjectResolver CreateScope(Action<IContainerBuilder> installation = null);

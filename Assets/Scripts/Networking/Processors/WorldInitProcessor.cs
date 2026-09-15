@@ -5,11 +5,6 @@ using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Fodinae.Networking.Processors;
 
-/// <summary>
-/// Applies WorldInitPacket to the world domain: loads the world into
-/// MapStorage/MapManager and routes the manager's world-initialized signal to
-/// GameManager so world readiness is published from one place.
-/// </summary>
 public sealed class WorldInitProcessor : System.IDisposable
 {
     private readonly IMapDataProvider _mapManager;

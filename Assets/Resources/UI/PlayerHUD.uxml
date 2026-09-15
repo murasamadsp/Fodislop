@@ -1,6 +1,10 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="PlayerHUDRoot" class="hud-root" picking-mode="Ignore">
 
+        <ui:VisualElement class="hud-fps-counter-container" picking-mode="Ignore">
+            <ui:Label name="FPSCounterLabel" class="hud-fps-counter" text="" picking-mode="Ignore" />
+        </ui:VisualElement>
+
         <!-- ════════════ ЕДИНАЯ ПАНЕЛЬ ИГРОКА (hud-panel): статус, валюта, корзина ════════════ -->
         <ui:VisualElement name="PlayerStatusPanel" class="hud-panel">
             <!-- Верхняя строка: Никнейм, Уровень, Клан -->

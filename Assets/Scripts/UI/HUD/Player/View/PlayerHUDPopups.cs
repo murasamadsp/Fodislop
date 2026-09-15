@@ -6,9 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Manages standard HUD popups: Respawn confirmation, Buildings info, and FAQ dialogs.
-/// </summary>
 public sealed class PlayerHUDPopups
 {
     private readonly Action<SuicidePacket> _sendSuicide;

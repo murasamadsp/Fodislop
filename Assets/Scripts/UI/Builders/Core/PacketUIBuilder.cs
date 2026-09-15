@@ -3,106 +3,94 @@
 using System;
 using Fodinae.Core.Interfaces;
 using Fodinae.UI.Builders;
-using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
-using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
-using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI
+namespace Fodinae.UI;
+public class PacketUIBuilder
 {
-    public class PacketUIBuilder
+    private readonly IAssetLoader _assetLoader;
+    private readonly IAsyncOperationSupervisor _operations;
+    private readonly PacketUIBuilderFactory _builderFactory = new();
+
+    public PacketUIBuilder(
+        IAssetLoader assetLoader,
+        IAsyncOperationSupervisor operations)
     {
-        private readonly IAssetLoader _assetLoader;
-        private readonly IAsyncOperationSupervisor _operations;
-        private readonly PacketUIBuilderFactory _builderFactory = new();
+        _assetLoader = assetLoader ?? throw new ArgumentNullException(nameof(assetLoader));
+        _operations = operations ?? throw new ArgumentNullException(nameof(operations));
+    }
 
-        public PacketUIBuilder(
-            IAssetLoader assetLoader,
-            IAsyncOperationSupervisor operations)
+    internal IAssetLoader AssetLoader => _assetLoader;
+    internal IAsyncOperationSupervisor Operations => _operations;
+
+    public VisualElement Build(IGUIComponentPacket packet)
+    {
+        PacketUIBuilderBase? builder = _builderFactory.CreateBuilder(packet);
+        VisualElement element;
+
+        if (builder != null)
         {
-            _assetLoader = assetLoader ?? throw new ArgumentNullException(nameof(assetLoader));
-            _operations = operations ?? throw new ArgumentNullException(nameof(operations));
+            element = builder.Build(packet, this);
+        }
+        else
+        {
+            element = new Label($"[Unimplemented: {packet.GetType().Name}]");
+            element.AddToClassList("packet-unimplemented");
         }
 
-        internal IAssetLoader AssetLoader => _assetLoader;
-        internal IAsyncOperationSupervisor Operations => _operations;
+        StyleApplicator.ApplyStyles(element, packet);
+        ApplyCanvasGeometry(element, packet);
+        element.userData = packet;
 
-        public VisualElement? Build(IGUIComponentPacket packet)
+        return element;
+    }
+
+    public void AddChildren(VisualElement parent, IContainerComponentPacket packet)
+    {
+        foreach (IGUIComponentPacket childPacket in packet.Children)
         {
-            var builder = _builderFactory.CreateBuilder(packet);
-            VisualElement? element;
+            parent.Add(Build(childPacket));
+        }
+    }
 
-            if (builder != null)
-            {
-                element = builder.Build(packet, this);
-            }
-            else
-            {
-                element = new Label($"[Unimplemented: {packet.GetType().Name}]");
-                element.style.backgroundColor = Color.magenta;
-            }
-
-            StyleApplicator.ApplyStyles(element!, packet);
-            ApplyAttachedProperties(element!, packet);
-
-            element!.userData = packet;
-
-            return element;
+    private static void ApplyCanvasGeometry(VisualElement element, IGUIComponentPacket packet)
+    {
+        if (packet.AttachedProperties == null || packet.AttachedProperties.Length == 0)
+        {
+            return;
         }
 
-        private static void ApplyAttachedProperties(VisualElement element, IGUIComponentPacket packet)
+        IStyle style = element.style;
+        bool absolute = false;
+
+        if (AttachedProperties.TryGetFloat(packet, "Canvas.X", out float left))
         {
-            if (packet.AttachedProperties == null || packet.AttachedProperties.Length == 0)
-            {
-                return;
-            }
+            style.left = left;
+            absolute = true;
+        }
 
-            foreach (var prop in packet.AttachedProperties)
-            {
-                // Протокольные числа всегда в инвариантной культуре (точка как
-                // десятичный разделитель) — на Windows с региональными RU/DE/TR
-                // float.TryParse по текущей культуре молча теряет геометрию окон.
-                if (prop.Key == "Canvas.X" && float.TryParse(
-                        prop.Value,
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out float left))
-                {
-                    element.style.position = Position.Absolute;
-                    element.style.left = left;
-                }
+        if (AttachedProperties.TryGetFloat(packet, "Canvas.Y", out float top))
+        {
+            style.top = top;
+            absolute = true;
+        }
 
-                if (prop.Key == "Canvas.Y" && float.TryParse(
-                        prop.Value,
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out float top))
-                {
-                    element.style.position = Position.Absolute;
-                    element.style.top = top;
-                }
+        if (AttachedProperties.TryGetFloat(packet, "Canvas.Width", out float width))
+        {
+            style.width = width;
+            absolute = true;
+        }
 
-                if (prop.Key == "Canvas.Width" && float.TryParse(
-                        prop.Value,
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out float width))
-                {
-                    element.style.position = Position.Absolute;
-                    element.style.width = width;
-                }
+        if (AttachedProperties.TryGetFloat(packet, "Canvas.Height", out float height))
+        {
+            style.height = height;
+            absolute = true;
+        }
 
-                if (prop.Key == "Canvas.Height" && float.TryParse(
-                        prop.Value,
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out float height))
-                {
-                    element.style.position = Position.Absolute;
-                    element.style.height = height;
-                }
-            }
+        if (absolute)
+        {
+            element.AddToClassList("abs");
         }
     }
 }

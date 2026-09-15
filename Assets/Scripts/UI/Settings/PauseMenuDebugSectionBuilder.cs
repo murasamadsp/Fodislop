@@ -9,9 +9,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Builds the Developer & Diagnostics Tools foldout in the pause menu.
-/// </summary>
 internal sealed class PauseMenuDebugSectionBuilder
 {
     private readonly INetworkService _networkService;

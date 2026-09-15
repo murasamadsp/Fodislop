@@ -1,87 +1,111 @@
-# PIPELINE.md — Графический пайплайн Fodinae
+# PIPELINE
 
-Графика Fodinae — это 2D-рендеринг на Unity URP с процедурным террейном, глобальным освещением Radiance Cascades на GPU Compute и кастомным пост-процессингом.
+`F` — размер поля освещения = клетки региона × scale (scale: 1 в PerBlock, 2 в High, 4 в Ultra).
+Регион ≈ 128×96 клеток. `S` — разрешение экрана.
 
----
+## Освещение
 
-## 1. Схема движения кадра
+```
+меш террейна ──[раст. MRT, орто]──┬──► MaterialField  (F, RGBA32, +mips)
+                                  └──► StaticEmission (F, ARGBHalf)
 
-```text
-[1. Сеть / Чанки]  →  MapStorage (32x32 чанки, RLE-кэш)
-       ↓
-[2. CPU Геометрия] →  TerrainCellCache → Precalculator → BackgroundFloodFill → TerrainMeshBuilder
-       ↓
-[3. Растеризация]  →  Pass "LightingMaterialField" → _MaterialField (окклюзия) + _EmissionField (свет)
-       ↓
-[4. GPU Освещение] →  WorldLighting.compute (Normals → Cascades → Unified Resolve & Composite)
-       ↓
-[5. Отрисовка]     →  Terrain.shader (сэмплирует _WorldLightTexture) + Роботы + Сущности
-       ↓
-[6. Пост-процесс]  →  PostProcessRendererFeature → PostProcess.compute (Bloom → ACES ToneMap → Grain)
-       ↓
-[7. Интерфейс]     →  UI Toolkit (UIDocument, ScreenToPanel координаты)
+источники ──[DynamicEmissionComposition]──► DynamicEmission (F, ARGBHalf)
+
+                     ┌── MaterialField
+StaticEmission ──────┴──[SolveCascade]──► RadianceAtlas (uint3 × N)
+                                              │
+                                              ▼
+                                       [ResolveDirect]
+                                              │
+                                              ▼
+                                    StaticDirect (F, ARGBHalf)
+
+                     ┌── MaterialField
+DynamicEmission ─────┴──[SolveCascade]──► RadianceAtlas   ← тот же буфер,
+                                              │             перезаписан
+                                              ▼
+                                       [ResolveDirect]
+                                              │
+                                              ▼
+                                       Direct (F, ARGBHalf)
+
+Direct ─────────┐
+StaticDirect ───┼──[SolveDiffuseBounce]──► Bounce (F/2, ARGBHalf)
+MaterialField ──┘
+
+Direct ─────────┐
+StaticDirect ───┼──[CompositeLighting]──► Lightmap (F, ARGBHalf)
+Bounce ─────────┘                              │
+                                               ▼
+                                    global _WorldLightTexture
 ```
 
----
+## Террейн (фрагмент, пасс Universal2D)
 
-## 2. Домены пайплайна
+```
+_WorldLightTexture ──[если DebugView≠0]──► выход, шаги ниже не выполняются
 
-### 1. Данные мира (World & Streaming)
+BaseMap (атлас) ──┐
+subAtlasRect ─────┼──[выборка тайла]──► texColor
+tileSizeUV ───────┤
+animData ─────────┘
+                       │
+                       ▼
+                  [анимация цвета]──► finalRGB ─────────────┐
+                                                            │
+маска соседства ──[силуэт: круг + углы]──► finalAlpha       │
+                                                            │
+MaterialField.mips ──[AO вокруг блоков, только фон]──► AO    │
+                                          │                 │
+_WorldLightTexture ──► lightColor ────────┤                 │
+                                          ▼                 ▼
+                    finalRGB × lightColor × (1-AO) ÷ finalAlpha
+                                          │
+                                          ▼
+                                     цвет пикселя
+```
 
-- **Файлы:** `MapStorage.cs`, `WorldLayer.cs`
-- **Задача:** Хранение клеток мира в 32×32 чанках с RLE-сжатием на диске (`.mapb`) и в RAM.
+## Экран
 
-### 2. Сборка меша (Terrain Mesh)
+```
+кадр ──[сигмоида Fodinae]──[блум]──[виньетка]──[аберрация]──[зерно]──► экран
+```
 
-- **Файлы:** `TerrainRenderer.cs`, `TerrainCellCache.cs`, `TerrainMeshBuilder.cs`, `BackgroundFloodFill.cs`
-- **Задача:**
-  1. Кэш квантуется шагом 8 вокруг камеры.
-  2. `TerrainPrecalculator` считает 47-битный авто-тайлинг и рельеф.
-  3. `BackgroundFloodFill` волновым алгоритмом строит заднюю стену в пустотах.
-  4. `TerrainMeshBuilder` собирает один меш с 7 UV-каналами (~45–50k вершин).
+## Таблица стадий
 
-### 3. Растеризация полей (Material & Emission)
+| #  | Стадия              | Читает                          | Пишет           | Размер | Когда           |
+|----|---------------------|---------------------------------|-----------------|--------|-----------------|
+| 1  | Поле материалов     | меш террейна + анимация цвета   | Material + Emis | F      | геометрия/регион|
+| 2  | Мипы поля           | Material                        | Material.mips   | F      | геометрия/регион|
+| 3  | Динам. эмиссия      | источники + анимир. клетки      | DynEmission     | F      | каждый кадр     |
+| 4  | Каскады (стат.)     | Material, StaticEmission        | RadianceAtlas   | N зап. | мир изменился   |
+| 5  | Resolve (стат.)     | RadianceAtlas                   | StaticDirect    | F      | мир изменился   |
+| 6  | Каскады (динам.)    | Material, DynEmission           | RadianceAtlas   | N зап. | каждый кадр*    |
+| 7  | Resolve (динам.)    | RadianceAtlas                   | Direct          | F      | каждый кадр*    |
+| 8  | Диффузный отскок    | Direct, StaticDirect, Material  | Bounce          | F/2    | каждый кадр     |
+| 9  | Сведение            | Direct, StaticDirect, Bounce    | Lightmap        | F      | каждый кадр     |
+| 10 | Выборка тайла       | BaseMap, атрибуты вершины       | texColor        | S      | каждый пиксель  |
+| 11 | Анимация цвета      | texColor, animData              | finalRGB        | S      | каждый пиксель  |
+| 12 | Силуэт              | маска соседства                 | finalAlpha      | S      | каждый пиксель  |
+| 13 | AO вокруг блоков    | MaterialField.mips (только фон) | occlusion       | S      | каждый пиксель  |
+| 14 | Освещение           | Lightmap, finalRGB, occlusion   | цвет пикселя    | S      | каждый пиксель  |
+| 15 | Постобработка       | кадр                            | экран           | S      | каждый кадр     |
 
-- **Файлы:** `Terrain.shader` (Pass `LightingMaterialField`)
-- **Задача:** Рендерит геометрию в две вспомогательные текстуры:
-  - `_MaterialField` (RGBA): окклюзия (A) и альбедо (RGB).
-  - `_EmissionField` (RGBA): самосвечение блоков + динамические источники роботов.
+\* Нет динамических источников → 6-7 заменяются обнулением `Direct`.
 
-### 4. GPU Radiance Cascades (Global Illumination)
+## Ветвления
 
-- **Файлы:** `LightingEngine.cs`, `WorldLighting.compute`
-- **Задача:** Расчет 2D глобального освещения чистым физическим пайплайном:
-  1. `SolveAutomaticNormals` — вектор нормалей по градиенту плотности (с Y-flip на Metal).
-  2. `SolveCascade` — иерархический лучевой марш (каскады 0..3) со слиянием радиальных интервалов и естественным физическим затенением.
-  3. `ResolveAndComposite` — однопроходная сборка финальной текстуры `_WorldLightTexture` (Direct Radiance + Lambertian Normal Response + Ambient).
+| Условие                       | Эффект                                                  |
+|-------------------------------|---------------------------------------------------------|
+| `_WorldLightDebugView != 0`   | Стадии 10-14 не выполняются, выводится тексель Lightmap |
+| `_BlockAveraged != 0`         | В 5 и 7 выборка атласа привязана к центру клетки        |
+| `!rebuildFields`              | Стадии 1-2 пропущены, используются прошлые текстуры     |
+| Лимит текстуры превышен       | `scale` понижается, вплоть до 1                         |
 
-### 5. Отрисовка мира (Scene Shading)
+## Отсутствует
 
-- **Файлы:** `Terrain.shader`, `Robot.cs`, `TentacleBatchRenderer.cs`
-- **Задача:**
-  - Террейн интерполирует `_WorldLightTexture`, накладывает анимации лавы/мерцания и UV-сдвиги.
-  - Роботы, хвосты и эффекты рендерятся поверх в единой системе освещения.
-
-### 6. Кастомный пост-процессинг (Post-Processing)
-
-- **Файлы:** `PostProcessRendererFeature.cs`, `PostProcessRenderPass.cs`, `PostProcess.compute`
-- **Задача:** Выполняется в RenderGraph **до** UI.
-  - Встроенный URP `cameraData.renderPostProcessing` **выключен**.
-  - Compute-шейдер делает: Bloom (Down/Up) → Chromatic Aberration → Motion Blur → ACES Tonemapping → Eigengrau Film Grain → Vignette.
-
-### 7. UI Toolkit
-
-- **Файлы:** `PlayerHUDView.cs`, `GlobalChatUI.cs`, `PlayerInteractionController.cs`
-- **Задача:**
-  - 100% UI Toolkit без EventSystem/uGUI.
-  - Все координаты мыши конвертируются только через `RuntimePanelUtils.ScreenToPanel`.
-  - Порядок слоев: Игровой UI — `0`, Лоадер меню — `100`.
-
----
-
-## 3. Главные инварианты (Что нельзя ломать)
-
-1. **Не добавлять искусственное затухание в Radiance Cascades:** интеграл сохранения энергии строгий; `distanceFalloff` убивает свет.
-2. **Не раздувать паддинг меша:** размер меша террейна строго привязан к области видимости камеры + фиксированный паддинг.
-3. **Не включать `cameraData.renderPostProcessing = true`:** это дублирует пост-процессинг стандартным проходом URP и ломает прозрачность.
-4. **Координаты мыши:** клики проверяются только через `RuntimePanelUtils.ScreenToPanel` из-за `ScaleWithScreenSize`.
+| Что                                | Статус                                     |
+|------------------------------------|--------------------------------------------|
+| Нормали поверхности                | Снесены полностью: объём даёт AO вокруг блоков |
+| Эмиссия в стадии 9                 | Читается только отладочными видами         |
+| Детали мельче клетки в освещении   | Невозможны: F ≤ 4 текселя на клетку, тайл 32 px |

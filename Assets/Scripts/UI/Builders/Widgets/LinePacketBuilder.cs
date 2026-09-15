@@ -1,54 +1,45 @@
 #nullable enable
 
-using Fodinae.UI;
-using Fodinae.UI.Builders;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Builders
+namespace Fodinae.UI.Builders;
+public class LinePacketBuilder : PacketUIBuilderBase<LinePacket>
 {
-    public class LinePacketBuilder : PacketUIBuilderBase
+    protected override VisualElement BuildTyped(LinePacket packet, PacketUIBuilder builder)
     {
-        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        var line = new UILine
         {
-            if (packet is not LinePacket linePkt)
-            {
-                return null;
-            }
+            Direction = packet.Direction,
+        };
 
-            var line = new UILine
+        if (packet.Style.HasValue)
+        {
+            line.LineColor = StyleApplicator.ConvertColor(packet.Style.Value.Background);
+            if (packet.Style.Value.BorderWidth > 0)
             {
-                Direction = linePkt.Direction,
-            };
-
-            if (linePkt.Style.HasValue)
-            {
-                line.LineColor = StyleApplicator.ConvertColor(linePkt.Style.Value.Background);
-                if (linePkt.Style.Value.BorderWidth > 0)
-                {
-                    line.Thickness = linePkt.Style.Value.BorderWidth;
-                }
+                line.Thickness = packet.Style.Value.BorderWidth;
             }
-
-            if (linePkt.Direction == LineDirection.Horizontal)
-            {
-                line.style.width = Length.Percent(100);
-                line.style.height = line.Thickness;
-            }
-            else if (linePkt.Direction == LineDirection.Vertical)
-            {
-                line.style.height = Length.Percent(100);
-                line.style.width = line.Thickness;
-            }
-            else
-            {
-                line.style.width = Length.Percent(100);
-                line.style.height = Length.Percent(100);
-            }
-
-            return line;
         }
+
+        // Длинная ось тянется на 100% — это константа и живёт в USS.
+        // Инлайном остаётся только толщина: она пришла из пакета.
+        switch (packet.Direction)
+        {
+            case LineDirection.Horizontal:
+                line.AddToClassList("packet-line--h");
+                line.style.height = line.Thickness;
+                break;
+            case LineDirection.Vertical:
+                line.AddToClassList("packet-line--v");
+                line.style.width = line.Thickness;
+                break;
+            default:
+                line.AddToClassList("packet-line--both");
+                break;
+        }
+
+        return line;
     }
 }

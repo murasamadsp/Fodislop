@@ -12,7 +12,27 @@ echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
-node "$(dirname "$0")/check-architecture.js"
+dotnet run --project tools/Fodinae.ArchitectureLinter --no-build --no-restore
+
+# Настройки описываются атрибутами и читаются рефлексией: ни компилятор, ни
+# линтер не могут сказать, что диапазон над полем осмыслен, что значение по
+# умолчанию в него попадает и что ветка разбора для этого типа существует.
+# Settings probe checks are now part of ArchitectureLinter (FOD-SETTINGS-PROBE rule).
+# Run the unified linter which includes all settings validation.
+echo "--- Step 0.1: Executing architecture linter (includes settings probe) ---"
+if command -v dotnet >/dev/null 2>&1; then
+    DOTNET_NOLOGO=1 dotnet run \
+        --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+        --no-build \
+        --no-restore \
+        --verbosity quiet -- \
+        --project-root "$(dirname "$0")/.." \
+        --rule FOD-DISPLAY-TRANSFORM \
+        --rule FOD-LOCALIZATION \
+        --rule FOD-PATTERN
+else
+    echo "Notice: dotnet not found; C# architecture linter skipped."
+fi
 
 if [ "$CI" != "true" ]; then
     echo "Notice: local hooks run fast static checks only."
@@ -171,6 +191,18 @@ if [ "$HAS_WARNINGS" -eq 1 ]; then
     echo -e "\n\033[0;31mPlease fix all compilation errors and analyzer warnings before committing.\033[0m"
     exit 1
 fi
+
+# IL contracts require the current assemblies produced by the successful builds
+# above. Running them earlier would inspect stale Library/ScriptAssemblies output.
+echo "--- Step 3: Executing C# runtime architecture rules ---"
+DOTNET_NOLOGO=1 dotnet run \
+    --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+    --verbosity quiet -- \
+    --project-root "$(dirname "$0")/.." \
+    --rule FOD-BLOCK-NAMESPACE \
+    --rule FOD-EXECUTION-ORDER \
+    --rule FOD-FORBIDDEN-API \
+    --rule FOD-POSTPROCESS-RUNTIME
 
 echo "All C# Roslyn analyzer checks passed successfully!"
 exit 0

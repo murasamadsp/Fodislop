@@ -1,44 +1,31 @@
 #nullable enable
 
-using Fodinae;
-using MinesServer.Networking.Server.Packets.GUI.Components;
+using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Builders
+namespace Fodinae.UI.Builders;
+public class ScrollViewerPacketBuilder : PacketUIBuilderBase<ScrollViewerPacket>
 {
-    public class ScrollViewerPacketBuilder : PacketUIBuilderBase
+    protected override VisualElement BuildTyped(ScrollViewerPacket packet, PacketUIBuilder builder)
     {
-        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        var scrollView = new ScrollView
         {
-            if (packet is not ScrollViewerPacket scrollPkt)
-            {
-                return null;
-            }
+            horizontalScrollerVisibility = MapScrollVisibility(packet.HorizontalScrollBar),
+            verticalScrollerVisibility = MapScrollVisibility(packet.VerticalScrollBar),
+        };
 
-            var scrollView = new ScrollView
-            {
-                horizontalScrollerVisibility = MapScrollVisibility(scrollPkt.HorizontalScrollBar),
-                verticalScrollerVisibility = MapScrollVisibility(scrollPkt.VerticalScrollBar),
-            };
+        builder.AddChildren(scrollView.contentContainer, packet);
+        return scrollView;
+    }
 
-            foreach (var childPacket in scrollPkt.Children)
-            {
-                var childElement = builder.Build(childPacket)!;
-                scrollView.contentContainer.Add(childElement);
-            }
-
-            return scrollView;
-        }
-
-        private static ScrollerVisibility MapScrollVisibility(MinesServer.Networking.Server.Packets.GUI.ScrollbarVisibility v)
+    private static ScrollerVisibility MapScrollVisibility(ScrollbarVisibility visibility)
+    {
+        return visibility switch
         {
-            return v switch
-            {
-                MinesServer.Networking.Server.Packets.GUI.ScrollbarVisibility.Hidden => ScrollerVisibility.Hidden,
-                MinesServer.Networking.Server.Packets.GUI.ScrollbarVisibility.Auto => ScrollerVisibility.Auto,
-                _ => ScrollerVisibility.AlwaysVisible,
-            };
-        }
+            ScrollbarVisibility.Hidden => ScrollerVisibility.Hidden,
+            ScrollbarVisibility.Auto => ScrollerVisibility.Auto,
+            _ => ScrollerVisibility.AlwaysVisible,
+        };
     }
 }

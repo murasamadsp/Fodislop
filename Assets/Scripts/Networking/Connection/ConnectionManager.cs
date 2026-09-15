@@ -1,10 +1,12 @@
 #nullable enable
 
+using Fodinae.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Fodinae.Networking.Diagnostics;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
@@ -25,8 +27,11 @@ namespace Fodinae.Networking.Connection
 {
     public class ConnectionManager : MonoBehaviour, IConnectionService
     {
-        private static readonly ProfilerMarker PacketDrainMarker =
+        private static readonly ProfilerMarker _PacketDrainMarker =
             new("Fodinae.Net.DrainPacketQueue");
+
+        private static readonly AllocationLedger.Entry _AllocationEntry =
+            AllocationLedger.Register("Сеть — разбор очереди");
 
         // Бюджет на обработку входящих пакетов — доля времени КАДРА, а не стены часов.
         // Пропорция к deltaTime масштабирует пропускную способность с частотой кадров
@@ -56,6 +61,8 @@ namespace Fodinae.Networking.Connection
         private ILocalizationService _loc = null!;
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
+        [Inject]
+        private IGameTokenStore _tokens = null!;
 
         [Inject]
         private DummyConnection _dummyConnection = null!;
@@ -82,21 +89,17 @@ namespace Fodinae.Networking.Connection
             UpdateReconnect();
         }
 
-        /// <summary>
-        /// Разбирает очередь входящих пакетов в рамках бюджета на кадр — доля
-        /// <see cref="PacketDrainBudgetFractionOfFrame"/> от времени кадра, но не более
-        /// <see cref="PacketDrainBudgetMaximumSeconds"/>. Батч за кадр дополнительно
-        /// ограничен <see cref="ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame"/>,
-        /// чтобы единичный всплеск не вешал кадр.
-        /// </summary>
         private void DrainPacketQueue()
         {
-            using var marker = PacketDrainMarker.Auto();
+            using var marker = _PacketDrainMarker.Auto();
+            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
             float budgetSeconds = Mathf.Min(
                 Time.unscaledDeltaTime * PacketDrainBudgetFractionOfFrame,
                 PacketDrainBudgetMaximumSeconds);
             long startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             int processedCount = 0;
+            bool stoppedByBudget = false;
+            bool stoppedByCap = false;
             while (_packetQueue.TryDequeue(out ServerPacket packet))
             {
                 processedCount++;
@@ -116,15 +119,21 @@ namespace Fodinae.Networking.Connection
 
                 if (processedCount >= ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
                 {
+                    stoppedByCap = true;
                     break;
                 }
 
                 float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
                 if (elapsedMs >= budgetSeconds * 1000f)
                 {
+                    stoppedByBudget = true;
                     break;
                 }
             }
+
+            // Остаток очереди и причина обрыва — единственный признак того, что
+            // пакет уже пришёл, но до обработчика в этом кадре не добрался.
+            PacketTelemetry.RecordQueueState(_packetQueue.Count, stoppedByBudget, stoppedByCap);
         }
 
         private void UpdateReconnect()
@@ -179,11 +188,6 @@ namespace Fodinae.Networking.Connection
             OnReconnectStatusChanged?.Invoke(_reconnectStatus);
         }
 
-        /// <summary>
-        /// Выбирает транспорт: реальный Darkar25 <see cref="TcpConnection"/> из
-        /// конфига, либо офлайн-заглушку <see cref="DummyConnection"/> для
-        /// локального теста без сервера.
-        /// </summary>
         private IServerConnection CreateConnection()
         {
             // Config может быть ещё не загружен (ClientConfigManager грузит его в Start).
@@ -195,7 +199,8 @@ namespace Fodinae.Networking.Connection
                 return _dummyConnection;
             }
 
-            if (ConnectionTransportConfig.SelectTransport(config.UseDummyConnection) == ConnectionTransportKind.Dummy)
+            ConnectionSettings connection = config.Connection;
+            if (ConnectionTransportConfig.SelectTransport(connection.UseDummyConnection) == ConnectionTransportKind.Dummy)
             {
                 Debug.Log(
                     "[Connection] Transport: DummyConnection (offline stub). Set UseDummyConnection=false in client config for the real server.");
@@ -203,13 +208,13 @@ namespace Fodinae.Networking.Connection
             }
 
             if (!ConnectionTransportConfig.TryResolveEndpoint(
-                    config.ServerHost,
-                    config.ServerPort,
+                    connection.ServerHost,
+                    connection.ServerPort,
                     out IPAddress address,
                     out int port))
             {
                 throw new InvalidOperationException(
-                    $"[Connection] Invalid server endpoint '{config.ServerHost}:{config.ServerPort}' in client config. " +
+                    $"[Connection] Invalid server endpoint '{connection.ServerHost}:{connection.ServerPort}' in client config. " +
                     "Expected a valid host/IP and a port in [1, 65535].");
             }
 
@@ -287,16 +292,6 @@ namespace Fodinae.Networking.Connection
             Disconnect();
             OnReconnectStatusChanged?.Invoke(_reconnectStatus);
         }
-
-        public void StartManualReconnect()
-        {
-            _restartWorldOnConnect = true;
-            _shouldAutoReconnect = true;
-            _reconnectBackoff.Reset();
-            _reconnectCountdown = _reconnectBackoff.CurrentDelay;
-            OnReconnectStatusChanged?.Invoke(_reconnectStatus);
-        }
-
         private void OnConnected()
         {
             _operations.Run("complete_connection", CompleteConnectionAsync);
@@ -309,25 +304,37 @@ namespace Fodinae.Networking.Connection
                 destroyCancellationToken);
             CancellationToken cancellationToken = linkedCancellation.Token;
 
-            if (_restartWorldOnConnect &&
-                string.Equals(
-                    _sceneNavigator.CurrentSceneName,
-                    "MainGame",
-                    StringComparison.Ordinal))
+            if (_restartWorldOnConnect)
             {
-                await _sceneNavigator.TransitionAsync("MainGame", cancellationToken);
+                bool alreadyInTargetScene = string.Equals(
+                    _sceneNavigator.CurrentSceneName,
+                    ProjectRuntimeContracts.SceneNames.MainGame,
+                    StringComparison.Ordinal);
+                // Always clear the flag here so a missing reload (e.g. re-entry)
+                // doesn't keep us pinned in restart mode for the next connect.
+                _restartWorldOnConnect = false;
+                if (!alreadyInTargetScene)
+                {
+                    await _sceneNavigator.TransitionAsync(
+                        ProjectRuntimeContracts.SceneNames.MainGame,
+                        cancellationToken);
+                }
+                else
+                {
+                    Debug.Log(
+                        "[Connection] Restart-on-connect suppressed: already inside MainGame; skipping redundant transition.");
+                }
             }
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            _restartWorldOnConnect = false;
             _shouldAutoReconnect = false;
             _reconnectBackoff.Reset();
             _reconnectStatus = string.Empty;
             OnReconnectHidden?.Invoke();
 
             int version = _useOldClient ? 0 : 1;
-            string token = AuthTokenManager.LoadToken();
+            string token = _tokens.Load();
             Debug.Log($"[Auth] Sending ClientHello with token: {(string.IsNullOrEmpty(token) ? "EMPTY" : "PRESENT")}");
             Connection?.SendAsync(new ClientPacket(
                 (uint)DateTimeOffset.UtcNow.Ticks,
@@ -387,19 +394,12 @@ namespace Fodinae.Networking.Connection
             }
         }
 
-        /// <summary>
-        /// Экспоненциальный backoff реконнекта с капом:
-        /// 1s → 2s → 4s → 8s → 16s → 30s → 30s ...
-        /// </summary>
         private sealed class ReconnectBackoff
         {
-            private static readonly float[] Steps = [1f, 2f, 4f, 8f, 16f, 30f];
+            private static readonly float[] _Steps = [1f, 2f, 4f, 8f, 16f, 30f];
 
             private int _attempt;
-
-            public int AttemptCount => _attempt;
-
-            public float CurrentDelay => Steps[Math.Min(_attempt, Steps.Length - 1)];
+            public float CurrentDelay => _Steps[Math.Min(_attempt, _Steps.Length - 1)];
 
             public void RecordFailure()
             {

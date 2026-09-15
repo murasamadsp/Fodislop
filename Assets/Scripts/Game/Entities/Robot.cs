@@ -14,9 +14,6 @@ using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
 using VContainer;
-using ArgumentOutOfRangeException = System.ArgumentOutOfRangeException;
-using InvalidOperationException = System.InvalidOperationException;
-using OperationCanceledException = System.OperationCanceledException;
 
 namespace Fodinae.Game
 {
@@ -25,14 +22,13 @@ namespace Fodinae.Game
         private const string TAG = "[Robot]";
 
         [SerializeField]
-        private uint _botId;
+        private uint _botID;
         [SerializeField]
-        private int _playerId;
+        private int _playerID;
         [SerializeField]
-        private byte _clanId;
+        private byte _clanID;
         [SerializeField]
         private SpriteRenderer? _spriteRenderer;
-        private Transform? _clanTransform;
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
         [Inject]
@@ -47,44 +43,34 @@ namespace Fodinae.Game
         private string _tailPath = string.Empty;
         [SerializeField]
         private float _rotationSpeed = ProjectRuntimeContracts.Movement.RobotRotationSpeed;
-        [Header("Dynamic Emission")]
-        [SerializeField]
-        [Tooltip("Разрешает Robot регистрировать dynamic emission source в LightingEngine.")]
-        private bool _emitsDynamicLight;
-        [SerializeField]
-        [Range(0f, 4f)]
-        [Tooltip("Интенсивность dynamic emission. HDR-значение выше 1 усиливает источник.")]
-        private float _dynamicLightIntensity;
-        [SerializeField]
-        [ColorUsage(showAlpha: false, hdr: true)]
-        [Tooltip("HDR-цвет dynamic emission источника Robot.")]
-        private Color _dynamicLightColor;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
         private bool _isMetadataLoaded;
         private bool _visualsLoadCompleted;
-        private CancellationTokenSource? _cts;
+        private RobotAssetLoader? _assetLoaderHelper;
+        private RobotAssetLoader _AssetLoader => _assetLoaderHelper ??= new RobotAssetLoader(_assetLoader, _operations, this.GetCancellationTokenOnDestroy());
         [SerializeField]
         private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
 
         [Inject]
         private IRobotService _robotService = null!;
         [Inject]
-        private IProjectDefaults _projectDefaults = null!;
+        private IRuntimeDebugSettings _debugSettings = null!;
 
         private RobotLighting _lighting = null!;
         private RobotVisuals _visuals = null!;
         private readonly RobotNameplate _nameplate = new();
+
+        [Inject]
+        private IWorldLabels _worldLabels = null!;
         private readonly RobotMovement _movement = new();
 
         private bool _visualElementsInitialized;
         private bool _hasPendingServerPosition;
         private ushort _pendingServerX;
         private ushort _pendingServerY;
-        private bool _isCulled;
-        private const float OffscreenCullDistance = 35f;
-        private const float OffscreenCullSqrDistance = OffscreenCullDistance * OffscreenCullDistance;
+        private readonly RobotCuller _culler = new();
         private WorldEntityBatchRenderer _entityBatchRenderer = null!;
         [Inject]
         private LightingEngine _lightingEngine = null!;
@@ -97,9 +83,9 @@ namespace Fodinae.Game
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
 
-        public uint BotId => _botId;
-        public int PlayerId => _playerId;
-        public byte ClanId => _clanId;
+        public uint BotID => _botID;
+        public int PlayerID => _playerID;
+        public byte ClanID => _clanID;
         public string Nickname => _nickname;
         public bool IsMetadataLoaded => _isMetadataLoaded;
         public bool IsVisualsLoaded => _isMetadataLoaded && _visualsLoadCompleted;
@@ -111,21 +97,16 @@ namespace Fodinae.Game
         [Inject]
         private void InitializeEntityBatch(WorldEntityBatchRenderer entityBatchRenderer)
         {
-            _lighting ??= new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
+            _lighting ??= new RobotLighting();
             _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
             _entityBatchRenderer = entityBatchRenderer;
             InitializeVisualElements();
-            _visuals.Initialize(entityBatchRenderer, _clanTransform);
+            _visuals.Initialize(entityBatchRenderer, _visuals.ClanTransform);
         }
 
-        /// <summary>
-        /// Lazily creates <see cref="_visuals"/> and <see cref="_lighting"/> when
-        /// VContainer resolves [Inject] methods before <see cref="Awake"/> has run.
-        /// Safe to call multiple times — Awake re-assigns with the same values.
-        /// </summary>
         private void EnsureVisuals()
         {
-            _lighting ??= new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
+            _lighting ??= new RobotLighting();
             _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
         }
 
@@ -141,33 +122,6 @@ namespace Fodinae.Game
         {
             get => _movement.TargetPosition;
             set => _movement.TargetPosition = value;
-        }
-
-        public void SetClanBadge(ushort clanId)
-        {
-            _clanId = (byte)clanId;
-            if (_clanId == 0)
-            {
-                ClearClanBadge();
-                return;
-            }
-
-            if (_cts != null)
-            {
-                CancellationToken entityToken = _cts.Token;
-                _operations.Run(
-                    "load_robot_clan_badge",
-                    supervisorToken => RunWithLinkedCancellationAsync(
-                        LoadClanAsync,
-                        entityToken,
-                        supervisorToken));
-            }
-        }
-
-        public void ClearClanBadge()
-        {
-            _clanId = 0;
-            _visuals.SetClanSprite(null);
         }
 
         public float MoveSpeed
@@ -198,17 +152,12 @@ namespace Fodinae.Game
 
             transform.localScale = Vector3.one;
             _movement.SnapTo(transform.position, transform.eulerAngles.z);
-
-            if (TryGetComponent<Rigidbody2D>(out var rb))
-            {
-                rb.freezeRotation = true;
-                rb.simulated = false;
-            }
         }
 
         protected void OnEnable()
         {
-            ApplyWorldUILayer();
+            _nameplate.SetEnabled(!IsLocalPlayer);
+            _nameplate.InvalidatePosition();
             if (!Application.isPlaying ||
                 (IsLocalPlayer ?
                     _localPlayer != null && _localPlayer.Current is { HasServerPosition: true } :
@@ -224,6 +173,7 @@ namespace Fodinae.Game
 
         protected void OnDisable()
         {
+            _nameplate.SetEnabled(false);
             _lighting.Remove(_lightingEngine);
             _visuals.SetTentaclesActive(false);
         }
@@ -236,37 +186,14 @@ namespace Fodinae.Game
             }
 
             _visualElementsInitialized = true;
-            _nameplate.Initialize(transform, _botId, _nickname, IsLocalPlayer, _sceneObjects);
-
-            if (_clanTransform == null)
-            {
-                Transform? existingClan = transform.Find("ClanIcon");
-                GameObject clanGo = existingClan != null
-                    ? existingClan.gameObject
-                    : (_sceneObjects != null
-                        ? _sceneObjects.Create("ClanIcon", RuntimeOwner.Robots)
-                        : throw new InvalidOperationException(
-                            $"{TAG} ISceneObjectFactory was not injected before creating ClanIcon for bot {_botId}."));
-                clanGo.transform.SetParent(transform, worldPositionStays: false);
-                _clanTransform = clanGo.transform;
-                _clanTransform.localScale = Vector3.one * 0.8f;
-            }
+            _nameplate.Initialize(transform, _botID, _nickname, IsLocalPlayer, _sceneObjects, _worldLabels);
+            _visuals.EnsureClanIcon(_sceneObjects, _botID);
         }
 
-        public void SetBatchedBodyVisible(bool visible)
-        {
-            _visuals.SetBodyVisible(visible);
-        }
+        public void SetBatchedBodyVisible(bool visible) => _visuals.SetBodyVisible(visible);
 
-        private void ApplyWorldUILayer()
-        {
-            if (_clanTransform == null)
-            {
-                _clanTransform = transform.Find("ClanIcon");
-            }
+        public void SetAuraWanted(bool wanted) => _visuals?.SetAuraWanted(wanted, _sceneObjects);
 
-            _nameplate.ApplyLayer();
-        }
 
         protected void Start()
         {
@@ -315,41 +242,18 @@ namespace Fodinae.Game
 
             TryInitializeDynamicLightSettings();
             ApplyPendingServerPosition();
+            _visuals.TickAura(Time.deltaTime);
 
-            if (!IsLocalPlayer)
+            if (!IsLocalPlayer && _culler.CheckAndApply(
+                transform,
+                _gameplayCamera?.Camera,
+                _visuals,
+                _nameplate,
+                _lighting,
+                _movement,
+                _lightingEngine))
             {
-                Camera? cam = _gameplayCamera?.Camera;
-                Vector2 diff = cam != null
-                    ? new Vector2(transform.position.x - cam.transform.position.x, transform.position.y - cam.transform.position.y)
-                    : Vector2.zero;
-                float sqrDistToCam = diff.sqrMagnitude;
-                bool shouldCull = sqrDistToCam > OffscreenCullSqrDistance;
-
-                if (shouldCull)
-                {
-                    if (!_isCulled)
-                    {
-                        _isCulled = true;
-                        _visuals.SetBodyVisible(false);
-                        _nameplate.SetEnabled(false);
-                        _visuals.SetTentaclesActive(false);
-                        _lighting.Remove(_lightingEngine);
-                    }
-
-                    transform.position = _movement.TargetPosition;
-                    _movement.TeleportToTarget();
-                    transform.rotation = Quaternion.Euler(0, 0, _movement.TargetAngle);
-                    return;
-                }
-
-                if (_isCulled)
-                {
-                    _isCulled = false;
-                    _visuals.SetBodyVisible(true);
-                    _nameplate.SetEnabled(true);
-                    _visuals.SetTentaclesActive(true);
-                    _visuals.SnapTentacles(transform.position);
-                }
+                return;
             }
 
             if (_movement.IsSettled(_visuals.TentaclesSettled))
@@ -375,33 +279,26 @@ namespace Fodinae.Game
             _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }
 
-        public void SetDynamicLightIntensity(float intensity)
-        {
-            _lighting.SetIntensity(intensity, _lightingEngine);
-        }
+        public void SetDynamicLightIntensity(float intensity) => _lighting.SetIntensity(intensity, _lightingEngine);
 
-        public void SetDynamicLightColor(Color color)
-        {
-            _lighting.SetColor(color, _lightingEngine);
-        }
+        public void SetDynamicLightColor(Color color) => _lighting.SetColor(color, _lightingEngine);
+
+        public void SetDynamicLightEnabled(bool enabled) => _lighting.SetEnabled(enabled, _lightingEngine);
 
         public void ResetDynamicLightPreferences()
         {
             if (IsLocalPlayer)
             {
-                _lighting.ResetPreferences(_projectDefaults, _lightingEngine);
+                _lighting.ResetPreferences(_lightingEngine);
             }
         }
 
-        private void TryInitializeDynamicLightSettings()
-        {
-            _lighting.InitializeSettings(_projectDefaults, _lightingEngine);
-        }
+        private void TryInitializeDynamicLightSettings() => _lighting.InitializeSettings(_lightingEngine);
 
-        public void Initialize(uint botId)
+        public void Initialize(uint botID)
         {
             TryInitializeDynamicLightSettings();
-            _botId = botId;
+            _botID = botID;
             _robotManager.RegisterRobot(this);
 
             _isMetadataLoaded = false;
@@ -416,11 +313,11 @@ namespace Fodinae.Game
             _visuals.SetClanSprite(null);
         }
 
-        public void SetMetadata(int playerId, byte clanid, string nickname, string skinPath, string tailPath)
+        public void SetMetadata(int playerID, byte clanID, string nickname, string skinPath, string tailPath)
         {
             if (_isMetadataLoaded &&
-                _playerId == playerId &&
-                _clanId == clanid &&
+                _playerID == playerID &&
+                _clanID == clanID &&
                 string.Equals(_nickname, nickname, global::System.StringComparison.Ordinal) &&
                 string.Equals(_skinPath, skinPath, global::System.StringComparison.Ordinal) &&
                 string.Equals(_tailPath, tailPath, global::System.StringComparison.Ordinal))
@@ -428,8 +325,8 @@ namespace Fodinae.Game
                 return;
             }
 
-            _playerId = playerId;
-            _clanId = clanid;
+            _playerID = playerID;
+            _clanID = clanID;
             _nickname = nickname;
             _skinPath = skinPath;
             _tailPath = tailPath;
@@ -450,10 +347,7 @@ namespace Fodinae.Game
             LoadMetadataAssets();
         }
 
-        public void SetPosition(ushort x, ushort y)
-        {
-            ApplyServerPosition(x, y);
-        }
+        public void SetPosition(ushort x, ushort y) => ApplyServerPosition(x, y);
 
         private void ApplyPendingServerPosition()
         {
@@ -468,223 +362,98 @@ namespace Fodinae.Game
 
         private void ApplyServerPosition(ushort x, ushort y)
         {
-            if (_movement.ApplyServerPosition(x, y, _mapManager.WorldHeight, IsLocalPlayer, out bool isInitial))
+            if (_movement.ApplyServerPosition(x, y, _mapManager.WorldHeight, IsLocalPlayer, out bool isInitial) && isInitial)
             {
-                if (isInitial)
-                {
-                    transform.position = _movement.ServerPosition;
-                    _visuals.SnapTentacles(_movement.SmoothPosition);
-                    _visuals.SetTentaclesActive(true);
-                }
+                transform.position = _movement.ServerPosition;
+                _visuals.SnapTentacles(_movement.SmoothPosition);
+                _visuals.SetTentaclesActive(true);
             }
         }
 
-        public void SetRotation(byte rotation)
-        {
-            TargetAngle = rotation switch
-            {
-                0 => 270f,
-                1 => 180f,
-                2 => 90f,
-                3 => 0f,
-                _ => throw new ArgumentOutOfRangeException(
-                    nameof(rotation),
-                    rotation,
-                    $"[{TAG}] Unsupported robot rotation value for bot {_botId}."),
-            };
-        }
+        public void SetRotation(byte rotation) => TargetAngle = PlayerMovementMath.RotationByteToAngle(rotation);
 
         private void LoadMetadataAssets()
         {
-            _cts?.Cancel();
-            _cts?.Dispose();
-            _cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
-            CancellationToken entityToken = _cts.Token;
-
-            _operations.Run(
-                "load_robot_metadata_assets",
-                supervisorToken => LoadMetadataAssetsAsync(
-                    entityToken,
-                    supervisorToken));
-        }
-
-        private async UniTask LoadMetadataAssetsAsync(
-            CancellationToken entityToken,
-            CancellationToken supervisorToken)
-        {
-            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                entityToken,
-                supervisorToken);
-            CancellationToken token = linkedCancellation.Token;
-            UniTask clanTask = IsLocalPlayer
-                ? UniTask.CompletedTask
-                : LoadClanAsync(token);
-            await UniTask.WhenAll(
-                LoadSkinAsync(token),
-                LoadTailAsync(token),
-                clanTask);
-        }
-
-        private static async UniTask RunWithLinkedCancellationAsync(
-            Func<CancellationToken, UniTask> operation,
-            CancellationToken entityToken,
-            CancellationToken supervisorToken)
-        {
-            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                entityToken,
-                supervisorToken);
-            await operation(linkedCancellation.Token);
-        }
-
-        private async UniTask LoadSkinAsync(CancellationToken token)
-        {
-            if (string.IsNullOrEmpty(_skinPath))
+            if (_assetLoader == null || _operations == null)
             {
                 return;
             }
 
-            Texture2D? skinTexture = await TryLoadOptionalTextureAsync(_assetLoader, _skinPath, token);
-            if (token.IsCancellationRequested)
-            {
-                return;
-            }
+            _AssetLoader.LoadMetadataAssets(
+                _skinPath,
+                _tailPath,
+                _clanID,
+                IsLocalPlayer,
+                onSkinLoaded: skinSprite =>
+                {
+                    if (skinSprite != null)
+                    {
+                        _visuals.SetSkinSprite(skinSprite);
+                        _nameplate.InvalidatePosition();
+                        _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
+                    }
 
-            if (skinTexture == null)
-            {
-                _visualsLoadCompleted = true;
-                return;
-            }
-
-            Sprite skinSprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
-            _visuals.SetSkinSprite(skinSprite);
-            _nameplate.InvalidatePosition();
-            _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
-            _visualsLoadCompleted = true;
+                    _visualsLoadCompleted = true;
+                },
+                onTailLoaded: tailTexture =>
+                {
+                    if (tailTexture != null)
+                    {
+                        _visuals.CreateTentacles(tailTexture, transform.position);
+                    }
+                    else
+                    {
+                        _visuals.ClearTentacles();
+                    }
+                },
+                onClanLoaded: clanSprite =>
+                {
+                    if (clanSprite != null)
+                    {
+                        _visuals.SetClanSprite(clanSprite);
+                    }
+                });
         }
 
         public void EnsureEditorPreviewVisual()
         {
-            if (_spriteRenderer != null && _spriteRenderer.sprite == null)
-            {
-                var botTex = Resources.Load<Texture2D>("Textures/bot") ?? Resources.Load<Texture2D>("bot");
-                Sprite previewSprite;
-                if (botTex != null)
-                {
-                    previewSprite = Sprite.Create(botTex, new Rect(0, 0, botTex.width, botTex.height), new Vector2(0.5f, 0.5f), 16);
-                }
-                else
-                {
-                    var tex = Texture2D.whiteTexture;
-                    previewSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16);
-                }
-
-                _visuals.SetSkinSprite(previewSprite);
-                _spriteRenderer.sprite = previewSprite;
-                _spriteRenderer.color = new Color(0.2f, 0.65f, 0.95f, 1f);
-                _spriteRenderer.enabled = true;
-            }
-        }
-
-        private async UniTask LoadTailAsync(CancellationToken token)
-        {
-            if (string.IsNullOrEmpty(_tailPath))
-            {
-                _visuals.ClearTentacles();
-                return;
-            }
-
-            Texture2D? tailTexture = await TryLoadOptionalTextureAsync(_assetLoader, _tailPath, token);
-            if (token.IsCancellationRequested)
+            if (_spriteRenderer == null || _spriteRenderer.sprite != null)
             {
                 return;
             }
 
-            if (tailTexture == null)
-            {
-                _visuals.ClearTentacles();
-                return;
-            }
-
-            _visuals.CreateTentacles(tailTexture, transform.position);
-        }
-
-        private async UniTask LoadClanAsync(CancellationToken token)
-        {
-            if (_clanId == 0)
-            {
-                return;
-            }
-
-            string clanPath = $"/Clan/{_clanId}";
-            Texture2D? clanTexture = await TryLoadOptionalTextureAsync(_assetLoader, clanPath, token);
-            if (token.IsCancellationRequested || clanTexture == null)
-            {
-                return;
-            }
-
-            Sprite clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
-            _visuals.SetClanSprite(clanSprite);
-        }
-
-        private static async UniTask<Texture2D?> TryLoadOptionalTextureAsync(
-            IAssetLoader loader,
-            string filename,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                return await loader.GetTextureAsync(filename, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                return null;
-            }
-            catch (System.Exception exception)
-            {
-                Debug.LogWarning(
-                    $"{TAG} Optional texture '{filename}' was skipped: {exception.Message}");
-                return null;
-            }
+            Sprite previewSprite = RobotAssetLoader.CreateEditorPreviewSprite();
+            _visuals.SetSkinSprite(previewSprite);
+            _spriteRenderer.sprite = previewSprite;
+            _spriteRenderer.color = new Color(0.2f, 0.65f, 0.95f, 1f);
+            _spriteRenderer.enabled = true;
         }
 
 #if UNITY_EDITOR
         protected void OnDrawGizmos()
         {
-            if (!Application.isPlaying || !RobotManager.ShowDebugVisuals)
+            if (!Application.isPlaying ||
+                _debugSettings == null ||
+                !_debugSettings.ShowRobotDebugVisuals)
             {
                 return;
             }
 
-            Fodinae.World.FodinaeGizmos.DrawBounds(_movement.ServerPosition, Vector2.one * 1.0f, Color.red);
-            Fodinae.World.FodinaeGizmos.DrawBounds(_movement.TargetPosition, Vector2.one * 0.9f, Color.blue);
-            Fodinae.World.FodinaeGizmos.DrawBounds(transform.position, Vector2.one * 0.8f, Color.cyan);
-
-            float angleRad = (transform.eulerAngles.z + VISUAL_ROTATION_OFFSET) * Mathf.Deg2Rad;
-            Vector3 direction = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
-            Fodinae.World.FodinaeGizmos.DrawArrow(transform.position, direction, Color.yellow, 1.2f);
-
-            string status = $"ID: {_botId}\n{(IsLocalPlayer ? "LOCAL PLAYER" : "REMOTE ROBOT")}\n" +
-                            $"Meta: {(_isMetadataLoaded ? "OK" : "PENDING")}\n" +
-                            $"Speed: {_moveSpeed:F1}";
-            Fodinae.World.FodinaeGizmos.DrawLabel(transform.position + (Vector3.up * 1.5f), status, _isMetadataLoaded ? Color.green : Color.orange);
-
-            if (!IsLocalPlayer)
-            {
-                float lag = Vector3.Distance(_movement.ServerPosition, transform.position);
-                if (lag > 0.5f)
-                {
-                    Fodinae.World.FodinaeGizmos.DrawDottedLine(transform.position, _movement.ServerPosition, Color.red, 4f);
-                }
-            }
+            RobotGizmos.DrawGizmos(
+                transform,
+                _botID,
+                IsLocalPlayer,
+                _isMetadataLoaded,
+                _moveSpeed,
+                _movement.ServerPosition,
+                _movement.TargetPosition);
         }
 #endif
 
         protected void OnDestroy()
         {
-            _cts?.Cancel();
-            _cts?.Dispose();
-
-            _robotService?.UnregisterRobot(_botId);
+            _assetLoaderHelper?.Cancel();
+            _robotService?.UnregisterRobot(_botID);
             _nameplate.Destroy();
             _visuals?.Destroy();
         }

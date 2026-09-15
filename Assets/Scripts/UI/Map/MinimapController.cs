@@ -13,9 +13,6 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    /// <summary>
-    /// Chunk-batched minimap renderer with time-throttled updates and async GPU upload.
-    /// </summary>
     public class MinimapController : MonoBehaviour
     {
         [SerializeField]
@@ -45,23 +42,16 @@ namespace Fodinae.UI
         private MinimapTextureRenderer? _textureRenderer;
         private readonly MapCellSampler _cellSampler = new();
 
-        // Throttle state
-        private Vector2Int _lastUpdatePos;
-        public Vector2Int LastUpdatePos => _lastUpdatePos;
-        private float _lastUpdateTime;
+        // Refresh & throttle state
+        private readonly MinimapRefreshPolicy _refreshPolicy = new();
         private bool _ready;
-        private bool _initialRefreshDone;
         private bool _lastRefreshHadLoadedCells;
-        private long _lastRenderedStorageRevision = -1;
-        private bool _chunkLoadRefreshRequested;
-        private bool _pendingPlayerMoveRefresh;
         private IWorldLayer<CellType>? _subscribedCellLayer;
         private bool _playerMoveSubscribed;
+
         // Toggle state
         private bool _isVisible = true;
         private bool _uiCreated;
-
-        private const float UPDATE_DELAY = 0.1f;
 
         protected void Start()
         {
@@ -73,7 +63,7 @@ namespace Fodinae.UI
 
             _textureRenderer = new MinimapTextureRenderer(_uiSize);
 
-            _minimapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+            _minimapTexture = RuntimeTextureFactory.CreateRGBA32NoMip(
                 _uiSize,
                 _uiSize,
                 "MinimapTexture",
@@ -148,6 +138,11 @@ namespace Fodinae.UI
 
         protected void Update()
         {
+            if (_doc == null || !_doc.enabled)
+            {
+                return;
+            }
+
             if (_ready && _mapStorage != null &&
                 !ReferenceEquals(_cellLayer, _mapStorage.CellLayer))
             {
@@ -155,30 +150,21 @@ namespace Fodinae.UI
                 InitializeWorldState();
             }
 
-            if (_ready && _initialRefreshDone && _isVisible &&
-                _player != null && _player.HasServerPosition &&
-                (_pendingPlayerMoveRefresh || (_mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)) &&
-                CanRefreshTexture())
+            if (_player != null && _player.HasServerPosition)
             {
-                _pendingPlayerMoveRefresh = false;
-                _cellSampler.Invalidate();
-                RefreshTexture(_player.Position.x, _player.Position.y);
-                _lastUpdateTime = Time.time;
-                _lastRenderedStorageRevision = _mapStorage != null ? _mapStorage.Revision : -1;
-            }
-
-            if (_chunkLoadRefreshRequested && _ready && _isVisible &&
-                _player != null && _player.HasServerPosition && CanRefreshTexture())
-            {
-                _chunkLoadRefreshRequested = false;
-                RefreshTexture(_player.Position.x, _player.Position.y);
-                _lastUpdateTime = Time.time;
-                _initialRefreshDone = _lastRefreshHadLoadedCells;
-                if (_initialRefreshDone)
+                long currentRevision = _mapStorage != null ? _mapStorage.Revision : -1;
+                if (_refreshPolicy.ShouldRefreshOnStorageOrMove(Time.time, currentRevision, _ready, _isVisible, true))
                 {
-                    _lastRenderedStorageRevision = _mapStorage?.Revision ??
-                        throw new InvalidOperationException(
-                            "Minimap storage was lost after a chunk loaded.");
+                    _cellSampler.Invalidate();
+                    RefreshTexture(_player.Position.x, _player.Position.y);
+                    _refreshPolicy.RecordRefresh(Time.time, currentRevision, _lastRefreshHadLoadedCells);
+                }
+                else if (_refreshPolicy.ShouldRefreshOnChunkLoad(Time.time, _ready, _isVisible, true))
+                {
+                    RefreshTexture(_player.Position.x, _player.Position.y);
+                    MapStorage storage = _mapStorage ??
+                        throw new InvalidOperationException("Minimap storage was lost after a chunk loaded.");
+                    _refreshPolicy.RecordChunkLoadRefresh(Time.time, storage.Revision, _lastRefreshHadLoadedCells);
                 }
             }
 
@@ -211,7 +197,7 @@ namespace Fodinae.UI
                 InitializeWorldState();
             }
 
-            if (_player != null && _player.HasServerPosition && !_initialRefreshDone)
+            if (_player != null && _player.HasServerPosition && !_refreshPolicy.InitialRefreshDone)
             {
                 _view?.UpdateCoordinates(_player.Position.x, _player.Position.y);
                 if (_isVisible)
@@ -219,13 +205,12 @@ namespace Fodinae.UI
                     RefreshTexture(_player.Position.x, _player.Position.y);
                 }
 
-                _lastUpdatePos = _player.Position;
-                _lastUpdateTime = Time.time;
-                _initialRefreshDone = !_isVisible || _lastRefreshHadLoadedCells;
-                if (_initialRefreshDone)
-                {
-                    _lastRenderedStorageRevision = _mapStorage.Revision;
-                }
+                _refreshPolicy.RecordInitialRefresh(
+                    Time.time,
+                    _player.Position,
+                    _mapStorage.Revision,
+                    _isVisible,
+                    _lastRefreshHadLoadedCells);
             }
         }
 
@@ -253,9 +238,7 @@ namespace Fodinae.UI
                 _subscribedCellLayer.ChunkLoaded += OnChunkLoaded;
                 _cellSampler.Bind(_cellLayer);
                 _cellSampler.Invalidate();
-                _chunkLoadRefreshRequested = true;
-                _initialRefreshDone = false;
-                _lastRenderedStorageRevision = -1;
+                _refreshPolicy.InvalidateStorageRevision();
             }
 
             _worldWidth = _mapManager.WorldWidth;
@@ -361,6 +344,7 @@ namespace Fodinae.UI
             _cellLayer = null;
             _cellSampler.Bind(null);
             _cellSampler.Invalidate();
+            _refreshPolicy.Reset();
             _ready = false;
             InitializeWorldState();
         }
@@ -382,27 +366,22 @@ namespace Fodinae.UI
                 return;
             }
 
-            float now = Time.time;
-            if (now - _lastUpdateTime >= UPDATE_DELAY)
+            _refreshPolicy.NotifyPlayerMoved(newPos, Time.time, out bool shouldRefreshNow);
+            if (shouldRefreshNow)
             {
-                _pendingPlayerMoveRefresh = false;
-                _lastUpdateTime = now;
-                _lastUpdatePos = newPos;
                 RefreshTexture(newPos.x, newPos.y);
                 MapStorage storage = _mapStorage ??
                     throw new InvalidOperationException("Minimap storage was lost during refresh.");
-                _lastRenderedStorageRevision = storage.Revision;
-            }
-            else
-            {
-                _pendingPlayerMoveRefresh = true;
+                _refreshPolicy.RecordRefresh(Time.time, storage.Revision, _lastRefreshHadLoadedCells);
             }
         }
 
         private void OnChunkLoaded(int serverX, int serverY, int width, int height)
         {
-            _cellSampler.Invalidate();
-            _chunkLoadRefreshRequested = true;
+            // Only the loaded chunk changed. Dropping the whole sampler here
+            // made every load re-request every chunk under the minimap.
+            _cellSampler.InvalidateChunk(serverX, serverY);
+            _refreshPolicy.NotifyChunkLoaded();
         }
 
         private void RefreshTexture(int playerX, int playerY)
@@ -419,19 +398,6 @@ namespace Fodinae.UI
                 _worldWidth,
                 _worldHeight,
                 _cellSampler);
-        }
-
-        private bool CanRefreshTexture()
-        {
-            return Time.time - _lastUpdateTime >= UPDATE_DELAY;
-        }
-
-        public void ForceRefresh()
-        {
-            if (isActiveAndEnabled && _player != null && _ready && _isVisible)
-            {
-                RefreshTexture(_player.Position.x, _player.Position.y);
-            }
         }
 
         protected void OnDestroy()
@@ -476,12 +442,10 @@ namespace Fodinae.UI
             SetVisible(_isVisible);
             if (_isVisible && _player != null && _ready)
             {
-                _lastUpdateTime = Time.time;
-                _lastUpdatePos = _player.Position;
                 RefreshTexture(_player.Position.x, _player.Position.y);
                 MapStorage storage = _mapStorage ??
                     throw new InvalidOperationException("Minimap storage was lost while becoming visible.");
-                _lastRenderedStorageRevision = storage.Revision;
+                _refreshPolicy.RecordRefresh(Time.time, storage.Revision, _lastRefreshHadLoadedCells);
             }
         }
 

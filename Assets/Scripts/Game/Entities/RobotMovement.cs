@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Handles position smoothing, angle smoothing, tremor and interpolation for Robot entities.
-/// </summary>
 public sealed class RobotMovement
 {
     private const float MinimumSmoothTime = 0.05f;
@@ -39,8 +36,6 @@ public sealed class RobotMovement
         get => _targetAngle;
         set => _targetAngle = value;
     }
-
-    public float SmoothAngle => _smoothAngle;
     public float MoveSpeed
     {
         get => _moveSpeed;

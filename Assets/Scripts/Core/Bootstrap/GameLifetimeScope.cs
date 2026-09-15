@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -16,16 +16,17 @@ using Fodinae.Player.Logic;
 using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI;
-using Fodinae.UI.HUD.Inventory.Interfaces;
-using Fodinae.UI.HUD.Inventory.Model;
-using Fodinae.UI.HUD.Inventory.View;
+using Fodinae.Game.Inventory;
+using Fodinae.UI.Inventory;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.UI.HUD.Player.View;
+using Fodinae.UI.Programmator;
 using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using global::Fodinae.Core.Localization;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
@@ -84,26 +85,16 @@ namespace Fodinae.Core
                     localPlayer.Publish(_playerMovement);
                 }
 
-                // SceneSetup is an authored scene-root component (not part of the
-                // ManagerBinding contract), so the container never injects it
-                // automatically. Without this its [Inject] ITextureStorageService
-                // stays null and TryStartSurfaceRendererSetup silently no-ops:
-                // SetLocalAssets is never called, the surface textures never get
-                // assigned, and the world-readiness gate is stuck on
-                // surface=false forever. SceneSetup.Update retries until the
-                // injection lands, so injecting here (after base.Awake built the
-                // container) is safe regardless of Start/Update ordering.
-                SceneSetup? sceneSetup = null;
-                foreach (var candidate in UnityEngine.Object.FindObjectsByType<SceneSetup>(
-                             FindObjectsInactive.Include))
-                {
-                    if (candidate.gameObject.scene == _ownScene)
-                    {
-                        sceneSetup = candidate;
-                        break;
-                    }
-                }
-
+                // SceneSetup не входит в контракт ManagerBinding, и контейнер сам
+                // его не внедряет. Без этого [Inject] ITextureStorageService пуст,
+                // TryStartSurfaceRendererSetup молча ничего не делает, текстуры
+                // поверхности не назначаются, и готовность мира вечно стоит на
+                // surface=false. SceneSetup.Update повторяет попытку, пока
+                // внедрение не придёт, так что порядок Start/Update не важен.
+                //
+                // Ищется под этим scope, а не по корням сцены: все объекты сцены
+                // лежат под composition root (ValidateSingleRoot).
+                SceneSetup? sceneSetup = GetComponentInChildren<SceneSetup>(includeInactive: true);
                 if (Container != null && sceneSetup != null)
                 {
                     Container.Inject(sceneSetup);
@@ -146,8 +137,15 @@ namespace Fodinae.Core
                     "MainGame scene scope is missing serialized _uiDocument with PanelSettings.");
             }
 
+            Fodinae.UI.DynamicAtlasConfigurator.Apply(_uiDocument.panelSettings);
+
             builder.RegisterInstance(_uiDocument);
-            builder.Register<MapStorage>(Lifetime.Singleton).As<IWorldDataStorage>().AsSelf();
+            builder.Register<MapStorage>(Lifetime.Singleton)
+                .As<IWorldDataStorage>()
+                .As<IWorldPersistence>()
+                .AsSelf();
+            builder.Register<FrameTelemetry>(Lifetime.Singleton).As<IFrameTelemetry>();
+            builder.Register<SharedMaterialCache>(Lifetime.Singleton).As<ISharedMaterialCache>();
             builder.Register<AsyncOperationSupervisor>(Lifetime.Singleton)
                 .AsSelf()
                 .As<IAsyncOperationSupervisor>();
@@ -157,9 +155,12 @@ namespace Fodinae.Core
             builder.Register<GraphicsSettingsController>(Lifetime.Singleton);
             builder.Register<MapModeState>(Lifetime.Singleton);
             builder.Register<ChatEventGateway>(Lifetime.Singleton);
-            builder.Register<WindowCommandStream>(Lifetime.Singleton);
+            builder.RegisterEntryPoint<WorldLabels>().As<IWorldLabels>();
             builder.Register<ServerWindowPresenter>(Lifetime.Singleton);
             builder.Register<InputBlockState>(Lifetime.Singleton).As<IInputBlocker>();
+            builder.Register<ProgrammatorData>(Lifetime.Singleton);
+            builder.Register<ProgrammatorTextureRegistry>(Lifetime.Singleton)
+                .As<IProgrammatorTextureCatalog>();
             builder.Register<NetworkStatusModel>(Lifetime.Singleton);
             builder.Register<WorldInitProcessor>(Lifetime.Singleton);
             builder.Register<AuthTokenProcessor>(Lifetime.Singleton);
@@ -168,7 +169,7 @@ namespace Fodinae.Core
             RegisterManager<WorldBackgroundSetup>(builder, "World");
             RegisterManager<WorldTextureManager>(builder, "World").AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder, "Audio").AsImplementedInterfaces().AsSelf();
-            RegisterManager<PacketHandler>(builder, "Networking").AsImplementedInterfaces().AsSelf();
+            builder.RegisterEntryPoint<PacketHandler>().AsSelf();
 
             builder.Register<ClanProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<InventoryProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
@@ -183,10 +184,10 @@ namespace Fodinae.Core
             builder.Register<ConnectionProcessor>(Lifetime.Singleton);
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
-            RegisterManager<GameManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
-            RegisterManager<VFXPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
-            RegisterManager<BuildingManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
-            RegisterManager<RobotManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
+            builder.RegisterEntryPoint<GameManager>().AsSelf();
+            RegisterManager<VfxPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
+            builder.Register<BuildingManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<RobotManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldEntityBatchRenderer>(builder, "Rendering");
 
             if (_playerMovement == null)
@@ -216,15 +217,14 @@ namespace Fodinae.Core
                 builder.RegisterComponent(playerInteraction);
             }
 
-            RegisterManager<ServerConfig>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
+            builder.Register<ServerConfig>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder, "UI");
-            RegisterManager<UIInputManager>(builder, "UI");
+            builder.Register<UIInputManager>(Lifetime.Singleton);
             RegisterManager<FPSCounter>(builder, "UI");
             RegisterManager<FloatingChatManager>(builder, "UI");
             RegisterManager<ReconnectUI>(builder, "UI");
             RegisterManager<AssetLoadingIndicator>(builder, "UI");
             RegisterManager<MissionArrowUI>(builder, "UI");
-            RegisterManager<DiagnosticRunner>(builder, "UI");
 
             if (_postProcessVolume == null)
             {
@@ -243,8 +243,11 @@ namespace Fodinae.Core
             RegisterManager<MinimapController>(builder, "UI");
             RegisterManager<WorldMapController>(builder, "UI");
             RegisterManager<WorldMapRenderer>(builder, "UI");
-            RegisterManager<DisplayManager>(builder, "UI");
+            builder.RegisterEntryPoint<DisplayManager>().AsSelf();
             RegisterManager<InGameDebugOverlay>(builder, "UI");
+            builder.Register<GameInfrastructureStartup>(Lifetime.Singleton);
+            builder.Register<GamePresentationStartup>(Lifetime.Singleton);
+            builder.Register<GameStartupPipeline>(Lifetime.Singleton);
             builder.RegisterEntryPoint<GameBootstrap>();
         }
 
@@ -263,17 +266,85 @@ namespace Fodinae.Core
         public void MarkReady() => _readiness.TrySetResult();
         public void MarkFailed(Exception exception) => _readiness.TrySetException(exception);
 
-        public async UniTask PrepareForUnloadAsync(
-            PacketHandler packetHandler,
-            GameManager gameManager,
-            MapManager mapManager,
-            AsyncOperationSupervisor operations)
+        protected void Update()
         {
-            packetHandler.Shutdown();
-            gameManager.DeauthorizeUI();
-            await operations.StopAsync();
-            await mapManager.FlushForUnloadAsync();
-            mapManager.ResetWorldState();
+            if (Keyboard.current == null || _uiDocument == null)
+            {
+                return;
+            }
+
+            if (Keyboard.current.f11Key.wasPressedThisFrame ||
+                ((Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed ||
+                  Keyboard.current.leftCommandKey.isPressed || Keyboard.current.rightCommandKey.isPressed) &&
+                 Keyboard.current.uKey.wasPressedThisFrame))
+            {
+                SetGameUIActive(!_uiDocument.enabled);
+            }
+        }
+
+        public void SetGameUIActive(bool active)
+        {
+            if (_uiDocument != null)
+            {
+                if (_uiDocument.rootVisualElement != null)
+                {
+                    _uiDocument.rootVisualElement.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+                    _uiDocument.rootVisualElement.pickingMode = active ? PickingMode.Position : PickingMode.Ignore;
+                }
+
+                _uiDocument.enabled = active;
+            }
+
+            if (_floatingUIRoot != null)
+            {
+                _floatingUIRoot.gameObject.SetActive(active);
+            }
+
+            Debug.Log($"[GameLifetimeScope] Game UI {(active ? "ENABLED" : "DISABLED")}.");
+        }
+
+        public async UniTask PrepareForUnloadAsync()
+        {
+            if (Container == null)
+            {
+                return;
+            }
+
+            Container.TryResolve(out PacketHandler? packetHandler);
+            Container.TryResolve(out GameManager? gameManager);
+            Container.TryResolve(out MapManager? mapManager);
+            Container.TryResolve(out AsyncOperationSupervisor? operations);
+
+            // Соединение живёт на Bootstrap, а игровая сессия — ровно столько,
+            // сколько эта сцена. Отключение здесь, а не только в
+            // ReturnToMainMenu: любой уход из MainGame (прямой переход, сбой,
+            // выход) иначе оставлял циклы офлайн-сервера слать пакеты в меню.
+            // Первым — пока контейнер сцены жив. Повторный Disconnect безвреден.
+            if (Container.TryResolve(out IConnectionService? connection) && connection != null)
+            {
+                connection.Disconnect();
+            }
+
+            if (packetHandler != null)
+            {
+                packetHandler.Shutdown();
+            }
+
+            if (gameManager != null)
+            {
+                gameManager.DeauthorizeUI();
+            }
+
+            if (operations != null)
+            {
+                await operations.StopAsync();
+            }
+
+            if (mapManager != null)
+            {
+                await mapManager.FlushForUnloadAsync();
+                mapManager.ResetWorldState();
+            }
 
             // LocalPlayerState lives on the persistent Bootstrap scope and
             // survives this scene's unload. Without an explicit Clear the current
@@ -281,11 +352,11 @@ namespace Fodinae.Core
             // re-entering MainGame then routes the first PlayerInfoPacket at a
             // destroyed object (MissingReferenceException). Publish a fresh player
             // on re-entry is idempotent only for the same reference, so clear it here.
-            if (Container != null)
+            // ILocalPlayerState is registered on the persistent Bootstrap
+            // container and normally resolvable from the game scope here; the
+            // same half-disposed-container caveat as above applies.
+            if (Container.TryResolve(out ILocalPlayerState? localPlayer) && localPlayer != null)
             {
-                // ILocalPlayerState is registered on the persistent Bootstrap
-                // container and always resolvable from the game scope here.
-                ILocalPlayerState localPlayer = Container.Resolve<ILocalPlayerState>();
                 ILocalPlayer? current = localPlayer.Current;
                 if (current != null)
                 {
@@ -393,7 +464,9 @@ namespace Fodinae.Core
 
         private void ValidateServiceGroups()
         {
-            string[] requiredGroups = ["Networking", "World", "Rendering", "Gameplay", "UI", "Audio"];
+            // Группа существует, только пока в ней есть компонент, которому нужен
+            // GameObject. Сеть и геймплей — чистый C# в контейнере (SCENE_STANDARD.md §1).
+            string[] requiredGroups = ["World", "Rendering", "UI", "Audio"];
             foreach (string group in requiredGroups)
             {
                 if (!HasSerializedServiceGroup(group))

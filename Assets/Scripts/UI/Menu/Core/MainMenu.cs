@@ -6,8 +6,8 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
+using Fodinae.Networking;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
@@ -17,7 +17,7 @@ namespace Fodinae.UI
     [RequireComponent(typeof(UIDocument))]
     public class MainMenu : MonoBehaviour, ILocalizableUI
     {
-        private const string GameSceneName = "MainGame";
+        private const string GameSceneName = ProjectRuntimeContracts.SceneNames.MainGame;
 
         [SerializeField]
         private Texture2D? _shadeTexture;
@@ -32,36 +32,12 @@ namespace Fodinae.UI
         private VisualElement? _loaderContent;
         private MenuLoaderProgress? _loaderProgress;
         private readonly MenuModalManager _modalManager = new();
-
-        // Шаги маршрута в футере
-        private VisualElement? _routeOrbit;
-        private VisualElement? _routeDescent;
-        private VisualElement? _routeSurface;
-
-        // Кнопки основного экрана
-        private Button? _playButton;
-        private Button? _serverSelectButton;
-        private Button? _updateAlertBanner;
-        private Button? _userPillButton;
-        private Button? _cancelDescentButton;
-
-        // Правая боковая панель (Genshin Sidebar)
-        private Button? _sideChronicleButton;
-        private Button? _sideSettingsButton;
-        private Button? _sideRepairButton;
-        private Button? _sideUpdateButton;
-        private Button? _sideDiscordButton;
-        private Button? _sideTelegramButton;
-        private Button? _sideVkButton;
-        private Button? _sideExitButton;
-
-        // Футер
-        private Button? _newsTickerButton;
-        private Button? _footerVersionButton;
+        private readonly MenuNavigationPresenter _navigationPresenter = new();
 
         private bool _loadingActive;
         private bool _built;
         private bool _subscribed;
+        private bool _windowVisibilitySubscribed;
         private bool _teardownStarted;
         private CancellationTokenSource? _descentCancellation;
 
@@ -70,16 +46,26 @@ namespace Fodinae.UI
         [Inject]
         private ISceneNavigator _sceneNavigator = null!;
         [Inject]
+        private IWorldEntryPreparation _worldEntryPreparation = null!;
+        [Inject]
         private IWorldLoadProgress _loadProgress = null!;
         [Inject]
         private IClientConfigManager _clientConfig = null!;
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
+        [Inject]
+        private WindowCommandStream _windowCommands = null!;
 
         private bool _loaderHiddenAtDone;
         private MenuStarfield? _sceneStarfield;
         private MenuSceneryController? _sceneScenery;
-        private readonly MenuSceneryPresenter _sceneryPresenter = new();
+        private MenuSceneryPresenter _sceneryPresenter = null!;
+
+        [Inject]
+        private void Construct(IRuntimeAssetPaths runtimeAssetPaths)
+        {
+            _sceneryPresenter = new MenuSceneryPresenter(runtimeAssetPaths);
+        }
 
         protected void OnValidate()
         {
@@ -108,7 +94,9 @@ namespace Fodinae.UI
                 }
 
                 _root = doc.rootVisualElement;
+                _root.pickingMode = PickingMode.Ignore;
                 SubscribeEvents();
+                SubscribeWindowVisibility();
                 _sceneryPresenter.Bind(_tree);
                 _sceneryPresenter.ApplyTextures(ref _shadeTexture, ref _spaceBgTexture);
 
@@ -150,17 +138,26 @@ namespace Fodinae.UI
                     "[MainMenu] UIDocument panel is not available at Start (панель создаётся в OnEnable документа и к Start обязана существовать).");
             }
 
-            var mainMenuUXML = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.MainMenuUxml);
-            if (mainMenuUXML == null)
+            PanelSettings panelSettings = _doc.panelSettings ??
+                throw new InvalidOperationException(
+                    "[MainMenu] UIDocument requires an authored PanelSettings asset.");
+
+            var mainMenuUxml = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.MainMenuUxml);
+            if (mainMenuUxml == null)
             {
                 throw new InvalidOperationException(
                     "Required UI asset 'Resources/UI/MainMenu.uxml' was not found.");
             }
 
             _root.Clear();
-            VisualElement tree = mainMenuUXML.CloneTree();
+            _root.pickingMode = PickingMode.Ignore;
+            VisualElement tree = mainMenuUxml.CloneTree();
             tree.AddToClassList("ui-fullscreen");
             _root.Add(tree);
+
+            _doc.panelSettings = panelSettings;
+            panelSettings.scale = UIScaleUtility.ResolveEffectiveScale(
+                _clientConfig?.Config.Interface.UIScale ?? 0f);
             _tree = tree;
 
             UILayoutTier.Attach(tree);
@@ -171,6 +168,7 @@ namespace Fodinae.UI
 
             _subscribed = false;
             SubscribeEvents();
+            SubscribeWindowVisibility();
             _sceneryPresenter.ApplyTextures(ref _shadeTexture, ref _spaceBgTexture);
 
             if (_loc != null)
@@ -188,8 +186,9 @@ namespace Fodinae.UI
         public async UniTask WaitUntilReadyAsync(CancellationToken cancellationToken = default)
         {
             float timeout = Time.realtimeSinceStartup + 3f;
-            while (Time.realtimeSinceStartup < timeout && !cancellationToken.IsCancellationRequested)
+            while (Time.realtimeSinceStartup < timeout)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (_built && _sceneryPresenter.IsSceneryReady)
                 {
                     return;
@@ -203,6 +202,9 @@ namespace Fodinae.UI
 
                 await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new TimeoutException("Main menu scenery did not become ready within 3 seconds.");
         }
 
         private void BindUIElements(VisualElement tree)
@@ -245,95 +247,21 @@ namespace Fodinae.UI
                 loaderPhaseCount,
                 loaderPhaseList,
                 _loc);
-            _routeOrbit = tree.Q<VisualElement>("MainMenuRouteOrbit");
-            _routeDescent = tree.Q<VisualElement>("MainMenuRouteDescent");
-            _routeSurface = tree.Q<VisualElement>("MainMenuRouteSurface");
 
-            _playButton = tree.Q<Button>("PlayButton");
-            _serverSelectButton = tree.Q<Button>("ServerSelectButton");
-            _updateAlertBanner = tree.Q<Button>("UpdateAlertBanner");
-            _userPillButton = tree.Q<Button>("UserPillButton");
-            _cancelDescentButton = tree.Q<Button>("CancelDescentButton");
-
-            _sideChronicleButton = tree.Q<Button>("SideChronicleButton");
-            _sideSettingsButton = tree.Q<Button>("SideSettingsButton");
-            _sideRepairButton = tree.Q<Button>("SideRepairButton");
-            _sideUpdateButton = tree.Q<Button>("SideUpdateButton");
-            _sideDiscordButton = tree.Q<Button>("SideDiscordButton");
-            _sideTelegramButton = tree.Q<Button>("SideTelegramButton");
-            _sideVkButton = tree.Q<Button>("SideVkButton");
-            _sideExitButton = tree.Q<Button>("SideExitButton");
-
-            if (_loc != null)
-            {
-                Label? playLabel = _playButton?.Q<Label>(null, "mm-btn-primary-text");
-                if (playLabel != null)
-                {
-                    playLabel.text = _loc.Get("menu.play");
-                }
-
-                Label? serverLabel = _serverSelectButton?.Q<Label>();
-                if (serverLabel != null)
-                {
-                    serverLabel.text = _loc.Get("menu.server_select");
-                }
-
-                if (_cancelDescentButton != null)
-                {
-                    _cancelDescentButton.text = _loc.Get("menu.cancel_descent");
-                }
-
-                Label? orbitLabel = _routeOrbit?.Q<Label>(null, "mm-route-text");
-                if (orbitLabel != null)
-                {
-                    orbitLabel.text = _loc.Get("menu.orbit");
-                }
-
-                Label? descentLabel = _routeDescent?.Q<Label>(null, "mm-route-text");
-                if (descentLabel != null)
-                {
-                    descentLabel.text = _loc.Get("menu.descent");
-                }
-
-                if (_sideChronicleButton != null)
-                {
-                    _sideChronicleButton.tooltip = _loc.Get("menu.chronicle");
-                }
-
-                if (_sideSettingsButton != null)
-                {
-                    _sideSettingsButton.tooltip = _loc.Get("menu.settings");
-                }
-
-                if (_sideRepairButton != null)
-                {
-                    _sideRepairButton.tooltip = _loc.Get("menu.repair");
-                }
-
-                if (_sideUpdateButton != null)
-                {
-                    _sideUpdateButton.tooltip = _loc.Get("menu.update");
-                }
-
-                if (_sideExitButton != null)
-                {
-                    _sideExitButton.tooltip = _loc.Get("menu.exit");
-                }
-            }
-
-            _newsTickerButton = tree.Q<Button>("NewsTickerButton");
-            _footerVersionButton = tree.Q<Button>("FooterVersionButton");
+            _navigationPresenter.Bind(
+                tree,
+                _modalManager,
+                OnPlayButtonClicked,
+                CancelDescent,
+                _loc);
 
             if (_loaderContainer != null)
             {
                 _loaderContainer.pickingMode = PickingMode.Ignore;
-                _loaderContainer.style.display = DisplayStyle.None;
             }
 
-            if (_loaderContent != null)
-            {
-                _loaderContent.style.display = DisplayStyle.None;
-            }
+            UIState.Hide(_loaderContainer);
+            UIState.Hide(_loaderContent);
         }
 
         protected void Update()
@@ -370,40 +298,7 @@ namespace Fodinae.UI
             }
 
             _sceneryPresenter.Tick(ref _spaceBgTexture);
-            HandleKeyboardInput();
-        }
-
-        private void HandleKeyboardInput()
-        {
-            if (!Application.isPlaying)
-            {
-                return;
-            }
-
-            var keyboard = Keyboard.current;
-            if (keyboard == null)
-            {
-                return;
-            }
-
-            if (keyboard.escapeKey.wasPressedThisFrame)
-            {
-                if (_modalManager.HasActiveModal)
-                {
-                    _modalManager.CloseCurrentModal();
-                }
-                else if (_loadingActive)
-                {
-                    CancelDescent();
-                }
-            }
-            else if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
-            {
-                if (!_modalManager.HasActiveModal && !_loadingActive)
-                {
-                    OnPlayButtonClicked();
-                }
-            }
+            MenuKeyboardHandler.HandleInput(_modalManager, _loadingActive, OnPlayButtonClicked, CancelDescent);
         }
 
         private void UpdateLoaderProgress()
@@ -416,7 +311,7 @@ namespace Fodinae.UI
             if (phase == WorldLoadPhase.Done && !_loaderHiddenAtDone)
             {
                 _loaderHiddenAtDone = true;
-                HideLoader();
+                ReleaseInputToGameplay();
             }
         }
 
@@ -425,82 +320,6 @@ namespace Fodinae.UI
             if (_subscribed)
             {
                 return;
-            }
-
-            if (_playButton != null)
-            {
-                _playButton.clicked += OnPlayButtonClicked;
-            }
-
-            if (_serverSelectButton != null)
-            {
-                _serverSelectButton.clicked += _modalManager.OpenServerBrowser;
-            }
-
-            if (_updateAlertBanner != null)
-            {
-                _updateAlertBanner.clicked += _modalManager.OpenUpdate;
-            }
-
-            if (_userPillButton != null)
-            {
-                _userPillButton.clicked += _modalManager.OpenProfile;
-            }
-
-            if (_cancelDescentButton != null)
-            {
-                _cancelDescentButton.clicked += CancelDescent;
-            }
-
-            if (_sideChronicleButton != null)
-            {
-                _sideChronicleButton.clicked += _modalManager.OpenChronicle;
-            }
-
-            if (_sideSettingsButton != null)
-            {
-                _sideSettingsButton.clicked += _modalManager.OpenSettings;
-            }
-
-            if (_sideRepairButton != null)
-            {
-                _sideRepairButton.clicked += _modalManager.OpenRepair;
-            }
-
-            if (_sideUpdateButton != null)
-            {
-                _sideUpdateButton.clicked += _modalManager.OpenUpdate;
-            }
-
-            if (_sideDiscordButton != null)
-            {
-                _sideDiscordButton.clicked += OpenDiscord;
-            }
-
-            if (_sideTelegramButton != null)
-            {
-                _sideTelegramButton.clicked += OpenTelegram;
-            }
-
-            if (_sideVkButton != null)
-            {
-                _sideVkButton.clicked += OpenVk;
-            }
-
-            if (_sideExitButton != null)
-            {
-                _sideExitButton.clicked += QuitGame;
-            }
-
-            if (_newsTickerButton != null)
-            {
-                _newsTickerButton.clicked += _modalManager.OpenChronicle;
-            }
-
-            if (_footerVersionButton != null)
-            {
-                ApplyVersionLabel();
-                _footerVersionButton.clicked += _modalManager.OpenUpdate;
             }
 
             if (_tree != null)
@@ -517,51 +336,9 @@ namespace Fodinae.UI
             _subscribed = true;
         }
 
-        protected void OnDisable()
-        {
-        }
-
         public void OpenModal(VisualElement? modal) => _modalManager.OpenModal(modal);
+
         public void CloseCurrentModal() => _modalManager.CloseCurrentModal();
-
-        private void QuitGame()
-        {
-            Debug.Log("[MainMenu] Exiting game client...");
-#if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-#else
-            Application.Quit();
-#endif
-        }
-
-        private static void OpenDiscord()
-        {
-            Application.OpenURL("https://discord.gg/fodinae");
-        }
-
-        private static void OpenTelegram()
-        {
-            Application.OpenURL("https://t.me/fodinae");
-        }
-
-        private static void OpenVk()
-        {
-            Application.OpenURL("https://vk.com/fodinae");
-        }
-
-        private void ApplyVersionLabel()
-        {
-            if (_footerVersionButton == null || _loc == null)
-            {
-                return;
-            }
-
-            _footerVersionButton.text = Application.isEditor
-                ? _loc.Get("mainmenu.version_editor", Application.version)
-                : Debug.isDebugBuild
-                    ? _loc.Get("mainmenu.version_dev", Application.version)
-                    : _loc.Get("mainmenu.version", Application.version);
-        }
 
         public void ApplyLocalizedText()
         {
@@ -572,7 +349,7 @@ namespace Fodinae.UI
             }
 
             UILocalizer.Apply(_tree, _loc);
-            ApplyVersionLabel();
+            _navigationPresenter.ApplyLocalization(_loc);
             _loaderProgress?.RefreshLocalization();
             UILocalizer.AssertLocalized(_tree, _loc);
         }
@@ -580,6 +357,12 @@ namespace Fodinae.UI
         protected void OnDestroy()
         {
             _teardownStarted = true;
+            if (_windowVisibilitySubscribed && _windowCommands != null)
+            {
+                _windowCommands.OpenWindowVisibilityChanged -= OnServerWindowVisibilityChanged;
+                _windowVisibilitySubscribed = false;
+            }
+
             if (_loc != null)
             {
                 _loc.UnregisterLocalizable(this);
@@ -595,17 +378,54 @@ namespace Fodinae.UI
 
         private void HideLoader()
         {
-            if (_loaderContainer != null)
-            {
-                _loaderContainer.style.display = DisplayStyle.None;
-            }
+            UIState.Hide(_loaderContainer);
         }
 
         private void HideMenu()
         {
-            if (_mainMenuContainer != null)
+            UIState.Hide(_mainMenuContainer);
+        }
+
+        private void ReleaseInputToGameplay()
+        {
+            _loadingActive = false;
+            UIState.Hide(_tree);
+            if (_root != null)
             {
-                _mainMenuContainer.style.display = DisplayStyle.None;
+                _root.pickingMode = PickingMode.Ignore;
+            }
+        }
+
+        private void SubscribeWindowVisibility()
+        {
+            if (_windowVisibilitySubscribed || _windowCommands == null)
+            {
+                return;
+            }
+
+            _windowCommands.OpenWindowVisibilityChanged += OnServerWindowVisibilityChanged;
+            _windowVisibilitySubscribed = true;
+            OnServerWindowVisibilityChanged(_windowCommands.HasOpenWindows);
+        }
+
+        private void OnServerWindowVisibilityChanged(bool visible)
+        {
+            if (_teardownStarted || !_loadingActive)
+            {
+                return;
+            }
+
+            UIState.SetHidden(_tree, visible);
+            if (_root != null)
+            {
+                _root.pickingMode = PickingMode.Ignore;
+            }
+
+            if (!visible)
+            {
+                UIState.Show(_loaderContainer);
+                UIState.Show(_loaderContent);
+                UpdateLoaderProgress();
             }
         }
 
@@ -626,18 +446,15 @@ namespace Fodinae.UI
             _descentCancellation = CancellationTokenSource.CreateLinkedTokenSource(
                 destroyCancellationToken);
 
-            if (_loaderContainer != null)
+            UIState.Show(_loaderContainer);
+            UIState.Show(_loaderContent);
+
+            if (_windowCommands != null && _windowCommands.HasOpenWindows)
             {
-                _loaderContainer.style.display = DisplayStyle.Flex;
+                OnServerWindowVisibilityChanged(visible: true);
             }
 
-            if (_loaderContent != null)
-            {
-                _loaderContent.style.display = DisplayStyle.Flex;
-            }
-
-            _routeOrbit?.RemoveFromClassList("mm-route-item--active");
-            _routeDescent?.AddToClassList("mm-route-item--active");
+            _navigationPresenter.SetDescentRouteActive();
 
             _sceneryPresenter.DescentTarget = 1f;
             UpdateLoaderProgress();
@@ -653,6 +470,8 @@ namespace Fodinae.UI
             CancellationToken transitionToken = linkedCancellation.Token;
             try
             {
+                // Подготовка мира не входит в таймаут перехода: он меряет только сцену.
+                await _worldEntryPreparation.EnsureReadyAsync(transitionToken);
                 await _sceneNavigator.TransitionAsync(GameSceneName, transitionToken);
             }
             catch (OperationCanceledException) when (transitionToken.IsCancellationRequested)
@@ -666,12 +485,15 @@ namespace Fodinae.UI
                 }
 
                 _loadingActive = false;
+                UIState.Show(_tree);
+                if (_root != null)
+                {
+                    _root.pickingMode = PickingMode.Ignore;
+                }
+
                 _sceneryPresenter.ResumeRenderers();
                 HideLoader();
-                if (_mainMenuContainer != null)
-                {
-                    _mainMenuContainer.style.display = DisplayStyle.Flex;
-                }
+                UIState.Show(_mainMenuContainer);
 
                 Debug.LogError($"[MainMenu] MainGame transition failed: {exception.Message}");
             }

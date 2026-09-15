@@ -9,9 +9,6 @@ namespace VContainer.Internal
 
         private static readonly Stack<List<T>> _pool = new Stack<List<T>>(4);
 
-        /// <summary>
-        /// BufferScope supports releasing a buffer with using clause.
-        /// </summary>
         internal readonly struct BufferScope : IDisposable
         {
             private readonly List<T> _buffer;
@@ -27,9 +24,6 @@ namespace VContainer.Internal
             }
         }
 
-        /// <summary>
-        /// Get a buffer from the pool.
-        /// </summary>
         /// <returns></returns>
         internal static List<T> Get()
         {
@@ -44,9 +38,6 @@ namespace VContainer.Internal
             }
         }
 
-        /// <summary>
-        /// Get a buffer from the pool. Returning a disposable struct to support recycling via using clause.
-        /// </summary>
         /// <param name="buffer"></param>
         /// <returns></returns>
         internal static BufferScope Get(out List<T> buffer)
@@ -55,9 +46,6 @@ namespace VContainer.Internal
             return new BufferScope(buffer);
         }
 
-        /// <summary>
-        /// Declare a buffer won't be used anymore and put it back to the pool.
-        /// </summary>
         /// <param name="buffer"></param>
         internal static void Release(List<T> buffer)
         {

@@ -6,7 +6,6 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace Fodinae.Networking;
 
-/// <summary>Packet-to-presentation event boundary for chat data.</summary>
 public sealed class ChatEventGateway
 {
     public event Action<ChatMessagePacket>? MessageReceived;

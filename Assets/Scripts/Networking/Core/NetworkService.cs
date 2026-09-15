@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking.Connection;
+using Fodinae.Networking.Diagnostics;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -51,10 +52,6 @@ namespace Fodinae.Networking
             UnsubscribeFromConnection();
         }
 
-        /// <summary>
-        /// Binds the packet stream after VContainer injection. Unity may call
-        /// OnEnable before [Inject] has populated the connection field.
-        /// </summary>
         public void EnsureConnectionSubscription()
         {
             if (_subscribedConnection != null)
@@ -145,6 +142,7 @@ namespace Fodinae.Networking
                 throw new InvalidOperationException(
                     "NetworkService requires IConnectionService before sending.");
             var timestamp = (uint)DateTimeOffset.UtcNow.Ticks;
+            PacketTelemetry.RecordOutgoing(packet.GetType(), Time.unscaledTimeAsDouble);
             connectionService.Send(new ClientPacket(timestamp, packet));
         }
 
@@ -210,19 +208,29 @@ namespace Fodinae.Networking
             while (payload is LzmaPacket lzma)
             {
                 payload = lzma.Payload;
+                PacketTelemetry.RecordCompressed();
             }
 
             while (payload is LZ4Packet lz4)
             {
                 payload = lz4.Payload;
+                PacketTelemetry.RecordCompressed();
             }
 
             if (payload is HBPacket hbPacket && hbPacket.Payload != null)
             {
+                // Размер пачки считается перебором, а не свойством длины:
+                // тип полезной нагрузки задан протоколом, и обращаться к его
+                // внутреннему устройству ради одного числа значит привязать
+                // учёт к тому, что клиенту не принадлежит.
+                int batched = 0;
                 foreach (var innerPacket in hbPacket.Payload)
                 {
+                    batched++;
                     Dispatch(innerPacket);
                 }
+
+                PacketTelemetry.RecordBatch(batched);
             }
             else
             {
@@ -239,17 +247,70 @@ namespace Fodinae.Networking
 
             var packetType = packet.GetType();
 
-            Subscription[] handlers;
+            Subscription[]? handlers;
             lock (_subscribersLock)
             {
-                if (!_subscriberSnapshots.TryGetValue(packetType, out var snapshot))
-                {
-                    return;
-                }
-
-                handlers = snapshot;
+                _subscriberSnapshots.TryGetValue(packetType, out handlers);
             }
 
+            // Учёт ведётся за пределами замка. Внутри он не нужен — телеметрия
+            // однопоточная и своих замков не берёт, — а вызов чужого кода
+            // из-под замка это привычка, которая однажды приводит к тому, что
+            // сеть встаёт из-за отладочного окна.
+            //
+            // Пакет без подписчика — не ошибка и не повод для лога: клиент
+            // слушает не весь протокол. Но «сервер не прислал» и «прислал, а
+            // никто не слушает» обязаны различаться при разборе, поэтому такой
+            // пакет всё равно считается.
+            PacketTelemetry.RecordIncoming(
+                packetType,
+                handled: handlers is { Length: > 0 },
+                Time.unscaledTimeAsDouble);
+
+            if (handlers == null)
+            {
+                return;
+            }
+
+            // Время всех обработчиков пакета вместе: без него пик разбора
+            // очереди не привязать к типу пакета.
+            long handlerStarted = PacketTelemetry.Enabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            try
+            {
+                using var allocationScope = Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Enabled
+                    ? Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Measure(PacketAllocationEntry(packetType))
+                    : default;
+                InvokeHandlers(packet, packetType, handlers);
+            }
+            finally
+            {
+                if (handlerStarted != 0L)
+                {
+                    PacketTelemetry.RecordHandlerTime(
+                        packetType,
+                        (System.Diagnostics.Stopwatch.GetTimestamp() - handlerStarted) * 1000.0 /
+                        System.Diagnostics.Stopwatch.Frequency);
+                }
+            }
+        }
+
+        // Одна запись учёта аллокаций на тип пакета; строка имени строится один
+        // раз на тип, а не на пакет.
+        private static readonly Dictionary<Type, Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Entry> _PacketAllocationEntries = new();
+
+        private static Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Entry PacketAllocationEntry(Type packetType)
+        {
+            if (!_PacketAllocationEntries.TryGetValue(packetType, out var entry))
+            {
+                entry = Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Register("Пакет · " + packetType.Name);
+                _PacketAllocationEntries[packetType] = entry;
+            }
+
+            return entry;
+        }
+
+        private void InvokeHandlers(object packet, Type packetType, Subscription[] handlers)
+        {
             for (int i = handlers.Length - 1; i >= 0; i--)
             {
                 try

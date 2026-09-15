@@ -12,15 +12,15 @@
     bottom: 0;
     justify-content: center;
     align-items: center;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: var(--surface-sunken);
 }
 
 .inv-full-bg {
-    background-color: rgba(14, 18, 26, 0.95);
+    background-color: var(--surface-slate-dense);
     border-width: 1px;
-    border-color: rgba(80, 140, 200, 0.5);
-    border-radius: 6px;
-    padding: 20px;
+    border-color: var(--accent-cyan-fill);
+    border-radius: var(--radius-md);
+    padding: var(--space-9);
     flex-direction: column;
     align-items: center;
     min-width: 560px;
@@ -32,41 +32,41 @@
     right: 8px;
     width: 28px;
     height: 28px;
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: var(--surface-void-haze);
     border-width: 1px;
-    border-color: rgba(80, 140, 200, 0.3);
-    border-radius: 4px;
+    border-color: var(--accent-cyan-glow);
+    border-radius: var(--radius-md);
     padding: 0;
     justify-content: center;
     align-items: center;
 }
 
 .inv-close-btn:hover {
-    background-color: rgba(180, 40, 40, 0.8);
-    border-color: rgba(255, 80, 80, 0.8);
+    background-color: var(--state-danger-glow);
+    border-color: var(--state-danger);
 }
 
 .inv-close-label {
-    font-size: 16px;
-    color: rgb(200, 200, 200);
+    font-size: var(--size-md);
+    color: var(--accent-gold);
     -unity-text-align: middle-center;
     align-self: center;
     justify-content: center;
 }
 
 .inv-title {
-    font-size: 16px;
+    font-size: var(--size-md);
     -unity-font-style: bold;
-    color: rgb(220, 235, 255);
-    margin-bottom: 12px;
+    color: var(--text-primary);
+    margin-bottom: var(--space-6);
     align-self: flex-start;
 }
 
 .inv-separator {
     height: 1px;
-    background-color: rgba(80, 140, 200, 0.3);
-    margin-top: 12px;
-    margin-bottom: 12px;
+    background-color: var(--accent-cyan-glow);
+    margin-top: var(--space-6);
+    margin-bottom: var(--space-6);
     align-self: center;
 }
 
@@ -82,60 +82,67 @@
     flex-shrink: 0;
 }
 
+/* Ячейка по скриншоту оригинала: почти чёрный квадрат без рамки, с
+   небольшим зазором до соседней — сквозь него видно мир. Шаг сетки остаётся
+   55 (51 сама клетка плюс по 2 отступа), поэтому четыре строки по-прежнему
+   укладываются в 220. Ни голубой обводки, ни крупного скругления там нет —
+   именно они и делали вид чужим. */
 .inv-cell {
-    width: 50px;
-    height: 50px;
-    min-width: 50px;
-    min-height: 50px;
+    width: 51px;
+    height: 51px;
+    min-width: 51px;
+    min-height: 51px;
     flex-shrink: 0;
     flex-grow: 0;
     justify-content: center;
     align-items: center;
-    margin: 3px;
-    background-color: rgba(20, 26, 38, 0.85);
-    border-width: 1px;
-    border-color: rgba(80, 140, 200, 0.4);
-    border-radius: 4px;
+    margin: 2px;
+    padding: 0;
+    border-width: 0;
+    border-radius: 3px;
+    background-color: rgba(10, 11, 13, 0.85);
 }
 
 .inv-cell:hover {
-    border-color: rgba(80, 180, 255, 0.9);
-    background-color: rgba(30, 42, 62, 0.9);
+    background-color: rgba(32, 34, 38, 0.9);
 }
 
 .inv-cell--selected {
-    border-width: 2px;
-    border-color: rgb(255, 214, 0);
-    background-color: rgba(60, 50, 20, 0.4);
+    background-color: rgba(48, 44, 20, 0.95);
 }
 
 .inv-cell--highlight {
-    background-color: rgba(50, 70, 100, 0.8);
+    background-color: rgba(32, 34, 38, 0.9);
 }
 
+/* Иконка квадратная и по центру клетки.
+   В префабе старого клиента у неё стоит 38x30, но там в неё кладут настоящий
+   спрайт предмета со своим соотношением сторон, и прямоугольник поля просто
+   не виден. У нас на его месте пока заглушка, и несимметричное поле читается
+   как перекос самой клетки. Квадрат 38x38 в клетке 51 даёт равные поля со
+   всех сторон. */
 .inv-icon {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
     align-self: center;
-    justify-content: center;
 }
 
 .inv-qty {
     position: absolute;
-    right: 3px;
-    bottom: 2px;
-    font-size: 11px;
-    color: white;
-    -unity-font-style: bold;
+    right: 2px;
+    bottom: 1px;
+    font-size: 10px;
+    color: rgb(255, 255, 255);
+    -unity-text-align: lower-right;
 }
 
 .inv-floating {
     position: absolute;
     width: 36px;
     height: 36px;
-    border-radius: 18px;
+    border-radius: var(--radius-md);
     opacity: 0.8;
 }
 
@@ -153,37 +160,73 @@
        picking-mode="Position" — паттерн как в ObserverJoystick.uxml. */
 }
 
+/* ─── Раскладка снята со старого клиента ───────────────────────────────
+   Панель там висела в ПРАВОМ ВЕРХНЕМ углу со смещением (-13, -53), а не
+   внизу по центру. Сетка: GridLayoutGroup 55x55 без промежутков и полей,
+   StartCorner = UpperRight, StartAxis = Vertical, Constraint =
+   FixedRowCount со счётом 4. То есть предметы заполняют столбец сверху
+   вниз, а новые столбцы прирастают ВЛЕВО.
+
+   В UI Toolkit нет GridLayoutGroup, и то же самое делается переносом:
+   flex-direction: column + flex-wrap задают заполнение по столбцам,
+   фиксированная высота 220px (4 x 55) задаёт четыре строки, а wrap-reverse
+   разворачивает ось переноса, чтобы первый столбец оказался справа.
+
+   Внешний вид — наш: панель остаётся sci-fi-panel, ячейки берут наши
+   границы, скругления и цвета из токенов. Перенесена геометрия, не стиль. */
 .inv-hotbar {
     position: absolute;
-    bottom: 16px;
-    align-self: center;
+    top: 53px;
+    right: 13px;
     flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    padding: 6px 12px;
-    border-radius: 8px;
+    align-items: flex-start;
+    padding: 0;
+    border-radius: var(--radius-md);
 }
 
+/* Столбцы строятся явными контейнерами, а не переносом строк.
+   Перенос (flex-wrap) в Yoga раскладывал их лесенкой: высота контейнера в
+   точности равна четырём клеткам, и на границе он то влезал, то нет.
+   Явный столбец такой неопределённости не имеет.
+   row-reverse: первый столбец справа, следующие прирастают влево — как
+   StartCorner = UpperRight в старом клиенте. */
 .inv-hotbar-slots {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
+    flex-direction: row-reverse;
+    align-items: flex-start;
+}
+
+.inv-slot-column {
+    flex-direction: column;
 }
 
 .inv-grid-container {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    margin-top: 10px;
+    margin-top: var(--space-5);
 }
 
+/* Узкая вертикальная полоса слева от сетки — как в старом клиенте:
+   15 в ширину, 220 в высоту, то есть ровно по высоте четырёх строк. */
+/* В оригинале это не панель, а узкая полоска с маленьким треугольником по
+   центру высоты, справа от сетки. Фона и рамки у неё нет. */
 .inv-toggle-btn {
-    margin-left: 10px;
-    height: 48px;
-    padding-left: 14px;
-    padding-right: 14px;
+    width: 15px;
+    min-width: 15px;
+    height: 220px;
+    margin: 0;
+    padding: 0;
     justify-content: center;
     align-items: center;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    color: rgba(200, 200, 200, 0.8);
+    font-size: 12px;
+}
+
+.inv-toggle-btn:hover {
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(255, 255, 255);
 }
 
 .inv-header-left {
@@ -199,18 +242,18 @@
     flex-shrink: 0;
     flex-grow: 0;
     margin: 3px;
-    background-color: rgba(30, 50, 75, 0.85);
+    background-color: var(--light-sheen);
     border-width: 1px;
-    border-color: rgba(80, 180, 255, 0.5);
-    border-radius: 4px;
+    border-color: var(--accent-cyan-fill);
+    border-radius: var(--radius-md);
     padding: 0;
     justify-content: center;
     align-items: center;
 }
 
 .inv-button:hover {
-    background-color: rgba(50, 85, 130, 0.95);
-    border-color: rgba(100, 210, 255, 0.9);
+    background-color: var(--accent-cyan-glow);
+    border-color: var(--accent-cyan-dense);
 }
 
 /* ─── Тултип выбранного предмета ─── */
@@ -228,48 +271,48 @@
 .inv-tooltip-bg {
     flex-direction: row;
     align-items: center;
-    background-color: rgba(14, 18, 26, 0.95);
+    background-color: var(--surface-slate-dense);
     border-width: 1px;
-    border-color: rgba(80, 140, 200, 0.5);
-    border-radius: 4px;
-    padding: 6px 12px;
+    border-color: var(--accent-cyan-fill);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-6);
 }
 
 .inv-tooltip-name {
-    font-size: 13px;
+    font-size: var(--size-base);
     -unity-font-style: bold;
-    color: rgb(255, 214, 0);
-    margin-right: 10px;
+    color: var(--accent-gold);
+    margin-right: var(--space-5);
 }
 
 .inv-tooltip-desc {
-    font-size: 12px;
-    color: rgb(210, 225, 240);
+    font-size: var(--size-sm);
+    color: var(--accent-cyan-solid);
 }
 
 /* ─── Контекстное меню ─── */
 
 .inv-context-menu {
     position: absolute;
-    background-color: rgba(14, 18, 26, 0.95);
+    background-color: var(--surface-slate-dense);
     border-width: 1px;
-    border-color: rgba(80, 140, 200, 0.5);
-    border-radius: 4px;
-    padding: 4px 0;
+    border-color: var(--accent-cyan-fill);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) 0;
     flex-direction: column;
     min-width: 150px;
 }
 
 .inv-context-btn {
-    background-color: rgba(0, 0, 0, 0);
+    background-color: transparent;
     border-width: 0;
-    padding: 6px 12px;
-    color: rgb(220, 235, 255);
-    font-size: 13px;
+    padding: var(--space-3) var(--space-6);
+    color: var(--text-primary);
+    font-size: var(--size-base);
     -unity-text-align: middle-left;
     min-height: 28px;
 }
 
 .inv-context-btn:hover {
-    background-color: rgba(50, 85, 130, 0.8);
+    background-color: var(--accent-cyan-glow);
 }

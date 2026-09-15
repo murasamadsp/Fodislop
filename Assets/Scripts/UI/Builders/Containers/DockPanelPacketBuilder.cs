@@ -2,116 +2,99 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Fodinae;
-using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Builders
+namespace Fodinae.UI.Builders;
+public enum Dock
 {
-    public enum Dock
+    Left,
+    Top,
+    Right,
+    Bottom,
+}
+
+public class DockPanelPacketBuilder : PacketUIBuilderBase<DockPanelPacket>
+{
+    private const string DockKey = "DockPanel.Dock";
+
+    protected override VisualElement BuildTyped(DockPanelPacket packet, PacketUIBuilder builder)
     {
-        Left,
-        Top,
-        Right,
-        Bottom,
+        // Раскладка — утилитарным классом, а не инлайном: инлайн выигрывает
+        // у любого правила USS, и серверное окно выпадает из-под темы и тира.
+        // Классы печатает генератор токенов в TokenUtilities.uss.
+        var element = new VisualElement();
+        element.AddToClassList("col");
+        element.AddToClassList("no-grow");
+        element.Add(Fill(packet.Children, builder));
+        return element;
     }
 
-    public class DockPanelPacketBuilder : PacketUIBuilderBase
+    private static VisualElement Fill(
+        IReadOnlyList<IGUIComponentPacket> children,
+        PacketUIBuilder builder)
     {
-        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        IGUIComponentPacket? filler = LastUndocked(children);
+        VisualElement current = filler != null
+            ? builder.Build(filler)
+            : new VisualElement();
+        current.AddToClassList("grow");
+
+        for (int i = children.Count - 1; i >= 0; i--)
         {
-            if (packet is not DockPanelPacket dpp)
+            IGUIComponentPacket child = children[i];
+            if (ReferenceEquals(child, filler))
             {
-                return null;
+                continue;
             }
 
-            var element = new VisualElement
-            {
-                style =
-                {
-                    flexGrow = 1,
-                },
-            };
-            HandleDockPanelChildren(element, dpp.Children, builder);
-            return element;
+            current = Wrap(current, builder.Build(child), DockOf(child));
         }
 
-        private static void HandleDockPanelChildren(VisualElement parent, IEnumerable<IGUIComponentPacket> children, PacketUIBuilder builder)
+        return current;
+    }
+
+    private static VisualElement Wrap(VisualElement current, VisualElement child, Dock dock)
+    {
+        // alignSelf: Auto здесь не задаётся — это и есть значение по
+        // умолчанию у только что созданного элемента.
+        var wrapper = new VisualElement();
+        wrapper.AddToClassList("grow");
+        wrapper.AddToClassList(dock is Dock.Top or Dock.Bottom ? "col" : "row");
+        if (dock is Dock.Left or Dock.Right)
         {
-            parent.style.flexDirection = FlexDirection.Column;
-            parent.style.flexGrow = 0;
-
-            var lastChild = children.LastOrDefault(c => c.AttachedProperties == null || c.AttachedProperties.All(p => p.Key != "DockPanel.Dock"));
-            VisualElement? current;
-            if (lastChild != null)
-            {
-                current = builder.Build(lastChild);
-                if (current != null)
-                {
-                    current.style.flexGrow = 1;
-                }
-            }
-            else
-            {
-                current = new VisualElement { style = { flexGrow = 1 } };
-            }
-
-            foreach (var childPacket in children.Reverse())
-            {
-                if (childPacket == lastChild)
-                {
-                    continue;
-                }
-
-                var childElement = builder.Build(childPacket)!;
-                var dock = Dock.Left;
-                var dockProp = childPacket.AttachedProperties?.FirstOrDefault(p => p.Key == "DockPanel.Dock");
-                if (dockProp != null)
-                {
-                    Enum.TryParse(dockProp.Value.Value, true, out dock);
-                }
-                else if (childPacket != lastChild)
-                {
-                    parent.Add(childElement);
-                    continue;
-                }
-
-                var wrapper = new VisualElement { style = { flexGrow = 1, alignSelf = Align.Auto } };
-                childElement.style.flexShrink = 0;
-
-                switch (dock)
-                {
-                    case Dock.Top:
-                        wrapper.style.flexDirection = FlexDirection.Column;
-                        wrapper.Add(childElement);
-                        wrapper.Add(current);
-                        break;
-                    case Dock.Bottom:
-                        wrapper.style.flexDirection = FlexDirection.Column;
-                        wrapper.Add(current);
-                        wrapper.Add(childElement);
-                        break;
-                    case Dock.Left:
-                        wrapper.style.flexDirection = FlexDirection.Row;
-                        wrapper.style.alignItems = Align.Center;
-                        wrapper.Add(childElement);
-                        wrapper.Add(current);
-                        break;
-                    case Dock.Right:
-                        wrapper.style.flexDirection = FlexDirection.Row;
-                        wrapper.style.alignItems = Align.Center;
-                        wrapper.Add(current);
-                        wrapper.Add(childElement);
-                        break;
-                }
-
-                current = wrapper;
-            }
-
-            parent.Add(current);
+            wrapper.AddToClassList("ai-center");
         }
+
+        child.AddToClassList("no-shrink");
+        bool childFirst = dock is Dock.Top or Dock.Left;
+        wrapper.Add(childFirst ? child : current);
+        wrapper.Add(childFirst ? current : child);
+        return wrapper;
+    }
+
+    private static Dock DockOf(IGUIComponentPacket packet)
+    {
+        // Отсутствие ключа читается через Find, а не через FirstOrDefault:
+        // присоединённое свойство — структура, и «первое или умолчание»
+        // возвращает пустую пару, неотличимую от найденной. Из-за этого
+        // ребёнок, у которого есть любые другие свойства, но нет Dock,
+        // молча прибивался влево вместо того, чтобы просто встать в столбец.
+        string? raw = AttachedProperties.Find(packet, DockKey);
+        return raw != null && Enum.TryParse(raw, true, out Dock dock) ? dock : Dock.Left;
+    }
+
+    private static IGUIComponentPacket? LastUndocked(IReadOnlyList<IGUIComponentPacket> children)
+    {
+        for (int i = children.Count - 1; i >= 0; i--)
+        {
+            if (!AttachedProperties.Has(children[i], DockKey))
+            {
+                return children[i];
+            }
+        }
+
+        return null;
     }
 }

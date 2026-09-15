@@ -2,7 +2,11 @@
 
 using System;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
+using UnityEngine.Serialization;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 
@@ -26,7 +30,9 @@ internal sealed class ClientConfigRepository
 
     public bool Exists => File.Exists(_configPath);
 
-    public ClientConfig Load()
+    public readonly record struct LoadedConfig(ClientConfig Config, string Json);
+
+    public LoadedConfig Load()
     {
         string json;
         try
@@ -40,9 +46,11 @@ internal sealed class ClientConfigRepository
                 ex);
         }
 
-        json = RenameLegacyKeys(json);
-        return JsonUtility.FromJson<ClientConfig>(json) ??
+        ClientConfig config = JsonUtility.FromJson<ClientConfig>(json) ??
             throw new InvalidDataException($"Client config '{_configPath}' is empty or invalid.");
+
+        ValidateCurrentSchemaPresence(json, config);
+        return new LoadedConfig(config, json);
     }
 
     public void Save(ClientConfig config, string? backupPath = null)
@@ -92,10 +100,64 @@ internal sealed class ClientConfigRepository
         }
     }
 
-    private static string RenameLegacyKeys(string json)
+    private static void ValidateCurrentSchemaPresence(string json, ClientConfig config)
     {
-        return json
-            .Replace("\"UiScale\"", "\"UIScale\"")
-            .Replace("\"UiVolume\"", "\"UIVolume\"");
+        if (config.SchemaVersion != ClientConfig.CurrentSchemaVersion)
+        {
+            // Historical schemas intentionally contain fewer fields. Their
+            // completeness is established by the ordered migration pipeline.
+            return;
+        }
+
+        Type[] persistedTypes =
+        [
+            typeof(ClientConfig),
+            typeof(AudioSettings),
+            typeof(DisplaySettings),
+            typeof(InterfaceSettings),
+            typeof(AccessibilitySettings),
+            typeof(ConnectionSettings),
+            typeof(PostProcessSettings),
+            typeof(WorldLightingSettings),
+            typeof(TerrainSettings),
+            typeof(EffectSettings),
+        ];
+        string[] missingFields = persistedTypes
+            .SelectMany(type => type.GetFields(BindingFlags.Instance | BindingFlags.Public))
+            .Where(field => !HasSerializedName(json, field))
+            .Select(field => field.Name)
+            .ToArray();
+        if (missingFields.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"Current client config '{config.SchemaVersion}' is incomplete; missing field(s): " +
+                string.Join(", ", missingFields) + ".");
+        }
     }
+
+    // Переименованное поле с [FormerlySerializedAs] JsonUtility читает и по
+    // старому имени, поэтому файл со старым именем тоже полный.
+    private static bool HasSerializedName(string json, FieldInfo field)
+    {
+        if (JsonHasKey(json, field.Name))
+        {
+            return true;
+        }
+
+        foreach (FormerlySerializedAsAttribute former in field.GetCustomAttributes<FormerlySerializedAsAttribute>())
+        {
+            if (JsonHasKey(json, former.oldName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool JsonHasKey(string json, string key) =>
+        Regex.IsMatch(
+            json,
+            $"\\\"{Regex.Escape(key)}\\\"\\s*:",
+            RegexOptions.CultureInvariant);
 }

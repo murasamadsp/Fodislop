@@ -4,78 +4,73 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.Core
+namespace Fodinae.Core;
+public interface ISharedMaterialCache
 {
-    public static class SharedMaterialCache
+    Material GetForTexture(Texture2D texture);
+}
+
+public sealed class SharedMaterialCache : ISharedMaterialCache, IDisposable
+{
+    private readonly Dictionary<Texture2D, Material> _materials = new();
+    private Shader? _shader;
+
+    private Shader Shader
     {
-        private static readonly Dictionary<Texture2D, Material> _materials = new();
-        private static Shader? _shader;
-
-        private static Shader Shader
+        get
         {
-            get
+            if (_shader == null)
             {
-                if (_shader == null)
-                {
-                    _shader = Shader.Find("Fodinae/World Entity") ??
-                        throw new InvalidOperationException(
-                            "SharedMaterialCache requires the supported 'Fodinae/World Entity' shader.");
-                }
-
-                return _shader;
+                _shader = Shader.Find(ProjectRuntimeContracts.ShaderNames.WorldEntity) ??
+                    throw new InvalidOperationException(
+                        "SharedMaterialCache requires the supported " +
+                        $"'{ProjectRuntimeContracts.ShaderNames.WorldEntity}' shader.");
             }
+
+            return _shader;
+        }
+    }
+
+    public Material GetForTexture(Texture2D texture)
+    {
+        if (texture == null)
+        {
+            throw new ArgumentNullException(nameof(texture));
         }
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
+        if (_materials.TryGetValue(texture, out var mat))
         {
-            // Runtime renderers survive script-domain reloads and keep their
-            // sharedMaterial references. Destroying those materials here leaves
-            // the restored renderers bound to Unity fake-null objects.
-            _materials.Clear();
-            _shader = null;
-        }
-
-        public static Material GetForTexture(Texture2D texture)
-        {
-            if (texture == null)
-            {
-                throw new ArgumentNullException(nameof(texture));
-            }
-
-            if (_materials.TryGetValue(texture, out var mat))
-            {
-                return mat;
-            }
-
-            mat = new Material(Shader)
-            {
-                name = $"Shared Sprite Material ({texture.name})",
-                hideFlags = HideFlags.DontSave,
-                mainTexture = texture,
-            };
-            _materials[texture] = mat;
             return mat;
         }
 
-        public static void Clear()
+        mat = new Material(Shader)
         {
-            foreach (var mat in _materials.Values)
+            name = $"Shared Sprite Material ({texture.name})",
+            hideFlags = HideFlags.DontSave,
+            mainTexture = texture,
+        };
+        _materials[texture] = mat;
+        return mat;
+    }
+
+    public void Dispose()
+    {
+        foreach (var mat in _materials.Values)
+        {
+            if (mat != null)
             {
-                if (mat != null)
+                if (Application.isPlaying)
                 {
-                    if (Application.isPlaying)
-                    {
-                        UnityEngine.Object.Destroy(mat);
-                    }
-                    else
-                    {
-                        UnityEngine.Object.DestroyImmediate(mat);
-                    }
+                    UnityEngine.Object.Destroy(mat);
+                }
+                else
+                {
+                    UnityEngine.Object.DestroyImmediate(mat);
                 }
             }
-
-            _materials.Clear();
         }
+
+        _materials.Clear();
+        _shader = null;
     }
 }

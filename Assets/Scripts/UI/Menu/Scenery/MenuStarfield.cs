@@ -26,32 +26,33 @@ namespace Fodinae.UI
     [ExecuteAlways]
     public sealed class MenuStarfield : MonoBehaviour
     {
+        private static readonly int _ShaderTimeID = Shader.PropertyToID("_ShaderTime");
+        private static readonly int _AspectID = Shader.PropertyToID("_Aspect");
+        private static readonly int _ParallaxOffsetID = Shader.PropertyToID("_ParallaxOffset");
+
         [SerializeField]
         private Material? _starfieldMaterial;
         private Material? _runtimeMaterial;
         private Material? _runtimeMaterialSource;
-
-        private const int ResizeThresholdPixels = 24;
 
         private int _targetWidth = 1920;
         private int _targetHeight = 1080;
 
         private RenderTexture? _texture;
 
-        /// <summary>
         public RenderTexture? Texture => _texture;
 
         public void SetDisplaySize(int width, int height)
         {
-            int w = Mathf.Max(width, 64);
-            int h = Mathf.Max(height, 64);
+            int w = Mathf.Max(width, MenuSceneryDefaults.MinimumRenderTextureSide);
+            int h = Mathf.Max(height, MenuSceneryDefaults.MinimumRenderTextureSide);
 
             // Порог, а не точное сравнение: размер приходит из Update каждый
             // кадр и дрожит на пиксель от округлений раскладки, а пересоздание
             // текстуры — не бесплатная операция.
             if (_texture != null &&
-                Mathf.Abs(_texture.width - w) <= ResizeThresholdPixels &&
-                Mathf.Abs(_texture.height - h) <= ResizeThresholdPixels)
+                Mathf.Abs(_texture.width - w) <= MenuSceneryDefaults.RenderTextureResizeThresholdPixels &&
+                Mathf.Abs(_texture.height - h) <= MenuSceneryDefaults.RenderTextureResizeThresholdPixels)
             {
                 return;
             }
@@ -83,9 +84,6 @@ namespace Fodinae.UI
 
         private bool _isDirty = true;
 
-        /// <summary>
-        /// Marks the starfield for re-rendering on the next frame or immediately.
-        /// </summary>
         public void SetDirty()
         {
             _isDirty = true;
@@ -108,9 +106,9 @@ namespace Fodinae.UI
                 return;
             }
 
-            _runtimeMaterial.SetFloat("_ShaderTime", 0f);
-            _runtimeMaterial.SetFloat("_Aspect", (float)_texture.width / Mathf.Max(_texture.height, 1));
-            _runtimeMaterial.SetVector("_ParallaxOffset", Vector4.zero);
+            _runtimeMaterial.SetFloat(_ShaderTimeID, 0f);
+            _runtimeMaterial.SetFloat(_AspectID, (float)_texture.width / Mathf.Max(_texture.height, 1));
+            _runtimeMaterial.SetVector(_ParallaxOffsetID, Vector4.zero);
             Graphics.Blit(Texture2D.whiteTexture, _texture, _runtimeMaterial);
             _isDirty = false;
         }

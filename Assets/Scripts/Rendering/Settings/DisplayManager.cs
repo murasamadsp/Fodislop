@@ -2,53 +2,104 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
+using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Rendering.PostProcessing;
 using UnityEngine;
-using VContainer;
+using UnityEngine.Rendering.Universal;
+using VContainer.Unity;
 
 namespace Fodinae.Rendering
 {
-    public class DisplayManager : MonoBehaviour
+    // Чистый сервис контейнера (SCENE_STANDARD.md §1): настройки вывода
+    // применяются при старте scope.
+    public sealed class DisplayManager : IStartable
     {
-        [Inject]
-        private IClientConfigManager _clientConfig = null!;
+        private readonly IClientConfigManager _clientConfig;
+        private readonly IGameplayCamera _gameplayCamera;
 
-        protected void Start()
+        public DisplayManager(IClientConfigManager clientConfig, IGameplayCamera gameplayCamera)
+        {
+            _clientConfig = clientConfig;
+            _gameplayCamera = gameplayCamera;
+        }
+
+        void IStartable.Start()
         {
             ApplyDisplaySettings();
         }
 
-        public void ApplyDisplaySettings()
+        public static void ApplyInitialSettings(DisplaySettings display)
         {
-            if (_clientConfig == null || _clientConfig.Config == null)
+            if (display == null)
             {
                 return;
             }
 
-            var config = _clientConfig.Config;
+            HDROutput.SetEnabled(display.HDREnabled);
+            AutoDetectDisplayCapabilities(display);
+            SanitizeCalibration(display);
+            PostProcessRuntimeState.SetDisplayCalibration(
+                display.Gamma,
+                display.PaperWhiteNits,
+                display.PeakBrightnessNits);
 
-            // Display synchronization is independent from simulation/render throughput.
-            // Honor the frame-rate cap the gateway offers: with VSync off an
-            // uncapped frame rate only burns GPU/CPU and heats the machine, and
-            // the saved TargetFrameRate used to be written but never applied.
-            // -1 (the default) means no cap. Unity ignores targetFrameRate while
-            // vSyncCount is set, so the two settings compose safely.
-            QualitySettings.vSyncCount = config.VSync ? 1 : 0;
-            Application.targetFrameRate = config.TargetFrameRate;
+            ApplyFrameTiming(display);
 
-            // Кап максимальной дельты кадра: долгий кадр на слабой машине не должен
-            // превращаться в «спираль смерти» (гигантский скачок симуляции на
-            // следующем кадре). Время кулдаунов идёт через Time.time — не затронуто.
-            Time.maximumDeltaTime = 0.1f;
-
-            // Resolution & Screen Mode
-            if (config.ResolutionWidth > 0 && config.ResolutionHeight > 0)
+            if (display.ResolutionWidth > 0 && display.ResolutionHeight > 0)
             {
-                var mode = NormalizeFullScreenMode((FullScreenMode)config.FullScreenMode);
-                int refresh = config.RefreshRate > 0 ? config.RefreshRate : (int)Screen.currentResolution.refreshRateRatio.value;
-                Screen.SetResolution(config.ResolutionWidth, config.ResolutionHeight, mode, new RefreshRate { numerator = (uint)Mathf.Max(1, refresh), denominator = 1 });
+                var mode = NormalizeFullScreenMode((FullScreenMode)display.FullScreenMode);
+                int refresh = display.RefreshRate > 0 ? display.RefreshRate : (int)Screen.currentResolution.refreshRateRatio.value;
+                Screen.SetResolution(display.ResolutionWidth, display.ResolutionHeight, mode, new RefreshRate { numerator = (uint)Mathf.Max(1, refresh), denominator = 1 });
             }
         }
+
+        public static void ApplyFrameTiming(DisplaySettings display)
+        {
+            if (display == null)
+            {
+                return;
+            }
+
+            QualitySettings.vSyncCount = display.VSync ? 1 : 0;
+            Application.targetFrameRate = display.TargetFrameRate;
+            Time.maximumDeltaTime = 0.1f;
+        }
+
+        public void ApplyDisplaySettings()
+        {
+            if (_clientConfig?.Config == null)
+            {
+                return;
+            }
+
+            DisplaySettings display = _clientConfig.Config.Display;
+            ApplyInitialSettings(display);
+            ApplyPixelSampling(display.PixelSampling);
+            HDROutput.ConfigureCamera(_gameplayCamera.Camera);
+        }
+
+        public void SetPixelSamplingMode(PixelSamplingMode mode)
+        {
+            if (_clientConfig?.Config == null)
+            {
+                return;
+            }
+
+            _clientConfig.UpdateSection(config => config.Display, display => display.PixelSampling = mode);
+            ApplyPixelSampling(mode);
+            Debug.Log($"[DisplayManager] SetPixelSamplingMode: {mode}");
+        }
+
+        private static void ApplyPixelSampling(PixelSamplingMode mode)
+        {
+            Shader.SetGlobalFloat(
+                _PixelArtFilteringProperty,
+                PixelSamplingRules.FiltersTexelEdges(mode) ? 1f : 0f);
+        }
+
+        private static readonly int _PixelArtFilteringProperty = Shader.PropertyToID("_PixelArtFiltering");
 
         public void SetResolution(int width, int height, FullScreenMode mode, int refreshRate = 60)
         {
@@ -58,15 +109,16 @@ namespace Fodinae.Rendering
             }
 
             mode = NormalizeFullScreenMode(mode);
-            _clientConfig.UpdateAndSave(config =>
+            _clientConfig.UpdateSection(config => config.Display, display =>
             {
-                config.ResolutionWidth = width;
-                config.ResolutionHeight = height;
-                config.FullScreenMode = (int)mode;
-                config.RefreshRate = refreshRate;
+                display.ResolutionWidth = width;
+                display.ResolutionHeight = height;
+                display.FullScreenMode = (int)mode;
+                display.RefreshRate = refreshRate;
             });
 
             Screen.SetResolution(width, height, mode, new RefreshRate { numerator = (uint)Mathf.Max(1, refreshRate), denominator = 1 });
+            Debug.Log($"[DisplayManager] SetResolution: {width}x{height} @ {refreshRate}Hz (Mode={mode})");
         }
 
         public void SetVSync(bool enabled)
@@ -76,32 +128,161 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            _clientConfig.UpdateAndSave(config => config.VSync = enabled);
+            _clientConfig.UpdateSection(config => config.Display, display => display.VSync = enabled);
 
             QualitySettings.vSyncCount = enabled ? 1 : 0;
-            Application.targetFrameRate = _clientConfig.Config.TargetFrameRate;
+            Application.targetFrameRate = _clientConfig.Config.Display.TargetFrameRate;
+            Debug.Log($"[DisplayManager] SetVSync: {enabled} (TargetFPS={_clientConfig.Config.Display.TargetFrameRate})");
         }
 
-        public void SetMuteInBackground(bool mute)
+        public HDROutput.ApplyRequestResult SetHDREnabled(bool enabled)
+        {
+            if (_clientConfig?.Config == null)
+            {
+                return HDROutput.ApplyRequestResult.RejectedUnsupported;
+            }
+
+            _clientConfig.UpdateSection(config => config.Display, display => display.HDREnabled = enabled);
+
+            HDROutput.ApplyRequestResult result = HDROutput.SetEnabled(enabled);
+            if (result == HDROutput.ApplyRequestResult.RejectedNotSwitchable)
+            {
+                Debug.LogWarning(
+                    "[HDR] The current output cannot switch HDR at runtime; " +
+                    $"the preference is kept at {enabled} for a compatible output.");
+            }
+
+            if (result == HDROutput.ApplyRequestResult.RejectedUnsupported)
+            {
+                Debug.LogWarning(
+                    "[HDR] No HDR-capable display is reported yet; the preference is kept " +
+                    "and applied by HDROutputReconciler once one appears.");
+            }
+
+            HDROutput.ConfigureCamera(_gameplayCamera.Camera);
+            Debug.Log($"[DisplayManager] SetHDREnabled: {enabled} (Result={result})");
+            return result;
+        }
+
+        public void SetGamma(float gamma)
         {
             if (_clientConfig?.Config == null)
             {
                 return;
             }
 
-            _clientConfig.UpdateAndSave(config => config.MuteAudioInBackground = mute);
+            float sanitized = FiniteClamp(
+                gamma,
+                DisplaySettings.GammaMin,
+                DisplaySettings.GammaMax,
+                DisplaySettings.DefaultGamma);
+            _clientConfig.UpdateSection(config => config.Display, display => display.Gamma = sanitized);
+            PostProcessRuntimeState.SetDisplayCalibration(
+                sanitized,
+                _clientConfig.Config.Display.PaperWhiteNits,
+                _clientConfig.Config.Display.PeakBrightnessNits);
+            Debug.Log($"[DisplayManager] SetGamma: {sanitized}");
         }
 
-        public IReadOnlyList<Resolution> GetSupportedResolutions()
+        public void SetPaperWhiteNits(float paperWhiteNits)
         {
-            return Screen.resolutions;
+            if (_clientConfig?.Config == null)
+            {
+                return;
+            }
+
+            float sanitizedPaperWhite = FiniteClamp(
+                paperWhiteNits,
+                DisplaySettings.PaperWhiteMin,
+                DisplaySettings.PaperWhiteMax,
+                DisplaySettings.DefaultPaperWhite);
+            float sanitizedPeak = Mathf.Max(
+                sanitizedPaperWhite,
+                FiniteClamp(
+                    _clientConfig.Config.Display.PeakBrightnessNits,
+                    DisplaySettings.PeakBrightnessMin,
+                    DisplaySettings.PeakBrightnessMax,
+                    DisplaySettings.DefaultPeakBrightness));
+            _clientConfig.UpdateSection(config => config.Display, display =>
+            {
+                display.PaperWhiteNits = sanitizedPaperWhite;
+                display.PeakBrightnessNits = sanitizedPeak;
+            });
+            PostProcessRuntimeState.SetDisplayCalibration(
+                _clientConfig.Config.Display.Gamma,
+                sanitizedPaperWhite,
+                sanitizedPeak);
+            Debug.Log(
+                $"[DisplayManager] SetPaperWhiteNits: {sanitizedPaperWhite} " +
+                $"(Peak={sanitizedPeak})");
         }
 
-        /// <summary>
-        /// Unity на macOS не поддерживает ExclusiveFullScreen — единственный
-        /// полноэкранный режим там FullScreenWindow. Маппим до вызова
-        /// Screen.SetResolution, чтобы конфиг «exclusive» не ронял окно на Mac.
-        /// </summary>
+        public void SetPeakBrightnessNits(float peakBrightnessNits)
+        {
+            if (_clientConfig?.Config == null)
+            {
+                return;
+            }
+
+            float paperWhite = FiniteClamp(
+                _clientConfig.Config.Display.PaperWhiteNits,
+                DisplaySettings.PaperWhiteMin,
+                DisplaySettings.PaperWhiteMax,
+                DisplaySettings.DefaultPaperWhite);
+            float sanitizedPeak = Mathf.Max(
+                paperWhite,
+                FiniteClamp(
+                    peakBrightnessNits,
+                    DisplaySettings.PeakBrightnessMin,
+                    DisplaySettings.PeakBrightnessMax,
+                    DisplaySettings.DefaultPeakBrightness));
+            _clientConfig.UpdateSection(config => config.Display, display =>
+            {
+                display.PaperWhiteNits = paperWhite;
+                display.PeakBrightnessNits = sanitizedPeak;
+            });
+            PostProcessRuntimeState.SetDisplayCalibration(
+                _clientConfig.Config.Display.Gamma,
+                paperWhite,
+                sanitizedPeak);
+            Debug.Log($"[DisplayManager] SetPeakBrightnessNits: {sanitizedPeak}");
+        }
+
+        public static void AutoDetectDisplayCapabilities(DisplaySettings display)
+        {
+            HDROutput.AutoDetectDisplayCapabilities(display);
+        }
+
+        private static void SanitizeCalibration(DisplaySettings display)
+        {
+            display.Gamma = FiniteClamp(
+                display.Gamma,
+                DisplaySettings.GammaMin,
+                DisplaySettings.GammaMax,
+                DisplaySettings.DefaultGamma);
+            display.PaperWhiteNits = FiniteClamp(
+                display.PaperWhiteNits,
+                DisplaySettings.PaperWhiteMin,
+                DisplaySettings.PaperWhiteMax,
+                DisplaySettings.DefaultPaperWhite);
+            display.PeakBrightnessNits = Mathf.Max(
+                display.PaperWhiteNits,
+                FiniteClamp(
+                    display.PeakBrightnessNits,
+                    DisplaySettings.PeakBrightnessMin,
+                    DisplaySettings.PeakBrightnessMax,
+                    DisplaySettings.DefaultPeakBrightness));
+        }
+
+        private static float FiniteClamp(
+            float value,
+            float minimum,
+            float maximum,
+            float fallback) =>
+            float.IsNaN(value) || float.IsInfinity(value)
+                ? fallback
+                : Mathf.Clamp(value, minimum, maximum);
+
         private static FullScreenMode NormalizeFullScreenMode(FullScreenMode mode)
         {
 #if UNITY_STANDALONE_OSX
@@ -112,6 +293,5 @@ namespace Fodinae.Rendering
             return mode;
 #endif
         }
-
     }
 }

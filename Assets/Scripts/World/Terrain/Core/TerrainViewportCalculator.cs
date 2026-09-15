@@ -1,18 +1,16 @@
 #nullable enable
 
+using Fodinae.Core;
 using UnityEngine;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Calculates dynamic terrain mesh dimensions, viewport sizing, padding, and region grid snapping.
-/// </summary>
 public sealed class TerrainViewportCalculator
 {
     private const int TerrainRegionAnchorCells = 8;
     private const int DimensionAllocationQuantum = 32;
     private const int MaximumTerrainDimension = 384;
-    private const float DimensionGrowDelay = 0.4f;
+    private const float DimensionShrinkDelay = 5.0f;
     private const int ViewportMargin = 4;
 
     private int _lastRequestedWidth;
@@ -40,12 +38,19 @@ public sealed class TerrainViewportCalculator
             baseViewportPadding,
             requiredLightingPadding + TerrainRegionAnchorCells + stableRegionPadding);
 
+        // Сетка считается на кадр максимального отдаления, а не текущий кадр.
+        // Она же — поле препятствий и регион освещения: при размере от зума
+        // приближение давало сетку меньше области света, за её краем поле было
+        // пустым, и свет перестраивался при каждой перепривязке сетки.
+        float sizingOrthographicSize = Mathf.Max(
+            camera.orthographicSize,
+            ProjectRuntimeContracts.Camera.MaximumOrthographicSize);
         requestedWidth = Mathf.Clamp(
-            Mathf.CeilToInt((camera.orthographicSize * 2 * camera.aspect) / cellSize) + (effectivePadding * 2),
+            Mathf.CeilToInt((sizingOrthographicSize * 2 * camera.aspect) / cellSize) + (effectivePadding * 2),
             2,
             MaximumTerrainDimension);
         requestedHeight = Mathf.Clamp(
-            Mathf.CeilToInt((camera.orthographicSize * 2) / cellSize) + (effectivePadding * 2),
+            Mathf.CeilToInt((sizingOrthographicSize * 2) / cellSize) + (effectivePadding * 2),
             2,
             MaximumTerrainDimension);
 
@@ -58,7 +63,7 @@ public sealed class TerrainViewportCalculator
 
         bool viewportSizeSettled =
             !Application.isPlaying ||
-            Time.unscaledTime - _lastViewportSizeChangeTime >= DimensionGrowDelay;
+            Time.unscaledTime - _lastViewportSizeChangeTime >= DimensionShrinkDelay;
 
         int targetWidth = SelectCachedDimension(requestedWidth, currentMeshWidth, isInitialized, viewportSizeSettled);
         int targetHeight = SelectCachedDimension(requestedHeight, currentMeshHeight, isInitialized, viewportSizeSettled);
@@ -93,8 +98,15 @@ public sealed class TerrainViewportCalculator
             1,
             Mathf.Max(1, effectivePadding));
 
-        viewportWidth = Mathf.Max(2, requestedWidth - (effectivePadding * 2));
-        viewportHeight = Mathf.Max(2, requestedHeight - (effectivePadding * 2));
+        // Видимое окно — реальный кадр камеры: рисуется только то, что на экране.
+        viewportWidth = Mathf.Clamp(
+            Mathf.CeilToInt((camera.orthographicSize * 2 * camera.aspect) / cellSize),
+            2,
+            Mathf.Max(2, requestedWidth - (effectivePadding * 2)));
+        viewportHeight = Mathf.Clamp(
+            Mathf.CeilToInt((camera.orthographicSize * 2) / cellSize),
+            2,
+            Mathf.Max(2, requestedHeight - (effectivePadding * 2)));
         viewportMinX = Mathf.FloorToInt(camPos.x / cellSize) - (viewportWidth / 2);
         viewportMinY = Mathf.FloorToInt(camPos.y / cellSize) - (viewportHeight / 2);
 

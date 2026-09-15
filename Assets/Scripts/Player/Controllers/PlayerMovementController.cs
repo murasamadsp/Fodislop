@@ -13,7 +13,6 @@ using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.Movement;
-using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -27,9 +26,9 @@ namespace Fodinae.Player.Logic
     {
         [Header("Movement Settings")]
         [SerializeField]
-        private float _moveSpeed = 15f;
+        private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
 
-        public uint BotId { get; private set; }
+        public uint BotID { get; private set; }
         public Vector2Int Position { get; private set; }
         public bool HasServerPosition { get; private set; }
         public bool IsGameplayVisible { get; private set; }
@@ -38,13 +37,13 @@ namespace Fodinae.Player.Logic
 
         private Robot? _robot;
         private IPlayerInput? _input;
+        private PlayerActionDispatcher? _actionDispatcher;
         private SpriteRenderer[] _playerRenderers = Array.Empty<SpriteRenderer>();
 
         private bool _autoDig = false;
         private bool _aggression = false;
         private bool _ignoreCollision = false;
         private float _lastMoveTime;
-        private float _lastDigTime;
         private Direction? _lastSentDirection;
         private bool _movementValidationFailed;
         [Inject]
@@ -64,6 +63,9 @@ namespace Fodinae.Player.Logic
 
         [Inject]
         private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayerState = null!;
+
+        [Inject]
+        private IRuntimeDebugSettings _debugSettings = null!;
 
         public void InitializeEditorPreview(IWorldDataStorage storage, IMapDataProvider mapDataProvider)
         {
@@ -86,12 +88,6 @@ namespace Fodinae.Player.Logic
 
         protected void Awake()
         {
-            if (TryGetComponent<Rigidbody2D>(out var rb))
-            {
-                rb.freezeRotation = true;
-                rb.simulated = false;
-            }
-
             _robot = GetComponent<Robot>();
             if (_robot is not null)
             {
@@ -128,10 +124,23 @@ namespace Fodinae.Player.Logic
             // this is the first point where publishing is guaranteed to reach
             // the application-tier state service.
             _localPlayerState?.Publish(this);
+            if (_input != null)
+            {
+                _actionDispatcher = new PlayerActionDispatcher(_input, _networkService, ToggleAggression);
+            }
         }
 
         protected void Update()
         {
+            // Аура считается до всех досрочных выходов ниже и гасится сама.
+            // Иначе она осталась бы гореть на роботе, застывшем в кадре, где
+            // открыли меню или потеряли позицию с сервера: выход из Update
+            // не снимает того, что уже нарисовано.
+            _actionDispatcher?.UpdateAura(
+                _robot,
+                HasServerPosition && (!Application.isPlaying || IsGameplayVisible),
+                _inputBlocker != null && _inputBlocker.IsInputBlocked);
+
             if (!HasServerPosition || (Application.isPlaying && !IsGameplayVisible))
             {
                 return;
@@ -168,57 +177,18 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
-            HandleDigInput();
-
-            if (_input.WantsToToggleAutoDig)
-            {
-                _networkService?.SendAction(new ToggleAutoDigPacket());
-            }
-
-            if (_input.WantsToToggleAggression)
-            {
-                ToggleAggression();
-            }
-
-            if (_input.WantsToGeo)
-            {
-                _networkService?.SendAction(new GeoPacket());
-            }
-
-            if (_input.WantsToHeal)
-            {
-                _networkService?.SendAction(new HealPacket());
-            }
-
-            if (_input.WantsToBuildCyan)
-            {
-                _networkService?.SendAction(new BuildCyanPacket());
-            }
-
-            if (_input.WantsToBuildGray)
-            {
-                _networkService?.SendAction(new BuildGrayPacket());
-            }
-
-            if (_input.WantsToBuildGreen)
-            {
-                _networkService?.SendAction(new BuildGreenPacket());
-            }
-
-            if (_input.WantsToBuildWhite)
-            {
-                _networkService?.SendAction(new BuildWhitePacket());
-            }
+            _actionDispatcher?.HandleDig(Position, _lastSentDirection ?? Direction.Down, _mapDataProvider);
+            _actionDispatcher?.DispatchHotkeys();
         }
 
-        public void Initialize(uint botId)
+        public void Initialize(uint botID)
         {
-            BotId = botId;
+            BotID = botID;
             HasServerPosition = false;
             IsGameplayVisible = false;
             _lastSentDirection = null;
             _lastMoveTime = 0f;
-            _lastDigTime = 0f;
+            _actionDispatcher?.ResetDigCooldown();
             foreach (SpriteRenderer renderer in _playerRenderers)
             {
                 renderer.enabled = false;
@@ -226,7 +196,7 @@ namespace Fodinae.Player.Logic
 
             if (_robot != null)
             {
-                _robot.Initialize(botId);
+                _robot.Initialize(botID);
             }
         }
 
@@ -260,16 +230,13 @@ namespace Fodinae.Player.Logic
             _networkService?.SendAction(new ToggleAgressionPacket());
             OnAggressionChanged?.Invoke(_aggression);
         }
-
-        public bool IsMoving => _input != null && _input.MoveInput != Vector2.zero;
-
         public bool IgnoreCollision
         {
             get => _ignoreCollision;
             set
             {
                 _ignoreCollision = value;
-                DummyConnection.IgnoreCollision = value;
+                _debugSettings.IgnoreCollision = value;
                 OnCollisionChanged?.Invoke(value);
             }
         }
@@ -278,12 +245,7 @@ namespace Fodinae.Player.Logic
 
         public static bool IsWithinWorldBounds(Vector2Int position, int worldWidth, int worldHeight)
         {
-            return worldWidth > 0 &&
-                   worldHeight > 0 &&
-                   position.x >= 0 &&
-                   position.x < worldWidth &&
-                   position.y >= 0 &&
-                   position.y < worldHeight;
+            return PlayerMovementValidator.IsWithinWorldBounds(position, worldWidth, worldHeight);
         }
 
         public void UpdateServerPosition(Vector2Int position)
@@ -350,139 +312,118 @@ namespace Fodinae.Player.Logic
             }
 
             Vector2 moveInput = _input.MoveInput;
-            if (moveInput != Vector2.zero)
+            if (moveInput == Vector2.zero)
             {
-                Vector2Int direction = Vector2Int.zero;
-                if (Mathf.Abs(moveInput.x) > Mathf.Abs(moveInput.y))
+                return;
+            }
+
+            Vector2Int direction = PlayerMovementMath.InputToDirection(moveInput);
+            if (direction == Vector2Int.zero)
+            {
+                return;
+            }
+
+            // The authoritative dig cooldown gates movement as well as
+            // repeated digging. Without this check auto-dig used the
+            // current terrain cell's movement delay and could send a
+            // BzPacket every movement tick, ignoring ServerConfig.
+            if (_actionDispatcher is { IsDigOnCooldown: true })
+            {
+                return;
+            }
+
+            Direction packetDirection = PlayerMovementMath.ToPacketDirection(direction);
+
+            ushort currentX = (ushort)Mathf.Clamp(Position.x, 0, ushort.MaxValue);
+            ushort currentServerY = (ushort)Mathf.Clamp(Position.y, 0, ushort.MaxValue);
+
+            var storage = _storage;
+            if (storage == null || !storage.IsReady)
+            {
+                return;
+            }
+
+            // Клетка под игроком может быть ещё не получена: карту присылает
+            // сервер, и он же решает, можно ли идти. Ранний выход здесь
+            // оставлял клиент без MovePacket, пока не придёт регион, а
+            // настоящий сервер регион без движения не шлёт.
+            var currentCellType = storage.GetCell(currentX, currentServerY);
+
+            var mapDataProvider = _mapDataProvider ?? throw new InvalidOperationException(
+                "[PlayerMovementController] IMapDataProvider is required for movement validation.");
+            float cooldown = PlayerMovementValidator.CalculateMoveCooldown(
+                mapDataProvider,
+                currentCellType,
+                _input.IsCtrlPressed,
+                _ignoreCollision);
+
+            if (cooldown > 0)
+            {
+                _robot.MoveSpeed = 1f / cooldown;
+            }
+
+            if (Time.time - _lastMoveTime < cooldown)
+            {
+                return;
+            }
+
+            if (_lastSentDirection != packetDirection)
+            {
+                _networkService?.SendAction(new RotatePacket(packetDirection));
+                _lastSentDirection = packetDirection;
+                _lastMoveTime = Time.time;
+            }
+
+            _robot.TargetAngle = PlayerMovementMath.DirectionToAngle(direction);
+
+            if (_input.IsShiftPressed)
+            {
+                return;
+            }
+
+            if (!PlayerMovementValidator.TryEvaluateStep(
+                Position,
+                direction,
+                mapDataProvider,
+                storage,
+                out Vector2Int targetPosition,
+                out CellType targetCellType,
+                out bool isPassable))
+            {
+                // Цель не загружена: предсказывать шаг не по чему, но запрос
+                // уходит серверу как есть. Позицию он вернёт RobotPositionPacket,
+                // и UpdateServerPosition переставит робота.
+                if (storage.CellLayer != null &&
+                    PlayerMovementValidator.IsWithinWorldBounds(
+                        targetPosition,
+                        mapDataProvider.WorldWidth,
+                        mapDataProvider.WorldHeight) &&
+                    storage.GetCell((ushort)targetPosition.x, (ushort)targetPosition.y) == CellType.Unloaded)
                 {
-                    direction.x = moveInput.x > 0 ? 1 : -1;
-                }
-                else
-                {
-                    direction.y = moveInput.y > 0 ? 1 : -1;
+                    _lastMoveTime = Time.time;
+                    _networkService?.SendAction(new MovePacket((ushort)targetPosition.x, (ushort)targetPosition.y));
                 }
 
-                if (direction != Vector2Int.zero)
-                {
-                    // The authoritative dig cooldown gates movement as well as
-                    // repeated digging. Without this check auto-dig used the
-                    // current terrain cell's movement delay and could send a
-                    // BzPacket every movement tick, ignoring ServerConfig.
-                    if (IsDigCooldownActive())
-                    {
-                        return;
-                    }
+                return;
+            }
 
-                    Direction packetDirection = direction.x switch
-                    {
-                        1 => Direction.Right,
-                        -1 => Direction.Left,
-                        _ => direction.y > 0 ? Direction.Up : Direction.Down,
-                    };
+            ushort targetServerX = (ushort)targetPosition.x;
+            ushort targetServerY = (ushort)targetPosition.y;
 
-                    ushort currentX = (ushort)Mathf.Clamp(Position.x, 0, ushort.MaxValue);
-                    ushort currentServerY = (ushort)Mathf.Clamp(Position.y, 0, ushort.MaxValue);
-
-                    var storage = _storage;
-                    if (storage == null || !storage.IsReady)
-                    {
-                        return;
-                    }
-
-                    var currentCellType = storage.GetCell(currentX, currentServerY);
-                    var mapDataProvider = _mapDataProvider ?? throw new InvalidOperationException(
-                        "[PlayerMovementController] IMapDataProvider is required for movement validation.");
-                    float cooldown = mapDataProvider.GetMoveCooldown(currentCellType);
-                    if (_input.IsCtrlPressed)
-                    {
-                        cooldown = mapDataProvider.GetMoveCooldown(CellType.Empty);
-                    }
-
-                    if (_ignoreCollision)
-                    {
-                        cooldown = Mathf.Max(0.01f, cooldown / 10f);
-                    }
-
-                    if (cooldown > 0)
-                    {
-                        _robot.MoveSpeed = 1f / cooldown;
-                    }
-
-                    if (Time.time - _lastMoveTime < cooldown)
-                    {
-                        return;
-                    }
-
-                    if (_lastSentDirection != packetDirection)
-                    {
-                        _networkService?.SendAction(new RotatePacket(packetDirection));
-                        _lastSentDirection = packetDirection;
-                        _lastMoveTime = Time.time;
-                    }
-
-                    if (direction.x != 0)
-                    {
-                        _robot.TargetAngle = direction.x > 0 ? 0f : 180f;
-                    }
-                    else
-                    {
-                        _robot.TargetAngle = direction.y > 0 ? 90f : 270f;
-                    }
-
-                    if (_input.IsShiftPressed)
-                    {
-                        return;
-                    }
-
-                    int deltaServerX = direction.x;
-                    int deltaServerY = direction.y > 0 ? -1 : (direction.y < 0 ? 1 : 0);
-
-                    int targetServerXInt = Position.x + deltaServerX;
-                    int targetServerYInt = Position.y + deltaServerY;
-
-                    var layer = storage.CellLayer;
-                    if (layer == null)
-                    {
-                        return;
-                    }
-
-                    if (_mapDataProvider == null)
-                    {
-                        return;
-                    }
-
-                    int mapWidth = _mapDataProvider.WorldWidth;
-                    int mapHeight = _mapDataProvider.WorldHeight;
-
-                    if (!IsWithinWorldBounds(new Vector2Int(targetServerXInt, targetServerYInt), mapWidth, mapHeight))
-                    {
-                        return;
-                    }
-
-                    ushort targetServerX = (ushort)targetServerXInt;
-                    ushort targetServerY = (ushort)targetServerYInt;
-
-                    var cellType = storage.GetCell(targetServerX, targetServerY);
-                    var cellConfig = _mapDataProvider.GetCellConfig(cellType);
-
-                    bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
-
-                    if (isPassable || _ignoreCollision)
-                    {
-                        _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(targetServerX, targetServerY, _mapDataProvider.WorldHeight, transform.position.z);
-                        Vector2Int oldPos = Position;
-                        Position = new Vector2Int(targetServerX, targetServerY);
-                        OnPlayerMoved?.Invoke(oldPos, Position);
-                        _lastMoveTime = Time.time;
-                        _networkService?.SendAction(new MovePacket(targetServerX, targetServerY));
-                    }
-                    else if (_autoDig)
-                    {
-                        _networkService?.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
-                        _lastMoveTime = Time.time;
-                        _lastDigTime = Time.time;
-                    }
-                }
+            if (isPassable || _ignoreCollision)
+            {
+                _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(targetServerX, targetServerY, mapDataProvider.WorldHeight, transform.position.z);
+                Vector2Int oldPos = Position;
+                Position = targetPosition;
+                OnPlayerMoved?.Invoke(oldPos, Position);
+                _lastMoveTime = Time.time;
+                _networkService?.SendAction(new MovePacket(targetServerX, targetServerY));
+            }
+            else if (_autoDig)
+            {
+                _networkService?.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
+                _lastMoveTime = Time.time;
+                _actionDispatcher?.NotifyDug();
             }
         }
 
@@ -497,40 +438,6 @@ namespace Fodinae.Player.Logic
             {
                 _input.SetMovementInput(input);
             }
-        }
-
-        private void HandleDigInput()
-        {
-            if (_input == null)
-            {
-                return;
-            }
-
-            if (!_input.WantsToDig || IsDigCooldownActive())
-            {
-                return;
-            }
-
-            Direction dir = _lastSentDirection ?? Direction.Down;
-            Vector2Int digOffset = dir switch
-            {
-                Direction.Down => new Vector2Int(0, 1),
-                Direction.Up => new Vector2Int(0, -1),
-                Direction.Left => new Vector2Int(-1, 0),
-                Direction.Right => new Vector2Int(1, 0),
-                _ => Vector2Int.zero,
-            };
-
-            ushort serverX = (ushort)(Position.x + digOffset.x);
-            ushort serverY = (ushort)(Position.y + digOffset.y);
-
-            _networkService?.Send(new ActionClientPacket(serverX, serverY, new BzPacket()));
-            _lastDigTime = Time.time;
-        }
-
-        private bool IsDigCooldownActive()
-        {
-            return IsDigCooldownActive(Time.time, _lastDigTime, ProjectRuntimeContracts.Gameplay.DefaultDigCooldown);
         }
 
         public static bool IsDigCooldownActive(

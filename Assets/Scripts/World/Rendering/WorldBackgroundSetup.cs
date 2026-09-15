@@ -1,5 +1,6 @@
 #nullable enable
 
+using Fodinae.Core;
 using Fodinae.World.Terrain;
 using UnityEngine;
 using VContainer;
@@ -31,9 +32,10 @@ namespace Fodinae.World
             MeshRenderer? renderer = _backgroundRenderer.GetComponent<MeshRenderer>();
             Transform trans = _backgroundRenderer.transform;
 
-            if (renderer != null && renderer.sortingOrder != -1000)
+            if (renderer != null &&
+                renderer.sortingOrder != ProjectRuntimeContracts.RequiredLayers.TerrainSortingOrder)
             {
-                renderer.sortingOrder = -1000;
+                renderer.sortingOrder = ProjectRuntimeContracts.RequiredLayers.TerrainSortingOrder;
             }
 
             if (trans.position.z != 0f)
@@ -42,11 +44,6 @@ namespace Fodinae.World
                 pos.z = 0f;
                 trans.position = pos;
             }
-        }
-
-        public TerrainRenderer GetBackgroundRenderer()
-        {
-            return _backgroundRenderer;
         }
     }
 }

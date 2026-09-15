@@ -7,116 +7,65 @@ using MinesServer.Data;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Game.Managers
+namespace Fodinae.Game.Managers;
+
+public sealed class ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths) : IItemCatalog
 {
-    public static class ItemRegistry
+    private const string TAG = "[ItemRegistry]";
+    private readonly Dictionary<ItemType, Texture2D> _iconCache = new();
+    private readonly HashSet<ItemType> _missingIconWarned = new();
+
+    public string GetName(ItemType type) => type.ToString();
+
+    public string GetDescription(ItemType type) => string.Empty;
+
+    public IEnumerable<ItemType> AllTypes => (ItemType[])System.Enum.GetValues(typeof(ItemType));
+
+    public Texture2D? GetIcon(ItemType type)
     {
-        private const string TAG = "[ItemRegistry]";
-        private static readonly Dictionary<ItemType, Texture2D> _iconCache = new();
-        private static readonly HashSet<ItemType> _missingIconWarned = new();
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
+        if (_iconCache.TryGetValue(type, out var t))
         {
-            Clear();
+            return t;
         }
 
-        public static string GetName(ItemType type) => type.ToString();
+        var typeName = type.ToString();
+        var camelName = char.ToLowerInvariant(typeName[0]) + typeName.Substring(1);
+        // Раньше здесь стоял Application.dataPath напрямую — в редакторе это
+        // Assets/, а в плеере каталог данных, куда сборка каталог Textures
+        // не кладёт. Иконки предметов молча пропадали именно в билде.
+        string? path = runtimeAssetPaths.FindBundledTextureFile($"Items/{camelName}.png") ??
+            runtimeAssetPaths.FindBundledTextureFile($"Items/{typeName.ToLowerInvariant()}.png");
 
-        public static string GetDescription(ItemType type) => string.Empty;
-
-        public static IEnumerable<ItemType> AllTypes => (ItemType[])System.Enum.GetValues(typeof(ItemType));
-
-        /// <summary>
-        /// Выполняет фоновый прогрев кэша иконок предметов, исключая синхронный I/O лаг во время игры.
-        /// </summary>
-        public static async Cysharp.Threading.Tasks.UniTask PreloadAllAsync(System.Threading.CancellationToken cancellationToken = default)
+        if (path == null)
         {
-            string? itemsDir = Fodinae.Core.RuntimeAssetPaths.TexturesSubfolder("Items");
-            if (itemsDir == null || !Directory.Exists(itemsDir))
+            if (_missingIconWarned.Add(type))
             {
-                return;
+                Debug.Log($"{TAG} No local icon for item type '{type}' (searched {camelName}.png), will use server texture if available");
             }
 
-            foreach (ItemType type in AllTypes)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
-
-                if (!_iconCache.ContainsKey(type))
-                {
-                    GetIcon(type);
-                }
-
-                await Cysharp.Threading.Tasks.UniTask.Yield();
-            }
+            return null;
         }
 
-        public static Texture2D? GetIcon(ItemType type)
+        Texture2D tex;
+        try
         {
-            if (_iconCache.TryGetValue(type, out var t))
-            {
-                return t;
-            }
-
-            var typeName = type.ToString();
-            var camelName = char.ToLowerInvariant(typeName[0]) + typeName.Substring(1);
-            // Раньше здесь стоял Application.dataPath напрямую — в редакторе это
-            // Assets/, а в плеере каталог данных, куда сборка каталог Textures
-            // не кладёт. Иконки предметов молча пропадали именно в билде.
-            string? itemsDir = Fodinae.Core.RuntimeAssetPaths.TexturesSubfolder("Items");
-            if (itemsDir == null)
-            {
-                return null;
-            }
-
-            var path = Path.Combine(itemsDir, camelName + ".png");
-            if (!File.Exists(path))
-            {
-                path = Path.Combine(itemsDir, typeName.ToLowerInvariant() + ".png");
-            }
-
-            if (!File.Exists(path))
-            {
-                if (_missingIconWarned.Add(type))
-                {
-                    Debug.Log($"{TAG} No local icon for item type '{type}' (searched {camelName}.png), will use server texture if available");
-                }
-
-                return null;
-            }
-
-            Texture2D tex;
-            try
-            {
-                tex = RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
-                    File.ReadAllBytes(path),
-                    $"ItemIcon_{type}",
-                    RuntimeTextureColorSpace.Srgb,
-                    FilterMode.Point,
-                    TextureWrapMode.Clamp,
-                    makeNoLongerReadable: true);
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning(
-                    $"{TAG} Local icon '{path}' for item type '{type}' is corrupt; " +
-                    $"will use the server texture if available. {exception.Message}");
-                return null;
-            }
-
-            _iconCache[type] = tex;
-            return tex;
+            tex = RuntimeTextureFactory.DecodeEncodedImageToRGBA32NoMip(
+                File.ReadAllBytes(path),
+                $"ItemIcon_{type}",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Clamp,
+                makeNoLongerReadable: true);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning(
+                $"{TAG} Local icon '{path}' for item type '{type}' is corrupt; " +
+                $"will use the server texture if available. {exception.Message}");
+            return null;
         }
 
-        public static void Clear()
-        {
-            // Inventory views can retain these runtime textures across a domain
-            // reload. Reset lookup state without destroying live UI resources.
-            _iconCache.Clear();
-            _missingIconWarned.Clear();
-        }
+        _iconCache[type] = tex;
+        return tex;
     }
 }

@@ -1,35 +1,23 @@
 #nullable enable
 
-using Fodinae;
 using Fodinae.UI.Controls;
-using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Builders
+namespace Fodinae.UI.Builders;
+public class SelectablePacketBuilder : PacketUIBuilderBase<SelectablePacket>
 {
-    public class SelectablePacketBuilder : PacketUIBuilderBase
+    protected override VisualElement BuildTyped(SelectablePacket packet, PacketUIBuilder builder)
     {
-        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        var selectable = new Selectable
         {
-            if (packet is not SelectablePacket selectablePacket)
-            {
-                return null;
-            }
+            Group = packet.Name,
+            value = packet.DefaultValue,
+        };
 
-            var checkedVisual = builder.Build(selectablePacket.Checked)!;
-            var uncheckedVisual = builder.Build(selectablePacket.Unchecked)!;
+        selectable.SetVisuals(builder.Build(packet.Checked), builder.Build(packet.Unchecked));
+        selectable.SetEnabled(packet.IsEnabled);
 
-            var selectable = new Selectable
-            {
-                Group = selectablePacket.Name,
-                value = selectablePacket.DefaultValue,
-            };
-
-            selectable.SetVisuals(checkedVisual, uncheckedVisual);
-            selectable.SetEnabled(selectablePacket.IsEnabled);
-
-            return selectable;
-        }
+        return selectable;
     }
 }

@@ -5,18 +5,9 @@ using UnityEngine;
 
 namespace Fodinae.Core.Lifecycle;
 
-/// <summary>
-/// One entry of the typed MainGame scene contract: a serialized, concrete
-/// manager reference authored on the composition root.
-///
-/// The editor one-way migrator fills bindings from the authored hierarchy.
-/// Missing or invalid bindings are hard scene-contract failures; there is no
-/// runtime name-based fallback.
-/// </summary>
 [Serializable]
 public sealed class ManagerBinding
 {
-    /// <summary>The <see cref="Type.AssemblyQualifiedName"/> of the managed MonoBehaviour.</summary>
     [SerializeField]
     private string? _managerType;
 

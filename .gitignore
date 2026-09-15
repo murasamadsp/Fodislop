@@ -490,6 +490,8 @@ Assets/_Recovery.meta
 .idea/
 *.csproj
 !/*.csproj
+!/tools/Fodinae.ArchitectureLinter/Fodinae.ArchitectureLinter.csproj
+!/tools/Fodinae.DisplayTests/Fodinae.DisplayTests.csproj
 *.sln
 *.slnx
 *.suo

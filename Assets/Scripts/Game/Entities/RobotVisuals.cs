@@ -3,13 +3,11 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Manages procedural visuals, sprite batching, skin/tail texture loading and tentacles for a Robot entity.
-/// </summary>
 public sealed class RobotVisuals
 {
     private readonly Transform _transform;
@@ -20,6 +18,7 @@ public sealed class RobotVisuals
     private Transform? _clanTransform;
     private Sprite? _skinSprite;
     private Sprite? _clanSprite;
+    private RobotAura? _aura;
     private Tentacle[]? _tentacles;
     private bool _tentaclesSettled;
     private Vector3 _lastTentacleRootPosition;
@@ -61,13 +60,6 @@ public sealed class RobotVisuals
         EnsureBatchHandles();
         _bodyBatchHandle?.SetEnabled(visible);
     }
-
-    public void SetClanVisible(bool visible)
-    {
-        EnsureBatchHandles();
-        _clanBatchHandle?.SetEnabled(visible);
-    }
-
     public void SetColor(Color color)
     {
         _bodyBatchHandle?.SetColor(color);
@@ -235,8 +227,42 @@ public sealed class RobotVisuals
         }
     }
 
+    public void SetAuraWanted(bool wanted, ISceneObjectFactory? sceneObjects)
+    {
+        if (!wanted && _aura == null)
+        {
+            return;
+        }
+
+        _aura ??= new RobotAura(_transform);
+        _aura.SetWanted(wanted, _entityBatchRenderer, sceneObjects);
+    }
+
+    public void TickAura(float deltaTime) => _aura?.Tick(deltaTime);
+
+    public Transform EnsureClanIcon(ISceneObjectFactory sceneObjects, uint botId)
+    {
+        if (_clanTransform == null)
+        {
+            Transform? existingClan = _transform.Find("ClanIcon");
+            GameObject clanGo = existingClan != null
+                ? existingClan.gameObject
+                : (sceneObjects != null
+                    ? sceneObjects.Create("ClanIcon", RuntimeOwner.Robots)
+                    : throw new System.InvalidOperationException(
+                        $"[Robot] ISceneObjectFactory was not injected before creating ClanIcon for bot {botId}."));
+            clanGo.transform.SetParent(_transform, worldPositionStays: false);
+            _clanTransform = clanGo.transform;
+            _clanTransform.localScale = Vector3.one * 0.8f;
+        }
+
+        return _clanTransform;
+    }
+
     public void Destroy()
     {
+        _aura?.Destroy();
+        _aura = null;
         _entityBatchRenderer?.UnregisterSprite(_bodyBatchHandle);
         _entityBatchRenderer?.UnregisterSprite(_clanBatchHandle);
         _bodyBatchHandle = null;

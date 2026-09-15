@@ -163,50 +163,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6cd4e8f91196b3c4c8a5d87c4c359162, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.UI.MissionArrowUI
---- !u!1 &59737646
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 59737647}
-  - component: {fileID: 59737648}
-  m_Layer: 0
-  m_Name: GameManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &59737647
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 59737646}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 106649475}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &59737648
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 59737646}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7c0b988abea39408fb90c187ca6eab5c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Game.Managers.GameManager
 --- !u!1 &68980587
 GameObject:
   m_ObjectHideFlags: 0
@@ -252,41 +208,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.UI.MinimapController
   _uiSize: 160
---- !u!1 &106649474
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 106649475}
-  m_Layer: 0
-  m_Name: Gameplay
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &106649475
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 106649474}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 59737647}
-  - {fileID: 1110220718}
-  - {fileID: 967501053}
-  - {fileID: 2118446934}
-  m_Father: {fileID: 2100000002}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &118973001
 GameObject:
   m_ObjectHideFlags: 0
@@ -415,12 +336,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 358710299}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 2000000002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &378316187
 GameObject:
@@ -710,143 +631,20 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1857202662}
-  - {fileID: 1506008413}
   - {fileID: 1458764063}
   - {fileID: 2030377782}
   - {fileID: 1812687273}
   - {fileID: 2017390605}
   - {fileID: 32888239}
-  - {fileID: 1958487289}
   - {fileID: 857961947}
   - {fileID: 378316188}
   - {fileID: 1920060538}
   - {fileID: 1103923417}
   - {fileID: 996933187}
-  - {fileID: 974753866}
   - {fileID: 1833245201}
   - {fileID: 68980588}
   m_Father: {fileID: 2100000002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &897925093
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 897925094}
-  m_Layer: 0
-  m_Name: Networking
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &897925094
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 897925093}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1516826446}
-  m_Father: {fileID: 2100000002}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &967501052
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 967501053}
-  - component: {fileID: 967501054}
-  m_Layer: 0
-  m_Name: RobotManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &967501053
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 967501052}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 106649475}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &967501054
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 967501052}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af102667d0be274790ced0f1c24064a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Game.Managers.RobotManager
---- !u!1 &974753865
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 974753866}
-  - component: {fileID: 974753867}
-  m_Layer: 0
-  m_Name: DisplayManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &974753866
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 974753865}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 893091724}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &974753867
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 974753865}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6565f1c9081d54714ad7ea149317822d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Rendering.DisplayManager
 --- !u!1 &996933186
 GameObject:
   m_ObjectHideFlags: 0
@@ -930,12 +728,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1000000000}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 2000000002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1000000004
 PrefabInstance:
@@ -943,7 +741,7 @@ PrefabInstance:
   serializedVersion: 2
   m_Modification:
     serializedVersion: 3
-    m_TransformParent: {fileID: 0}
+    m_TransformParent: {fileID: 2000000002}
     m_Modifications:
     - target: {fileID: 100000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
       propertyPath: m_Name
@@ -983,15 +781,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -1029,6 +827,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e55a1800031c9374ba92fb984b2216f6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!4 &1000000006 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
+  m_PrefabInstance: {fileID: 1000000004}
+  m_PrefabAsset: {fileID: 0}
 --- !u!43 &1011521769
 Mesh:
   m_ObjectHideFlags: 0
@@ -1182,8 +985,9 @@ Mesh:
   m_LocalAABB:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 0, y: 0, z: 0}
-  m_MeshUsageFlags: 0
   m_CookingOptions: 30
+  m_PreBakeConvexCollisionMesh: 0
+  m_PreBakeTriangleCollisionMesh: 0
   m_BakedConvexCollisionMesh: 
   m_BakedTriangleCollisionMesh: 
   'm_MeshMetrics[0]': 1
@@ -1207,37 +1011,6 @@ Mesh:
       - serializedVersion: 1
         m_IndexStart: 0
         m_IndexCount: 0
---- !u!1 &1068468520
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1068468522}
-  m_Layer: 0
-  m_Name: AutoMapManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1068468522
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1068468520}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1103923416
 GameObject:
   m_ObjectHideFlags: 0
@@ -1330,57 +1103,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1108560715}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1110220717
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1110220718}
-  - component: {fileID: 1110220719}
-  m_Layer: 0
-  m_Name: BuildingManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1110220718
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1110220717}
-  serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 106649475}
+  m_Father: {fileID: 2000000002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1110220719
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1110220717}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 17a8b8cee9b7f644891fe8d6130ecc78, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Game.Managers.BuildingManager
 --- !u!1 &1150380007
 GameObject:
   m_ObjectHideFlags: 0
@@ -1424,7 +1153,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 28db09fc049bf324fbee51907a8eaa35, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Game.VFXPool
+  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Game.VfxPool
   _configs: []
   _defaultInitialSize: 2
   _shrinkDelay: 30
@@ -1524,94 +1253,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1d974ab55487a4c4cb3ab516dd76bbc6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.UI.FPSCounter
---- !u!1 &1506008412
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1506008413}
-  - component: {fileID: 1506008414}
-  m_Layer: 0
-  m_Name: UIInputManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1506008413
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1506008412}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 893091724}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1506008414
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1506008412}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c34c768fec081144e9067572dd29b463, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.UI.UIInputManager
---- !u!1 &1516826445
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1516826446}
-  - component: {fileID: 1516826447}
-  m_Layer: 0
-  m_Name: PacketHandler
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1516826446
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1516826445}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 897925094}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1516826447
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1516826445}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ab66f6769805461ba10cc5d808b38ae2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Networking.PacketHandler
 --- !u!1 &1553536788
 GameObject:
   m_ObjectHideFlags: 0
@@ -1823,9 +1464,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 479837b1b427b4889afe08e2d5a2078b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.UI.InGameDebugOverlay
-  _showGrid: 1
-  _showEntities: 1
-  _showCursor: 1
 --- !u!1 &1857202661
 GameObject:
   m_ObjectHideFlags: 0
@@ -2008,6 +1646,7 @@ MonoBehaviour:
   _terrainShader: {fileID: 4800000, guid: 943286b1ceedb6e49881652498d6ec13, type: 3}
   _sortingLayerName: Default
   _sortingOrder: -1000
+  _doorOverlaySortingOrder: 500
   _viewportPadding: 2
 --- !u!23 &1882361804
 MeshRenderer:
@@ -2110,50 +1749,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c04865ae1e3c7d41b3a3422f715a1cc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.UI.PauseMenu
---- !u!1 &1958487288
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1958487289}
-  - component: {fileID: 1958487290}
-  m_Layer: 0
-  m_Name: DiagnosticRunner
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1958487289
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1958487288}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 893091724}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1958487290
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1958487288}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9aa7082fa892940cea5aca6cbd84691f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.DiagnosticRunner
 --- !u!1 &2000000000
 GameObject:
   m_ObjectHideFlags: 0
@@ -2198,132 +1793,76 @@ MonoBehaviour:
   _postProcessVolume: {fileID: 358710300}
   _playerMovement: {fileID: 1000000005}
   _managerBindings:
-  - _managerType: Fodinae.World.MapManager, Fodinae.World, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.World.MapManager, Fodinae.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: World
     _target: {fileID: 1868303245}
-  - _managerType: Fodinae.World.Terrain.TerrainRenderer, Fodinae.World, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.World.Terrain.TerrainRenderer, Fodinae.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1882361803}
-  - _managerType: Fodinae.World.WorldBackgroundSetup, Fodinae.World, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.World.WorldBackgroundSetup, Fodinae.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: World
     _target: {fileID: 1832716198}
-  - _managerType: Fodinae.World.WorldTextureManager, Fodinae.World, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.World.WorldTextureManager, Fodinae.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: World
     _target: {fileID: 310136117}
-  - _managerType: Fodinae.Game.Managers.ServerAudioEventManager, Fodinae.Runtime,
-      Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.Game.Managers.ServerAudioEventManager, Fodinae.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Audio
     _target: {fileID: 881552890}
-  - _managerType: Fodinae.Networking.PacketHandler, Fodinae.Networking, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
-    _serviceGroup: Networking
-    _target: {fileID: 1516826447}
-  - _managerType: Fodinae.Game.Managers.GameManager, Fodinae.Runtime, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
-    _serviceGroup: Gameplay
-    _target: {fileID: 59737648}
-  - _managerType: Fodinae.Game.VFXPool, Fodinae.Runtime, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.Game.VfxPool, Fodinae.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1150380009}
-  - _managerType: Fodinae.Game.Managers.BuildingManager, Fodinae.Runtime, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
-    _serviceGroup: Gameplay
-    _target: {fileID: 1110220719}
-  - _managerType: Fodinae.Game.Managers.RobotManager, Fodinae.Runtime, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
-    _serviceGroup: Gameplay
-    _target: {fileID: 967501054}
-  - _managerType: Fodinae.Game.WorldEntityBatchRenderer, Fodinae.Runtime, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.Game.WorldEntityBatchRenderer, Fodinae.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1880757875}
-  - _managerType: Fodinae.Game.Managers.ServerConfig, Fodinae.Runtime, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
-    _serviceGroup: Gameplay
-    _target: {fileID: 2118446935}
-  - _managerType: Fodinae.UI.GlobalChatUI, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.GlobalChatUI, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 1857202663}
-  - _managerType: Fodinae.UI.UIInputManager, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
-    _serviceGroup: UI
-    _target: {fileID: 1506008414}
-  - _managerType: Fodinae.UI.FPSCounter, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.FPSCounter, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 1458764064}
-  - _managerType: Fodinae.UI.FloatingChatManager, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.FloatingChatManager, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 2030377783}
-  - _managerType: Fodinae.UI.ReconnectUI, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.ReconnectUI, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 1812687274}
-  - _managerType: Fodinae.UI.AssetLoadingIndicator, Fodinae.UI, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.UI.AssetLoadingIndicator, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 2017390606}
-  - _managerType: Fodinae.UI.MissionArrowUI, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.MissionArrowUI, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 32888240}
-  - _managerType: Fodinae.DiagnosticRunner, Fodinae.Bootstrap, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
-    _serviceGroup: UI
-    _target: {fileID: 1958487290}
-  - _managerType: Fodinae.Rendering.PostProcessing.PostProcessController, Fodinae.Runtime,
-      Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.Rendering.PostProcessing.PostProcessController, Fodinae.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 577792951}
-  - _managerType: Fodinae.World.Lighting.LightingEngine, Fodinae.World, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.World.Lighting.LightingEngine, Fodinae.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1553536790}
-  - _managerType: Fodinae.World.SurfaceRenderer, Fodinae.World, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.World.SurfaceRenderer, Fodinae.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 801820429}
-  - _managerType: Fodinae.Player.CameraFollow, Fodinae.Runtime, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.Player.CameraFollow, Fodinae.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1403310852}
-  - _managerType: Fodinae.UI.HUD.Player.View.PlayerHUDView, Fodinae.UI, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.UI.HUD.Player.View.PlayerHUDView, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 857961948}
-  - _managerType: Fodinae.UI.HUD.Inventory.View.InventoryView, Fodinae.UI, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
+  - _managerType: Fodinae.UI.Inventory.InventoryView, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 378316189}
-  - _managerType: Fodinae.UI.PauseMenu, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.PauseMenu, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 1920060539}
-  - _managerType: Fodinae.UI.MinimapController, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.MinimapController, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 68980589}
-  - _managerType: Fodinae.UI.WorldMapController, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.WorldMapController, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 1103923418}
-  - _managerType: Fodinae.UI.WorldMapRenderer, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.WorldMapRenderer, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 996933188}
-  - _managerType: Fodinae.Rendering.DisplayManager, Fodinae.Runtime, Version=0.0.0.0,
-      Culture=neutral, PublicKeyToken=null
-    _serviceGroup: UI
-    _target: {fileID: 974753867}
-  - _managerType: Fodinae.UI.InGameDebugOverlay, Fodinae.UI, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
+  - _managerType: Fodinae.UI.InGameDebugOverlay, Fodinae.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 1833245202}
 --- !u!4 &2000000002
@@ -2341,6 +1880,10 @@ Transform:
   m_Children:
   - {fileID: 2100000002}
   - {fileID: 2100000012}
+  - {fileID: 1000000002}
+  - {fileID: 1000000006}
+  - {fileID: 358710301}
+  - {fileID: 1108560719}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2017390604
@@ -2460,10 +2003,8 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 897925094}
   - {fileID: 1765704200}
   - {fileID: 118973002}
-  - {fileID: 106649475}
   - {fileID: 893091724}
   - {fileID: 382654668}
   m_Father: {fileID: 2000000002}
@@ -2659,57 +2200,8 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2100000012}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2118446933
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2118446934}
-  - component: {fileID: 2118446935}
-  m_Layer: 0
-  m_Name: ServerConfig
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2118446934
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2118446933}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 106649475}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2118446935
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2118446933}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1fe2f571af196724c89491e789865b33, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Game.Managers.ServerConfig
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1000000002}
-  - {fileID: 1068468522}
-  - {fileID: 1000000004}
   - {fileID: 2000000002}
-  - {fileID: 358710301}
-  - {fileID: 1108560719}

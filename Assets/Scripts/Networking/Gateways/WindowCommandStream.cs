@@ -13,9 +13,24 @@ public sealed class WindowCommandStream
 
     public event Action<ModalWindowPacket>? ModalRequested;
 
-    public void PublishOpen(OpenWindowPacket packet) => OpenRequested?.Invoke(packet);
+    public event Action<bool>? OpenWindowVisibilityChanged;
 
-    public void PublishClose(CloseWindowPacket packet) => CloseRequested?.Invoke(packet);
+    public bool HasOpenWindows { get; private set; }
 
-    public void PublishModal(ModalWindowPacket packet) => ModalRequested?.Invoke(packet);
+    public void PublishOpenWindow(OpenWindowPacket packet) => OpenRequested?.Invoke(packet);
+
+    public void PublishCloseWindow(CloseWindowPacket packet) => CloseRequested?.Invoke(packet);
+
+    public void PublishModalWindow(ModalWindowPacket packet) => ModalRequested?.Invoke(packet);
+
+    public void SetServerWindowVisibility(bool visible)
+    {
+        if (HasOpenWindows == visible)
+        {
+            return;
+        }
+
+        HasOpenWindows = visible;
+        OpenWindowVisibilityChanged?.Invoke(visible);
+    }
 }

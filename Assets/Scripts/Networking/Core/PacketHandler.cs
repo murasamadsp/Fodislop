@@ -15,218 +15,133 @@ using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
-using VContainer;
+using VContainer.Unity;
 
-namespace Fodinae.Networking
+namespace Fodinae.Networking;
+
+// Чистый сервис контейнера (SCENE_STANDARD.md §1): подписка на пакеты при
+// старте scope, отписка при его уничтожении.
+public sealed class PacketHandler(
+    INetworkService networkService,
+    WorldInitProcessor worldInit,
+    PlayerInfoProcessor playerInfo,
+    WindowPacketProcessor windowProcessor,
+    MapRegionProcessor mapRegion,
+    BuildingProcessor building,
+    PlayerStatsProcessor playerStats,
+    ChatProcessor chat,
+    StatusProcessor status,
+    AudioPacketProcessor audio,
+    InventoryProcessor inventory,
+    ClanProcessor clan,
+    MissionProcessor mission,
+    MissionArrowProcessor missionArrow,
+    ConnectionProcessor connection,
+    AuthTokenProcessor authToken) : IStartable, IDisposable
 {
-    /// <summary>
-    /// Pure packet dispatcher: binds packet types to processors and owns the
-    /// subscription lifetime against <see cref="INetworkService"/>. It holds no
-    /// UI, no scene managers and no player state — every packet is routed to a
-    /// processor that updates a model, an event gateway or a domain service.
-    /// </summary>
-    public partial class PacketHandler : MonoBehaviour
+    private readonly INetworkService _networkService = networkService;
+    private readonly WorldInitProcessor _worldInit = worldInit;
+    private readonly PlayerInfoProcessor _playerInfo = playerInfo;
+    private readonly WindowPacketProcessor _windowProcessor = windowProcessor;
+    private readonly MapRegionProcessor _mapRegion = mapRegion;
+    private readonly BuildingProcessor _building = building;
+    private readonly PlayerStatsProcessor _playerStats = playerStats;
+    private readonly ChatProcessor _chat = chat;
+    private readonly StatusProcessor _status = status;
+    private readonly AudioPacketProcessor _audio = audio;
+    private readonly InventoryProcessor _inventory = inventory;
+    private readonly ClanProcessor _clan = clan;
+    private readonly MissionProcessor _mission = mission;
+    private readonly MissionArrowProcessor _missionArrow = missionArrow;
+    private readonly ConnectionProcessor _connection = connection;
+    private readonly AuthTokenProcessor _authToken = authToken;
+    private readonly List<Action> _unsubscribers = [];
+
+    public bool IsSubscribed { get; private set; }
+
+    void IStartable.Start() => Subscribe();
+
+    // Вызывается конвейером старта: подписка идемпотентна.
+    public void EnsureInitialized() => Subscribe();
+
+    public void Shutdown() => Unsubscribe();
+
+    public void Dispose() => Unsubscribe();
+
+    // Protocol packets may be value types, so this helper must remain unconstrained.
+    private void On<T>(Action<T> handler)
     {
-        private bool _isInitialized;
-        private bool _isSubscribed;
-        private INetworkService? _subscribedNetworkService;
+        _networkService.Subscribe(handler);
+        _unsubscribers.Add(() => _networkService.Unsubscribe(handler));
+    }
 
-        [Inject]
-        private ChatProcessor _chat = null!;
-        [Inject]
-        private AudioPacketProcessor _audio = null!;
-        [Inject]
-        private PlayerInfoProcessor _playerInfo = null!;
-        [Inject]
-        private MapRegionProcessor _mapRegion = null!;
-        [Inject]
-        private MissionProcessor _mission = null!;
-        [Inject]
-        private BuildingProcessor _building = null!;
-        [Inject]
-        private ConnectionProcessor _connection = null!;
-        [Inject]
-        private MissionArrowProcessor _missionArrow = null!;
-        [Inject]
-        private WindowPacketProcessor _windowProcessor = null!;
-        [Inject]
-        private PlayerStatsProcessor _playerStats = null!;
-        [Inject]
-        private StatusProcessor _status = null!;
-        [Inject]
-        private InventoryProcessor _inventory = null!;
-        [Inject]
-        private ClanProcessor _clan = null!;
-        [Inject]
-        private WorldInitProcessor _worldInit = null!;
-        [Inject]
-        private AuthTokenProcessor _authToken = null!;
-        [Inject]
-        private INetworkService _networkService = null!;
-
-        protected virtual void Awake()
+    private void Subscribe()
+    {
+        if (IsSubscribed)
         {
-            TryInitialize();
+            return;
         }
 
-        protected void Start()
+        On<WorldInitPacket>(_worldInit.Process);
+        On<RobotInfoPacket>(_playerInfo.Process);
+        On<PlayerInfoPacket>(_playerInfo.Process);
+        On<MovementSpeedPacket>(_playerInfo.Process);
+        On<OpenWindowPacket>(_windowProcessor.Process);
+        On<CloseWindowPacket>(_windowProcessor.Process);
+        On<RobotPositionPacket>(_playerInfo.Process);
+        On<MapRegionPacket>(_mapRegion.Process);
+        On<PackPacket>(_building.Process);
+        On<RemovePackPacket>(_building.Process);
+
+        On<LevelPacket>(_playerStats.Process);
+        On<HealthPacket>(_playerStats.Process);
+        On<CurrencyPacket>(_playerStats.Process);
+        On<GeologyPacket>(_playerStats.Process);
+        On<BasketPacket>(_playerStats.Process);
+        On<MaxDepthPacket>(_playerStats.Process);
+
+        On<AutoMineStatePacket>(_playerInfo.Process);
+        On<AggressionStatePacket>(_playerInfo.Process);
+        On<SkillProgressPacket>(_playerStats.Process);
+        On<DailyBonusStatePacket>(_playerStats.Process);
+        On<TeleportPacket>(_playerInfo.Process);
+        On<ChatMessageListPacket>(_chat.Process);
+        On<LocalChatMessagePacket>(_chat.Process);
+        On<ChatMutePacket>(_chat.Process);
+        On<ChatListPacket>(_chat.Process);
+
+        On<OnlinePacket>(_status.Process);
+        On<PingPacket>(_status.Process);
+        On<OutdatedClientPacket>(_status.Process);
+        On<AudioPacket>(_audio.Process);
+        On<InventoryPacket>(_inventory.Process);
+        On<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(_inventory.Process);
+        On<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(_inventory.Process);
+        On<AddStatusLinePacket>(_status.Process);
+        On<ClearStatusLinePacket>(_status.Process);
+        On<ClearStatusPacket>(_status.Process);
+        On<ModalWindowPacket>(_windowProcessor.Process);
+        On<ShowClanPacket>(_clan.Process);
+        On<HideClanPacket>(_clan.Process);
+        On<MissionInitPacket>(_mission.Process);
+        On<MissionProgressPacket>(_mission.Process);
+        On<DisconnectPacket>(_connection.Process);
+        On<ReconnectPacket>(_connection.Process);
+        On<AuthTokenPacket>(_authToken.Process);
+        On<OpenURLPacket>(packet => Application.OpenURL(packet.URL));
+        On<MissionArrowPacket>(_missionArrow.Process);
+
+        IsSubscribed = true;
+    }
+
+    private void Unsubscribe()
+    {
+        foreach (Action unsubscribe in _unsubscribers)
         {
-            TryInitialize();
+            unsubscribe();
         }
 
-        public void EnsureInitialized()
-        {
-            if (!TryInitialize() || !_isSubscribed)
-            {
-                throw new InvalidOperationException(
-                    "PacketHandler dependencies were not injected before startup completed.");
-            }
-        }
-
-        private bool TryInitialize()
-        {
-            if (_networkService == null)
-            {
-                return false;
-            }
-
-            if (!_isInitialized)
-            {
-                _isInitialized = true;
-            }
-
-            TrySubscribeToNetworkService();
-            return true;
-        }
-
-        private readonly List<Action> _unsubscribers = new();
-
-        // Protocol packets may be value types, so this helper must remain unconstrained.
-        private void Subscribe<T>(Action<T> handler)
-        {
-            INetworkService networkService = _networkService;
-            networkService.Subscribe(handler);
-            _unsubscribers.Add(() => networkService.Unsubscribe(handler));
-        }
-
-        private void TrySubscribeToNetworkService()
-        {
-            if (_networkService == null)
-            {
-                return;
-            }
-
-            // Repeated initialization of the same scene must be a no-op. If the
-            // dispatcher instance changed (domain reload or scope rebuild), detach
-            // from the old dispatcher before binding the new one; otherwise the old
-            // graph keeps receiving packets after the scene has been replaced.
-            if (_isSubscribed && ReferenceEquals(_subscribedNetworkService, _networkService))
-            {
-                return;
-            }
-
-            if (_isSubscribed)
-            {
-                UnsubscribePacketSubscriptions();
-            }
-
-            Subscribe<WorldInitPacket>(_worldInit.Process);
-            Subscribe<RobotInfoPacket>(_playerInfo.Process);
-            Subscribe<PlayerInfoPacket>(_playerInfo.Process);
-            Subscribe<MovementSpeedPacket>(_playerInfo.Process);
-            Subscribe<OpenWindowPacket>(_windowProcessor.Process);
-            Subscribe<CloseWindowPacket>(_windowProcessor.Process);
-            Subscribe<RobotPositionPacket>(_playerInfo.Process);
-            Subscribe<MapRegionPacket>(_mapRegion.Process);
-            Subscribe<PackPacket>(_building.Process);
-            Subscribe<RemovePackPacket>(_building.Process);
-
-            Subscribe<LevelPacket>(_playerStats.Process);
-            Subscribe<HealthPacket>(_playerStats.Process);
-            Subscribe<CurrencyPacket>(_playerStats.Process);
-            Subscribe<GeologyPacket>(_playerStats.Process);
-            Subscribe<BasketPacket>(_playerStats.Process);
-            Subscribe<MaxDepthPacket>(_playerStats.Process);
-
-            Subscribe<AutoMineStatePacket>(_playerInfo.Process);
-            Subscribe<AggressionStatePacket>(_playerInfo.Process);
-            Subscribe<SkillProgressPacket>(_playerStats.Process);
-            Subscribe<DailyBonusStatePacket>(_playerStats.Process);
-            Subscribe<TeleportPacket>(_playerInfo.Process);
-            Subscribe<ChatMessageListPacket>(_chat.Process);
-            Subscribe<LocalChatMessagePacket>(_chat.Process);
-            Subscribe<ChatMutePacket>(_chat.Process);
-            Subscribe<ChatListPacket>(_chat.Process);
-
-            Subscribe<OnlinePacket>(_status.Process);
-            Subscribe<PingPacket>(_status.Process);
-            Subscribe<OutdatedClientPacket>(_status.Process);
-            Subscribe<AudioPacket>(_audio.Process);
-            Subscribe<InventoryPacket>(_inventory.Process);
-            Subscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(_inventory.Process);
-            Subscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(_inventory.Process);
-            Subscribe<AddStatusLinePacket>(_status.Process);
-            Subscribe<ClearStatusLinePacket>(_status.Process);
-            Subscribe<ClearStatusPacket>(_status.Process);
-            Subscribe<ModalWindowPacket>(_windowProcessor.Process);
-            Subscribe<ShowClanPacket>(_clan.Process);
-            Subscribe<HideClanPacket>(_clan.Process);
-            Subscribe<MissionInitPacket>(_mission.Process);
-            Subscribe<MissionProgressPacket>(_mission.Process);
-            Subscribe<DisconnectPacket>(_connection.Process);
-            Subscribe<ReconnectPacket>(_connection.Process);
-            Subscribe<AuthTokenPacket>(_authToken.Process);
-            Subscribe<OpenURLPacket>(packet => Application.OpenURL(packet.URL));
-            Subscribe<MissionArrowPacket>(_missionArrow.Process);
-
-            _subscribedNetworkService = _networkService;
-            _isSubscribed = true;
-        }
-
-        /// <summary>
-        /// Detaches every packet subscription. Idempotent.
-        /// </summary>
-        /// <remarks>
-        /// Split out of <c>OnDestroy</c> so it can be called BEFORE the game
-        /// scene starts unloading, which is the only point at which it actually
-        /// prevents anything. The connection lives in the Bootstrap scope and
-        /// keeps draining packets across the transition by design, while
-        /// OnDestroy runs *inside* the unload in an order Unity does not define.
-        /// OnDestroy still calls this as a backstop.
-        /// </remarks>
-        public void Shutdown()
-        {
-            UnsubscribeAll();
-        }
-
-        protected virtual void OnDestroy()
-        {
-            UnsubscribeAll();
-        }
-
-        private void UnsubscribeAll()
-        {
-            if (!_isInitialized || !_isSubscribed)
-            {
-                return;
-            }
-
-            UnsubscribePacketSubscriptions();
-        }
-
-        private void UnsubscribePacketSubscriptions()
-        {
-            if (_networkService != null)
-            {
-                foreach (Action unsubscribe in _unsubscribers)
-                {
-                    unsubscribe();
-                }
-            }
-
-            _unsubscribers.Clear();
-            _isSubscribed = false;
-            _subscribedNetworkService = null;
-        }
+        _unsubscribers.Clear();
+        IsSubscribed = false;
     }
 }

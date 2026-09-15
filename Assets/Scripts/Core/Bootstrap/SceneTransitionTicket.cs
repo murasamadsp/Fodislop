@@ -3,22 +3,11 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Fodinae.Core.Interfaces;
 using UnityEngine.SceneManagement;
 
 namespace Fodinae.Core;
 
-/// <summary>
-/// Per-load handshake between the persistent composition root and exactly one
-/// content-scene composition root.
-/// </summary>
-/// <remarks>
-/// The ticket carries a hard transition budget: if the target scene never
-/// reaches <see cref="MarkPresentationReady"/> within the configured timeout,
-/// the ticket fails with <see cref="TimeoutException"/> and every waiter is
-/// short-circuited exactly once. This prevents an eternal loader when the
-/// target composition root dies before attaching (e.g. an exception inside its
-/// Awake before the ticket could be attached).
-/// </remarks>
 public sealed class SceneTransitionTicket : IDisposable
 {
     public static readonly TimeSpan DefaultTransitionTimeout = TimeSpan.FromSeconds(30);
@@ -30,9 +19,6 @@ public sealed class SceneTransitionTicket : IDisposable
     private readonly UniTaskCompletionSource _failureSignal = new();
     private readonly CancellationTokenSource _timeoutCts;
     private readonly TimeSpan _timeout;
-    private bool _isAttached;
-    private bool _isActivationRequested;
-    private bool _isFailed;
     private bool _isDisposed;
     private Exception? _failure;
 
@@ -54,11 +40,18 @@ public sealed class SceneTransitionTicket : IDisposable
 
     public string TargetSceneName { get; }
 
-    public bool IsAttached => _isAttached;
+    public SceneTransitionPhase Phase { get; private set; } = SceneTransitionPhase.Created;
 
-    public bool IsStartupReady { get; private set; }
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
+    public bool IsAttached => Phase >= SceneTransitionPhase.Attached && Phase != SceneTransitionPhase.Failed;
 
-    public bool IsPresentationReady { get; private set; }
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
+    public bool IsStartupReady => Phase >= SceneTransitionPhase.StartupReady && Phase != SceneTransitionPhase.Failed;
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
+    public bool IsPresentationReady => Phase == SceneTransitionPhase.PresentationReady;
+
+    internal event Action<SceneTransitionStatus>? Changed;
 
     public void Attach(Scene scene)
     {
@@ -68,58 +61,49 @@ public sealed class SceneTransitionTicket : IDisposable
                 $"Scene transition ticket for '{TargetSceneName}' was attached by invalid scene '{scene.name}'.");
         }
 
-        if (_isAttached)
+        if (Phase != SceneTransitionPhase.Created)
         {
             throw new InvalidOperationException(
                 $"Scene '{TargetSceneName}' attached more than one composition root to the same transition.");
         }
 
-        _isAttached = true;
+        SetPhase(SceneTransitionPhase.Attached);
         _attached.TrySetResult();
     }
 
     public void RequestActivation()
     {
-        EnsureAttached();
-        if (_isFailed || _isActivationRequested)
+        if (Phase != SceneTransitionPhase.Attached)
         {
             throw new InvalidOperationException(
                 $"Scene '{TargetSceneName}' received an invalid duplicate activation request.");
         }
 
-        _isActivationRequested = true;
+        SetPhase(SceneTransitionPhase.ActivationRequested);
         _activationRequested.TrySetResult();
     }
 
     public void MarkStartupReady()
     {
-        EnsureAttached();
-        if (_isFailed || IsStartupReady || !_isActivationRequested)
+        if (Phase != SceneTransitionPhase.ActivationRequested)
         {
             throw new InvalidOperationException(
                 $"Scene '{TargetSceneName}' reported startup readiness in an invalid transition state.");
         }
 
-        IsStartupReady = true;
+        SetPhase(SceneTransitionPhase.StartupReady);
         _startupReady.TrySetResult();
     }
 
     public void MarkPresentationReady()
     {
-        EnsureAttached();
-        if (_isFailed || IsPresentationReady || !_isActivationRequested)
+        if (Phase != SceneTransitionPhase.StartupReady)
         {
             throw new InvalidOperationException(
                 $"Scene '{TargetSceneName}' reported presentation readiness in an invalid transition state.");
         }
 
-        if (!IsStartupReady)
-        {
-            throw new InvalidOperationException(
-                $"Scene '{TargetSceneName}' reported presentation readiness before startup readiness.");
-        }
-
-        IsPresentationReady = true;
+        SetPhase(SceneTransitionPhase.PresentationReady);
         _presentationReady.TrySetResult();
     }
 
@@ -129,13 +113,13 @@ public sealed class SceneTransitionTicket : IDisposable
         {
             throw new ArgumentNullException(nameof(exception));
         }
-        if (_isFailed || IsPresentationReady)
+        if (Phase is SceneTransitionPhase.Failed or SceneTransitionPhase.PresentationReady)
         {
             return;
         }
 
-        _isFailed = true;
         _failure = exception;
+        SetPhase(SceneTransitionPhase.Failed, exception);
         _failureSignal.TrySetResult();
         _attached.TrySetResult();
         _activationRequested.TrySetResult();
@@ -147,15 +131,11 @@ public sealed class SceneTransitionTicket : IDisposable
 
     public UniTask WaitForActivationAsync() => AwaitPhaseAsync(_activationRequested.Task);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public UniTask WaitForStartupAsync() => AwaitPhaseAsync(_startupReady.Task);
 
     public UniTask WaitForPresentationAsync() => AwaitPhaseAsync(_presentationReady.Task);
 
-    /// <summary>
-    /// Completes when the coordinator fails this ticket. The returned task
-    /// itself is a signal; awaiting the phase task afterwards rethrows the
-    /// original failure.
-    /// </summary>
     public UniTask WaitForFailureAsync() => _failureSignal.Task;
 
     public void Dispose()
@@ -174,7 +154,7 @@ public sealed class SceneTransitionTicket : IDisposable
 
     private void OnTimeout()
     {
-        if (_isDisposed || _isFailed || IsPresentationReady)
+        if (_isDisposed || Phase is SceneTransitionPhase.Failed or SceneTransitionPhase.PresentationReady)
         {
             return;
         }
@@ -192,12 +172,9 @@ public sealed class SceneTransitionTicket : IDisposable
         }
     }
 
-    private void EnsureAttached()
+    private void SetPhase(SceneTransitionPhase phase, Exception? failure = null)
     {
-        if (!_isAttached)
-        {
-            throw new InvalidOperationException(
-                $"Scene '{TargetSceneName}' attempted to change transition state before attaching its composition root.");
-        }
+        Phase = phase;
+        Changed?.Invoke(new SceneTransitionStatus(TargetSceneName, phase, failure));
     }
 }

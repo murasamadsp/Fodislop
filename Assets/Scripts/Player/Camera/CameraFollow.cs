@@ -35,6 +35,12 @@ namespace Fodinae.Player
         private float _zoomSmoothness = 8f;
 
         private const float ZoomSettleEpsilon = 0.001f;
+
+        // Сериализованные пределы не выходят за контракт: освещение рассчитано
+        // на кадр ProjectRuntimeContracts.Camera.MaximumOrthographicSize.
+        private float MinimumZoom => Mathf.Max(_minZoom, ProjectRuntimeContracts.Camera.MinimumOrthographicSize);
+
+        private float MaximumZoom => Mathf.Clamp(_maxZoom, MinimumZoom, ProjectRuntimeContracts.Camera.MaximumOrthographicSize);
         private const float FollowSettleEpsilonSquared = 0.000001f;
 
         private float _originalZ;
@@ -58,6 +64,11 @@ namespace Fodinae.Player
         [Inject]
         private ILocalPlayerState _localPlayer = null!;
 
+        [Inject]
+        private IClientConfigManager? _clientConfig;
+
+        private CameraPixelGridAligner? _aligner;
+
         protected void Start()
         {
             if (!Application.isPlaying)
@@ -73,9 +84,11 @@ namespace Fodinae.Player
             _camera = _injectedCamera;
 
             _originalZ = _camera.transform.position.z;
-            _targetZoom = _camera.orthographicSize;
+            float initialZoom = (MinimumZoom + MaximumZoom) * 0.5f;
+            _targetZoom = initialZoom;
             _currentZoom = _targetZoom;
             _lastZoom = _currentZoom;
+            ApplyZoom(_currentZoom);
             if (_target == null || _target == _camera.transform)
             {
                 var player = _localPlayer?.Current;
@@ -201,14 +214,24 @@ namespace Fodinae.Player
 
         protected void LateUpdate()
         {
+            // Камера принадлежит Bootstrap и может быть уничтожена раньше этой
+            // сцены: порядок разрушения сцен при выходе и в тестах не гарантирован.
+            if (_camera == null)
+            {
+                return;
+            }
+
             if (!Application.isPlaying)
             {
-                _camera.orthographicSize = DefaultOrthographicSize;
+                ApplyZoom(DefaultOrthographicSize);
 
                 var player = _localPlayer?.Current;
                 if (player != null)
                 {
-                    _camera.transform.position = new Vector3(player.transform.position.x, player.transform.position.y, DefaultCameraDepthZ);
+                    _camera.transform.position = SnapToPixelGrid(new Vector3(
+                        player.transform.position.x,
+                        player.transform.position.y,
+                        DefaultCameraDepthZ));
                 }
 
                 return;
@@ -246,7 +269,7 @@ namespace Fodinae.Player
             if (Mathf.Abs(scrollInput) > 0.01f)
             {
                 _targetZoom -= scrollInput * _zoomSpeed * Time.deltaTime;
-                _targetZoom = Mathf.Clamp(_targetZoom, _minZoom, _maxZoom);
+                _targetZoom = Mathf.Clamp(_targetZoom, MinimumZoom, MaximumZoom);
             }
 
             float nextZoom = Mathf.Lerp(
@@ -259,10 +282,7 @@ namespace Fodinae.Player
             }
 
             _currentZoom = nextZoom;
-            if (!Mathf.Approximately(_camera.orthographicSize, _currentZoom))
-            {
-                _camera.orthographicSize = _currentZoom;
-            }
+            ApplyZoom(_currentZoom);
 
             if (Mathf.Abs(_currentZoom - _lastZoom) > 0.01f)
             {
@@ -311,14 +331,31 @@ namespace Fodinae.Player
                 return;
             }
 
-            cameraTransform.position = Vector3.SmoothDamp(
+            Vector3 smoothed = Vector3.SmoothDamp(
                 cameraTransform.position,
                 desiredPosition,
                 ref _followVelocity,
                 smoothTime,
                 float.PositiveInfinity,
                 Time.deltaTime);
+            cameraTransform.position = SnapToPixelGrid(smoothed);
         }
+
+        private void ApplyZoom(float desiredSize)
+        {
+            float size = _Aligner.ResolveOrthographicSize(desiredSize, _minZoom, _maxZoom);
+            if (!Mathf.Approximately(_camera.orthographicSize, size))
+            {
+                _camera.orthographicSize = size;
+            }
+        }
+
+        private Vector3 SnapToPixelGrid(Vector3 position) =>
+            _Aligner.SnapPosition(position, _camera.orthographicSize);
+
+        private CameraPixelGridAligner _Aligner =>
+            _aligner ??= new CameraPixelGridAligner(_clientConfig);
+
 
         public void SnapToTarget()
         {
@@ -339,54 +376,12 @@ namespace Fodinae.Player
             if (_target != null && _target != cameraTransform)
             {
                 Vector3 targetPosition = _target.position + new Vector3(_offset.x, _offset.y, 0f);
-                cameraTransform.position = new Vector3(targetPosition.x, targetPosition.y, _originalZ);
+                cameraTransform.position = SnapToPixelGrid(
+                    new Vector3(targetPosition.x, targetPosition.y, _originalZ));
                 _followVelocity = Vector3.zero;
             }
         }
-
-        public void SetGameplayReady()
-        {
-            if (_localPlayer?.Current is not { HasServerPosition: true })
-            {
-                throw new InvalidOperationException(
-                    "[CameraFollow] Cannot enable camera before the local server position is synchronized.");
-            }
-
-            SnapToTarget();
-            _hasSnappedToServerPosition = true;
-        }
-
-        public void SetTarget(Transform newTarget)
-        {
-            _target = newTarget;
-            SnapToTarget();
-        }
-
-        public void SetZoom(float zoomLevel)
-        {
-            if (_camera != null)
-            {
-                _targetZoom = Mathf.Clamp(zoomLevel, _minZoom, _maxZoom);
-            }
-            else
-            {
-                if (!_cameraNullLogged)
-                {
-                    Debug.LogWarning("[CameraFollow] Ignoring zoom request until the camera is initialized.");
-                    _cameraNullLogged = true;
-                }
-            }
-        }
-
-        public float GetCurrentZoom() => _currentZoom;
         public void SetScrollEnabled(bool enabled) => _scrollEnabled = enabled;
-        public void Reinitialize()
-        {
-            DisposeScrollAction();
-            _hasSnappedToServerPosition = false;
-            InitializeRuntime();
-        }
-
 #if UNITY_EDITOR
         protected void OnDrawGizmosSelected()
         {

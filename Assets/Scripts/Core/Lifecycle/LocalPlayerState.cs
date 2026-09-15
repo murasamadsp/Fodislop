@@ -5,7 +5,6 @@ using Fodinae.Core.Interfaces;
 
 namespace Fodinae.Core.Lifecycle;
 
-/// <summary>Default ILocalPlayerState: publish/clear with idempotent change notification.</summary>
 public sealed class LocalPlayerState : ILocalPlayerState
 {
     public ILocalPlayer? Current { get; private set; }

@@ -105,16 +105,7 @@ namespace Fodinae.UI
                 _camera = _gameplayCamera.Camera;
             }
 
-            var robot = _robotManager?.GetOrCreateRobot(packet.BotId);
-            if (robot == null)
-            {
-                return;
-            }
-
-            if (!IsInCameraView(robot.transform.position))
-            {
-                return;
-            }
+            ExpireBubbleOf((int)packet.BotId);
 
             var bubble = GetFromPool();
             if (bubble == null)
@@ -122,9 +113,27 @@ namespace Fodinae.UI
                 return;
             }
 
-            bubble.transform.position = robot.transform.position + (Vector3.up * 1.8f);
-            bubble.Init(packet.Text);
+            var robot = _robotManager?.GetOrCreateRobot(packet.BotId);
+            if (robot == null)
+            {
+                ReturnToPool(bubble);
+                return;
+            }
+
+            bubble.Init((int)packet.BotId, packet.Text, robot.transform);
             _activeBubbles.Add(bubble);
+        }
+
+        private void ExpireBubbleOf(int ownerID)
+        {
+            for (int i = _activeBubbles.Count - 1; i >= 0; i--)
+            {
+                FloatingChatBubble bubble = _activeBubbles[i];
+                if (bubble != null && bubble.OwnerID == ownerID)
+                {
+                    bubble.Expire();
+                }
+            }
         }
 
         private FloatingChatBubble? GetFromPool()
@@ -160,15 +169,5 @@ namespace Fodinae.UI
             _pool.Enqueue(bubble);
         }
 
-        private bool IsInCameraView(Vector3 worldPos)
-        {
-            if (_camera == null)
-            {
-                return false;
-            }
-
-            Vector3 vp = _camera.WorldToViewportPoint(worldPos);
-            return vp.x >= -0.15f && vp.x <= 1.15f && vp.y >= -0.15f && vp.y <= 1.15f;
-        }
     }
 }

@@ -9,13 +9,10 @@ using UnityEngine;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Handles sampling world cells and rendering pixels into the world map texture buffer.
-/// </summary>
 internal sealed class MapViewportRenderer
 {
-    private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
-    private readonly Color32 _defaultColor = UnloadedColor;
+    private static readonly Color32 _UnloadedColor = new(0, 0, 0, 255);
+    private readonly Color32 _defaultColor = _UnloadedColor;
     private readonly Color32[] _cellColorTable = new Color32[256];
     private Color32[]? _pixelBuffer;
 
@@ -90,7 +87,7 @@ internal sealed class MapViewportRenderer
                         : CellType.Unloaded;
 
                     color = type == CellType.Unloaded
-                        ? UnloadedColor
+                        ? _UnloadedColor
                         : _cellColorTable[(byte)type];
                 }
 

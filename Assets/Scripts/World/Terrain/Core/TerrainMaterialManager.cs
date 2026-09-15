@@ -9,34 +9,34 @@ using UnityEngine;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Manages terrain materials and shader parameters based on client configuration and active atlases.
-/// </summary>
 public sealed class TerrainMaterialManager
 {
-    private static readonly int BaseMapPropertyId = Shader.PropertyToID("_BaseMap");
-    private static readonly int FlowMapPropertyId = Shader.PropertyToID("_FlowMap");
-    private static readonly int FlowScalePropertyId = Shader.PropertyToID("_FlowScale");
-    private static readonly int ShimmerSpeedScalePropertyId = Shader.PropertyToID("_ShimmerSpeedScale");
-    private static readonly int PulseSpeedScalePropertyId = Shader.PropertyToID("_PulseSpeedScale");
-    private static readonly int ShimmerColorPropertyId = Shader.PropertyToID("_ShimmerColor");
-    private static readonly int DebugColorPropertyId = Shader.PropertyToID("_DebugColor");
-    private static readonly int DebugModePropertyId = Shader.PropertyToID("_DebugMode");
-    private static readonly int WorldLightTexturePropertyId = Shader.PropertyToID("_WorldLightTexture");
-    private static readonly int WorldLightRectPropertyId = Shader.PropertyToID("_WorldLightRect");
+    private static readonly int _BaseMapPropertyID = Shader.PropertyToID("_BaseMap");
+    private static readonly int _FlowMapPropertyID = Shader.PropertyToID("_FlowMap");
+    private static readonly int _FlowScalePropertyID = Shader.PropertyToID("_FlowScale");
+    private static readonly int _ShimmerSpeedScalePropertyID = Shader.PropertyToID("_ShimmerSpeedScale");
+    private static readonly int _PulseSpeedScalePropertyID = Shader.PropertyToID("_PulseSpeedScale");
+    private static readonly int _ShimmerColorPropertyID = Shader.PropertyToID("_ShimmerColor");
+    private static readonly int _DebugColorPropertyID = Shader.PropertyToID("_DebugColor");
+    private static readonly int _DebugModePropertyID = Shader.PropertyToID("_DebugMode");
+    private static readonly int _WorldLightTexturePropertyID = Shader.PropertyToID("_WorldLightTexture");
+    private static readonly int _WorldLightRectPropertyID = Shader.PropertyToID("_WorldLightRect");
 
-    private Material[] _materials = Array.Empty<Material>();
-    private List<int>[] _subMeshIndices = Array.Empty<List<int>>();
+    private Material[] _materials = [];
+    private Material[] _overlayMaterials = [];
+    private Material[] _cellMaterials = [];
+
+    // Единственный материал террейна: меш идентификаторов, все атласы разом.
+    public Material[] CellMaterials => _cellMaterials;
     private Shader? _terrainShader;
     private int _lastAtlasCount = -1;
     private bool _lightingBindingValidated;
 
     public Material[] Materials => _materials;
 
-    public List<int>[] SubMeshIndices => _subMeshIndices;
-
-    public bool LightingBindingValidated => _lightingBindingValidated;
-
+    // Материалы накладки дверей: те же, но без режима клеток — накладка
+    // остаётся обычным мешем вершин.
+    public Material[] OverlayMaterials => _overlayMaterials;
     public Shader? TerrainShader
     {
         get => _terrainShader;
@@ -64,14 +64,14 @@ public sealed class TerrainMaterialManager
             return;
         }
 
-        foreach (Material material in _materials)
+        foreach (Material material in AllMaterials())
         {
-            material.SetVector(FlowScalePropertyId, config.TerrainFlowScale);
-            material.SetFloat(ShimmerSpeedScalePropertyId, config.TerrainShimmerSpeedScale);
-            material.SetFloat(PulseSpeedScalePropertyId, config.TerrainPulseSpeedScale);
-            material.SetColor(ShimmerColorPropertyId, config.TerrainShimmerColor);
-            material.SetColor(DebugColorPropertyId, config.TerrainDebugColor);
-            material.SetFloat(DebugModePropertyId, config.TerrainDebugMode ? 1f : 0f);
+            material.SetVector(_FlowScalePropertyID, config.Terrain.FlowScale);
+            material.SetFloat(_ShimmerSpeedScalePropertyID, config.Terrain.ShimmerSpeedScale);
+            material.SetFloat(_PulseSpeedScalePropertyID, config.Terrain.PulseSpeedScale);
+            material.SetColor(_ShimmerColorPropertyID, config.Terrain.ShimmerColor);
+            material.SetColor(_DebugColorPropertyID, config.Terrain.DebugColor);
+            material.SetFloat(_DebugModePropertyID, config.Terrain.DebugMode ? 1f : 0f);
         }
     }
 
@@ -97,12 +97,10 @@ public sealed class TerrainMaterialManager
             cellCache.ClearCaches();
             CleanupMaterials();
 
-            _subMeshIndices = new List<int>[atlases.Count];
             _materials = new Material[atlases.Count];
-            int estimatedPerAtlas = (meshWidth * meshHeight * 2 * 6 / atlases.Count) + 16;
+            _overlayMaterials = new Material[atlases.Count];
             for (int i = 0; i < atlases.Count; i++)
             {
-                _subMeshIndices[i] = new List<int>(estimatedPerAtlas);
                 Shader shader = _terrainShader ??
                     throw new InvalidOperationException(
                         "Terrain shader was not initialized before atlas material creation.");
@@ -112,36 +110,49 @@ public sealed class TerrainMaterialManager
                     hideFlags = HideFlags.HideAndDontSave,
                 };
                 RequireShaderProperties(_materials[i]);
-                _materials[i].SetVector(FlowScalePropertyId, clientConfig.TerrainFlowScale);
-                _materials[i].SetFloat(ShimmerSpeedScalePropertyId, clientConfig.TerrainShimmerSpeedScale);
-                _materials[i].SetFloat(PulseSpeedScalePropertyId, clientConfig.TerrainPulseSpeedScale);
-                _materials[i].SetColor(ShimmerColorPropertyId, clientConfig.TerrainShimmerColor);
-                _materials[i].SetColor(DebugColorPropertyId, clientConfig.TerrainDebugColor);
-                _materials[i].SetFloat(DebugModePropertyId, clientConfig.TerrainDebugMode ? 1f : 0f);
+                _materials[i].SetVector(_FlowScalePropertyID, clientConfig.Terrain.FlowScale);
+                _materials[i].SetFloat(_ShimmerSpeedScalePropertyID, clientConfig.Terrain.ShimmerSpeedScale);
+                _materials[i].SetFloat(_PulseSpeedScalePropertyID, clientConfig.Terrain.PulseSpeedScale);
+                _materials[i].SetColor(_ShimmerColorPropertyID, clientConfig.Terrain.ShimmerColor);
+                _materials[i].SetColor(_DebugColorPropertyID, clientConfig.Terrain.DebugColor);
+                _materials[i].SetFloat(_DebugModePropertyID, clientConfig.Terrain.DebugMode ? 1f : 0f);
 
                 if (_materials[i].FindPass("Universal2D") < 0 ||
-                    _materials[i].FindPass("LightingMaterialField") < 0)
+                    _materials[i].FindPass(
+                        ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField) < 0)
                 {
                     throw new InvalidOperationException(
                         $"Terrain material '{_materials[i].name}' is missing required " +
                         "world-lighting properties or passes.");
                 }
+
+                _overlayMaterials[i] = new Material(_materials[i])
+                {
+                    name = $"Terrain Door Overlay Material {i}",
+                    hideFlags = HideFlags.HideAndDontSave,
+                };
+
             }
 
-            materialsChanged = true;
-        }
-        else
-        {
-            int estimatedPerAtlas =
-                (meshWidth * meshHeight * 2 * 6 / _subMeshIndices.Length) + 16;
-            foreach (var list in _subMeshIndices)
+            if (atlases.Count > _TerrainAtlasPropertyIDs.Length)
             {
-                list.Clear();
-                if (list.Capacity < estimatedPerAtlas)
-                {
-                    list.Capacity = estimatedPerAtlas;
-                }
+                throw new InvalidOperationException(
+                    $"Terrain cell material holds {_TerrainAtlasPropertyIDs.Length} atlases, got {atlases.Count}.");
             }
+
+            // Один материал на все атласы рисует меш идентификаторов: при
+            // материале на атлас каждый проходил бы все вершины сетки.
+            _cellMaterials =
+            [
+                new Material(_materials[0])
+                {
+                    name = "Terrain Cell Material",
+                    hideFlags = HideFlags.HideAndDontSave,
+                },
+            ];
+            _cellMaterials[0].EnableKeyword(CellModeKeyword);
+
+            materialsChanged = true;
         }
 
         return materialsChanged;
@@ -149,25 +160,70 @@ public sealed class TerrainMaterialManager
 
     public void BindAtlasTextures(
         IReadOnlyList<IAtlasDescriptor> atlases,
-        ITextureService textureService,
-        Mesh mesh)
+        ITextureService textureService)
     {
-        for (int i = 0; i < atlases.Count; i++)
+        for (int i = 0; i < atlases.Count && i < _materials.Length; i++)
         {
-            var atlasTex = atlases[i].Texture;
-            if (_materials[i].GetTexture(BaseMapPropertyId) != atlasTex)
+            BindAtlas(_materials[i], atlases[i].Texture, textureService.FlowMapTexture);
+            BindAtlas(_overlayMaterials[i], atlases[i].Texture, textureService.FlowMapTexture);
+            if (_cellMaterials.Length > 0 && i < _TerrainAtlasPropertyIDs.Length &&
+                _cellMaterials[0].GetTexture(_TerrainAtlasPropertyIDs[i]) != atlases[i].Texture)
             {
-                _materials[i].SetTexture(BaseMapPropertyId, atlasTex);
+                _cellMaterials[0].SetTexture(_TerrainAtlasPropertyIDs[i], atlases[i].Texture);
             }
+        }
 
-            if (_materials[i].GetTexture(FlowMapPropertyId) != textureService.FlowMapTexture)
-            {
-                _materials[i].SetTexture(FlowMapPropertyId, textureService.FlowMapTexture);
-            }
-
-            mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+        if (_cellMaterials.Length > 0)
+        {
+            BindAtlas(_cellMaterials[0], atlases[0].Texture, textureService.FlowMapTexture);
         }
     }
+
+    // Атлас или карта потока могут быть ещё не загружены: пустой слот
+    // материала — штатное состояние до загрузки, SetTexture принимает null.
+    private static void BindAtlas(Material material, Texture? atlas, Texture? flowMap)
+    {
+        if (material.GetTexture(_BaseMapPropertyID) != atlas)
+        {
+            material.SetTexture(_BaseMapPropertyID, atlas);
+        }
+
+        if (material.GetTexture(_FlowMapPropertyID) != flowMap)
+        {
+            material.SetTexture(_FlowMapPropertyID, flowMap);
+        }
+    }
+
+    private System.Collections.Generic.IEnumerable<Material> AllMaterials()
+    {
+        foreach (Material material in _materials)
+        {
+            yield return material;
+        }
+
+        foreach (Material material in _overlayMaterials)
+        {
+            yield return material;
+        }
+
+        foreach (Material material in _cellMaterials)
+        {
+            yield return material;
+        }
+    }
+
+    private static readonly int[] _TerrainAtlasPropertyIDs =
+    [
+        Shader.PropertyToID("_TerrainAtlas0"),
+        Shader.PropertyToID("_TerrainAtlas1"),
+        Shader.PropertyToID("_TerrainAtlas2"),
+        Shader.PropertyToID("_TerrainAtlas3"),
+        Shader.PropertyToID("_TerrainAtlas4"),
+        Shader.PropertyToID("_TerrainAtlas5"),
+        Shader.PropertyToID("_TerrainAtlas6"),
+        Shader.PropertyToID("_TerrainAtlas7"),
+    ];
+    private const string CellModeKeyword = "FODINAE_TERRAIN_CELLS";
 
     public void ValidateLightingBinding()
     {
@@ -180,15 +236,16 @@ public sealed class TerrainMaterialManager
         {
             Material material = _materials[materialIndex];
             if (material.FindPass("Universal2D") < 0 ||
-                material.FindPass("LightingMaterialField") < 0)
+                material.FindPass(
+                    ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField) < 0)
             {
                 throw new InvalidOperationException(
                     $"Terrain material '{material.name}' is missing world-lighting passes.");
             }
         }
 
-        Texture globalTexture = Shader.GetGlobalTexture(WorldLightTexturePropertyId);
-        Vector4 globalRect = Shader.GetGlobalVector(WorldLightRectPropertyId);
+        Texture globalTexture = Shader.GetGlobalTexture(_WorldLightTexturePropertyID);
+        Vector4 globalRect = Shader.GetGlobalVector(_WorldLightRectPropertyID);
         if (globalTexture == null || globalRect.z <= 0f || globalRect.w <= 0f)
         {
             throw new InvalidOperationException(
@@ -196,16 +253,13 @@ public sealed class TerrainMaterialManager
         }
 
         _lightingBindingValidated = true;
-        Debug.Log(
-            $"[TerrainLighting] Bound {globalTexture.name} " +
-            $"({globalTexture.width}x{globalTexture.height}) to {_materials.Length} terrain material(s).");
     }
 
     public void CleanupMaterials()
     {
         if (_materials != null)
         {
-            foreach (var mat in _materials)
+            foreach (var mat in AllMaterials())
             {
                 if (mat != null)
                 {

@@ -53,11 +53,6 @@ namespace Fodinae.Game
 
         protected void Awake()
         {
-            if (TryGetComponent<SpriteRenderer>(out var obsoleteRenderer))
-            {
-                obsoleteRenderer.enabled = false;
-            }
-
             Transform? existingVisual = transform.Find("BuildingVisual");
             GameObject visualObject = existingVisual != null
                 ? existingVisual.gameObject
@@ -79,6 +74,7 @@ namespace Fodinae.Game
             clanGo.transform.SetParent(transform, worldPositionStays: false);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
             _clanTransform = clanGo.transform;
+            enabled = false;
         }
 
         public void Initialize(BuildingType buildingType, byte variant, byte linkedClan)
@@ -94,6 +90,7 @@ namespace Fodinae.Game
             _buildingType = buildingType;
             _variant = variant;
             _linkedClan = linkedClan;
+            enabled = _hasEffekseerEffect;
 
             LoadAssets();
         }
@@ -124,13 +121,8 @@ namespace Fodinae.Game
             string buildingPath = $"Pack/{buildingName}/{_variant}";
 
             // 1. Try loading as a texture (existing behavior — static or animated sprite)
-            if (_assetLoader is not ClientAssetLoader loader)
-            {
-                return;
-            }
-
             Texture2D? buildingTexture = await TryLoadOptionalTextureAsync(
-                loader,
+                _assetLoader,
                 buildingPath,
                 token);
             if (token.IsCancellationRequested)
@@ -160,7 +152,7 @@ namespace Fodinae.Game
             }
 
             // 2. Texture not found — try loading as Effekseer effect (.efk data)
-            var efkBytes = await loader.GetAssetBytesAsync(buildingPath, timeoutSeconds: 10);
+            var efkBytes = await _assetLoader.GetAssetBytesAsync(buildingPath, timeoutSeconds: 10);
             if (token.IsCancellationRequested || efkBytes == null || efkBytes.Length < 4)
             {
                 return;
@@ -176,7 +168,7 @@ namespace Fodinae.Game
             var effectAsset = await RuntimeEffekseerLoader.LoadEffectAsync(
                 efkBytes,
                 $"Pack_{buildingName}_{_variant}",
-                loader,
+                _assetLoader,
                 texturePathMapper: path => $"{buildingPath}/{path}",
                 textureTimeoutSeconds: 10);
 
@@ -188,6 +180,7 @@ namespace Fodinae.Game
             _effekseerHandle = EffekseerSystem.PlayEffect(effectAsset, transform.position);
             _hasEffekseerEffect = true;
             _effekseerAsset = effectAsset;
+            enabled = true;
 
             _buildingBatchHandle?.SetEnabled(false);
 
@@ -206,13 +199,8 @@ namespace Fodinae.Game
                 return;
             }
 
-            if (_assetLoader is not ClientAssetLoader loader)
-            {
-                return;
-            }
-
             Texture2D? clanTexture = await TryLoadOptionalTextureAsync(
-                loader,
+                _assetLoader,
                 $"Clan/{_linkedClan}",
                 token);
             if (token.IsCancellationRequested || clanTexture == null || _clanTransform == null)
@@ -235,7 +223,7 @@ namespace Fodinae.Game
         }
 
         private static async UniTask<Texture2D?> TryLoadOptionalTextureAsync(
-            ClientAssetLoader loader,
+            IAssetLoader loader,
             string filename,
             CancellationToken cancellationToken)
         {
@@ -279,6 +267,7 @@ namespace Fodinae.Game
                 : RenderingConstants.CELL_SIZE;
             float xOffset = (packWidth / (RenderingConstants.CELL_SIZE * 2f)) + 0.1f;
             _clanTransform.localPosition = new Vector3(xOffset, -0.5f, 0);
+            _clanBatchHandle?.MarkTransformDirty();
         }
 
         private void ApplyRoofOffset()
@@ -296,6 +285,7 @@ namespace Fodinae.Game
                 center.x * ProjectRuntimeContracts.World.CellSize,
                 -center.y * ProjectRuntimeContracts.World.CellSize,
                 0f);
+            _buildingBatchHandle?.MarkTransformDirty();
         }
 
         protected void Update()
@@ -308,6 +298,7 @@ namespace Fodinae.Game
                 _effekseerAsset = null;
 
                 _buildingBatchHandle?.SetEnabled(_buildingSprite != null);
+                enabled = false;
             }
         }
 
@@ -319,6 +310,7 @@ namespace Fodinae.Game
                 _hasEffekseerEffect = false;
                 RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
                 _effekseerAsset = null;
+                enabled = false;
             }
         }
 
@@ -333,14 +325,17 @@ namespace Fodinae.Game
             {
                 _buildingBatchHandle ??= _entityBatchRenderer.RegisterSprite(
                     _visualTransform,
-                    RenderingConstants.BUILDING_ROOF_SORTING_ORDER);
+                    RenderingConstants.BUILDING_ROOF_SORTING_ORDER,
+                    isStatic: true);
             }
+
             if (_clanTransform != null)
             {
                 _clanBatchHandle ??=
                     _entityBatchRenderer.RegisterSprite(
                         _clanTransform,
-                        RenderingConstants.BUILDING_ROOF_SORTING_ORDER + 10);
+                        RenderingConstants.BUILDING_ROOF_SORTING_ORDER + 10,
+                        isStatic: true);
             }
         }
 

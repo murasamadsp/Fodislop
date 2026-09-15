@@ -61,8 +61,43 @@ Shader "Fodinae/World Entity"
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
 
+            // Тумблер режима выборки. Ноль — ближайшая без сглаживания,
+            // единица — со сглаженной границей текселя. Раздаётся глобально
+            // из DisplayManager: террейн и сущности рисуются разными
+            // материалами, часть из них создаётся в рантайме.
+            float _PixelArtFiltering;
+
+            // Сглаженная ближайшая выборка — та же, что у террейна.
+            //
+            // Тексель спрайта занимает на экране дробное число пикселей,
+            // и ближайшая выборка вынуждена одни строки текселей
+            // дублировать, а другие терять. Функция оставляет выборку
+            // ближайшей внутри текселя и размывает только его границу,
+            // ровно на ширину экранного пикселя из fwidth.
+            //
+            // Выйти за край спрайта эта полоса может лишь на полтекселя и
+            // попадает в отступ атласа, который заполнен прозрачным: край
+            // смягчается, соседняя запись атласа не подтекает.
+            float2 PixelArtSampleUV(float2 uv, float2 textureSize)
+            {
+                if (_PixelArtFiltering < 0.5)
+                {
+                    return uv;
+                }
+
+                float2 uvTexels = uv * textureSize;
+                float2 seam = floor(uvTexels + 0.5);
+                float2 pixelWidth = max(fwidth(uvTexels), 1e-5);
+                uvTexels = seam + clamp((uvTexels - seam) / pixelWidth, -0.5, 0.5);
+                return uvTexels / textureSize;
+            }
+
+            // Свойства материала держатся вместе: одно, объявленное снаружи,
+            // выключает SRP Batcher на всём шейдере. `_MainTex_TexelSize` Unity
+            // заводит сам под текстуру _MainTex — это свойство материала.
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color;
+                float4 _MainTex_TexelSize;
             CBUFFER_END
 
             Texture2D<float4> _WorldLightTexture;
@@ -100,24 +135,32 @@ Shader "Fodinae/World Entity"
                 output.uv = input.uv;
                 output.color = input.color;
                 // Batch-mesh vertices are pre-transformed world positions, so
-                // object space equals world space here.
-                output.worldPos = input.positionOS.xy;
+                // object space equals world space when rendering with identity matrix.
+                // Using TransformObjectToWorld ensures correct light sampling if an entity
+                // or preview is rendered with a non-identity GameObject transform.
+                output.worldPos = TransformObjectToWorld(input.positionOS.xyz).xy;
                 return output;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
-                half4 texColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                float2 sampleUV = PixelArtSampleUV(input.uv, _MainTex_TexelSize.zw);
+                half4 texColor = _PixelArtFiltering < 0.5
+                    ? SAMPLE_TEXTURE2D(_MainTex, sampler_PointClamp, sampleUV)
+                    : SAMPLE_TEXTURE2D(_MainTex, sampler_LinearClamp, sampleUV);
                 half4 color = texColor * input.color * _Color;
-                float3 worldLight = GetWorldLightColor(input.worldPos);
-                if (_WorldLightDebugView != 0)
+                if (color.a > 0.003)
                 {
-                    return half4(worldLight, color.a);
+                    float3 worldLight = GetWorldLightColor(input.worldPos);
+                    color.rgb *= worldLight;
+                    // Premultiplied output, matching Sprites/Default's blend.
+                    color.rgb *= color.a;
+                }
+                else
+                {
+                    color = half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                color.rgb *= worldLight;
-                // Premultiplied output, matching Sprites/Default's blend.
-                color.rgb *= color.a;
                 return color;
             }
             ENDHLSL
