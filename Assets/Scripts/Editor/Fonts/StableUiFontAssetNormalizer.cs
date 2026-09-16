@@ -8,7 +8,7 @@ using UnityEngine.TextCore.Text;
 
 namespace Kern.Editor;
 
-    internal static class StableUiFontAssetNormalizer
+internal static class StableUiFontAssetNormalizer
 {
     private const string MenuPath = "Kern/Assets/Normalize Stable UI Fonts";
 
@@ -96,5 +96,4 @@ namespace Kern.Editor;
             }
         }
     }
-
 }

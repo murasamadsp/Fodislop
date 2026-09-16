@@ -219,7 +219,7 @@
 - [ ] Потолок долга по арту в духе `DEBT_BUDGET`: число ассетов вне метрики
       фиксируется числом; рост — нарушение, падение — тоже, иначе отвоёванное
       можно молча вернуть.
-- [ ] Расширить `Assets/Editor/Rendering/PixelArtTextureImportPolicy.cs` на
+- [ ] Расширить `Assets/Scripts/Editor/Rendering/PixelArtTextureImportPolicy.cs` на
       `Assets/Textures` (сейчас покрыты только `Resources/Programmator` и
       `Resources/Skills`). В комментарии честно оговорить, что для этой ветки
       настройки импорта на экран не влияют: `BuildTextureStager` копирует файлы

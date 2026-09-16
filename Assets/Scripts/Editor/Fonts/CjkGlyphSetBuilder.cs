@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Kern.Editor;
 
-    internal static class CjkGlyphSetBuilder
+internal static class CjkGlyphSetBuilder
 {
     public const string EnglishLocalizationPath = "Assets/Resources/Localization/en.json";
     public const string RussianLocalizationPath = "Assets/Resources/Localization/ru.json";

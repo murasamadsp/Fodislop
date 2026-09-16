@@ -219,7 +219,7 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeIntParam(
             compute,
             MaterialYFlipID,
-            0);
+            SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
         commandBuffer.SetComputeIntParam(
             compute,
             EnableDiffuseBounceID,

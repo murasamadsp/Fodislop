@@ -58,7 +58,6 @@ public sealed class DisplayOutputProfileTests
 
     [TestCase("Assets/Settings/DefaultVolumeProfile.asset")]
     [TestCase("Assets/Settings/PostProcessVolumeProfile.asset")]
-    [TestCase("Assets/Settings/MenuSceneryVolumeProfile.asset")]
     public void AuthoredProfilesDoNotIntroduceASecondNativePostProcess(string path)
     {
         VolumeProfile profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(path);

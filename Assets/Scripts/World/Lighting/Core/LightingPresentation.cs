@@ -50,7 +50,6 @@ internal sealed class LightingPresentation
         Shader.SetGlobalVector(WorldLightTextureSizeID, new Vector4(1, 1, 1, 1));
         Shader.SetGlobalInteger(WorldLightDebugViewID, 0);
         Shader.SetGlobalInteger(WorldLightPerBlockID, 0);
-        Shader.SetGlobalInteger(WorldOccupancyYFlipID, 0);
         Shader.SetGlobalFloat(WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
         _disabledStatePublished = true;
     }
@@ -78,7 +77,7 @@ internal sealed class LightingPresentation
             Shader.SetGlobalTexture(WorldOccupancyTextureID, _resources.MaterialField);
             Shader.SetGlobalInteger(
                 WorldOccupancyYFlipID,
-                0);
+                SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
         }
 
         Shader.SetGlobalInteger(WorldLightDebugViewID, (int)debugView);

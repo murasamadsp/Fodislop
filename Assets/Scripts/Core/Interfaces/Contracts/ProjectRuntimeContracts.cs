@@ -97,6 +97,12 @@ public static class ProjectRuntimeContracts
         public const string MainGame = "MainGame";
     }
 
+    public static class EditorSession
+    {
+        // Сцена, из которой нажали Play: редактор кладёт её сюда, Bootstrap забирает.
+        public const string PlayModeTargetScene = "Kern.PlayModeTargetScene";
+    }
+
     public static class PreviewVisuals
     {
         public const float RobotPixelsPerUnit = 16f;

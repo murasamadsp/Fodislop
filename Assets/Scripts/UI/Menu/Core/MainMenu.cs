@@ -292,6 +292,12 @@ namespace Kern.UI
                 }
             }
 
+            // [ExecuteAlways]: вне Play Mode VContainer не вызывает Construct.
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             if (_loadingActive)
             {
                 UpdateLoaderProgress();

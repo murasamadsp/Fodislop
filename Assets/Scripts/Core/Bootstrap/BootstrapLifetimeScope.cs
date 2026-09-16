@@ -13,7 +13,6 @@ using Kern.Networking;
 using Kern.Networking.Auth;
 using Kern.Networking.Connection;
 using Kern.Rendering;
-using Kern.UI;
 using MinesServer.Networking.Connection.Client;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -85,14 +84,11 @@ namespace Kern.Core
                     Debug.LogError($"[Bootstrap] Application camera bind failed: {ex.Message}");
                     throw;
                 }
-
-                SceneManager.sceneLoaded += OnSceneLoaded;
             }
         }
 
         protected override void OnDestroy()
         {
-            SceneManager.sceneLoaded -= OnSceneLoaded;
             // Do not dispose the gate here. A transition can still be unwinding
             // after the scope receives OnDestroy (for example when the Test
             // Runner exits PlayMode). Disposing it makes the continuation's
@@ -100,14 +96,6 @@ namespace Kern.Core
             // transition result. SemaphoreSlim is managed state and can be
             // reclaimed normally once no transition references it.
             base.OnDestroy();
-        }
-
-        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-        {
-            // HDR is reconciled by HDROutputReconciler, an entry point on this
-            // scope: keeping the display surface in step is a rendering concern
-            // and does not belong in the composition root.
-            EnforceSingleCamera(scene);
         }
 
         private void BindApplicationCamera()
@@ -125,32 +113,6 @@ namespace Kern.Core
             }
 
             GameplayCamera.BindPersistent(camera);
-            EnforceSingleCamera(gameObject.scene);
-        }
-
-        private void EnforceSingleCamera(Scene scene)
-        {
-            Camera applicationCamera = _applicationCamera;
-            if (applicationCamera == null || applicationCamera.gameObject.scene != gameObject.scene)
-            {
-                throw new InvalidOperationException("BootstrapLifetimeScope requires an authored application camera reference in this scene.");
-            }
-            applicationCamera.backgroundColor = new Color(0.012f, 0.018f, 0.032f, 1f);
-            applicationCamera.clearFlags = CameraClearFlags.SolidColor;
-            foreach (GameObject root in scene.GetRootGameObjects())
-            {
-                foreach (Camera camera in root.GetComponentsInChildren<Camera>(true))
-                {
-                    if (camera == applicationCamera || camera.targetTexture != null ||
-                        camera.GetComponentInParent<MenuSceneryController>() != null)
-                    {
-                        continue;
-                    }
-
-                    camera.enabled = false;
-                    camera.tag = "Untagged";
-                }
-            }
         }
 
         private async UniTask EnsureMainMenuLoadedAsync()

@@ -1,6 +1,6 @@
-#if UNITY_EDITOR
 #nullable enable
 
+using Kern.Core;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -11,8 +11,8 @@ namespace Kern.Editor;
 [InitializeOnLoad]
 public static class PlayModeSceneBootstrapper
 {
-    public const string BootstrapScenePath = "Assets/Scenes/Bootstrap.unity";
-    public const string TargetSceneSessionKey = "Kern.PlayModeTargetScene";
+    public static readonly string BootstrapScenePath =
+        BuildSceneOrder.ScenePath(ProjectRuntimeContracts.SceneNames.Bootstrap);
 
     static PlayModeSceneBootstrapper()
     {
@@ -21,7 +21,6 @@ public static class PlayModeSceneBootstrapper
         EnsurePlayModeStartScene();
     }
 
-    [MenuItem("Kern/Architecture/Ensure Play Mode Bootstrap Scene")]
     public static void EnsurePlayModeStartScene()
     {
         SceneAsset? bootstrapAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootstrapScenePath);
@@ -65,15 +64,14 @@ public static class PlayModeSceneBootstrapper
         }
 
         if (!string.IsNullOrEmpty(targetScene) &&
-            targetScene != "Bootstrap")
+            targetScene != ProjectRuntimeContracts.SceneNames.Bootstrap)
         {
-            SessionState.SetString(TargetSceneSessionKey, targetScene);
+            SessionState.SetString(ProjectRuntimeContracts.EditorSession.PlayModeTargetScene, targetScene);
             Debug.Log($"[PlayModeSceneBootstrapper] Play mode requested with scene '{targetScene}' active/selected; launching Bootstrap first.");
         }
         else
         {
-            SessionState.SetString(TargetSceneSessionKey, string.Empty);
+            SessionState.SetString(ProjectRuntimeContracts.EditorSession.PlayModeTargetScene, string.Empty);
         }
     }
 }
-#endif

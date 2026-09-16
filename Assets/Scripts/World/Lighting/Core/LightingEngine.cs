@@ -309,11 +309,7 @@ namespace Kern.World.Lighting
             }
         }
 
-        // MaterialField is rendered with GL.GetGPUProjectionMatrix(..., renderIntoTexture: true),
-        // which already inverts row 1 of the projection matrix on platforms where graphicsUVStartsAtTop
-        // is true. The texture in memory is therefore already upright (row 0 = bottom, row H-1 = top),
-        // matching the compute shader and lightmap coordinate system. No Y flip is required.
-        public int MaterialYFlip => 0;
+        public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
         public float CellSize => ProjectRuntimeContracts.World.CellSize;
 

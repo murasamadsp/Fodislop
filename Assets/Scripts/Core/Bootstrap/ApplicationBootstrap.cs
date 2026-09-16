@@ -101,9 +101,9 @@ public sealed class ApplicationBootstrap : IStartable
     {
 #if UNITY_EDITOR
         string target = UnityEditor.SessionState.GetString(
-            "Kern.PlayModeTargetScene",
+            ProjectRuntimeContracts.EditorSession.PlayModeTargetScene,
             string.Empty);
-        UnityEditor.SessionState.SetString("Kern.PlayModeTargetScene", string.Empty);
+        UnityEditor.SessionState.SetString(ProjectRuntimeContracts.EditorSession.PlayModeTargetScene, string.Empty);
         if (!string.IsNullOrWhiteSpace(target) &&
             target != ProjectRuntimeContracts.SceneNames.Bootstrap)
         {

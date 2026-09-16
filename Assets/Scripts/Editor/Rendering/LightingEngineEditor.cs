@@ -1,6 +1,5 @@
 #nullable enable
 
-#if UNITY_EDITOR
 using Kern.World.Lighting;
 using UnityEditor;
 using UnityEngine;
@@ -54,4 +53,3 @@ namespace Kern.Editor
         }
     }
 }
-#endif

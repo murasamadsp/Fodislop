@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,7 +10,7 @@ namespace Kern.Editor
 {
     public class MapbConverter : EditorWindow
     {
-        [MenuItem("Tools/Convert Server Mapb")]
+        [MenuItem("Kern/World/Convert Server Mapb")]
         public static void ShowWindow()
         {
             GetWindow<MapbConverter>("Mapb Converter");
@@ -104,11 +106,7 @@ namespace Kern.Editor
                 return;
             }
 
-            string outputDir = Path.GetDirectoryName(outputPath);
-            if (!Directory.Exists(outputDir))
-            {
-                Directory.CreateDirectory(outputDir);
-            }
+            Directory.CreateDirectory(_outputFolder);
 
             try
             {
