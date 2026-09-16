@@ -3,14 +3,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using VContainer.Unity;
 
-namespace Fodinae.Rendering
+namespace Kern.Rendering
 {
     // Чистый сервис контейнера (SCENE_STANDARD.md §1): настройки вывода
     // применяются при старте scope.

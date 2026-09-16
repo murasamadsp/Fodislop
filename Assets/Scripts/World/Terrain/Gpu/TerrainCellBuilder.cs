@@ -3,12 +3,12 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Fodinae.Core.Interfaces;
-using Fodinae.World.Terrain.Background;
+using Kern.Core.Interfaces;
+using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 // Всё, из чего собирается клетка террейна.
 public readonly record struct TerrainCellSources(

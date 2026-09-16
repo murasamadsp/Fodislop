@@ -2,9 +2,9 @@
 
 using System;
 using UnityEngine;
-using Fodinae.Core;
+using Kern.Core;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 public static class PostProcessRuntimeState
 {
     internal static Camera? MainCamera { get; private set; }

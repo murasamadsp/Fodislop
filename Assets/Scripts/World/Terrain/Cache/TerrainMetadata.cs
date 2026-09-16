@@ -4,7 +4,7 @@ using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 public enum TerrainCellState
 {
     Loaded,

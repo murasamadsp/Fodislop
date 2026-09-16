@@ -2,14 +2,14 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering;
-using Fodinae.World.Lighting.Quality;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 internal sealed class LightingResourceManager
 {
     // Static solves happen as one frame-sized burst when the lighting region
@@ -99,10 +99,10 @@ internal sealed class LightingResourceManager
         ValidateMaterialFieldPass();
         LightingCommandBuffer = new CommandBuffer
         {
-            name = "Fodinae Radiance Cascades",
+            name = "Kern Radiance Cascades",
         };
         GpuPipelineInitialized = true;
-        Shader.EnableKeyword("FODINAE_WORLD_LIGHTING");
+        Shader.EnableKeyword("KERN_WORLD_LIGHTING");
     }
 
     public void ReleaseGpuPipeline()

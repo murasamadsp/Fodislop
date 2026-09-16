@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
+using Kern.Core;
+using Kern.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 public sealed class TerrainMaterialManager
 {
@@ -223,7 +223,7 @@ public sealed class TerrainMaterialManager
         Shader.PropertyToID("_TerrainAtlas6"),
         Shader.PropertyToID("_TerrainAtlas7"),
     ];
-    private const string CellModeKeyword = "FODINAE_TERRAIN_CELLS";
+    private const string CellModeKeyword = "KERN_TERRAIN_CELLS";
 
     public void ValidateLightingBinding()
     {

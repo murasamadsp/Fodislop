@@ -2,12 +2,12 @@
 
 using System;
 using System.Text;
-using Fodinae.Core.Localization;
+using Kern.Core.Localization;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 internal static class ChatMessageFormatter
 {

@@ -7,18 +7,18 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public static class FmodBankBuilder
     {
-        private const string FmodSourceBuildPath = "FodinaeAudio/Build/Desktop";
+        private const string FmodSourceBuildPath = "KernAudio/Build/Desktop";
         private const string StreamingAssetsAudioPath = "Assets/StreamingAssets/Audio";
 
         [MenuItem("Tools/FMOD/Sync Banks to StreamingAssets")]
         public static void SyncBanks()
         {
             var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            var fsproPath = Path.Combine(projectRoot, "FodinaeAudio", "FodinaeAudio.fspro");
+            var fsproPath = Path.Combine(projectRoot, "KernAudio", "KernAudio.fspro");
             var sourceDir = Path.Combine(projectRoot, FmodSourceBuildPath);
             var targetDir = Path.Combine(projectRoot, StreamingAssetsAudioPath);
 

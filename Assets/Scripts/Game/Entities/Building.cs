@@ -3,14 +3,14 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.Game.Managers;
-using Fodinae.Networking.Buildings;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
+using Kern.Game.Managers;
+using Kern.Networking.Buildings;
+using Kern.Rendering.PostProcessing;
+using Kern.World;
+using Kern.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 using VContainer;
@@ -19,7 +19,7 @@ using VContainer;
 // наш домен говорит Building, провод остаётся Pack.
 using BuildingType = MinesServer.Data.PackType;
 
-namespace Fodinae.Game
+namespace Kern.Game
 {
     public class Building : MonoBehaviour
     {

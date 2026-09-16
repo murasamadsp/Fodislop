@@ -4,7 +4,7 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 public sealed class ClientConfigDecompositionContractTests
 {

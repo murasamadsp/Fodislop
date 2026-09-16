@@ -3,7 +3,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
-namespace Fodinae.LightingTests;
+namespace Kern.LightingTests;
 
 internal static class NativeHarness
 {
@@ -57,7 +57,7 @@ internal static class NativeHarness
         string computePath = Path.Combine(repositoryRoot, "Assets/Resources/Shaders/Lighting/WorldLighting.compute");
         string executable = string.IsNullOrWhiteSpace(validator) ? "glslangValidator" : validator;
         Regex kernelPattern = new("^#pragma kernel (\\w+)", RegexOptions.Multiline | RegexOptions.CultureInvariant);
-        string temporaryDirectory = Path.Combine(Path.GetTempPath(), "fodinae-hlsl-" + Guid.NewGuid().ToString("N"));
+        string temporaryDirectory = Path.Combine(Path.GetTempPath(), "kern-hlsl-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryDirectory);
         try
         {

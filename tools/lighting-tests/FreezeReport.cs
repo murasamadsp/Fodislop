@@ -2,7 +2,7 @@
 
 using System.Text.Json;
 
-namespace Fodinae.LightingTests;
+namespace Kern.LightingTests;
 
 internal static class FreezeReport
 {

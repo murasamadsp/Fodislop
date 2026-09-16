@@ -2,7 +2,7 @@
 
 using System;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 [Flags]
 public enum LightingInvalidationFlags

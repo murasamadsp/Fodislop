@@ -1,15 +1,15 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Game;
-using Fodinae.Game.Managers;
-using Fodinae.Networking;
-using Fodinae.Networking.Connection;
-using Fodinae.Player.Interfaces;
-using Fodinae.World;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Game;
+using Kern.Game.Managers;
+using Kern.Networking;
+using Kern.Networking.Connection;
+using Kern.Player.Interfaces;
+using Kern.World;
+using Kern.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.Movement;
@@ -18,7 +18,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;
 
-namespace Fodinae.Player.Logic
+namespace Kern.Player.Logic
 {
     [ExecuteAlways]
     [RequireComponent(typeof(Robot))]
@@ -59,10 +59,10 @@ namespace Fodinae.Player.Logic
         private IConnectionService _connectionService = null!;
 
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
         [Inject]
-        private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayerState = null!;
+        private Kern.Core.Interfaces.ILocalPlayerState _localPlayerState = null!;
 
         [Inject]
         private IRuntimeDebugSettings _debugSettings = null!;
@@ -479,7 +479,7 @@ namespace Fodinae.Player.Logic
                 Gizmos.color = Color.green;
                 Gizmos.DrawLine(transform.position, _robot.TargetPosition);
                 Gizmos.DrawWireSphere(_robot.TargetPosition, 0.2f);
-                FodinaeGizmos.DrawLabel(gridPos + (Vector3.down * 0.7f), $"Grid: {Position.x}, {Position.y}", Color.cyan);
+                KernGizmos.DrawLabel(gridPos + (Vector3.down * 0.7f), $"Grid: {Position.x}, {Position.y}", Color.cyan);
             }
         }
 #endif

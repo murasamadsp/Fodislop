@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 internal sealed class LightingRuntimeState
 {

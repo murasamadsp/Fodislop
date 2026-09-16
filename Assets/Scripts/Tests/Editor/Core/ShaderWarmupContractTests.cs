@@ -3,12 +3,12 @@
 using System.Collections;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
+using Kern.Core;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 public sealed class ShaderWarmupContractTests
 {

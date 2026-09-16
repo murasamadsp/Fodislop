@@ -1,11 +1,11 @@
 #if UNITY_EDITOR
 #nullable enable
 
-using Fodinae.World.Coordinates;
+using Kern.World.Coordinates;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
 [TestFixture]
 public sealed class TypedCoordinatesTests

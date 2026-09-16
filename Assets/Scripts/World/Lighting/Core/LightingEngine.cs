@@ -2,19 +2,19 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering;
-using Fodinae.World.Lighting.Diagnostics;
-using Fodinae.World.Lighting.Quality;
-using Fodinae.World.Streaming;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering;
+using Kern.World.Lighting.Diagnostics;
+using Kern.World.Lighting.Quality;
+using Kern.World.Streaming;
+using Kern.World.Terrain;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using VContainer;
 
-namespace Fodinae.World.Lighting
+namespace Kern.World.Lighting
 {
     [DisallowMultipleComponent]
     public class LightingEngine : MonoBehaviour
@@ -309,7 +309,11 @@ namespace Fodinae.World.Lighting
             }
         }
 
-        public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
+        // MaterialField is rendered with GL.GetGPUProjectionMatrix(..., renderIntoTexture: true),
+        // which already inverts row 1 of the projection matrix on platforms where graphicsUVStartsAtTop
+        // is true. The texture in memory is therefore already upright (row 0 = bottom, row H-1 = top),
+        // matching the compute shader and lightmap coordinate system. No Y flip is required.
+        public int MaterialYFlip => 0;
 
         public float CellSize => ProjectRuntimeContracts.World.CellSize;
 

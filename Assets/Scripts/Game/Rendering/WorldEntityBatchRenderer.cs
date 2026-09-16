@@ -1,20 +1,20 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces.Diagnostics;
+using Kern.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.World;
-using Fodinae.World.Lighting;
-using Fodinae.World.Streaming;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
+using Kern.World;
+using Kern.World.Lighting;
+using Kern.World.Streaming;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VContainer;
 
-namespace Fodinae.Game
+namespace Kern.Game
 {
     public class WorldEntityBatchRenderer : MonoBehaviour, ILightingGeometryContributor
     {
@@ -30,7 +30,7 @@ namespace Fodinae.Game
             StreamingPolicy.Default.AllocationQuantumCells;
 
         private static readonly ProfilerMarker _LateUpdateMarker =
-            new("Fodinae.WorldEntities.LateUpdate");
+            new("Kern.WorldEntities.LateUpdate");
 
         private static readonly AllocationLedger.Entry _AllocationEntry =
             AllocationLedger.Register("Сущности мира — LateUpdate");

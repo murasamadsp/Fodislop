@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.TextCore.LowLevel;
 using UnityEngine.TextCore.Text;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     internal static class CjkFontAssetCreator
     {
@@ -35,13 +35,13 @@ namespace Fodinae.Editor
         private const string JetBrainsMonoFontPath = FontsDirectory + "/JetBrainsMono.ttf";
         private const string JetBrainsMonoTmpAssetPath = FontsDirectory + "/JetBrainsMono_TMP.asset";
 
-        [MenuItem("Fodinae/Assets/Create CJK Fallback Fonts")]
+        [MenuItem("Kern/Assets/Create CJK Fallback Fonts")]
         private static void CreateFromMenu()
         {
             Create();
         }
 
-        [MenuItem("Fodinae/Assets/Create CJK World-Text Fonts (Tmp)")]
+        [MenuItem("Kern/Assets/Create CJK World-Text Fonts (Tmp)")]
         private static void CreateWorldTextFontsFromMenu()
         {
             CreateWorldTextFonts();

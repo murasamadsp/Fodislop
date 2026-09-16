@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.Player.Logic;
+namespace Kern.Player.Logic;
 
 public static class PlayerMovementValidator
 {

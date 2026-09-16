@@ -5,12 +5,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using Fodinae.Core;
-using Fodinae.World.Lighting.Quality;
-using Fodinae.World.Streaming;
+using Kern.Core;
+using Kern.World.Lighting.Quality;
+using Kern.World.Streaming;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting.Diagnostics;
+namespace Kern.World.Lighting.Diagnostics;
 
 public static class LightingFrameDumper
 {

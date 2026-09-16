@@ -3,19 +3,19 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.Game.Managers;
-using Fodinae.Player.Logic;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World;
-using Fodinae.World.Lighting;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
+using Kern.Game.Managers;
+using Kern.Player.Logic;
+using Kern.Rendering.PostProcessing;
+using Kern.World;
+using Kern.World.Lighting;
+using Kern.World.Terrain;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Game
+namespace Kern.Game
 {
     public class Robot : MonoBehaviour, IRobotView
     {

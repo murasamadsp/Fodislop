@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Lifecycle;
+using Kern.Core;
+using Kern.Core.Lifecycle;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 public sealed class TerrainDoorOverlayRenderer : IDisposable
 {

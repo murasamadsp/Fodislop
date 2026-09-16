@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
     internal static class CjkGlyphSetBuilder
 {

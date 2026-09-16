@@ -1,13 +1,13 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 internal sealed class MapViewportRenderer
 {

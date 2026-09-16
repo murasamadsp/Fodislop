@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     // A real 3D orbit ring (LineRenderer loop) rendered by the menu scenery
     // camera alongside the planet, so it wraps around the sphere with proper

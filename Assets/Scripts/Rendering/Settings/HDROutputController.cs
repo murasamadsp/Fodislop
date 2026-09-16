@@ -2,7 +2,7 @@
 
 using System;
 
-namespace Fodinae.Rendering;
+namespace Kern.Rendering;
 
 public sealed class HDROutputController(HDROutputController.IBackend backend)
 {

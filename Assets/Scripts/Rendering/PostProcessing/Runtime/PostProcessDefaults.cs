@@ -6,7 +6,7 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 public static class PostProcessDefaults
 {

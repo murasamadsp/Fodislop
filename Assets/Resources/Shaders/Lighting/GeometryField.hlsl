@@ -1,5 +1,5 @@
-#ifndef FODINAE_GEOMETRY_FIELD_HLSL
-#define FODINAE_GEOMETRY_FIELD_HLSL
+#ifndef KERN_GEOMETRY_FIELD_HLSL
+#define KERN_GEOMETRY_FIELD_HLSL
 
 // Утилиты для работы с material/emission полями.
 //
@@ -67,4 +67,4 @@ float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
     return length(rayDirection * cellsPerPixel * pathLengthInPixels);
 }
 
-#endif // FODINAE_GEOMETRY_FIELD_HLSL
+#endif // KERN_GEOMETRY_FIELD_HLSL

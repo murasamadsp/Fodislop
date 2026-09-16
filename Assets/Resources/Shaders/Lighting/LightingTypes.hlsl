@@ -1,5 +1,5 @@
-#ifndef FODINAE_LIGHTING_TYPES_HLSL
-#define FODINAE_LIGHTING_TYPES_HLSL
+#ifndef KERN_LIGHTING_TYPES_HLSL
+#define KERN_LIGHTING_TYPES_HLSL
 
 // Общие типы, константы и packing/unpacking функции для всей lighting-системы.
 //
@@ -60,4 +60,4 @@ struct LampTileInfo
     int2 tileOffset;
 };
 
-#endif // FODINAE_LIGHTING_TYPES_HLSL
+#endif // KERN_LIGHTING_TYPES_HLSL

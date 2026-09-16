@@ -2,12 +2,12 @@
 
 using UnityEngine;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     [ExecuteAlways]
     public class MenuSceneryController : MonoBehaviour
     {
-        private const string ResolveShaderName = "Fodinae/UI/UnpremultiplyAlpha";
+        private const string ResolveShaderName = "Kern/UI/UnpremultiplyAlpha";
 
         private Camera? _sceneryCamera;
         private OrbitalStationMotion? _station;

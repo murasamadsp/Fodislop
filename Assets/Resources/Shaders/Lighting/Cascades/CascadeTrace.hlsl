@@ -1,5 +1,5 @@
-#ifndef FODINAE_CASCADE_TRACE_HLSL
-#define FODINAE_CASCADE_TRACE_HLSL
+#ifndef KERN_CASCADE_TRACE_HLSL
+#define KERN_CASCADE_TRACE_HLSL
 
 // SolveCascade: DDA traversal каскадов и запись в атлас.
 //
@@ -311,4 +311,4 @@ void ResolveTransmissionDebug(uint3 dispatchId : SV_DispatchThreadID)
     _DirectTexture[pixel] = float4(localTransmission / 32.0, 1.0);
 }
 
-#endif // FODINAE_CASCADE_TRACE_HLSL
+#endif // KERN_CASCADE_TRACE_HLSL

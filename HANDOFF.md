@@ -54,8 +54,8 @@
 - Изменён `Assets/Settings/DefaultVolumeProfile.asset`: удалено 742 строки штатных subassets через Editor, не текстом.
 - `PostProcessVolumeProfile.asset` и `MenuSceneryVolumeProfile.asset` не нуждались в изменениях.
 - `Assets/Editor/Rendering/HDRSDRDualModeSetup.cs` содержит отдельные команды:
-  - `Fodinae/Rendering/Clean Display Volume Profiles`
-  - `Fodinae/Rendering/Validate Display Volume Profiles`
+  - `Kern/Rendering/Clean Display Volume Profiles`
+  - `Kern/Rendering/Validate Display Volume Profiles`
 - Отдельная очистка не меняет Player Settings, сцены и URP asset; сохраняет только затронутые профили через SaveAssetIfDirty.
 - Из старого setup удалён автоматический `InitializeOnLoadMethod`, менявший HDR Player Settings при загрузке. Явная широкая setup-команда остаётся; не запускать её для обычной проверки.
 - `Assets/Scripts/Tests/Editor/Core/DisplayOutputProfileTests.cs` проверяет отсутствие штатных post effects в трёх авторственных профилях. Тест переписан с проверки временного подавления на проверку данных.
@@ -125,10 +125,10 @@ xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer dire
 - Фактический Unity: 6000.6.0f1, URP17.6.0.
 - URP source: `Library/PackageCache/com.unity.render-pipelines.universal@8457e85b8184`.
 - Core source: `Library/PackageCache/com.unity.render-pipelines.core@2d66c71e606e`.
-- Source linter: `dotnet run --project tools/Fodinae.ArchitectureLinter --no-restore -- --rule FOD-DISPLAY-TRANSFORM` — проходил, защищает разделение стадий, includes, отсутствие дубля Luminance и guarded HDR gamut access.
-- Временный внешний compile harness: `/private/tmp/fodinae-hdr-check.EMH9rP/Check.csproj`, лог `build.log`. Сборка runtime исходников без запуска Unity: 0 errors, 43 warnings. Это не полноценная asmdef/Unity/Metal верификация.
+- Source linter: `dotnet run --project tools/Kern.ArchitectureLinter --no-restore -- --rule FOD-DISPLAY-TRANSFORM` — проходил, защищает разделение стадий, includes, отсутствие дубля Luminance и guarded HDR gamut access.
+- Временный внешний compile harness: `/private/tmp/kern-hdr-check.EMH9rP/Check.csproj`, лог `build.log`. Сборка runtime исходников без запуска Unity: 0 errors, 43 warnings. Это не полноценная asmdef/Unity/Metal верификация.
 - Generated Unity csproj ранее содержали устаревшие пути; не путать ошибки окружения с ошибками исходников.
-- Упоминавшийся ранее `tools/Fodinae.SettingsProbe` теперь отсутствует. Не заявлять повторный прогон 2771 теста: свежая попытка завершилась отсутствием пути.
+- Упоминавшийся ранее `tools/Kern.SettingsProbe` теперь отсутствует. Не заявлять повторный прогон 2771 теста: свежая попытка завершилась отсутствием пути.
 
 ## Начать следующую сессию
 

@@ -3,10 +3,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Fodinae.Tools.Imgui;
+using Kern.Tools.Imgui;
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing.Workbench;
+namespace Kern.Rendering.PostProcessing.Workbench;
 
 internal sealed class GradingLayerControlsDrawer
 {
@@ -319,11 +319,11 @@ internal sealed class GradingLayerControlsDrawer
         if (GUILayout.Button(
                 _state.Transform == DisplayTransform.None
                     ? "Display transform: None"
-                    : "Display transform: Fodinae",
+                    : "Display transform: Kern",
                 ToolTheme.SecondaryButton))
         {
             _state.Transform = _state.Transform == DisplayTransform.None
-                ? DisplayTransform.Fodinae
+                ? DisplayTransform.Kern
                 : DisplayTransform.None;
         }
 
@@ -1103,11 +1103,11 @@ internal sealed class GradingLayerControlsDrawer
         }
 
         const int size = 128;
-        _wheelTexture = Fodinae.RuntimeTextureFactory.CreateRGBA32NoMip(
+        _wheelTexture = Kern.RuntimeTextureFactory.CreateRGBA32NoMip(
             size,
             size,
-            "Fodinae.PrimaryColorWheel",
-            Fodinae.RuntimeTextureColorSpace.Linear,
+            "Kern.PrimaryColorWheel",
+            Kern.RuntimeTextureColorSpace.Linear,
             FilterMode.Bilinear,
             TextureWrapMode.Clamp);
         Color[] pixels = new Color[size * size];

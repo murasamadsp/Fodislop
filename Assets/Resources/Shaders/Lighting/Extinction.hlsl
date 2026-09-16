@@ -1,5 +1,5 @@
-#ifndef FODINAE_EXTINCTION_HLSL
-#define FODINAE_EXTINCTION_HLSL
+#ifndef KERN_EXTINCTION_HLSL
+#define KERN_EXTINCTION_HLSL
 
 // Математика экстинкции и пропускания среды.
 //
@@ -48,4 +48,4 @@ float CellEmissionWeight(float extinction, float distanceCells)
     return result;
 }
 
-#endif // FODINAE_EXTINCTION_HLSL
+#endif // KERN_EXTINCTION_HLSL

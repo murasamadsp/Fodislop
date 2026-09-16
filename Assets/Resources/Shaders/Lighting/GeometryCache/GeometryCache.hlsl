@@ -1,5 +1,5 @@
-#ifndef FODINAE_GEOMETRY_CACHE_HLSL
-#define FODINAE_GEOMETRY_CACHE_HLSL
+#ifndef KERN_GEOMETRY_CACHE_HLSL
+#define KERN_GEOMETRY_CACHE_HLSL
 
 // BuildCellSolidMask: кэш геометрии для closed-diagonal rule.
 //
@@ -23,4 +23,4 @@ void BuildCellSolidMask(uint3 dispatchId : SV_DispatchThreadID)
     _CellSolidMaskOutput[cell] = float4(isSolid ? 1.0 : 0.0, 0.0, 0.0, 0.0);
 }
 
-#endif // FODINAE_GEOMETRY_CACHE_HLSL
+#endif // KERN_GEOMETRY_CACHE_HLSL

@@ -4,11 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Audio.Core;
-using Fodinae.Core;
+using Kern.Audio.Core;
+using Kern.Core;
 using UnityEngine;
 
-namespace Fodinae.Audio.Backend;
+namespace Kern.Audio.Backend;
 public sealed class FmodAudioBackend
 {
     private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _buses = new();

@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 public enum ColorCurveInterpolation
 {

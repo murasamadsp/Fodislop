@@ -3,15 +3,15 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Networking.Auth;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Networking.Auth;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     [RequireComponent(typeof(UIDocument))]
     public sealed class GatewayController : MonoBehaviour, ILocalizableUI

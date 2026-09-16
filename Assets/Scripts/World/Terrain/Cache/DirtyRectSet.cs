@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 public sealed class DirtyRectSet
 {
     private readonly List<RectInt> _rects = new(8);

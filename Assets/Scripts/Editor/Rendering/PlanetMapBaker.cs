@@ -7,7 +7,7 @@ using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     [InitializeOnLoad]
     public static class PlanetMapBaker
@@ -29,7 +29,7 @@ namespace Fodinae.Editor
             EditorApplication.delayCall += WarnIfMapsMissing;
         }
 
-        [MenuItem("Fodinae/Planet/Bake Maps")]
+        [MenuItem("Kern/Planet/Bake Maps")]
         public static void Bake()
         {
             string projectRoot = Directory.GetParent(Application.dataPath)!.FullName;
@@ -94,7 +94,7 @@ namespace Fodinae.Editor
                 Debug.LogError(
                     $"[PlanetMapBaker] Нет карты планеты: {path}\n"
                     + "Карты не хранятся в репозитории. Запеки их: меню "
-                    + "Fodinae > Planet > Bake Maps, либо python3 " + GeneratorPath + "\n"
+                    + "Kern > Planet > Bake Maps, либо python3 " + GeneratorPath + "\n"
                     + "Пока их нет, планета в главном меню будет серой сферой.");
                 return;
             }

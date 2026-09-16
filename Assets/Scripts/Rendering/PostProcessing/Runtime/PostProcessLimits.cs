@@ -1,8 +1,8 @@
 #nullable enable
 
-using Fodinae.Core;
+using Kern.Core;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 public static class PostProcessLimits
 {

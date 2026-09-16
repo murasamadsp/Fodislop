@@ -4,7 +4,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public class MapbConverter : EditorWindow
     {

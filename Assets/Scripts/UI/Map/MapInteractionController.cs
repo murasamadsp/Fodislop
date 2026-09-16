@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 public sealed class MapInteractionController
 {

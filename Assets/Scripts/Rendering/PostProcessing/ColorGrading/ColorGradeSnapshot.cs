@@ -3,7 +3,7 @@
 using System.Diagnostics.CodeAnalysis;
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 public readonly record struct ColorGradeSnapshot
 {
@@ -368,7 +368,7 @@ public readonly record struct ColorGradeSnapshot
         return new ColorGradeSnapshot
         {
             EnabledMask = EnabledMask & ((1 << 6) - 1),
-            Transform = Transform is DisplayTransform.None or DisplayTransform.Fodinae
+            Transform = Transform is DisplayTransform.None or DisplayTransform.Kern
                 ? Transform
                 : defaults.Transform,
             Exposure = FiniteClamp(

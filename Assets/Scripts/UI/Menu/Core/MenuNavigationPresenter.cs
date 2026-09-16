@@ -1,11 +1,11 @@
 #nullable enable
 
 using System;
-using Fodinae.Core.Localization;
+using Kern.Core.Localization;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 public sealed class MenuNavigationPresenter
 {
@@ -233,11 +233,11 @@ public sealed class MenuNavigationPresenter
     }
 
     private static void OpenDiscord() =>
-        Application.OpenURL("https://discord.gg/fodinae");
+        Application.OpenURL("https://discord.gg/kern");
 
     private static void OpenTelegram() =>
-        Application.OpenURL("https://t.me/fodinae");
+        Application.OpenURL("https://t.me/kern");
 
     private static void OpenVk() =>
-        Application.OpenURL("https://vk.com/fodinae");
+        Application.OpenURL("https://vk.com/kern");
 }

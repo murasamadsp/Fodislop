@@ -1,5 +1,5 @@
-#ifndef FODINAE_BOUNCE_SOLVE_HLSL
-#define FODINAE_BOUNCE_SOLVE_HLSL
+#ifndef KERN_BOUNCE_SOLVE_HLSL
+#define KERN_BOUNCE_SOLVE_HLSL
 
 // SolveDiffuseBounce и вспомогательные функции: diffuse bounce solution.
 //
@@ -105,4 +105,4 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
     _BounceTexture[pixel] = float4(scatteredInAir * (1.0 - centerSolid) * bounceStrength, 1.0);
 }
 
-#endif // FODINAE_BOUNCE_SOLVE_HLSL
+#endif // KERN_BOUNCE_SOLVE_HLSL

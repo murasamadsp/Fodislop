@@ -3,7 +3,7 @@
 using System;
 using UnityEngine;
 
-namespace Fodinae.World.Coordinates;
+namespace Kern.World.Coordinates;
 
 /// <summary>
 /// Continuous world coordinates in Unity world space (meters, Y-up).

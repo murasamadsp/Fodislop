@@ -45,8 +45,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma target 4.5
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile _ FODINAE_WORLD_LIGHTING
-            #pragma multi_compile_local _ FODINAE_TERRAIN_CELLS
+            #pragma multi_compile _ KERN_WORLD_LIGHTING
+            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/TerrainColorAnimation.hlsl"
@@ -130,7 +130,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             float3 GetWorldLightColor(float2 worldPos)
             {
-                #if !defined(FODINAE_WORLD_LIGHTING)
+                #if !defined(KERN_WORLD_LIGHTING)
                     return 1.0;
                 #else
                 float2 lightUV = GetWorldLightUv(worldPos);
@@ -251,7 +251,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Varyings vert (Attributes input)
             {
                 Varyings output;
-            #if defined(FODINAE_TERRAIN_CELLS)
+            #if defined(KERN_TERRAIN_CELLS)
                 // Один материал на все атласы: меш проходится один раз, атлас
                 // выбирается во фрагменте по индексу квада.
                 TerrainCellVertex cell = LoadTerrainCellVertex(input.positionOS.xyz, input.uv);
@@ -285,7 +285,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 return output;
             }
 
-            #if defined(FODINAE_TERRAIN_CELLS)
+            #if defined(KERN_TERRAIN_CELLS)
             TEXTURE2D(_TerrainAtlas0);
             TEXTURE2D(_TerrainAtlas1);
             TEXTURE2D(_TerrainAtlas2);
@@ -377,7 +377,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 tilesCount = max(tilesCount, 1.0);
 
                 bool isTiling = fmod(input.worldPos.w, 2.0) > 0.5;
-                float2 wrapped = FodinaeResolveTerrainTileIndex(
+                float2 wrapped = KernResolveTerrainTileIndex(
                     input.worldPos.xy,
                     tilesCount,
                     input.worldPos.z,
@@ -409,7 +409,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     if (outsideX || outsideY)
                     {
                         float2 stepPos = input.worldPos.xy + stepUV;
-                        float2 wrappedStep = FodinaeResolveTerrainTileIndex(
+                        float2 wrappedStep = KernResolveTerrainTileIndex(
                             stepPos,
                             tilesCount,
                             input.worldPos.z,
@@ -441,7 +441,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     finalUV.y = baseUV.y + fmod(finalUV.y - baseUV.y + scrollUV + subAtlasSizeUV.y, subAtlasSizeUV.y);
                 }
 
-            #if defined(FODINAE_TERRAIN_CELLS)
+            #if defined(KERN_TERRAIN_CELLS)
                 int atlasSlot = (int)round(input.atlasIndex);
                 float4 atlasTexelSize = TerrainAtlasTexelSize(atlasSlot);
             #else
@@ -473,7 +473,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // Сэмплер выбирается режимом: без сглаживания выборка
                 // обязана остаться точечной, иначе выключенный режим всё
                 // равно размывал бы картинку линейным фильтром.
-            #if defined(FODINAE_TERRAIN_CELLS)
+            #if defined(KERN_TERRAIN_CELLS)
                 half4 texColor = _PixelArtFiltering < 0.5
                     ? TerrainSampleAtlas(atlasSlot, sampler_PointClamp, finalUV)
                     : TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
@@ -572,7 +572,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // Тень получает только фон. Блоки все одной высоты и друг на
                 // друга не падают, а бит 64 — как раз физическая масса
                 // переднего плана.
-                #ifdef FODINAE_WORLD_LIGHTING
+                #ifdef KERN_WORLD_LIGHTING
                 uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
                 if ((shadowFlags & 64u) == 0u && _WorldLightPerBlock == 0)
                 {
@@ -591,7 +591,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         Pass
         {
             Name "LightingMaterialField"
-            Tags { "LightMode" = "FodinaeLightingMaterialField" }
+            Tags { "LightMode" = "KernLightingMaterialField" }
 
             Blend One One
             BlendOp Max
@@ -603,7 +603,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma target 4.5
             #pragma vertex MaterialFieldVert
             #pragma fragment MaterialFieldFrag
-            #pragma multi_compile_local _ FODINAE_TERRAIN_CELLS
+            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/TerrainColorAnimation.hlsl"
@@ -671,7 +671,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             MaterialFieldVaryings MaterialFieldVert(MaterialFieldAttributes input)
             {
                 MaterialFieldVaryings output;
-            #if defined(FODINAE_TERRAIN_CELLS)
+            #if defined(KERN_TERRAIN_CELLS)
                 // Поле рисуется одним материалом по всем квадам: атлас здесь
                 // не читается, отбрасываются только незаполненные квады.
                 TerrainCellVertex cell = LoadTerrainCellVertex(input.positionOS.xyz, input.uv);

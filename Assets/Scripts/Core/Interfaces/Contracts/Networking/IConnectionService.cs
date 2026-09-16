@@ -4,7 +4,7 @@ using System;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Server.Packets;
 
-namespace Fodinae.Core.Interfaces;
+namespace Kern.Core.Interfaces;
 public interface IConnectionService
 {
     bool IsConnected { get; }

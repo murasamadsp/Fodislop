@@ -8,7 +8,7 @@
 // Отладочные виды и шторка сравнения — инструмент колориста, а не кадр игрока.
 // Без этого варианта одиннадцать ветвей ложного цвета, отсечки и линия шторки
 // компилировались в самый горячий kernel кадра и держали регистры у всех.
-#pragma multi_compile _ FODINAE_POST_DIAGNOSTICS
+#pragma multi_compile _ KERN_POST_DIAGNOSTICS
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
@@ -117,7 +117,7 @@ float4x4 _HistoryReprojection;
 // consistently; Metal does not allow a function to reference a later global.
 #include "ColorGrading.hlsl"
 
-#if !defined(FODINAE_POST_DIAGNOSTICS)
+#if !defined(KERN_POST_DIAGNOSTICS)
 
 // Вариант игрока: сравнения нет, шторки нет. Обе функции — тождества, и
 // компилятор выкидывает вместе с ними все ветви ложного цвета и отсечки.
@@ -182,7 +182,7 @@ inline float3 ApplyCompareDivider(float3 color, float2 pixel)
     return lerp(result, float3(1.0, 1.0, 1.0), core);
 }
 
-#endif // FODINAE_POST_DIAGNOSTICS
+#endif // KERN_POST_DIAGNOSTICS
 
 float LinearToPerceptual(float linearValue)
 {
@@ -253,7 +253,7 @@ float3 ApplyCreativeGrade(float3 color)
     // The creative grade is independent from the display curve. Previously
     // bypassing/soloing the curve also bypassed CDL, and the comparison split
     // compared two different grades instead of only showing curve before/after.
-    float3 logColor = FodinaeLogEncode(color);
+    float3 logColor = KernLogEncode(color);
     logColor = ApplyCdl(
         logColor,
         _CdlSlope.rgb * _CdlMaster.x,
@@ -272,7 +272,7 @@ float3 ApplyCreativeGrade(float3 color)
         logColor = ApplyContrastControls(logColor, _Contrast, _ContrastControls, _ContrastControls2);
     }
 
-    float3 gradedLinear = FodinaeLogDecode(logColor);
+    float3 gradedLinear = KernLogDecode(logColor);
     if (abs(_CdlSaturation - 1.0) > 0.001)
     {
         gradedLinear = ApplySaturation(gradedLinear, _CdlSaturation, lumaWeights);
@@ -304,8 +304,8 @@ void BakeGradeLut(uint3 id : SV_DispatchThreadID)
     if (any(id >= (uint3)BakedGradeLutSize)) return;
 
     float3 encoded = float3(id) / (BakedGradeLutSize - 1.0);
-    float3 graded = ApplyCreativeGrade(FodinaeLogDecode(encoded));
-    _BakedGradeLut[id] = float4(FodinaeLogEncode(graded), 1.0);
+    float3 graded = ApplyCreativeGrade(KernLogDecode(encoded));
+    _BakedGradeLut[id] = float4(KernLogEncode(graded), 1.0);
 }
 
 // Отрицательные входы идут как ноль: таблица построена на неотрицательной
@@ -315,12 +315,12 @@ float3 SampleBakedGrade(float3 color)
 {
     float3 positive = max(color, 0.0);
     float peak = max(positive.r, max(positive.g, positive.b));
-    float headLimit = FodinaeMidGrey * (exp2(FodinaeSceneHeadStops) - exp2(-FodinaeSceneToeStops));
+    float headLimit = KernMidGrey * (exp2(KernSceneHeadStops) - exp2(-KernSceneToeStops));
     float scale = max(peak / headLimit, 1.0);
-    float3 encoded = saturate(FodinaeLogEncode(positive / scale));
+    float3 encoded = saturate(KernLogEncode(positive / scale));
     float3 uvw = encoded * ((BakedGradeLutSize - 1.0) / BakedGradeLutSize) + 0.5 / BakedGradeLutSize;
     float3 gradedEncoded = _BakedGradeLutTex.SampleLevel(sampler_LinearClamp, uvw, 0).rgb;
-    return FodinaeLogDecode(gradedEncoded) * scale;
+    return KernLogDecode(gradedEncoded) * scale;
 }
 
 [numthreads(8, 8, 1)]
@@ -673,7 +673,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
     // это уже принятый в проекте способ смотреть на кадр числами, и второй
     // способ означал бы, что их надо помнить оба.
     // ------------------------------------------------------------------
-#if defined(FODINAE_POST_DIAGNOSTICS)
+#if defined(KERN_POST_DIAGNOSTICS)
     if (_PostDebugView != 0)
     {
         // Считаем в перцептивном кодировании: зоны экспозиции — понятие
@@ -818,7 +818,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         _OutputTex[id.xy] = float4(ToDisplayOutput(ApplyCompareDivider(result, id.xy + 0.5)), srcAlpha);
         return;
     }
-#endif // FODINAE_POST_DIAGNOSTICS
+#endif // KERN_POST_DIAGNOSTICS
 
     color = ApplyCompareDivider(color, id.xy + 0.5);
     _OutputTex[id.xy] = float4(ToDisplayOutput(color), srcAlpha);

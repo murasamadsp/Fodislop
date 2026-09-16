@@ -10,7 +10,7 @@ using UnityEditor.Profiling;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
 // Снимок того, куда уходит кадр, без окон игры.
 //
@@ -26,7 +26,7 @@ internal static class FrameProfileCapture
 
     private static double _stopAt = -1;
 
-    [MenuItem("Fodinae/Diagnostics/Capture Frame Profile (3 s)")]
+    [MenuItem("Kern/Diagnostics/Capture Frame Profile (3 s)")]
     private static void Start()
     {
         if (!EditorApplication.isPlaying)

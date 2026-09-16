@@ -1,11 +1,11 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public static class PhysicsAndLayerCleanup
     {
-        [MenuItem("Fodinae/Cleanup Physics and Setup Layers")]
+        [MenuItem("Kern/Cleanup Physics and Setup Layers")]
         public static void Cleanup()
         {
             RemoveRigidbody2DFromPlayer();

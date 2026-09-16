@@ -12,7 +12,7 @@ echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
-dotnet run --project tools/Fodinae.ArchitectureLinter --no-build --no-restore
+dotnet run --project tools/Kern.ArchitectureLinter --no-build --no-restore
 
 # Настройки описываются атрибутами и читаются рефлексией: ни компилятор, ни
 # линтер не могут сказать, что диапазон над полем осмыслен, что значение по
@@ -22,7 +22,7 @@ dotnet run --project tools/Fodinae.ArchitectureLinter --no-build --no-restore
 echo "--- Step 0.1: Executing architecture linter (includes settings probe) ---"
 if command -v dotnet >/dev/null 2>&1; then
     DOTNET_NOLOGO=1 dotnet run \
-        --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+        --project "$(dirname "$0")/../tools/Kern.ArchitectureLinter" \
         --no-build \
         --no-restore \
         --verbosity quiet -- \
@@ -98,9 +98,9 @@ done
 # editor code against a stale runtime assembly and report false missing members.
 PROJECTS=()
 for PROJECT_FILE in \
-    "./Fodinae.Runtime.csproj" \
-    "./Fodinae.Editor.csproj" \
-    "./Fodinae.Tests.Editor.csproj"; do
+    "./Kern.Runtime.csproj" \
+    "./Kern.Editor.csproj" \
+    "./Kern.Tests.Editor.csproj"; do
     if [ -f "$PROJECT_FILE" ]; then
         PROJECTS+=("$PROJECT_FILE")
     fi
@@ -196,7 +196,7 @@ fi
 # above. Running them earlier would inspect stale Library/ScriptAssemblies output.
 echo "--- Step 3: Executing C# runtime architecture rules ---"
 DOTNET_NOLOGO=1 dotnet run \
-    --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+    --project "$(dirname "$0")/../tools/Kern.ArchitectureLinter" \
     --verbosity quiet -- \
     --project-root "$(dirname "$0")/.." \
     --rule FOD-BLOCK-NAMESPACE \

@@ -2,7 +2,7 @@
 
 using System;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 /// <summary>
 /// Fixed-size logical grid whose origin moves by changing two indices.

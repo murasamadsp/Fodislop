@@ -1,21 +1,21 @@
 #nullable enable
 
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
 using NUnit.Framework;
 using System;
 using System.IO;
 using UnityEngine;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 public sealed class RuntimeAssetPathsTests
 {
     [Test]
     public void RuntimeAssetPaths_UsesPersistentOverrideAndCaseInsensitiveBundledLookup()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"fodinae-paths-{Guid.NewGuid():N}");
+        string root = Path.Combine(Path.GetTempPath(), $"kern-paths-{Guid.NewGuid():N}");
         string bundled = Path.Combine(root, "bundled");
         string persistent = Path.Combine(root, "persistent");
         Directory.CreateDirectory(Path.Combine(bundled, "Skin"));
@@ -45,7 +45,7 @@ public sealed class RuntimeAssetPathsTests
     [TestCase("skin//bee.png")]
     public void RuntimeAssetPaths_RejectsUnsafeRelativePaths(string relativePath)
     {
-        string root = Path.Combine(Path.GetTempPath(), $"fodinae-paths-{Guid.NewGuid():N}");
+        string root = Path.Combine(Path.GetTempPath(), $"kern-paths-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
 
         try

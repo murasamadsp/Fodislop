@@ -1,14 +1,14 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Localization;
+using Kern.Core;
+using Kern.Core.Localization;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Programmator;
+namespace Kern.UI.Programmator;
 
 // Builds the programmator UI Toolkit tree: the static layout (popup, panel,
 // toolbar, program list, create dialog) lives in Programmator.uxml; this

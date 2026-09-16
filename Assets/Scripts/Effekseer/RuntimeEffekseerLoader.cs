@@ -8,14 +8,14 @@ using System.IO;
 using Cysharp.Threading.Tasks;
 using Effekseer;
 using Effekseer.Internal;
-using Fodinae;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World;
-using Fodinae.World.Terrain;
+using Kern;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World;
+using Kern.World.Terrain;
 using UnityEngine;
 
-namespace Fodinae.Effekseer;
+namespace Kern.Effekseer;
 public static class RuntimeEffekseerLoader
 {
     private static readonly HashSet<EntityId> _ActiveRuntimeEffectIds = new();

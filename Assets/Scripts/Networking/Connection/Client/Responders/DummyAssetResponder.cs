@@ -2,7 +2,7 @@
 
 using System;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using MinesServer.Networking.Client.Packets.Utilities;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Utilities;

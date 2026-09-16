@@ -4,7 +4,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 [Serializable]
 internal sealed class ClientConfigLegacySchema21

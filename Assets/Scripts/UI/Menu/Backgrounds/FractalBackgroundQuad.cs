@@ -2,10 +2,10 @@
 
 using UnityEngine;
 
-namespace Fodinae.UI.Backgrounds
+namespace Kern.UI.Backgrounds
 {
     [ExecuteAlways]
-    [AddComponentMenu("Fodinae/UI/Backgrounds/Fractal Background Quad")]
+    [AddComponentMenu("Kern/UI/Backgrounds/Fractal Background Quad")]
     public sealed class FractalBackgroundQuad : MonoBehaviour
     {
         [SerializeField] private Material? _material;

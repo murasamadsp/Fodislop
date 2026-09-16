@@ -2,13 +2,13 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 public class TerrainCellCache
 {
     private readonly TerrainRingGrid<CachedCellData> _cellCache = new();

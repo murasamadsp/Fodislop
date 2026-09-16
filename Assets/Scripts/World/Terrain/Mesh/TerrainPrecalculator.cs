@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 public class TerrainPrecalculator
 {

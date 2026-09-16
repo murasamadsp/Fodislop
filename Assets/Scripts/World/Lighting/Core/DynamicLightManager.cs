@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 public readonly struct DynamicLightGpuData
 {
     public readonly Vector4 PositionRadius;

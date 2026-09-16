@@ -5,7 +5,7 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 // Текстуры данных клетки террейна: по текселю на квад, по две строки на
 // клетку (фон, передний план), плюс сетка смещений искажения на узлах.

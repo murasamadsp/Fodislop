@@ -1,10 +1,10 @@
 #nullable enable
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 public enum DisplayTransform
 {
     None = 0,
 
-    Fodinae = 1,
+    Kern = 1,
 }

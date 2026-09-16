@@ -2,16 +2,16 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Rendering;
-using Fodinae.World.Lighting;
-using Fodinae.World.Lighting.Quality;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Rendering;
+using Kern.World.Lighting;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 internal sealed class PauseMenuGraphicsTabBuilder
 {

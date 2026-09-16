@@ -4,11 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.World;
+using Kern.Core;
+using Kern.World;
 using UnityEngine;
 
-namespace Fodinae;
+namespace Kern;
 
 internal sealed class AssetCacheEntry
 {

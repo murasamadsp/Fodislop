@@ -4,14 +4,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae;
+using Kern;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Information;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 public sealed class DummyGameplayActionResponderTests
 {
@@ -22,7 +22,7 @@ public sealed class DummyGameplayActionResponderTests
         var operations = new RecordingSupervisor();
         var player = new DummyPlayerSimulationState();
         player.SetHealth(400);
-        using var world = new DummyWorldSimulationState(operations, new Fodinae.Tests.Networking.UnavailableDummyWorldMapSource());
+        using var world = new DummyWorldSimulationState(operations, new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
         var teleports = new DummyTeleportManager(sent.Add, [], operations);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(

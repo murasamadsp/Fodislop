@@ -3,8 +3,8 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae;
-using Fodinae.Core.Interfaces;
+using Kern;
+using Kern.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;

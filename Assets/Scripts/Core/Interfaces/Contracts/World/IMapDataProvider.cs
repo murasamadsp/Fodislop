@@ -7,7 +7,7 @@ using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Core.Interfaces;
+namespace Kern.Core.Interfaces;
 public interface IMapDataProvider
 {
     ushort WorldWidth { get; }

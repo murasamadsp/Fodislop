@@ -1,5 +1,5 @@
-#ifndef FODINAE_CASCADE_RESOLVE_HLSL
-#define FODINAE_CASCADE_RESOLVE_HLSL
+#ifndef KERN_CASCADE_RESOLVE_HLSL
+#define KERN_CASCADE_RESOLVE_HLSL
 
 // ResolveDirect: чтение из атласа и запись прямого света.
 //
@@ -33,4 +33,4 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
     _DirectTexture[pixel] = float4(directOutput, 1.0);
 }
 
-#endif // FODINAE_CASCADE_RESOLVE_HLSL
+#endif // KERN_CASCADE_RESOLVE_HLSL

@@ -1,17 +1,17 @@
-#ifndef FODINAE_COLOR_GRADING_INCLUDED
-#define FODINAE_COLOR_GRADING_INCLUDED
+#ifndef KERN_COLOR_GRADING_INCLUDED
+#define KERN_COLOR_GRADING_INCLUDED
 
-#define FODINAE_CURVE_MAX_POINTS 16
+#define KERN_CURVE_MAX_POINTS 16
 
-float4 _MasterCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _RedCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _GreenCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _BlueCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _HueVsHueCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _HueVsSaturationCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _HueVsLuminanceCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _LuminanceVsSaturationCurve[FODINAE_CURVE_MAX_POINTS];
-float4 _SaturationVsSaturationCurve[FODINAE_CURVE_MAX_POINTS];
+float4 _MasterCurve[KERN_CURVE_MAX_POINTS];
+float4 _RedCurve[KERN_CURVE_MAX_POINTS];
+float4 _GreenCurve[KERN_CURVE_MAX_POINTS];
+float4 _BlueCurve[KERN_CURVE_MAX_POINTS];
+float4 _HueVsHueCurve[KERN_CURVE_MAX_POINTS];
+float4 _HueVsSaturationCurve[KERN_CURVE_MAX_POINTS];
+float4 _HueVsLuminanceCurve[KERN_CURVE_MAX_POINTS];
+float4 _LuminanceVsSaturationCurve[KERN_CURVE_MAX_POINTS];
+float4 _SaturationVsSaturationCurve[KERN_CURVE_MAX_POINTS];
 float3 _ContrastControls2;
 int _MasterCurvePointCount;
 int _RedCurvePointCount;
@@ -128,16 +128,16 @@ float3 ApplyWhiteBalance(float3 color, float3 lmsCoefficients)
 // привязку, которой в проекте нет. Здесь шкала объявлена явно — стопы
 // относительно средне-серого, нормированные в [0, 1].
 //
-// FodinaeSceneToeStops стопов ниже серого и FodinaeSceneHeadStops выше него.
+// KernSceneToeStops стопов ниже серого и KernSceneHeadStops выше него.
 // Диапазон выбран под сцену, а не под кинонегатив: 10 стопов вниз это
 // серый/1024, 6.5 вверх — серый*90, чего хватает и на неон, и на тени.
 
-static const float FodinaeMidGrey = 0.18;
-static const float FodinaeSceneToeStops = 10.0;
-static const float FodinaeSceneHeadStops = 6.5;
-static const float FodinaeSceneStops = FodinaeSceneToeStops + FodinaeSceneHeadStops;
+static const float KernMidGrey = 0.18;
+static const float KernSceneToeStops = 10.0;
+static const float KernSceneHeadStops = 6.5;
+static const float KernSceneStops = KernSceneToeStops + KernSceneHeadStops;
 
-float3 FodinaeLogEncode(float3 linearColor)
+float3 KernLogEncode(float3 linearColor)
 {
     // Encode magnitude and carry the sign separately. `max(color, 1e-7)`
     // looked safe but silently turned every negative HDR intermediate into a
@@ -153,19 +153,19 @@ float3 FodinaeLogEncode(float3 linearColor)
     // (sign == 0) оставался чёрным. Сдвиг под логарифмом на 2^-toe даёт
     // encode(0) = 0, монотонность и точную обратимость; для средних и светлых
     // тонов он пренебрежимо мал (1/1024 серого).
-    float toeFloor = exp2(-FodinaeSceneToeStops);
-    float3 magnitudeStops = log2(abs(linearColor) / FodinaeMidGrey + toeFloor);
+    float toeFloor = exp2(-KernSceneToeStops);
+    float3 magnitudeStops = log2(abs(linearColor) / KernMidGrey + toeFloor);
     float3 encodedMagnitude =
-        (magnitudeStops + FodinaeSceneToeStops) / FodinaeSceneStops;
+        (magnitudeStops + KernSceneToeStops) / KernSceneStops;
     return sign(linearColor) * encodedMagnitude;
 }
 
-float3 FodinaeLogDecode(float3 logColor)
+float3 KernLogDecode(float3 logColor)
 {
-    float toeFloor = exp2(-FodinaeSceneToeStops);
+    float toeFloor = exp2(-KernSceneToeStops);
     float3 magnitude = abs(logColor);
-    float3 stops = magnitude * FodinaeSceneStops - FodinaeSceneToeStops;
-    return sign(logColor) * max(exp2(stops) - toeFloor, 0.0) * FodinaeMidGrey;
+    float3 stops = magnitude * KernSceneStops - KernSceneToeStops;
+    return sign(logColor) * max(exp2(stops) - toeFloor, 0.0) * KernMidGrey;
 }
 
 // ----------------------------------------------------------------------------
@@ -310,7 +310,7 @@ float HueRangeWeight(float hue, float4 parameters)
     return weight * step(1e-5, parameters.y + feather);
 }
 
-float3 FodinaeHSVToRGB(float3 hsv)
+float3 KernHSVToRGB(float3 hsv)
 {
     const float4 constants = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
     float3 permutation = abs(frac(hsv.xxx + constants.xyz) * 6.0 - constants.www);
@@ -325,11 +325,11 @@ float3 ApplyGlobalHue(float3 color, float shiftDegrees)
     float saturation = chroma / max(maximum, 1e-5);
     float3 hsv = float3(HueDegrees(color) / 360.0, saturation, maximum);
     hsv.x = frac(hsv.x + shiftDegrees / 360.0);
-    float3 adjusted = FodinaeHSVToRGB(hsv);
+    float3 adjusted = KernHSVToRGB(hsv);
     return lerp(color, adjusted, step(1e-5, abs(shiftDegrees)) * step(1e-6, chroma));
 }
 
-inline float EvaluateColorCurve(float value, float4 points[FODINAE_CURVE_MAX_POINTS], int pointCount)
+inline float EvaluateColorCurve(float value, float4 points[KERN_CURVE_MAX_POINTS], int pointCount)
 {
     value = saturate(value);
     float result = value;
@@ -340,7 +340,7 @@ inline float EvaluateColorCurve(float value, float4 points[FODINAE_CURVE_MAX_POI
     if (authored && !identity)
     {
         result = points[pointCount - 1].y;
-        for (int index = 1; index < FODINAE_CURVE_MAX_POINTS; index++)
+        for (int index = 1; index < KERN_CURVE_MAX_POINTS; index++)
         {
             if (index >= pointCount)
             {
@@ -366,7 +366,7 @@ inline float EvaluateColorCurve(float value, float4 points[FODINAE_CURVE_MAX_POI
     return saturate(result);
 }
 
-inline bool IsIdentityColorCurve(float4 points[FODINAE_CURVE_MAX_POINTS], int pointCount)
+inline bool IsIdentityColorCurve(float4 points[KERN_CURVE_MAX_POINTS], int pointCount)
 {
     bool identity = pointCount == 2;
     if (identity)
@@ -379,10 +379,10 @@ inline bool IsIdentityColorCurve(float4 points[FODINAE_CURVE_MAX_POINTS], int po
 }
 
 // Нейтраль кривых «X против Y» — горизонталь на 0.5 (ColorGradeCurveKind.Hue/Range).
-inline bool IsNeutralSelectiveCurve(float4 points[FODINAE_CURVE_MAX_POINTS], int pointCount)
+inline bool IsNeutralSelectiveCurve(float4 points[KERN_CURVE_MAX_POINTS], int pointCount)
 {
     bool neutral = true;
-    for (int index = 0; index < FODINAE_CURVE_MAX_POINTS; index++)
+    for (int index = 0; index < KERN_CURVE_MAX_POINTS; index++)
     {
         if (index >= pointCount)
         {
@@ -424,7 +424,7 @@ float3 ApplySelectiveCurves(float3 color)
     {
         float shift = EvaluateColorCurve(hue, _HueVsHueCurve, _HueVsHueCurvePointCount) - 0.5;
         float3 hsv = float3(frac(hue + shift * hueConfidence), saturation, maximum);
-        color = lerp(color, FodinaeHSVToRGB(hsv), step(1e-6, chroma) * step(1e-6, maximum));
+        color = lerp(color, KernHSVToRGB(hsv), step(1e-6, chroma) * step(1e-6, maximum));
     }
 
     if (!IsNeutralSelectiveCurve(_HueVsSaturationCurve, _HueVsSaturationCurvePointCount))
@@ -674,4 +674,4 @@ inline float3 ApplyCubeLut(float3 color)
     return lerp(color, lutColor, saturate(_GradeLutParams.x));
 }
 
-#endif // FODINAE_COLOR_GRADING_INCLUDED
+#endif // KERN_COLOR_GRADING_INCLUDED

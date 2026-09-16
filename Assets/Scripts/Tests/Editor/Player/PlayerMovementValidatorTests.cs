@@ -1,13 +1,13 @@
 #nullable enable
 
-namespace Fodinae.Tests.Player;
+namespace Kern.Tests.Player;
 
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
-using Fodinae.Player.Logic;
+using Kern.Core.Interfaces;
+using Kern.Player.Logic;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;

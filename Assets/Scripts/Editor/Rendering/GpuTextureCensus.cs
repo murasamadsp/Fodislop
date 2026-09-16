@@ -8,7 +8,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Profiling;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
 // Перепись всех живых текстур процесса редактора.
 //
@@ -21,7 +21,7 @@ internal static class GpuTextureCensus
 {
     private readonly record struct Key(string Type, string Name, int Width, int Height, string Format, bool Asset, HideFlags Flags);
 
-    [MenuItem("Fodinae/Diagnostics/Dump Live Textures")]
+    [MenuItem("Kern/Diagnostics/Dump Live Textures")]
     private static void Dump()
     {
         var groups = new Dictionary<Key, (int Count, long Bytes)>();

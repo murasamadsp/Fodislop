@@ -2,10 +2,10 @@
 
 using System;
 using System.IO;
-using Fodinae.Rendering;
+using Kern.Rendering;
 using UnityEngine;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 internal sealed class ClientConfigValidator(GraphicsQualityProfile graphicsQualityProfile)
 {

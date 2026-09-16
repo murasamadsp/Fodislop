@@ -4,7 +4,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 // Меш идентификаторов квадов террейна.
 //

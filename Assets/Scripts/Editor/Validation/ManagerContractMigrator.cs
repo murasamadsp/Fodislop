@@ -3,15 +3,15 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using Fodinae.Core;
-using Fodinae.Core.Lifecycle;
+using Kern.Core;
+using Kern.Core.Lifecycle;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using VContainer.Unity;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
 public static class ManagerContractMigrator
 {
@@ -24,7 +24,7 @@ public static class ManagerContractMigrator
 
     private static readonly Dictionary<string, Type> _ResolvedTypes = new();
 
-    [MenuItem("Fodinae/Architecture/Populate Manager Contract")]
+    [MenuItem("Kern/Architecture/Populate Manager Contract")]
     public static void Populate()
     {
         var contracts = ReadContract();
@@ -111,7 +111,7 @@ public static class ManagerContractMigrator
         }
     }
 
-    [MenuItem("Fodinae/Architecture/Populate Bootstrap Contract")]
+    [MenuItem("Kern/Architecture/Populate Bootstrap Contract")]
     public static void PopulateBootstrap()
     {
         const string scenePath = "Assets/Scenes/Bootstrap.unity";
@@ -325,7 +325,7 @@ public static class ManagerContractMigrator
         if (!_ResolvedTypes.TryGetValue(name, out Type? type))
         {
             type = null;
-            string fullName = $"Fodinae.{name}";
+            string fullName = $"Kern.{name}";
 
             // UnityEditor.TypeCache вместо AppDomain.GetAssemblies (UAC0005):
             // домен отдаёт в том числе уже выгруженные сборки, и обход их типов
@@ -335,7 +335,7 @@ public static class ManagerContractMigrator
             foreach (Type candidate in UnityEditor.TypeCache.GetTypesDerivedFrom<MonoBehaviour>())
             {
                 string? assemblyName = candidate.Assembly.GetName().Name;
-                if (assemblyName?.StartsWith("Fodinae", StringComparison.Ordinal) != true &&
+                if (assemblyName?.StartsWith("Kern", StringComparison.Ordinal) != true &&
                     assemblyName?.StartsWith("Assembly-CSharp", StringComparison.Ordinal) != true)
                 {
                     continue;

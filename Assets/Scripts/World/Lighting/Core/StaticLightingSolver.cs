@@ -6,9 +6,9 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Unity.Profiling;
-using Fodinae.Core;
+using Kern.Core;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 /// <summary>
 /// Records static radiance cascade tracing and atlas resolve commands.
@@ -19,9 +19,9 @@ internal sealed class StaticLightingSolver
     private const int MaximumDispatchGroupsPerDimension = 65535;
 
     private static readonly ProfilerMarker CascadeMarker =
-        new("Fodinae.Lighting.Cascades.Record.CPU");
+        new("Kern.Lighting.Cascades.Record.CPU");
     private static readonly ProfilerMarker ResolveMarker =
-        new("Fodinae.Lighting.Resolve.Record.CPU");
+        new("Kern.Lighting.Resolve.Record.CPU");
 
     private readonly LightingResourceManager _resources;
     private readonly IFrameTelemetry _telemetry;
@@ -61,7 +61,7 @@ internal sealed class StaticLightingSolver
         Vector4 worldRect)
     {
         using var cascadeMarker = CascadeMarker.Auto();
-        commandBuffer.BeginSample("Fodinae.Lighting.RadianceCascades");
+        commandBuffer.BeginSample("Kern.Lighting.RadianceCascades");
         ComputeShader compute = _resources.LightingCompute!;
         int solveKernel = _resources.SolveCascadeKernel;
         bool useDependencyMask = allowDependencyMask &&
@@ -124,7 +124,7 @@ internal sealed class StaticLightingSolver
             }
         }
 
-        commandBuffer.EndSample("Fodinae.Lighting.RadianceCascades");
+        commandBuffer.EndSample("Kern.Lighting.RadianceCascades");
     }
 
     private void RecordScroll(
@@ -307,10 +307,10 @@ internal sealed class StaticLightingSolver
     {
         string sampleName = cascadeIndex switch
         {
-            3 => "Fodinae.Lighting.Cascade_3",
-            2 => "Fodinae.Lighting.Cascade_2",
-            1 => "Fodinae.Lighting.Cascade_1",
-            _ => "Fodinae.Lighting.Cascade_0",
+            3 => "Kern.Lighting.Cascade_3",
+            2 => "Kern.Lighting.Cascade_2",
+            1 => "Kern.Lighting.Cascade_1",
+            _ => "Kern.Lighting.Cascade_0",
         };
         commandBuffer.BeginSample(sampleName);
         CascadeLayout cascade = _resources.Cascades[cascadeIndex];

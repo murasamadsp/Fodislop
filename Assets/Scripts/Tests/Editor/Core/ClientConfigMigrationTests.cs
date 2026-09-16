@@ -1,13 +1,13 @@
 #nullable enable
 
 using System.IO;
-using Fodinae.Core;
-using Fodinae.Rendering;
+using Kern.Core;
+using Kern.Rendering;
 using NUnit.Framework;
 using UnityEngine;
-using AudioSettings = Fodinae.Core.AudioSettings;
+using AudioSettings = Kern.Core.AudioSettings;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 public sealed class ClientConfigMigrationTests
 {

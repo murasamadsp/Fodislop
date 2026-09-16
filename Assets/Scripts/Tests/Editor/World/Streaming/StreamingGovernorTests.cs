@@ -1,11 +1,11 @@
 #nullable enable
 
 using System;
-using Fodinae.World.Streaming;
+using Kern.World.Streaming;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World.Streaming;
+namespace Kern.Tests.World.Streaming;
 
 [TestFixture]
 public sealed class StreamingGovernorTests

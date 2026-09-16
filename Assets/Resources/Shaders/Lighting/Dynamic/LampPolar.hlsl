@@ -1,5 +1,5 @@
-#ifndef FODINAE_LAMP_POLAR_HLSL
-#define FODINAE_LAMP_POLAR_HLSL
+#ifndef KERN_LAMP_POLAR_HLSL
+#define KERN_LAMP_POLAR_HLSL
 
 // Динамический свет ламп: полярные лучи, optical depth lookup, per-pixel radiance.
 //
@@ -380,4 +380,4 @@ float3 LampRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
     return result;
 }
 
-#endif // FODINAE_LAMP_POLAR_HLSL
+#endif // KERN_LAMP_POLAR_HLSL

@@ -1,12 +1,12 @@
 #nullable enable
 
-namespace Fodinae.Rendering;
+namespace Kern.Rendering;
 
 using System;
 using System.Text;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;

@@ -6,11 +6,11 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.TextCore.Text;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
     internal static class StableUiFontAssetNormalizer
 {
-    private const string MenuPath = "Fodinae/Assets/Normalize Stable UI Fonts";
+    private const string MenuPath = "Kern/Assets/Normalize Stable UI Fonts";
 
     private static readonly (string Path, bool IncludeCjk)[] _FontAssets =
     [

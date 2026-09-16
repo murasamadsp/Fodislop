@@ -5,7 +5,7 @@ using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
 
-namespace Fodinae.Core.Interfaces;
+namespace Kern.Core.Interfaces;
 public interface INetworkService
 {
     event Action? PacketBatchStarted;

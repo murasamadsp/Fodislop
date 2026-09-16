@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Shared;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 public sealed class DummyConnectionSessionTests
 {

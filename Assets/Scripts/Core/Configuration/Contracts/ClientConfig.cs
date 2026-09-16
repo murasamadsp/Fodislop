@@ -1,10 +1,10 @@
 #nullable enable
 
 using System;
-using Fodinae.Rendering;
+using Kern.Rendering;
 using UnityEngine.Serialization;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 [Serializable]
 public class ClientConfig
 {

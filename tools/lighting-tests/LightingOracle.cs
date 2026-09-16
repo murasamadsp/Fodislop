@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.LightingTests;
+namespace Kern.LightingTests;
 
 internal static class LightingOracle
 {

@@ -3,13 +3,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Fodinae.Core;
+using Kern.Core;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
 
-namespace Fodinae.World;
+namespace Kern.World;
 
 public sealed class MapCellConfigCatalog
 {

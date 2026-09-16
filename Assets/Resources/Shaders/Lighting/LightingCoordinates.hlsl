@@ -1,5 +1,5 @@
-#ifndef FODINAE_LIGHTING_COORDINATES_HLSL
-#define FODINAE_LIGHTING_COORDINATES_HLSL
+#ifndef KERN_LIGHTING_COORDINATES_HLSL
+#define KERN_LIGHTING_COORDINATES_HLSL
 
 // ============================================================================
 // Coordinate Spaces & Conversions
@@ -65,4 +65,4 @@ float2 FieldPxToProbeCoord(float2 fieldPx, int probeSpacing)
     return fieldPx / float(probeSpacing) - 0.5;
 }
 
-#endif // FODINAE_LIGHTING_COORDINATES_HLSL
+#endif // KERN_LIGHTING_COORDINATES_HLSL

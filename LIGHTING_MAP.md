@@ -72,11 +72,11 @@ Camera
 ## Verification commands without Unity
 
 ```bash
-dotnet run --project tools/lighting-tests/Fodinae.LightingTests.csproj -- all
-dotnet run --project tools/lighting-tests/Fodinae.LightingTests.csproj -- transport
-dotnet run --project tools/lighting-tests/Fodinae.LightingTests.csproj -- equivalence Assets/Resources/Shaders/Lighting/WorldLighting.compute
-dotnet run --project tools/lighting-tests/Fodinae.LightingTests.csproj -- compile
-dotnet test tools/Fodinae.TerrainTests/Fodinae.TerrainTests.csproj --no-restore
+dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- all
+dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- transport
+dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- equivalence Assets/Resources/Shaders/Lighting/WorldLighting.compute
+dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- compile
+dotnet test tools/Kern.TerrainTests/Kern.TerrainTests.csproj --no-restore
 git diff --check
 ```
 

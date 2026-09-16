@@ -2,18 +2,18 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Interfaces.Diagnostics;
-using Fodinae.Rendering;
-using Fodinae.World.Lighting.Diagnostics;
-using Fodinae.World.Lighting.Quality;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Interfaces.Diagnostics;
+using Kern.Rendering;
+using Kern.World.Lighting.Diagnostics;
+using Kern.World.Lighting.Quality;
+using Kern.World.Terrain;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 /// <summary>
 /// Owns per-frame invalidation, command recording, execution and journal state.
@@ -21,13 +21,13 @@ namespace Fodinae.World.Lighting;
 internal sealed class LightingUpdateCoordinator
 {
     private static readonly ProfilerMarker UpdateMarker =
-        new("Fodinae.Lighting.UpdateLighting.CPU");
+        new("Kern.Lighting.UpdateLighting.CPU");
     private static readonly AllocationLedger.Entry AllocationEntry =
         AllocationLedger.Register("Свет — обновление");
     private static readonly ProfilerMarker BuildCommandsMarker =
-        new("Fodinae.Lighting.BuildCommands.CPU");
+        new("Kern.Lighting.BuildCommands.CPU");
     private static readonly ProfilerMarker ExecuteCommandsMarker =
-        new("Fodinae.Lighting.ExecuteCommands.CPU");
+        new("Kern.Lighting.ExecuteCommands.CPU");
 
     private readonly LightingResourceManager _resources;
     private readonly LightingRuntimeState _state;
@@ -217,7 +217,7 @@ internal sealed class LightingUpdateCoordinator
             long buildStart = System.Diagnostics.Stopwatch.GetTimestamp();
             using (BuildCommandsMarker.Auto())
             {
-                commandBuffer.BeginSample("Fodinae.RadianceCascades");
+                commandBuffer.BeginSample("Kern.RadianceCascades");
                 if (_state.DynamicSolveInProgress)
                 {
                     dynamicLightCount = _dynamicLightManager.UploadedCount;
@@ -235,7 +235,7 @@ internal sealed class LightingUpdateCoordinator
                 if (!rebuildFields && !dynamicLightsChanged &&
                     !_state.CompositeDirty && !_state.BounceDirty)
                 {
-                    commandBuffer.EndSample("Fodinae.RadianceCascades");
+                    commandBuffer.EndSample("Kern.RadianceCascades");
                     RememberDynamicLightState();
                     return;
                 }
@@ -280,7 +280,7 @@ internal sealed class LightingUpdateCoordinator
                     _telemetry.LightingDynamicSolveCount++;
                 }
 
-                commandBuffer.EndSample("Fodinae.RadianceCascades");
+                commandBuffer.EndSample("Kern.RadianceCascades");
                 _telemetry.LightingBuildCommandsTimeMs =
                     (float)((System.Diagnostics.Stopwatch.GetTimestamp() - buildStart) *
                         1000.0 / System.Diagnostics.Stopwatch.Frequency);

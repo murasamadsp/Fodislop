@@ -2,8 +2,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Core;
-using Fodinae.Editor;
+using Kern.Core;
+using Kern.Editor;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -11,7 +11,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 [TestFixture]
 public sealed class ProductionSceneContractValidatorTests

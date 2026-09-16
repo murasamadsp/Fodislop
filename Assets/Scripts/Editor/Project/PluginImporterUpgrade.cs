@@ -3,11 +3,11 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.EditorTools
+namespace Kern.EditorTools
 {
     internal static class PluginImporterUpgrade
     {
-        [MenuItem("Tools/Fodinae/Пересохранить метаданные плагинов")]
+        [MenuItem("Tools/Kern/Пересохранить метаданные плагинов")]
         private static void ResaveAll()
         {
             int upgraded = 0;

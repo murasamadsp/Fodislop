@@ -6,11 +6,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
-using Fodinae.Networking;
-using Fodinae.Networking.Auth;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Game.Managers;
+using Kern.Networking;
+using Kern.Networking.Auth;
 using MinesServer.Networking.Connection.Client;
 using NUnit.Framework;
 using UnityEngine;
@@ -21,7 +21,7 @@ using VContainer;
 using VContainer.Unity;
 using Object = UnityEngine.Object;
 
-namespace Fodinae.Tests.PlayMode;
+namespace Kern.Tests.PlayMode;
 
 [TestFixture]
 public sealed class SceneTransitionPlayModeTests

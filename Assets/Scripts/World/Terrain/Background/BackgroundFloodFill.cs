@@ -7,9 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
-using Fodinae.World.Terrain;
+using Kern.World.Terrain;
 
-namespace Fodinae.World.Terrain.Background;
+namespace Kern.World.Terrain.Background;
 public sealed class BackgroundFloodFill
 {
     private int[] _fbpwGeneration = Array.Empty<int>();

@@ -4,14 +4,14 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     // Диагностический захват фактического рендера планеты главного меню в PNG,
     // чтобы агент мог видеть ту же картинку, что и пользователь, а не угадывать
     // по сырым equirect-текстурам.
     public static class PlanetCapture
     {
-        [MenuItem("Fodinae/Diagnostics/Capture Planet PNG")]
+        [MenuItem("Kern/Diagnostics/Capture Planet PNG")]
         public static void Capture()
         {
             var scenery = Object.FindAnyObjectByType<UI.MenuSceneryController>();

@@ -4,10 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using MinesServer.Data;
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Game.Managers;
+namespace Kern.Game.Managers;
 
 public sealed class ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths) : IItemCatalog
 {

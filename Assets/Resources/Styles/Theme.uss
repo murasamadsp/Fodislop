@@ -1,4 +1,4 @@
-/* Fodinae Theme */
+/* Kern Theme */
 
 :root {
     -unity-font-definition: url("project://database/Assets/Resources/Fonts/Exo2_SDF.asset");
@@ -157,7 +157,7 @@ TextField,
    центрирование.
 
    Числа выведены, а не подобраны. Источник истины — planet-disc: 860px из
-   visual/fodinae-ui-lab/css/tokens.css. Здесь планета не CSS-фигура, а
+   visual/kern-ui-lab/css/tokens.css. Здесь планета не CSS-фигура, а
    рендер 3D-сферы в RenderTexture, и сфера занимает ~70% ширины кадра
    (замерено: контейнер 820 → диск 568). Отсюда контейнер = 860 / 0.7 ≈ 1229,
    а поля вокруг диска = (1229 − 860) / 2 ≈ 184. Чтобы диск уходил за правый
@@ -1499,7 +1499,7 @@ Button.mm-btn-outline:hover {
 
 /* ═══════════════════════════════════════════════════════════
    Баннер обязательного обновления (#UpdateAlertBanner)
-   Соответствует .update-alert-banner из visual/fodinae-ui-lab.
+   Соответствует .update-alert-banner из visual/kern-ui-lab.
    ═══════════════════════════════════════════════════════════ */
 
 .mm-update-banner {

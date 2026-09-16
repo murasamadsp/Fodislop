@@ -2,11 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.World.Terrain;
+using Kern.World.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
 [TestFixture]
 public class DirtyRectSetFuzzTests

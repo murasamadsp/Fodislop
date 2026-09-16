@@ -76,16 +76,16 @@ namespace UnityEngine.Rendering
     }
 }
 
-namespace Fodinae.Core
+namespace Kern.Core
 {
     public readonly struct GraphicsQualitySettings;
 }
 
-namespace Fodinae.Rendering
+namespace Kern.Rendering
 {
 }
 
-namespace Fodinae.World.Terrain
+namespace Kern.World.Terrain
 {
     public static class TerrainLook
     {
@@ -94,7 +94,7 @@ namespace Fodinae.World.Terrain
     }
 }
 
-namespace Fodinae.World.Lighting.Quality
+namespace Kern.World.Lighting.Quality
 {
     public enum LightingQualityMode
     {
@@ -103,7 +103,7 @@ namespace Fodinae.World.Lighting.Quality
     }
 }
 
-namespace Fodinae.World.Lighting
+namespace Kern.World.Lighting
 {
     [Flags]
     public enum LightingFeatureFlags

@@ -1,22 +1,22 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces.Diagnostics;
+using Kern.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.World.Lighting;
-using Fodinae.World.Lighting.Quality;
-using Fodinae.World.Streaming;
-using Fodinae.World.Terrain.Background;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
+using Kern.World.Lighting;
+using Kern.World.Lighting.Quality;
+using Kern.World.Streaming;
+using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VContainer;
 
-namespace Fodinae.World.Terrain
+namespace Kern.World.Terrain
 {
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -114,13 +114,13 @@ namespace Fodinae.World.Terrain
         private MapManager? _subscribedMapManager;
         private IWorldDataStorage? _subscribedStorage;
 
-        private static readonly ProfilerMarker _CacheMarker = new("Fodinae.Terrain.Cache");
-        private static readonly ProfilerMarker _PrecalculateMarker = new("Fodinae.Terrain.Precalculate");
-        private static readonly ProfilerMarker _FloodFillMarker = new("Fodinae.World.Terrain.BackgroundFloodFill");
-        private static readonly ProfilerMarker _MeshBuildMarker = new("Fodinae.Terrain.MeshBuild");
-        private static readonly ProfilerMarker _MeshUploadMarker = new("Fodinae.Terrain.MeshUpload");
+        private static readonly ProfilerMarker _CacheMarker = new("Kern.Terrain.Cache");
+        private static readonly ProfilerMarker _PrecalculateMarker = new("Kern.Terrain.Precalculate");
+        private static readonly ProfilerMarker _FloodFillMarker = new("Kern.World.Terrain.BackgroundFloodFill");
+        private static readonly ProfilerMarker _MeshBuildMarker = new("Kern.Terrain.MeshBuild");
+        private static readonly ProfilerMarker _MeshUploadMarker = new("Kern.Terrain.MeshUpload");
         private static readonly ProfilerMarker _TerrainLateUpdateMarker =
-            new("Fodinae.Terrain.LateUpdate.CPU");
+            new("Kern.Terrain.LateUpdate.CPU");
 
         private static readonly AllocationLedger.Entry _AllocationEntry =
             AllocationLedger.Register("Террейн — LateUpdate");
@@ -355,7 +355,7 @@ namespace Fodinae.World.Terrain
 
         private int _diagLogged;
 
-        [System.Diagnostics.Conditional("FODINAE_TERRAIN_DIAG")]
+        [System.Diagnostics.Conditional("KERN_TERRAIN_DIAG")]
         private void LogDiag(int bit, string message)
         {
             if ((_diagLogged & bit) != 0)

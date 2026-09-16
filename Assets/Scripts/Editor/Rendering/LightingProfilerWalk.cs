@@ -4,14 +4,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using Fodinae.Core;
-using Fodinae.Game;
-using Fodinae.World.Lighting;
+using Kern.Core;
+using Kern.Game;
+using Kern.World.Lighting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Profiling;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public static class LightingProfilerWalk
     {
@@ -38,7 +38,7 @@ namespace Fodinae.Editor
         private static bool _moverIsCamera;
         private static LightingEngine? _lighting;
 
-        [MenuItem("Tools/Fodinae/Profile Lighting Walk (MUTE vs ON)")]
+        [MenuItem("Tools/Kern/Profile Lighting Walk (MUTE vs ON)")]
         public static void Run()
         {
             if (!Application.isPlaying)

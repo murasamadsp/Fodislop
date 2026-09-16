@@ -3,10 +3,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Fodinae.Tools.Imgui.Profiling;
+using Kern.Tools.Imgui.Profiling;
 using UnityEngine;
 
-namespace Fodinae.Tools.Imgui.Windows;
+namespace Kern.Tools.Imgui.Windows;
 
 public sealed class FrameBreakdownWindow : ToolWindow
 {
@@ -14,7 +14,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
     private const double BudgetMilliseconds = 1000.0 / 60.0;
     private const int FrameTabLoopRows = 8;
     private const int MaxDiscoveredMarkers = 80;
-    private const string OwnMarkerPrefix = "Fodinae.";
+    private const string OwnMarkerPrefix = "Kern.";
 
     private enum Tab
     {
@@ -297,7 +297,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         _timings.Clear();
         _playerLoop.Start();
         _loop.Begin();
-        Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Enabled = true;
+        Kern.Core.Interfaces.Diagnostics.AllocationLedger.Enabled = true;
         foreach (List<FrameProbe> list in AllCatalogLists())
         {
             foreach (FrameProbe probe in list)
@@ -318,7 +318,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         _spikes.Cancel();
         _layout.Stop();
         _layoutActive = false;
-        Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Enabled = false;
+        Kern.Core.Interfaces.Diagnostics.AllocationLedger.Enabled = false;
         foreach (List<FrameProbe> list in AllCatalogLists())
         {
             foreach (FrameProbe probe in list)
@@ -384,9 +384,9 @@ public sealed class FrameBreakdownWindow : ToolWindow
             }
 
             if (!info.Name.StartsWith(OwnMarkerPrefix, StringComparison.Ordinal) ||
-                info.Name.StartsWith("Fodinae.Tools.", StringComparison.Ordinal) ||
+                info.Name.StartsWith("Kern.Tools.", StringComparison.Ordinal) ||
                 // Маркеры Test Runner — имена тестов, а не участки кадра.
-                info.Name.StartsWith("Fodinae.Tests.", StringComparison.Ordinal) ||
+                info.Name.StartsWith("Kern.Tests.", StringComparison.Ordinal) ||
                 _catalogNames.Contains(info.Name) ||
                 known.Contains(info.Name) ||
                 info.Unit != Unity.Profiling.ProfilerMarkerDataUnit.TimeNanoseconds)
@@ -746,7 +746,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         AddStageGroup(rows, _cpu, ToolTheme.Warning);
 
         rows.Add(new Row(RowKind.Header, "ПЕРЕСБОРКИ — ПРИЧИНЫ"));
-        var ledger = Fodinae.Core.Interfaces.Diagnostics.RebuildLedger.Entries;
+        var ledger = Kern.Core.Interfaces.Diagnostics.RebuildLedger.Entries;
         if (ledger.Count == 0)
         {
             rows.Add(new Row(RowKind.Text, "Пересборок в этом сеансе не было."));
@@ -754,7 +754,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
 
         foreach (var entry in ledger)
         {
-            int rate = Fodinae.Core.Interfaces.Diagnostics.RebuildLedger.RateOf(entry);
+            int rate = Kern.Core.Interfaces.Diagnostics.RebuildLedger.RateOf(entry);
             string ago = entry.LastTime < 0f
                 ? "не было"
                 : $"{Time.unscaledTime - entry.LastTime:F1} с назад";
@@ -784,7 +784,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         rows.Add(new Row(RowKind.Header, $"НАШИ МАРКЕРЫ ВНЕ ПЕРЕЧНЯ ({_discovered.Count})"));
         if (_discovered.Count == 0)
         {
-            rows.Add(new Row(RowKind.Text, "Все сработавшие маркеры Fodinae.* уже в перечне."));
+            rows.Add(new Row(RowKind.Text, "Все сработавшие маркеры Kern.* уже в перечне."));
         }
 
         AddProbeList(rows, _discovered, ToolTheme.Accent, pinnable: true);
@@ -1084,7 +1084,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         probes.AddRange(_reordered);
     }
 
-    private readonly List<Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Entry> _ledgerSorted = [];
+    private readonly List<Kern.Core.Interfaces.Diagnostics.AllocationLedger.Entry> _ledgerSorted = [];
 
     // У ledger и счётчика GC разные окна выборок. Их разность не является
     // измерением аллокаций редактора или UI.
@@ -1092,7 +1092,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
     {
         rows.Add(new Row(RowKind.Header, "МУСОР ПО ИГРОВЫМ ПУТЯМ (СРЕДНЕЕ ЗА КАДР)"));
         _ledgerSorted.Clear();
-        _ledgerSorted.AddRange(Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Entries);
+        _ledgerSorted.AddRange(Kern.Core.Interfaces.Diagnostics.AllocationLedger.Entries);
         _ledgerSorted.Sort(static (left, right) => right.AverageBytes.CompareTo(left.AverageBytes));
         if (_ledgerSorted.Count == 0)
         {

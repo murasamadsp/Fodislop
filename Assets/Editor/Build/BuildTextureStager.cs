@@ -5,11 +5,11 @@ using System.IO;
 using System.Linq;
 using UnityEditor.Build;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public sealed class BuildTextureStager : BuildPlayerProcessor
     {
-        private const string StagingRoot = "Library/FodinaeBuild/StreamingAssets";
+        private const string StagingRoot = "Library/KernBuild/StreamingAssets";
 
         public override void PrepareForBuild(BuildPlayerContext buildPlayerContext)
         {

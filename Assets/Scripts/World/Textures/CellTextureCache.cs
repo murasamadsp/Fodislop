@@ -7,7 +7,7 @@ using System.Linq;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World;
+namespace Kern.World;
 
 public class CellTextureCache
 {

@@ -6,7 +6,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 public static class ColorGradeFile
 {
@@ -546,7 +546,7 @@ public static class ColorGradeFile
         builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         builder.AppendLine("<ColorDecisionList xmlns=\"urn:ASC:CDL:v1.01\">");
         builder.AppendLine("  <ColorDecision>");
-        builder.AppendLine("    <ColorCorrection id=\"fodinae\">");
+        builder.AppendLine("    <ColorCorrection id=\"kern\">");
         builder.AppendLine("      <SOPNode>");
         builder.AppendLine($"        <Slope>{Triplet(state.Slope, culture)}</Slope>");
         builder.AppendLine($"        <Offset>{Triplet(state.Offset, culture)}</Offset>");

@@ -1,13 +1,13 @@
 #nullable enable
 
 using NUnit.Framework;
-using Fodinae.Rendering;
+using Kern.Rendering;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 public sealed class DisplayOutputProfileTests
 {
@@ -69,7 +69,7 @@ public sealed class DisplayOutputProfileTests
                 component.GetType().Namespace == typeof(Tonemapping).Namespace &&
                 component is IPostProcessComponent;
             Assert.That(nativePostEffect, Is.False,
-                $"{path}: {component?.GetType().Name}; artistic effects belong to Fodinae, output tonemapping to Bootstrap.");
+                $"{path}: {component?.GetType().Name}; artistic effects belong to Kern, output tonemapping to Bootstrap.");
         }
     }
 }

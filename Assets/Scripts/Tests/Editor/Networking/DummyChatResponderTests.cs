@@ -8,7 +8,7 @@ using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 public sealed class DummyChatResponderTests
 {

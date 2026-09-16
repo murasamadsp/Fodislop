@@ -4,11 +4,11 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
+using Kern.Core;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Fodinae.Networking.Auth;
+namespace Kern.Networking.Auth;
 public readonly struct VkSession
 {
     public string AccessToken { get; init; }

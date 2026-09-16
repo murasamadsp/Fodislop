@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Core;
+using Kern.Core;
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing
+namespace Kern.Rendering.PostProcessing
 {
     public static class PostProcessLook
     {
@@ -93,7 +93,7 @@ namespace Fodinae.Rendering.PostProcessing
     }
 }
 
-namespace Fodinae.World.Lighting
+namespace Kern.World.Lighting
 {
     [System.Flags]
     public enum LightingFeatureFlags
@@ -139,7 +139,7 @@ namespace Fodinae.World.Lighting
     }
 }
 
-namespace Fodinae.World.Terrain
+namespace Kern.World.Terrain
 {
     public static class TerrainLook
     {

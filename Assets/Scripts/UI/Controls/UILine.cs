@@ -4,7 +4,7 @@ using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     [UxmlElement]
     public partial class UILine : VisualElement

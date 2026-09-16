@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.Player.Interfaces;
+using Kern.Player.Interfaces;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Player.Input
+namespace Kern.Player.Input
 {
     public class PlayerInputHandler : MonoBehaviour, IPlayerInput
     {
@@ -68,10 +68,10 @@ namespace Fodinae.Player.Input
             (Gamepad.current != null && Gamepad.current.leftTrigger.isPressed);
 
         [VContainer.Inject]
-        private Fodinae.Core.Interfaces.IClientConfigManager? _clientConfig;
+        private Kern.Core.Interfaces.IClientConfigManager? _clientConfig;
 
         [VContainer.Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
+        private Kern.Core.Interfaces.IInputBlocker? _inputBlocker;
 
         [VContainer.Inject]
         private UIDocument? _uiDocument;

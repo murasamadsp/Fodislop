@@ -502,7 +502,7 @@
   "gateway.auth.eula_line2": "2. АВТОРИТЕТ СЕРВЕРА: координаты и добыча рассчитываются сервером авторитарно.",
   "gateway.auth.eula_line3": "3. ПРОГРЕСС: все данные синхронизируются по протоколу MinesProtocol v7.",
   "gateway.auth.eula_accept": "Принимаю Пользовательское соглашение и EULA",
-  "gateway.auth.submit": "ВОЙТИ В МИР FODINAE",
+  "gateway.auth.submit": "ВОЙТИ В МИР KERN",
   "gateway.auth.offline": "Офлайн режим (Dummy)",
   "gateway.auth.recover": "Забыли пароль?",
   "gateway.auth.vk": "ВОЙТИ ЧЕРЕЗ VK",

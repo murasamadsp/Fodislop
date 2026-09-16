@@ -1,10 +1,10 @@
 #nullable enable
 
 using System;
-using Fodinae.Core.Interfaces;
-using Fodinae.Networking;
-using Fodinae.Networking.Processors;
-using Fodinae.UI.HUD.Player.Model;
+using Kern.Core.Interfaces;
+using Kern.Networking;
+using Kern.Networking.Processors;
+using Kern.UI.HUD.Player.Model;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -15,7 +15,7 @@ using MinesServer.Networking.Server.Packets.Information.StatusPanel;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 [TestFixture]
 public class StatusProcessorTests

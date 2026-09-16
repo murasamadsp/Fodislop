@@ -1,16 +1,16 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
+using Kern.Core;
+using Kern.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
-using static Fodinae.Rendering.PostProcessing.PostProcessShaderConstants;
+using static Kern.Rendering.PostProcessing.PostProcessShaderConstants;
 
-namespace Fodinae.Rendering.PostProcessing
+namespace Kern.Rendering.PostProcessing
 {
     public class PostProcessRenderPass : ScriptableRenderPass2D
     {

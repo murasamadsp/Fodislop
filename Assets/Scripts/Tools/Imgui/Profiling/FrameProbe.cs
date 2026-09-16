@@ -3,7 +3,7 @@
 using System;
 using Unity.Profiling;
 
-namespace Fodinae.Tools.Imgui.Profiling;
+namespace Kern.Tools.Imgui.Profiling;
 
 // Один маркер или счётчик профайлера: время участка, байты или количество.
 // Имя разрешается через MarkerDirectory, без угадывания категории; можно

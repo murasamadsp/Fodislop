@@ -1,14 +1,14 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World.Lighting;
-using Fodinae.Game;
-using Fodinae.World;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
+using Kern.World.Lighting;
+using Kern.Game;
+using Kern.World;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Tools.Imgui.Windows;
+namespace Kern.Tools.Imgui.Windows;
 
 public sealed class RenderBypassWindow : ToolWindow
 {

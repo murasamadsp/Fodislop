@@ -2,8 +2,8 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core.Interfaces;
-using Fodinae.Networking.Processors;
+using Kern.Core.Interfaces;
+using Kern.Networking.Processors;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.GUI;
@@ -17,7 +17,7 @@ using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using VContainer.Unity;
 
-namespace Fodinae.Networking;
+namespace Kern.Networking;
 
 // Чистый сервис контейнера (SCENE_STANDARD.md §1): подписка на пакеты при
 // старте scope, отписка при его уничтожении.

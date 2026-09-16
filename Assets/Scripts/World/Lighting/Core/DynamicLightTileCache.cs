@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 // Lamp light, kept per lamp until the lamp or what it lights changes.
 //

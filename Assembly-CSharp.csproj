@@ -183,7 +183,7 @@
     <Compile Include="Assets\\Scripts\\UI\\Common\\Windows\\ModalWindowHandler.cs" />
     <Compile Include="Assets/Scripts/Core/Bootstrap/GameLifetimeScope.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InjectParameter.cs" />
-    <Compile Include="Assets\Scripts\World\Common\FodinaeGizmos.cs" />
+    <Compile Include="Assets\Scripts\World\Common\KernGizmos.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Container.cs" />
     <Compile Include="Assets\Scripts\Player\Controllers\PlayerMovementController.cs" />
     <Compile Include="Assets\Scripts\Player\Logic\PlayerMovementValidator.cs" />

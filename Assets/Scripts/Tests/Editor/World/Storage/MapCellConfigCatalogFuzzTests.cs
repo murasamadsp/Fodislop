@@ -3,14 +3,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Fodinae.World;
+using Kern.World;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
 [TestFixture]
 [Category("FuzzPure")]

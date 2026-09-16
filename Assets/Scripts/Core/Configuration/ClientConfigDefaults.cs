@@ -2,9 +2,9 @@
 
 using System;
 using System.IO;
-using Fodinae.Rendering;
+using Kern.Rendering;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 internal static class ClientConfigDefaults
 {

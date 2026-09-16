@@ -6,13 +6,13 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Fodinae;
-using Fodinae.Core;
+using Kern;
+using Kern.Core;
 using UnityEngine;
 
-[assembly: InternalsVisibleTo("Fodinae.Tests.Editor")]
+[assembly: InternalsVisibleTo("Kern.Tests.Editor")]
 
-namespace Fodinae.Persistence;
+namespace Kern.Persistence;
 public sealed class WorldLayer<T> : IWorldLayer<T>
     where T : unmanaged
 {

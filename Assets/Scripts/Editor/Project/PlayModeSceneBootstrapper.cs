@@ -6,13 +6,13 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
 [InitializeOnLoad]
 public static class PlayModeSceneBootstrapper
 {
     public const string BootstrapScenePath = "Assets/Scenes/Bootstrap.unity";
-    public const string TargetSceneSessionKey = "Fodinae.PlayModeTargetScene";
+    public const string TargetSceneSessionKey = "Kern.PlayModeTargetScene";
 
     static PlayModeSceneBootstrapper()
     {
@@ -21,7 +21,7 @@ public static class PlayModeSceneBootstrapper
         EnsurePlayModeStartScene();
     }
 
-    [MenuItem("Fodinae/Architecture/Ensure Play Mode Bootstrap Scene")]
+    [MenuItem("Kern/Architecture/Ensure Play Mode Bootstrap Scene")]
     public static void EnsurePlayModeStartScene()
     {
         SceneAsset? bootstrapAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootstrapScenePath);

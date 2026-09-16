@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.World.Lighting;
-using Fodinae.World.Streaming;
+using Kern.World.Lighting;
+using Kern.World.Streaming;
 using UnityEngine;
 
-namespace Fodinae.LightingTests;
+namespace Kern.LightingTests;
 
 internal static class Program
 {

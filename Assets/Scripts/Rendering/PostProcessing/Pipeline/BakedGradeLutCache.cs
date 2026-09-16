@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 // Ключ запекания творческого грейда.
 //

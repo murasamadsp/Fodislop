@@ -1,17 +1,17 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World;
-using Fodinae.Player.Logic;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World;
+using Kern.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     public class MinimapController : MonoBehaviour
     {

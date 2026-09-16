@@ -4,12 +4,12 @@ using System;
 using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Fodinae.Core;
-// Контракт IRuntimeAssetPaths находится в Fodinae.Contracts, а реализация
+namespace Kern.Core;
+// Контракт IRuntimeAssetPaths находится в Kern.Contracts, а реализация
 // живёт рядом с потребителями asset pipeline.
 public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
 {

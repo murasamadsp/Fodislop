@@ -1,5 +1,5 @@
-#ifndef FODINAE_DYNAMIC_LIGHT_TRACE_HLSL
-#define FODINAE_DYNAMIC_LIGHT_TRACE_HLSL
+#ifndef KERN_DYNAMIC_LIGHT_TRACE_HLSL
+#define KERN_DYNAMIC_LIGHT_TRACE_HLSL
 
 // SolveDynamicLighting и ComposeDynamicLighting: per-lamp tile tracing и композиция.
 // При одной лампе SolveDynamicLighting может сразу писать DirectTexture.
@@ -80,4 +80,4 @@ void ComposeDynamicLighting(uint3 dispatchId : SV_DispatchThreadID)
     _DirectTexture[pixel] = float4(radiance, 1.0);
 }
 
-#endif // FODINAE_DYNAMIC_LIGHT_TRACE_HLSL
+#endif // KERN_DYNAMIC_LIGHT_TRACE_HLSL

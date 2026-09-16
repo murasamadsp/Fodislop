@@ -2,10 +2,10 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.World.Lighting;
+using Kern.World.Lighting;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 [TestFixture]
 public class CascadeLayoutBuilderFuzzTests

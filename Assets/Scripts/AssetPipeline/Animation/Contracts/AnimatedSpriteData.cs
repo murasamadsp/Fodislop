@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae;
+namespace Kern;
 public readonly struct AnimatedSpriteData
 {
     public AnimatedSpriteData(Sprite[] frames, float fps, int frameHeight)

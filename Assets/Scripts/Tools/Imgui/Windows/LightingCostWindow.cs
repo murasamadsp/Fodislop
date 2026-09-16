@@ -1,13 +1,13 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World.Lighting;
-using Fodinae.World.Lighting.Quality;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World.Lighting;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 
-namespace Fodinae.Tools.Imgui.Windows;
+namespace Kern.Tools.Imgui.Windows;
 
 public sealed class LightingCostWindow : ToolWindow
 {

@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.World.Lighting;
-using Fodinae.World.Streaming;
+using Kern.World.Lighting;
+using Kern.World.Streaming;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 [TestFixture]
 public class LightingRegionCalculatorFuzzTests

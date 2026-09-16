@@ -1,12 +1,12 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
 using UnityEngine;
 
-namespace Fodinae.Game.Managers;
+namespace Kern.Game.Managers;
 
 // Чистый сервис контейнера (SCENE_STANDARD.md §1): роботы создаются фабрикой
 // под Runtime/Robots, сам сервис объекта на сцене не имеет.

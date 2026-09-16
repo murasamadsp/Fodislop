@@ -3,7 +3,7 @@
 using System;
 using System.Diagnostics;
 using Unity.Profiling;
-namespace Fodinae.Core;
+namespace Kern.Core;
 public interface IFrameTelemetry
 {
     float TerrainMeshTimeMs { get; set; }

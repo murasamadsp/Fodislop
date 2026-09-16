@@ -1,4 +1,4 @@
-Shader "Fodinae/World Entity"
+Shader "Kern/World Entity"
 {
     // Sprite shader for everything rendered through WorldEntityBatchRenderer
     // (robots, buildings, tentacles, pooled VFX, chat bubbles). Identical in
@@ -7,7 +7,7 @@ Shader "Fodinae/World Entity"
     // position and multiplies, so world entities finally receive the same
     // lighting as the terrain instead of glowing full-bright in dark caves.
     //
-    // The FODINAE_WORLD_LIGHTING keyword is toggled globally by LightingEngine
+    // The KERN_WORLD_LIGHTING keyword is toggled globally by LightingEngine
     // (same mechanism as Terrain.shader): when it is off, lighting is disabled
     // and the lookup short-circuits to white, so the shader is safe before the
     // first solve and under the "Off" quality mode.
@@ -39,7 +39,7 @@ Shader "Fodinae/World Entity"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile _ FODINAE_WORLD_LIGHTING
+            #pragma multi_compile _ KERN_WORLD_LIGHTING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -109,7 +109,7 @@ Shader "Fodinae/World Entity"
 
             float3 GetWorldLightColor(float2 worldPos)
             {
-                #if !defined(FODINAE_WORLD_LIGHTING)
+                #if !defined(KERN_WORLD_LIGHTING)
                     return 1.0;
                 #else
                 float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
@@ -175,7 +175,7 @@ Shader "Fodinae/World Entity"
         Pass
         {
             Name "LightingMaterialField"
-            Tags { "LightMode" = "FodinaeLightingMaterialField" }
+            Tags { "LightMode" = "KernLightingMaterialField" }
 
             Blend One One
             BlendOp Max

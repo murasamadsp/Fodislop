@@ -1,11 +1,11 @@
 #nullable enable
 
 using System;
-using Fodinae.Rendering;
-using Fodinae.World.Lighting.Quality;
+using Kern.Rendering;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 // Разрешение настроек качества в конкретные числа — и только это.
 //

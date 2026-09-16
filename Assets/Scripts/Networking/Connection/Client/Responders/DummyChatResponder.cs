@@ -63,7 +63,7 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket)
 
         return
         [
-            new ChatMessagePacket(1, now - 300000, 0, 0, gray, "System", gray, "Добро пожаловать на Fodinae!"),
+            new ChatMessagePacket(1, now - 300000, 0, 0, gray, "System", gray, "Добро пожаловать на Kern!"),
             new ChatMessagePacket(2, now - 270000, 1, 1, green, "Miner77", white, "привет всем!"),
             new ChatMessagePacket(3, now - 240000, 2, 0, blue, "DeepDrill", white, "кто на сервере?"),
             new ChatMessagePacket(4, now - 210000, 3, 2, red, "CrystalMage", white, "иду копать алмазы"),

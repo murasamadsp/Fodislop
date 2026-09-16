@@ -1,8 +1,8 @@
 #nullable enable
 
-using Fodinae.Rendering;
+using Kern.Rendering;
 
-namespace Fodinae.World.Lighting.Quality;
+namespace Kern.World.Lighting.Quality;
 public static class LightingQualityResolver
 {
     public static LightingQualityMode Resolve(

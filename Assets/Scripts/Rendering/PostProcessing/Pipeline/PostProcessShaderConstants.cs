@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 internal static class PostProcessShaderConstants
 {
@@ -108,7 +108,7 @@ internal static class PostProcessShaderConstants
 
     // Ключевое слово отладочных видов и шторки сравнения. Вне инструмента
     // колориста вариант не включается, и весь этот код в kernel не попадает.
-    public const string DiagnosticsKeyword = "FODINAE_POST_DIAGNOSTICS";
+    public const string DiagnosticsKeyword = "KERN_POST_DIAGNOSTICS";
 
     // Глубина пирамиды блума. Уровней было по одному: цепочка «половина ->
     // четверть -> обратно» давала охват порядка радиуса на четверти

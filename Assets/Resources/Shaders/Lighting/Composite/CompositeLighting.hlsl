@@ -1,5 +1,5 @@
-#ifndef FODINAE_COMPOSITE_LIGHTING_HLSL
-#define FODINAE_COMPOSITE_LIGHTING_HLSL
+#ifndef KERN_COMPOSITE_LIGHTING_HLSL
+#define KERN_COMPOSITE_LIGHTING_HLSL
 
 // CompositeLighting: финальная сборка изображения.
 //
@@ -227,4 +227,4 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     _Result[pixel] = float4(ambient + output, 1.0);
 }
 
-#endif // FODINAE_COMPOSITE_LIGHTING_HLSL
+#endif // KERN_COMPOSITE_LIGHTING_HLSL

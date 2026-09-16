@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace Fodinae.Tools.Imgui.Profiling;
+namespace Kern.Tools.Imgui.Profiling;
 
 /// <summary>
 /// Перепись живой иерархии: сколько объектов, в каких сценах и под какими

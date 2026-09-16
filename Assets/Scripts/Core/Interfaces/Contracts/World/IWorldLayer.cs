@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Fodinae;
+namespace Kern;
 
 public enum ChunkReadStatus
 {

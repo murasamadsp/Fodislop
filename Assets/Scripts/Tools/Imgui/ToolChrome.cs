@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Tools.Imgui;
+namespace Kern.Tools.Imgui;
 
 public static class ToolChrome
 {

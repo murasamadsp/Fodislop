@@ -1,16 +1,16 @@
 ﻿#nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Game.Managers;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Game.Managers;
+using Kern.World.Terrain;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     public sealed class AssetLoadingIndicator : MonoBehaviour, ILocalizableUI
     {

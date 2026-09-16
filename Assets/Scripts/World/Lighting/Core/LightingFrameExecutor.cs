@@ -2,14 +2,14 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World.Lighting.Quality;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World.Lighting.Quality;
+using Kern.World.Terrain;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 /// <summary>
 /// Records the complete lighting transport order into one command buffer.

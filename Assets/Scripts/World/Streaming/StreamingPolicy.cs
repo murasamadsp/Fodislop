@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.World.Streaming;
+namespace Kern.World.Streaming;
 
 public readonly record struct StreamingPolicy(
     int AllocationQuantumCells,

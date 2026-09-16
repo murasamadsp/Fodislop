@@ -3,7 +3,7 @@
 using System;
 using UnityEngine;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 [Serializable]
 public sealed class TerrainSettings

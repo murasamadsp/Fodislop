@@ -2,12 +2,12 @@
 
 using System;
 using System.IO;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering;
+using Kern.Core.Interfaces;
+using Kern.Rendering;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Core
+namespace Kern.Core
 {
     [DefaultExecutionOrder(-9000)]
     public class ClientConfigManager : MonoBehaviour, IClientConfigManager

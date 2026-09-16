@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.Core;
-using Fodinae.World.Streaming;
+using Kern.Core;
+using Kern.World.Streaming;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 public sealed class TerrainViewportCalculator
 {

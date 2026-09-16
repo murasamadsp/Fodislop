@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using MinesServer.Networking.Shared.Packets;
 
-namespace Fodinae.Game;
+namespace Kern.Game;
 
 internal sealed class ServerAudioParameters
 {

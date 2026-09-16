@@ -2,21 +2,21 @@
 
 using System;
 using System.Text;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
-using Fodinae.Player;
-using Fodinae.Player.Logic;
-using Fodinae.Rendering;
-using Fodinae.World;
-using Fodinae.World.Lighting;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Game.Managers;
+using Kern.Player;
+using Kern.Player.Logic;
+using Kern.Rendering;
+using Kern.World;
+using Kern.World.Lighting;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Profiling;
 
-namespace Fodinae.Tools.Imgui.Windows;
+namespace Kern.Tools.Imgui.Windows;
 
 internal static class DebugOverlayTextFormatter
 {
@@ -81,7 +81,7 @@ internal static class DebugOverlayTextFormatter
                     {
                         sb.Append("\n<b>Клетка под курсором  ·  ")
                           .Append(cell.x).Append(", ").Append(cell.y).Append("</b>\n")
-                          .Append("fodinae:unloaded (#0)\n")
+                          .Append("kern:unloaded (#0)\n")
                           .Append("Проходимая: нет  ·  Разрушаемая: нет\n");
                     }
                     else
@@ -92,7 +92,7 @@ internal static class DebugOverlayTextFormatter
 
                         sb.Append("\n<b>Клетка под курсором  ·  ")
                           .Append(cell.x).Append(", ").Append(cell.y).Append("</b>\n")
-                          .Append("fodinae:").Append(cellType.ToString().ToLowerInvariant()).Append(" (#").Append((int)cellType).Append(")\n")
+                          .Append("kern:").Append(cellType.ToString().ToLowerInvariant()).Append(" (#").Append((int)cellType).Append(")\n")
                           .Append("Проходимая: ").Append(passable ? "да" : "нет")
                           .Append("  ·  Разрушаемая: ").Append(breakable ? "да" : "нет")
                           .Append("  ·  Рельеф: ").Append(config.ReliefGroup).Append("\n");

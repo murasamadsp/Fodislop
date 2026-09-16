@@ -1,18 +1,18 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.Player;
-using Fodinae.Player.Logic;
-using Fodinae.World;
-using Fodinae.World.Lighting;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
+using Kern.Player;
+using Kern.Player.Logic;
+using Kern.World;
+using Kern.World.Lighting;
+using Kern.World.Terrain;
 using UnityEngine;
 using VContainer.Unity;
 
-namespace Fodinae.Game.Managers
+namespace Kern.Game.Managers
 {
     public enum GameState
     {

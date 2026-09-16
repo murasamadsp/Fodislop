@@ -4,7 +4,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae;
+namespace Kern;
 
 public enum RuntimeTextureColorSpace
 {

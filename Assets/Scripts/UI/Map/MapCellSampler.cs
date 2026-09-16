@@ -1,10 +1,10 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.World;
+using Kern.World;
 using MinesServer.Data;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 internal sealed class MapCellSampler
 {
     private const int MaxChunkCacheEntries = 4096;

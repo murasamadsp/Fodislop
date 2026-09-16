@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 /// <summary>
 /// Explicit Resource Registry for the lighting system.

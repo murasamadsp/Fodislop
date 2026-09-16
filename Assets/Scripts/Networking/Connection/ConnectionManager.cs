@@ -1,16 +1,16 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces.Diagnostics;
+using Kern.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Networking.Diagnostics;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Networking.Auth;
+using Kern.Networking.Diagnostics;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Networking.Auth;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Connection;
@@ -23,12 +23,12 @@ using Unity.Profiling;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Networking.Connection
+namespace Kern.Networking.Connection
 {
     public class ConnectionManager : MonoBehaviour, IConnectionService, IWorldRegionRequester
     {
         private static readonly ProfilerMarker _PacketDrainMarker =
-            new("Fodinae.Net.DrainPacketQueue");
+            new("Kern.Net.DrainPacketQueue");
 
         private static readonly AllocationLedger.Entry _AllocationEntry =
             AllocationLedger.Register("Сеть — разбор очереди");

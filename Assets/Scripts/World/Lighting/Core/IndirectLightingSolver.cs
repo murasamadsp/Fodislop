@@ -4,12 +4,12 @@ using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 internal sealed class IndirectLightingSolver
 {
     private static readonly ProfilerMarker CompositeMarker =
-        new("Fodinae.Lighting.Composite.Record.CPU");
+        new("Kern.Lighting.Composite.Record.CPU");
 
     private readonly LightingResourceManager _resources;
 
@@ -48,7 +48,7 @@ internal sealed class IndirectLightingSolver
     public void RecordComposite(CommandBuffer commandBuffer)
     {
         using var compositeMarker = CompositeMarker.Auto();
-        commandBuffer.BeginSample("Fodinae.Lighting.Composite");
+        commandBuffer.BeginSample("Kern.Lighting.Composite");
         ComputeShader compute = _resources.LightingCompute!;
         int kernel = _resources.CompositeLightingKernel;
         commandBuffer.SetComputeTextureParam(
@@ -77,6 +77,6 @@ internal sealed class IndirectLightingSolver
             LightingComputeBinder.DispatchGroups(_resources.FieldWidth),
             LightingComputeBinder.DispatchGroups(_resources.FieldHeight),
             1);
-        commandBuffer.EndSample("Fodinae.Lighting.Composite");
+        commandBuffer.EndSample("Kern.Lighting.Composite");
     }
 }

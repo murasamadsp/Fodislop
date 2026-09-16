@@ -4,11 +4,11 @@ using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.EditorTools;
+namespace Kern.EditorTools;
 
     internal static class SrpBatcherReport
 {
-    [MenuItem("Fodinae/Диагностика/Отчёт SRP Batcher")]
+    [MenuItem("Kern/Диагностика/Отчёт SRP Batcher")]
     private static void Report()
     {
         string[] paths =

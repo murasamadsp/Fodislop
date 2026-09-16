@@ -3,12 +3,12 @@
 
 using System.IO;
 using System.Text.RegularExpressions;
-using Fodinae.World.Lighting;
+using Kern.World.Lighting;
 using NUnit.Framework;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 [TestFixture]
 public sealed class ShaderContractTests

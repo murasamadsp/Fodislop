@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Core.Models;
-using Fodinae.Networking;
-using Fodinae.Game.Inventory;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Core.Models;
+using Kern.Networking;
+using Kern.Game.Inventory;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Shared.Packets;
@@ -16,7 +16,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI.Inventory
+namespace Kern.UI.Inventory
 {
     public class InventoryView : MonoBehaviour, ILocalizableUI
     {
@@ -30,7 +30,7 @@ namespace Fodinae.UI.Inventory
         [Inject]
         private IInventoryModel _model = null!;
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
         private ILocalizationService _loc = null!;
         [Inject]

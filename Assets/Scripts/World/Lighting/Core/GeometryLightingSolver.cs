@@ -2,9 +2,9 @@
 
 using UnityEngine;
 using UnityEngine.Rendering;
-using Fodinae.World.Terrain;
+using Kern.World.Terrain;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 internal sealed class GeometryLightingSolver
 {
@@ -21,7 +21,7 @@ internal sealed class GeometryLightingSolver
         LightingGeometryRegistry geometryRegistry,
         Vector4 worldRect)
     {
-        commandBuffer.BeginSample("Fodinae.Lighting.MaterialField");
+        commandBuffer.BeginSample("Kern.Lighting.MaterialField");
         terrainRenderer.RenderLightingMaterialFields(
             commandBuffer,
             _resources.MaterialField!,
@@ -38,7 +38,7 @@ internal sealed class GeometryLightingSolver
         }
 
         commandBuffer.GenerateMips(_resources.MaterialField!);
-        commandBuffer.EndSample("Fodinae.Lighting.MaterialField");
+        commandBuffer.EndSample("Kern.Lighting.MaterialField");
     }
 
     public void PrepareCaches(CommandBuffer commandBuffer, bool materialFieldRebuilt)
@@ -112,7 +112,7 @@ internal sealed class GeometryLightingSolver
             return;
         }
 
-        commandBuffer.BeginSample("Fodinae.Lighting.GeometryCaches");
+        commandBuffer.BeginSample("Kern.Lighting.GeometryCaches");
         BindFieldTextures(commandBuffer, compute, buildMaskKernel);
         BindFieldTextures(commandBuffer, compute, buildTapsKernel);
         BindFieldTextures(commandBuffer, compute, buildFilterKernel);
@@ -144,7 +144,7 @@ internal sealed class GeometryLightingSolver
                 1);
         }
 
-        commandBuffer.EndSample("Fodinae.Lighting.GeometryCaches");
+        commandBuffer.EndSample("Kern.Lighting.GeometryCaches");
         _resources.GeometryCachesValid = true;
     }
 

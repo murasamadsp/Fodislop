@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using VContainer.Unity;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
 // Сводит каждую сцену сборки к одному корню — её LifetimeScope.
 //
@@ -22,7 +22,7 @@ namespace Fodinae.Editor;
 // Сцена без единственного scope не трогается: там сначала нужен сам scope.
 public static class SceneRootMigrator
 {
-    [MenuItem("Fodinae/Architecture/Move Scene Roots Under Composition Root")]
+    [MenuItem("Kern/Architecture/Move Scene Roots Under Composition Root")]
     public static void Migrate()
     {
         SceneSetup[] setup = EditorSceneManager.GetSceneManagerSetup();

@@ -1,17 +1,17 @@
 #nullable enable
 
 using System;
-using Fodinae.World.Lighting.Quality;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 /// <summary>
 /// Publishes the lighting result and disabled fallback to world shaders.
 /// </summary>
 internal sealed class LightingPresentation
 {
-    public const string WorldLightingKeyword = "FODINAE_WORLD_LIGHTING";
+    public const string WorldLightingKeyword = "KERN_WORLD_LIGHTING";
 
     private static readonly int WorldLightTextureID = Shader.PropertyToID("_WorldLightTexture");
     private static readonly int WorldLightRectID = Shader.PropertyToID("_WorldLightRect");
@@ -50,6 +50,7 @@ internal sealed class LightingPresentation
         Shader.SetGlobalVector(WorldLightTextureSizeID, new Vector4(1, 1, 1, 1));
         Shader.SetGlobalInteger(WorldLightDebugViewID, 0);
         Shader.SetGlobalInteger(WorldLightPerBlockID, 0);
+        Shader.SetGlobalInteger(WorldOccupancyYFlipID, 0);
         Shader.SetGlobalFloat(WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
         _disabledStatePublished = true;
     }
@@ -77,7 +78,7 @@ internal sealed class LightingPresentation
             Shader.SetGlobalTexture(WorldOccupancyTextureID, _resources.MaterialField);
             Shader.SetGlobalInteger(
                 WorldOccupancyYFlipID,
-                SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
+                0);
         }
 
         Shader.SetGlobalInteger(WorldLightDebugViewID, (int)debugView);

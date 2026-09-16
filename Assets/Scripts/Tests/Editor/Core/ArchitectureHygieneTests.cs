@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 [TestFixture]
 public sealed class ArchitectureHygieneTests
@@ -67,7 +67,7 @@ public sealed class ArchitectureHygieneTests
             "DispatchCompute",
             "SetComputeTextureParam",
             "SetComputeBufferParam",
-            "BeginSample(\"Fodinae.RadianceCascades\")",
+            "BeginSample(\"Kern.RadianceCascades\")",
             "RecordMaterialField(",
         ];
 

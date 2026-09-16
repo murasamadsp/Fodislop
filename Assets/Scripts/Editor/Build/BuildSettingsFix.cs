@@ -4,7 +4,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public static class BuildSettingsFix
     {
@@ -21,7 +21,7 @@ namespace Fodinae.Editor
             MainGameScenePath,
         ];
 
-        [MenuItem("Fodinae/Build/Ensure Build Settings")]
+        [MenuItem("Kern/Build/Ensure Build Settings")]
         public static void EnsureScenesInBuildSettings()
         {
             var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>();
@@ -85,7 +85,7 @@ namespace Fodinae.Editor
                         : $"{scene.path} (enabled={scene.enabled})";
                     throw new InvalidOperationException(
                         $"Build Settings scene {index} must be '{requiredPath}' and enabled; actual: {actual}. " +
-                        "Run Fodinae/Build/Ensure Build Settings explicitly to migrate authoring data.");
+                        "Run Kern/Build/Ensure Build Settings explicitly to migrate authoring data.");
                 }
             }
         }

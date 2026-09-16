@@ -3,9 +3,9 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
-using static Fodinae.Rendering.PostProcessing.PostProcessShaderConstants;
+using static Kern.Rendering.PostProcessing.PostProcessShaderConstants;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 internal static class PostProcessPassExecutor
 {
@@ -57,11 +57,11 @@ internal static class PostProcessPassExecutor
             {
                 // Ключ сохраняется при исполнении прохода после записи
                 // dispatch, а не при построении потенциально неисполненного графа.
-                cmd.BeginSample("Fodinae.PostProcess.BakeGradeLut");
+                cmd.BeginSample("Kern.PostProcess.BakeGradeLut");
                 int groups = Mathf.CeilToInt(PostProcessRenderPass.BakedGradeLutSize / 4f);
                 cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelBakeGradeLut, BakedGradeLutID, data.BakedGradeLut);
                 cmd.DispatchCompute(data.PostProcessCS, data.KernelBakeGradeLut, groups, groups, groups);
-                cmd.EndSample("Fodinae.PostProcess.BakeGradeLut");
+                cmd.EndSample("Kern.PostProcess.BakeGradeLut");
                 data.GradeLutCache?.Store(data);
             }
 
@@ -69,24 +69,24 @@ internal static class PostProcessPassExecutor
             cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, BakedGradeLutTexID, data.BakedGradeLut);
         }
 
-        cmd.BeginSample("Fodinae.PostProcess.Composite");
+        cmd.BeginSample("Kern.PostProcess.Composite");
         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, InputTexID, data.ColorTexture);
         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, OutputTexID, data.IntermediateTexture);
         cmd.DispatchCompute(data.PostProcessCS, data.KernelComposite, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-        cmd.EndSample("Fodinae.PostProcess.Composite");
+        cmd.EndSample("Kern.PostProcess.Composite");
 
         if (!data.SwapColor)
         {
-            cmd.BeginSample("Fodinae.PostProcess.BlitBack");
+            cmd.BeginSample("Kern.PostProcess.BlitBack");
             Blitter.BlitCameraTexture(cmd, data.IntermediateTexture, data.ColorTexture);
-            cmd.EndSample("Fodinae.PostProcess.BlitBack");
+            cmd.EndSample("Kern.PostProcess.BlitBack");
         }
 
         if (data.TemporalActive)
         {
-            cmd.BeginSample("Fodinae.PostProcess.HistoryCopy");
+            cmd.BeginSample("Kern.PostProcess.HistoryCopy");
             cmd.CopyTexture(data.IntermediateTexture, data.HistoryTexture);
-            cmd.EndSample("Fodinae.PostProcess.HistoryCopy");
+            cmd.EndSample("Kern.PostProcess.HistoryCopy");
         }
     }
 
@@ -144,7 +144,7 @@ internal static class PostProcessPassExecutor
             data.PostProcessCS,
             SourceTexelSizeID,
             new Vector4(1f / width, 1f / height, width, height));
-        cmd.BeginSample("Fodinae.PostProcess.Bloom.Prefilter");
+        cmd.BeginSample("Kern.PostProcess.Bloom.Prefilter");
         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, InputTexID, data.ColorTexture);
         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, DestTexID, data.BloomPrefilterTexture);
         cmd.DispatchCompute(
@@ -153,14 +153,14 @@ internal static class PostProcessPassExecutor
             Mathf.CeilToInt(prefilterWidth / 8f),
             Mathf.CeilToInt(prefilterHeight / 8f),
             1);
-        cmd.EndSample("Fodinae.PostProcess.Bloom.Prefilter");
+        cmd.EndSample("Kern.PostProcess.Bloom.Prefilter");
 
         int downWidth = prefilterWidth;
         int downHeight = prefilterHeight;
         int sourceWidth = prefilterWidth;
         int sourceHeight = prefilterHeight;
         TextureHandle currentSource = data.BloomPrefilterTexture;
-        cmd.BeginSample("Fodinae.PostProcess.Bloom.Downsample");
+        cmd.BeginSample("Kern.PostProcess.Bloom.Downsample");
         for (int i = 0; i < levels; i++)
         {
             downWidth = Mathf.Max(1, downWidth / 2);
@@ -186,12 +186,12 @@ internal static class PostProcessPassExecutor
             sourceHeight = downHeight;
         }
 
-        cmd.EndSample("Fodinae.PostProcess.Bloom.Downsample");
+        cmd.EndSample("Kern.PostProcess.Bloom.Downsample");
 
         TextureHandle currentUp = data.BloomDownTextures[levels - 1];
         int currentUpWidth = downWidth;
         int currentUpHeight = downHeight;
-        cmd.BeginSample("Fodinae.PostProcess.Bloom.Upsample");
+        cmd.BeginSample("Kern.PostProcess.Bloom.Upsample");
         for (int i = levels - 1; i >= 0; i--)
         {
             int upWidth = Mathf.Max(1, width >> (i + 1));
@@ -221,7 +221,7 @@ internal static class PostProcessPassExecutor
             currentUpHeight = upHeight;
         }
 
-        cmd.EndSample("Fodinae.PostProcess.Bloom.Upsample");
+        cmd.EndSample("Kern.PostProcess.Bloom.Upsample");
 
         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, BloomTexID, currentUp);
     }

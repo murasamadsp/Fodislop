@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.World.Lighting.Quality;
-using Fodinae.Rendering;
+using Kern.World.Lighting.Quality;
+using Kern.Rendering;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 /// <summary>
 /// Owns GPU resource sizing and release transitions for the lighting runtime.

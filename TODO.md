@@ -68,7 +68,7 @@
 - [x] Добавить обязательные macOS ARM64 и Windows x64 IL2CPP builds.
 - [x] Закрепить Git UPM-зависимости конкретными commit SHA.
 - [x] Валидировать Build Settings без автоматического изменения авторских данных.
-- [ ] Подключить лицензированные self-hosted runners с меткой `fodinae-unity`.
+- [ ] Подключить лицензированные self-hosted runners с меткой `kern-unity`.
 - [ ] Зафиксировать performance baseline и бюджеты регрессий.
 
 ### 2. Async lifecycle и сохранность мира
@@ -93,9 +93,9 @@
 
 ### 3. Границы модулей
 
-- [x] Оставить в `Fodinae.Contracts` только интерфейсы, DTO и value types.
-- [x] Перенести `WorldLayer<T>` и файловый формат в `Fodinae.Persistence` assembly.
-- [ ] Разбить `Fodinae.Runtime` на Core/Application/Infrastructure/Presentation.
+- [x] Оставить в `Kern.Contracts` только интерфейсы, DTO и value types.
+- [x] Перенести `WorldLayer<T>` и файловый формат в `Kern.Persistence` assembly.
+- [ ] Разбить `Kern.Runtime` на Core/Application/Infrastructure/Presentation.
 - [ ] Закрыть implementation types через `internal`. Граф asmdef проверяется:
       `checkAssemblyGraph` в `scripts/check-architecture.js` ловит и кольца, и
       обращение к типу из сборки, на которую нет ссылки. Нашла две настоящие
@@ -108,7 +108,7 @@
 - [ ] Экрана загрузки бутстрапа (`BootstrapLoadingScreen.uxml/.uss`) **в макете нет**.
       Его вид не из чего выводить: сейчас он собран из общих токенов по аналогии
       с оверлеями, но источника истины у него не существует. Либо экран рисуется
-      в `visual/fodinae-ui-lab`, либо признаётся служебным и не участвует в
+      в `visual/kern-ui-lab`, либо признаётся служебным и не участвует в
       сверке с макетом. До решения любые правки его вида — догадка.
 - [ ] Контракт `data-fit` не покрывает main game: заголовок предмета в инспекторе
       (`clip`), описание предмета (`clamp`) и слоты корзины (`atomic`) объявлены

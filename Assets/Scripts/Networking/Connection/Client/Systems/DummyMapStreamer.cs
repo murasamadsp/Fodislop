@@ -1,7 +1,7 @@
 #nullable enable
 
-using Fodinae;
-using Fodinae.Core;
+using Kern;
+using Kern.Core;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -9,7 +9,7 @@ using Cysharp.Threading.Tasks;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.World;
-using Fodinae.World.Streaming;
+using Kern.World.Streaming;
 using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;

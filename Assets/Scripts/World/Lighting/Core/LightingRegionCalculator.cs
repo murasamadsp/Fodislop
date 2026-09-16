@@ -1,9 +1,9 @@
 #nullable enable
 
 using UnityEngine;
-using Fodinae.World.Streaming;
+using Kern.World.Streaming;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 public static class LightingRegionCalculator
 {
     private static readonly StreamingPolicy RegionPolicy = StreamingPolicy.Default;

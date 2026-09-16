@@ -2,14 +2,14 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World.Terrain.Background;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 internal static class TerrainQuadBuilder
 {

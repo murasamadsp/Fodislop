@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.World.Lighting;
+using Kern.World.Lighting;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 [TestFixture]
 public sealed class LightingRuntimeStateTests

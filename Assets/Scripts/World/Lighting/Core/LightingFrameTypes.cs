@@ -1,10 +1,10 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.World.Lighting.Quality;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 internal readonly record struct LightingFrameRequest(
     Vector4 WorldRect,

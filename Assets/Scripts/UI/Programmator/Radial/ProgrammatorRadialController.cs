@@ -1,12 +1,12 @@
 #nullable enable
 
 using System;
-using Fodinae.Core.Localization;
+using Kern.Core.Localization;
 using UnityEngine;
 using UnityEngine.UIElements;
 using MinesServer.Data;
 
-namespace Fodinae.UI.Programmator;
+namespace Kern.UI.Programmator;
 
 // Owns the radial category/operator menu and the observer joystick used to
 // place operators into a grid cell. Cell repaints and the "auto-advance to a

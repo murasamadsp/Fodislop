@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 // Чистый сервис контейнера: ни рендера, ни transform (SCENE_STANDARD.md §1).
 public sealed class UIInputManager

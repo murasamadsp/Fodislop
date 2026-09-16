@@ -1,5 +1,5 @@
-#ifndef FODINAE_DDA_HLSL
-#define FODINAE_DDA_HLSL
+#ifndef KERN_DDA_HLSL
+#define KERN_DDA_HLSL
 
 // Примитивы геометрического traversal (DDA ray marching).
 //
@@ -245,4 +245,4 @@ void TraceRadianceSegment(
         float4(0.0, 0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0), radiance, transmittance);
 }
 
-#endif // FODINAE_DDA_HLSL
+#endif // KERN_DDA_HLSL

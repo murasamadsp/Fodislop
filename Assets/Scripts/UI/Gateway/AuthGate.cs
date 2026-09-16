@@ -1,14 +1,14 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Networking.Auth;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Networking.Auth;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 public sealed class AuthGate
 {
     private const string AutoLoginPrefsKey = "Auth.AutoLogin";

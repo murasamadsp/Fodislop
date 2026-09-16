@@ -1,11 +1,11 @@
 #nullable enable
 
 #if UNITY_EDITOR
-using Fodinae.World.Lighting;
+using Kern.World.Lighting;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     [CustomEditor(typeof(LightingEngine))]
     public sealed class LightingEngineEditor : UnityEditor.Editor

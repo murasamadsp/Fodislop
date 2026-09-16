@@ -2,11 +2,11 @@
 
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
 using UnityEngine;
 
-namespace Fodinae.Game;
+namespace Kern.Game;
 
 public sealed class RobotVisuals
 {

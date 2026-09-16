@@ -8,15 +8,15 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 public sealed class ShaderWarmupService : IShaderWarmupService
 {
     private static readonly (string ShaderName, string[]? Keywords)[] _ShadersToWarm =
     [
-        (ProjectRuntimeContracts.ShaderNames.Terrain, ["FODINAE_WORLD_LIGHTING"]),
-        (ProjectRuntimeContracts.ShaderNames.WorldSurface, ["FODINAE_SURFACE_REDROCK", "FODINAE_SURFACE_TRANSIT", "FODINAE_SURFACE_PERSPECTIVE"]),
-        (ProjectRuntimeContracts.ShaderNames.WorldEntity, ["FODINAE_WORLD_LIGHTING"]),
+        (ProjectRuntimeContracts.ShaderNames.Terrain, ["KERN_WORLD_LIGHTING"]),
+        (ProjectRuntimeContracts.ShaderNames.WorldSurface, ["KERN_SURFACE_REDROCK", "KERN_SURFACE_TRANSIT", "KERN_SURFACE_PERSPECTIVE"]),
+        (ProjectRuntimeContracts.ShaderNames.WorldEntity, ["KERN_WORLD_LIGHTING"]),
         (ProjectRuntimeContracts.ShaderNames.PlanetSurface, null),
         (ProjectRuntimeContracts.ShaderNames.PlanetAtmosphere, null),
         (ProjectRuntimeContracts.ShaderNames.Starfield, null),
@@ -58,7 +58,7 @@ public sealed class ShaderWarmupService : IShaderWarmupService
         int warmedKernels = 0;
 
         RenderTexture dummyTarget = RenderTexture.GetTemporary(4, 4, 0, RenderTextureFormat.ARGB32);
-        CommandBuffer cmd = new() { name = "Fodinae.ShaderWarmup" };
+        CommandBuffer cmd = new() { name = "Kern.ShaderWarmup" };
 
         try
         {

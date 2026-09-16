@@ -2,20 +2,20 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Audio;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Game;
-using Fodinae.Networking;
-using Fodinae.Networking.Connection;
-using Fodinae.Rendering;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World.Lighting;
+using Kern.Audio;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Game;
+using Kern.Networking;
+using Kern.Networking.Connection;
+using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
+using Kern.World.Lighting;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 internal sealed class PauseMenuSettingsBuilder
 {
     private readonly UIDocument _doc;

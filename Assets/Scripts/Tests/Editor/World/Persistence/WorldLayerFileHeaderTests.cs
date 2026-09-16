@@ -1,10 +1,10 @@
 #nullable enable
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
 using System;
 using System.IO;
-using Fodinae.Persistence;
+using Kern.Persistence;
 using NUnit.Framework;
 
 [TestFixture]
@@ -15,7 +15,7 @@ public class WorldLayerFileHeaderTests
     [SetUp]
     public void SetUp()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), "fodinae_header_tests_" + Guid.NewGuid().ToString("N"));
+        _tempDir = Path.Combine(Path.GetTempPath(), "kern_header_tests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
     }
 

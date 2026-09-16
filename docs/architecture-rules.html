@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fodinae Architecture Rules</title>
+  <title>Kern Architecture Rules</title>
   <style>
     :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #11151c; color: #dce5f2; }
     body { max-width: 1100px; margin: 0 auto; padding: 36px 24px 72px; line-height: 1.55; }
@@ -21,23 +21,23 @@
   </style>
 </head>
 <body>
-  <h1>Fodinae architecture rules</h1>
+  <h1>Kern architecture rules</h1>
   <p>The project currently uses two complementary linters. The C# runner in
-    <code>tools/Fodinae.ArchitectureLinter</code> owns migrated source and IL contracts.
+    <code>tools/Kern.ArchitectureLinter</code> owns migrated source and IL contracts.
     <code>scripts/check-architecture.js</code> still owns non-migrated scene, design-system,
     localization, and debt-budget checks. Neither runner is described as a full replacement
     until the remaining checks have actually moved.</p>
 
   <h2>Running</h2>
-  <pre><code>dotnet run --project tools/Fodinae.ArchitectureLinter -- -p .
-dotnet run --project tools/Fodinae.ArchitectureLinter -- -p . --rule FOD-DISPLAY-TRANSFORM
-dotnet run --project tools/Fodinae.ArchitectureLinter -- -p . \
+  <pre><code>dotnet run --project tools/Kern.ArchitectureLinter -- -p .
+dotnet run --project tools/Kern.ArchitectureLinter -- -p . --rule FOD-DISPLAY-TRANSFORM
+dotnet run --project tools/Kern.ArchitectureLinter -- -p . \
   --rule FOD-DISPLAY-TRANSFORM --rule FOD-POSTPROCESS-RUNTIME</code></pre>
   <p><code>--rule</code> is repeatable and rejects unknown IDs. With no selector, every discovered
     rule runs. Source-only selections do not load compiled assemblies. IL selections discover
     assemblies by simple name, prefer <code>Temp/bin</code> over
     <code>Library/ScriptAssemblies</code> and <code>build</code>, and avoid scanning a stale
-    monolithic <code>Assembly-CSharp.dll</code> beside modular <code>Fodinae.*</code> assemblies.</p>
+    monolithic <code>Assembly-CSharp.dll</code> beside modular <code>Kern.*</code> assemblies.</p>
   <p class="note">The local pre-commit hook runs the migrated source-based display,
     localization, and architecture-pattern rules. Runtime IL rules run in CI only after a
     successful current C# build, so stale Editor output cannot decide the result.</p>

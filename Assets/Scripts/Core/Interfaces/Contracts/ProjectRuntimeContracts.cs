@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 public static class ProjectRuntimeContracts
 {
@@ -105,13 +105,13 @@ public static class ProjectRuntimeContracts
     public static class ShaderNames
     {
         public const string Terrain = "Universal Render Pipeline/Custom/Terrain";
-        public const string WorldSurface = "Fodinae/World Surface";
-        public const string WorldEntity = "Fodinae/World Entity";
-        public const string PlanetSurface = "Fodinae/UI/PlanetSurface";
-        public const string PlanetAtmosphere = "Fodinae/UI/PlanetAtmosphere";
-        public const string Starfield = "Fodinae/UI/Starfield";
-        public const string MenuLineUnlit = "Fodinae/UI/MenuLineUnlit";
-        public const string UnpremultiplyAlpha = "Fodinae/UI/UnpremultiplyAlpha";
+        public const string WorldSurface = "Kern/World Surface";
+        public const string WorldEntity = "Kern/World Entity";
+        public const string PlanetSurface = "Kern/UI/PlanetSurface";
+        public const string PlanetAtmosphere = "Kern/UI/PlanetAtmosphere";
+        public const string Starfield = "Kern/UI/Starfield";
+        public const string MenuLineUnlit = "Kern/UI/MenuLineUnlit";
+        public const string UnpremultiplyAlpha = "Kern/UI/UnpremultiplyAlpha";
     }
 
     public static class ShaderPassNames

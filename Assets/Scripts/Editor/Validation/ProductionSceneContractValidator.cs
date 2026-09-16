@@ -3,9 +3,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Core;
-using Fodinae.Core.Lifecycle;
-using Fodinae.UI;
+using Kern.Core;
+using Kern.Core.Lifecycle;
+using Kern.UI;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer.Unity;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public sealed class ProductionSceneContractValidator : IPreprocessBuildWithReport
     {
@@ -24,7 +24,7 @@ namespace Fodinae.Editor
 
         public int callbackOrder => 0;
 
-        [MenuItem("Fodinae/Architecture/Validate Production Scene Contracts")]
+        [MenuItem("Kern/Architecture/Validate Production Scene Contracts")]
         public static void ValidateFromMenu()
         {
             EditorBuildSettingsScene[] buildScenes = EditorBuildSettings.scenes
@@ -319,7 +319,7 @@ namespace Fodinae.Editor
             {
                 errors.Add(
                     $"{sceneName}: GameLifetimeScope has no typed manager contract. " +
-                    "Run Fodinae/Architecture/Populate Manager Contract before building.");
+                    "Run Kern/Architecture/Populate Manager Contract before building.");
                 return;
             }
 
@@ -401,7 +401,7 @@ namespace Fodinae.Editor
                         {
                             errors.Add(
                                 $"{sceneName}: manager '{manager.GetType().Name}' under Services/{group} has no typed ManagerBinding. " +
-                                "Run Fodinae/Architecture/Populate Manager Contract.");
+                                "Run Kern/Architecture/Populate Manager Contract.");
                         }
                     }
                 }
@@ -413,7 +413,7 @@ namespace Fodinae.Editor
         // Объект рядом со scope контейнер не видит: SceneSetup в MainGame так и
         // стоял с пустыми [Inject], пока GameLifetimeScope.Awake не стал искать
         // его по корням вручную. Переносит пункт меню
-        // «Fodinae/Architecture/Move Scene Roots Under Composition Root».
+        // «Kern/Architecture/Move Scene Roots Under Composition Root».
         private static void ValidateSingleRoot(
             string sceneName,
             Scene scene,

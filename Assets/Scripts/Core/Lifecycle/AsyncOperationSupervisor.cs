@@ -6,7 +6,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace Fodinae.Core.Lifecycle;
+namespace Kern.Core.Lifecycle;
 
 public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDisposable
 {

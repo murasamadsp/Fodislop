@@ -4,12 +4,12 @@ using System;
 using System.Collections;
 using System.IO;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Lifecycle;
-using Fodinae.Persistence;
+using Kern.Core.Lifecycle;
+using Kern.Persistence;
 using NUnit.Framework;
 using UnityEngine.TestTools;
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
 [TestFixture]
 public class WorldLayerRleTests

@@ -1,28 +1,28 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.World.Lighting.Quality;
+using Kern.Core;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-namespace Fodinae.Rendering;
+namespace Kern.Rendering;
 
 public enum GraphicsPreset
 {
-    [Fodinae.Core.SettingLabel("settings.preset.very_low")]
+    [Kern.Core.SettingLabel("settings.preset.very_low")]
     VeryLow,
-    [Fodinae.Core.SettingLabel("settings.preset.low")]
+    [Kern.Core.SettingLabel("settings.preset.low")]
     Low,
-    [Fodinae.Core.SettingLabel("settings.preset.medium")]
+    [Kern.Core.SettingLabel("settings.preset.medium")]
     Medium,
-    [Fodinae.Core.SettingLabel("settings.preset.high")]
+    [Kern.Core.SettingLabel("settings.preset.high")]
     High,
-    [Fodinae.Core.SettingLabel("settings.preset.very_high")]
+    [Kern.Core.SettingLabel("settings.preset.very_high")]
     VeryHigh,
-    [Fodinae.Core.SettingLabel("settings.preset.ultra")]
+    [Kern.Core.SettingLabel("settings.preset.ultra")]
     Ultra,
-    [Fodinae.Core.SettingLabel("settings.preset.custom")]
+    [Kern.Core.SettingLabel("settings.preset.custom")]
     Custom,
 }
 

@@ -1,12 +1,12 @@
 #nullable enable
 
 using System.Text;
-using Fodinae.Networking;
+using Kern.Networking;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     public class FPSCounter : MonoBehaviour
     {

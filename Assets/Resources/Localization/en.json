@@ -502,7 +502,7 @@
   "gateway.auth.eula_line2": "2. SERVER AUTHORITY: coordinates and mining are computed authoritatively by the server.",
   "gateway.auth.eula_line3": "3. PROGRESS: all data is synchronized via the MinesProtocol v7.",
   "gateway.auth.eula_accept": "I accept the Terms of Service and EULA",
-  "gateway.auth.submit": "ENTER THE WORLD OF FODINAE",
+  "gateway.auth.submit": "ENTER THE WORLD OF KERN",
   "gateway.auth.offline": "Offline mode (Dummy)",
   "gateway.auth.recover": "Forgot password?",
   "gateway.auth.vk": "SIGN IN WITH VK",

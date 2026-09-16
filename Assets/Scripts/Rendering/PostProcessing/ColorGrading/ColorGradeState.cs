@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 public enum ColorGradeLayer
 {
@@ -459,7 +459,7 @@ public sealed class ColorGradeState
     public void Sanitize()
     {
         EnabledMask &= (1 << LayerCount) - 1;
-        if (Transform is not (DisplayTransform.None or DisplayTransform.Fodinae))
+        if (Transform is not (DisplayTransform.None or DisplayTransform.Kern))
         {
             Transform = PostProcessLook.Grade.Transform;
         }

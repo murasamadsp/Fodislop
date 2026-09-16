@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-namespace Fodinae.Tools.Imgui.Profiling;
+namespace Kern.Tools.Imgui.Profiling;
 
 // Поиск по всем маркерам профайлера и закреплённые маркеры.
 //

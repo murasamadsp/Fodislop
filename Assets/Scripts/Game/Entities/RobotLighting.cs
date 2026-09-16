@@ -1,13 +1,13 @@
 #nullable enable
 
 using System.Threading;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World.Lighting;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
+using Kern.World.Lighting;
 using UnityEngine;
 
-namespace Fodinae.Game;
+namespace Kern.Game;
 
 public sealed class RobotLighting
 {

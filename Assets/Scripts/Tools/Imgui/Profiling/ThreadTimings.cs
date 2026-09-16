@@ -3,7 +3,7 @@
 using System;
 using UnityEngine;
 
-namespace Fodinae.Tools.Imgui.Profiling;
+namespace Kern.Tools.Imgui.Profiling;
 
 public sealed class RollingSeries
 {

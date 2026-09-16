@@ -4,7 +4,7 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 public sealed class DummyResponderDecompositionContractTests
 {

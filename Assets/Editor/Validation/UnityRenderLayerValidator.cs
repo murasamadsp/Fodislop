@@ -1,13 +1,13 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
+using Kern.Core;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
 public sealed class UnityRenderLayerValidator : IPreprocessBuildWithReport
 {
@@ -18,7 +18,7 @@ public sealed class UnityRenderLayerValidator : IPreprocessBuildWithReport
         Validate();
     }
 
-    [MenuItem("Fodinae/Diagnostics/Validate Unity Render Layers")]
+    [MenuItem("Kern/Diagnostics/Validate Unity Render Layers")]
     public static void Validate()
     {
         int gameObjectLayer = LayerMask.NameToLayer(ProjectRuntimeContracts.RequiredLayers.WorldUI);

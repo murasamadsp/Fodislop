@@ -1,11 +1,11 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Rendering.PostProcessing.Scopes;
-using Fodinae.Tools.Imgui;
+using Kern.Rendering.PostProcessing.Scopes;
+using Kern.Tools.Imgui;
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing.Workbench;
+namespace Kern.Rendering.PostProcessing.Workbench;
 
 internal sealed class GradingScopesWindow : ToolWindow
 {

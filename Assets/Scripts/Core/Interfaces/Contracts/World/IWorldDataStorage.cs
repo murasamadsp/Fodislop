@@ -4,7 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using MinesServer.Data;
 
-namespace Fodinae.Core.Interfaces;
+namespace Kern.Core.Interfaces;
 public interface IRegionBatchStorage
 {
     void BeginRegionBatch();

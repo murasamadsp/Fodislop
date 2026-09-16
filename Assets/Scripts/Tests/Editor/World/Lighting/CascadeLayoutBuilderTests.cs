@@ -2,11 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.World.Lighting;
-using Fodinae.World.Lighting.Quality;
+using Kern.World.Lighting;
+using Kern.World.Lighting.Quality;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 [TestFixture]
 public class CascadeLayoutBuilderTests

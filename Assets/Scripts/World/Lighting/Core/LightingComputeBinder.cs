@@ -1,11 +1,11 @@
 #nullable enable
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 using System;
-using Fodinae.Core;
-using Fodinae.Rendering;
-using Fodinae.World.Lighting.Quality;
+using Kern.Core;
+using Kern.Rendering;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -202,11 +202,11 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeFloatParam(
             compute,
             TerrainAmbientOcclusionMipID,
-            Fodinae.World.Terrain.TerrainLook.AmbientOcclusionMip);
+            Kern.World.Terrain.TerrainLook.AmbientOcclusionMip);
         commandBuffer.SetComputeFloatParam(
             compute,
             TerrainAmbientOcclusionStrengthID,
-            Fodinae.World.Terrain.TerrainLook.AmbientOcclusionStrength);
+            Kern.World.Terrain.TerrainLook.AmbientOcclusionStrength);
         commandBuffer.SetComputeFloatParam(compute, EmissionScaleID, LightingConfigHolder.EmissionScale);
         commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierID, LightingConfigHolder.MaximumLightMultiplier);
         commandBuffer.SetComputeIntParam(compute, LightingCountersEnabledID, 0);
@@ -219,7 +219,7 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeIntParam(
             compute,
             MaterialYFlipID,
-            SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
+            0);
         commandBuffer.SetComputeIntParam(
             compute,
             EnableDiffuseBounceID,

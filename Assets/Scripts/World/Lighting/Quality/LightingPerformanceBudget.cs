@@ -1,8 +1,8 @@
 #nullable enable
 
-using Fodinae.Core;
+using Kern.Core;
 
-namespace Fodinae.World.Lighting.Quality;
+namespace Kern.World.Lighting.Quality;
 
 public static class LightingPerformanceBudget
 {

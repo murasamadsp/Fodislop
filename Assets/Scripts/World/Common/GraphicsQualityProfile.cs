@@ -2,14 +2,14 @@
 
 using System;
 using System.IO;
-using Fodinae.Core;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World.Lighting.Quality;
+using Kern.Core;
+using Kern.Rendering.PostProcessing;
+using Kern.World.Lighting.Quality;
 using UnityEngine;
 
-namespace Fodinae.Rendering
+namespace Kern.Rendering
 {
-[CreateAssetMenu(fileName = "GraphicsQualityProfile", menuName = "Fodinae/Graphics Quality Profile")]
+[CreateAssetMenu(fileName = "GraphicsQualityProfile", menuName = "Kern/Graphics Quality Profile")]
     public sealed class GraphicsQualityProfile : ScriptableObject
     {
         public const int StandardPresetCount = (int)GraphicsPreset.Custom;

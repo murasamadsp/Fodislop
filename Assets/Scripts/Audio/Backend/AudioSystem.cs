@@ -4,14 +4,14 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Audio.Core;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
+using Kern.Audio.Core;
+using Kern.Core;
+using Kern.Core.Interfaces;
 using UnityEngine;
 using VContainer;
 using UnityAudioSettings = UnityEngine.AudioSettings;
 
-namespace Fodinae.Audio.Backend
+namespace Kern.Audio.Backend
 {
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch startup exceptions to prevent game crash.")]
     [DefaultExecutionOrder(-10000)]

@@ -1,13 +1,13 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Localization;
+using Kern.Core;
+using Kern.Core.Localization;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Programmator;
+namespace Kern.UI.Programmator;
 public class RadialMenu
 {
     private readonly ILocalizationService _loc;

@@ -8,12 +8,12 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace Fodinae.EditorTools;
+namespace Kern.EditorTools;
 
 internal static class HDRSDRDualModeSetup
 {
     private const string UniversalRPPath = "Assets/Settings/UniversalRP.asset";
-    private const string MenuPath = "Fodinae/Rendering/Apply HDR-SDR Dual Mode Setup";
+    private const string MenuPath = "Kern/Rendering/Apply HDR-SDR Dual Mode Setup";
 
     [MenuItem(MenuPath)]
     public static void Apply()
@@ -106,7 +106,7 @@ internal static class HDRSDRDualModeSetup
         typeof(ScreenSpaceLensFlare),
     ];
 
-    [MenuItem("Fodinae/Rendering/Clean Display Volume Profiles")]
+    [MenuItem("Kern/Rendering/Clean Display Volume Profiles")]
     private static void CleanDisplayProfiles()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
@@ -127,7 +127,7 @@ internal static class HDRSDRDualModeSetup
         ValidateDisplayProfiles();
     }
 
-    [MenuItem("Fodinae/Rendering/Validate Display Volume Profiles")]
+    [MenuItem("Kern/Rendering/Validate Display Volume Profiles")]
     private static void ValidateDisplayProfiles()
     {
         foreach (string path in _CleanProfilePaths)

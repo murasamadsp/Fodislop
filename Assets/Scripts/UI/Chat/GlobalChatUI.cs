@@ -3,12 +3,12 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Game.Managers;
-using Fodinae.Networking;
-using Fodinae.Game.Inventory;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Game.Managers;
+using Kern.Networking;
+using Kern.Game.Inventory;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
@@ -17,7 +17,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     public class GlobalChatUI : MonoBehaviour, ILocalizableUI
     {

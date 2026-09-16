@@ -59,7 +59,7 @@
 - `Reset`/`Dispose` во время ожидания; позднее завершение старого запроса не меняет состояние нового.
 - Запрос от другого мира игнорируется. Отдельно исследовать `OpenAsync` во время movement-request: сейчас он явно отменяет terrain, но не movement. Возможную правку этого поведения вынести отдельным пунктом, не прятать в extraction.
 
-Для локального старта есть одноразовый fixture `/tmp/fodinae-streaming-check.KWThzj/`: 26 проверок actual streaming sources и извлечённого residency-check. Он может отсутствовать в другой сессии и не покрывает всю матрицу выше. Не переносить его в тестовые каталоги без нового разрешения.
+Для локального старта есть одноразовый fixture `/tmp/kern-streaming-check.KWThzj/`: 26 проверок actual streaming sources и извлечённого residency-check. Он может отсутствовать в другой сессии и не покрывает всю матрицу выше. Не переносить его в тестовые каталоги без нового разрешения.
 
 ### Критерий готовности
 
@@ -103,9 +103,9 @@
 Из корня проекта:
 
 ```sh
-dotnet test tools/Fodinae.TerrainTests/Fodinae.TerrainTests.csproj --no-restore --verbosity quiet
-dotnet run --project tools/lighting-tests/Fodinae.LightingTests.csproj -- all
-dotnet run --project tools/lighting-tests/Fodinae.LightingTests.csproj -- streaming
+dotnet test tools/Kern.TerrainTests/Kern.TerrainTests.csproj --no-restore --verbosity quiet
+dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- all
+dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- streaming
 git diff --check
 ```
 

@@ -1,11 +1,11 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
+using Kern.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 
 internal sealed class DynamicLightingSolver
 {
@@ -54,7 +54,7 @@ internal sealed class DynamicLightingSolver
         LightingEngine.DebugView debugView,
         IFrameTelemetry telemetry)
     {
-        commandBuffer.BeginSample("Fodinae.Lighting.DynamicRadiance");
+        commandBuffer.BeginSample("Kern.Lighting.DynamicRadiance");
 
         bool hasPreviousRectUnion = TryGetRectUnion(
             _lampRects,
@@ -66,7 +66,7 @@ internal sealed class DynamicLightingSolver
         {
             ClearDynamicDirect(commandBuffer);
             _tileCache.InvalidateAll();
-            commandBuffer.EndSample("Fodinae.Lighting.DynamicRadiance");
+            commandBuffer.EndSample("Kern.Lighting.DynamicRadiance");
             return;
         }
 
@@ -298,7 +298,7 @@ internal sealed class DynamicLightingSolver
 
         _previousLampCount = count;
 
-        commandBuffer.EndSample("Fodinae.Lighting.DynamicRadiance");
+        commandBuffer.EndSample("Kern.Lighting.DynamicRadiance");
     }
 
     private void ClearDynamicDirect(CommandBuffer commandBuffer)

@@ -2,13 +2,13 @@
 #nullable enable
 
 using System;
-using Fodinae.Rendering;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World.Lighting.Quality;
+using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
+using Kern.World.Lighting.Quality;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 // Guardrail for the "many layers, any one can silently drop the value"
 // failure mode: GUI -> ClientConfig -> GraphicsQualityProfile ->

@@ -7,10 +7,10 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine.Serialization;
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 internal sealed class ClientConfigRepository
 {

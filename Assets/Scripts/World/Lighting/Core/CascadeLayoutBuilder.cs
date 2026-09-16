@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.World.Lighting;
+namespace Kern.World.Lighting;
 public static class CascadeLayoutBuilder
 {
     // Safe default for every caller. A larger angular cap must be an explicit

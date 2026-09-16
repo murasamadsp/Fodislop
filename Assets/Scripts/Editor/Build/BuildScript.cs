@@ -6,12 +6,12 @@ using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
-namespace Fodinae.Editor
+namespace Kern.Editor
 {
     public static class BuildScript
     {
-        private const string ProductName = "Fodinae";
-        private const string DevArg = "-fodinaeDev";
+        private const string ProductName = "Kern";
+        private const string DevArg = "-kernDev";
 
         private static string[] _EnabledScenes =>
             EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();

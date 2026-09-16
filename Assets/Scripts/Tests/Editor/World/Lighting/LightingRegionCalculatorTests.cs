@@ -2,10 +2,10 @@
 
 using UnityEngine;
 using NUnit.Framework;
-using Fodinae.World.Lighting;
-using Fodinae.World.Streaming;
+using Kern.World.Lighting;
+using Kern.World.Streaming;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 [TestFixture]
 public class LightingRegionCalculatorTests

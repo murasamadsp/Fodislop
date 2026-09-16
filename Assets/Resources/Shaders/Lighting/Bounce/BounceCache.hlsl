@@ -1,5 +1,5 @@
-#ifndef FODINAE_BOUNCE_CACHE_HLSL
-#define FODINAE_BOUNCE_CACHE_HLSL
+#ifndef KERN_BOUNCE_CACHE_HLSL
+#define KERN_BOUNCE_CACHE_HLSL
 
 // BuildBounceTaps и BuildBounceFilter: кэширование geometry для diffuse bounce.
 //
@@ -127,4 +127,4 @@ void BuildBounceFilter(uint3 dispatchId : SV_DispatchThreadID)
     }
 }
 
-#endif // FODINAE_BOUNCE_CACHE_HLSL
+#endif // KERN_BOUNCE_CACHE_HLSL

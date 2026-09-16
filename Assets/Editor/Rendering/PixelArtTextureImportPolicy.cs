@@ -4,7 +4,7 @@ using System;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Editor;
+namespace Kern.Editor;
 
 public sealed class PixelArtTextureImportPolicy : AssetPostprocessor
 {

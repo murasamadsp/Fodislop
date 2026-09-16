@@ -5,7 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.AssetPipeline;
+namespace Kern.Tests.AssetPipeline;
 
 [TestFixture]
 public sealed class PersistentAssetCacheFormatTests
@@ -18,7 +18,7 @@ public sealed class PersistentAssetCacheFormatTests
     {
         _testRoot = Path.Combine(
             Path.GetTempPath(),
-            $"fodinae_asset_cache_format_{Guid.NewGuid():N}");
+            $"kern_asset_cache_format_{Guid.NewGuid():N}");
         _cachePath = Path.Combine(_testRoot, "AssetCache");
         Directory.CreateDirectory(_testRoot);
     }

@@ -7,7 +7,7 @@ using Unity.Profiling.LowLevel;
 using Unity.Profiling.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace Fodinae.Tools.Imgui.Profiling;
+namespace Kern.Tools.Imgui.Profiling;
 
 public readonly record struct MarkerInfo(
     ProfilerRecorderHandle Handle,

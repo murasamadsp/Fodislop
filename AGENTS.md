@@ -1,6 +1,6 @@
-# Fodinae agent guidance
+# Kern agent guidance
 
-Fodinae — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask і пакетах `darkar25.fodinae.*`.
+Kern — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask і пакетах `darkar25.kern.*`.
 
 ## Межі дозволів
 
@@ -32,14 +32,14 @@ Fodinae — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.
 - Дотримуйтеся Allman braces, обов'язкових `{}`, SA1513/SA1508 і trailing comma у багаторядкових ініціалізаторах. Приватні поля — `_camelCase`; публічні члени й типи — `PascalCase`.
 - Ім'я Unity-скрипта має збігатися з класом. Перевірка `MonoScript.GetClass()` потребує окремого явного дозволу на Unity.
 - Не створюйте менеджери через `AddComponent` у `Configure`. Scene-компоненти реєструйте через `RegisterComponent`; prefab/entity створюйте через `ISceneObjectFactory`. `IObjectResolver` допустимий лише в composition roots і фабриках.
-- `Fodinae.Contracts` — нижній шар: не посилається на жодну збірку `Fodinae.*`. Контракти модуля лежать поруч із модулем у папці `Contracts/` з `Fodinae.Contracts.asmref`; без нього тип потрапляє у збірку модуля й ламає всіх, хто нижче. Тип, що залежить від реалізації, до `Contracts/` не кладіть. Стереже `ContractsAssemblyBoundaryTests`.
+- `Kern.Contracts` — нижній шар: не посилається на жодну збірку `Kern.*`. Контракти модуля лежать поруч із модулем у папці `Contracts/` з `Kern.Contracts.asmref`; без нього тип потрапляє у збірку модуля й ламає всіх, хто нижче. Тип, що залежить від реалізації, до `Contracts/` не кладіть. Стереже `ContractsAssemblyBoundaryTests`.
 - Документи в `docs/` мають бути автономним HTML з inline `<style>`, без Markdown і зовнішніх залежностей.
 
 ## Критичні інваріанти
 
 - Серверні координати мають початок згори ліворуч і Y вниз; перетворення виконуйте лише через `CoordinateUtils` з `MapManager.WorldHeight`.
-- UI Toolkit використовує єдине дерево стилів через `FodinaeTheme.tss`; статична структура живе в UXML. Видимість перемикається класом `is-hidden` через `UIState`, а координати екрана — через `RuntimePanelUtils.ScreenToPanel`.
-- Кожна сцена має рівно один корінь — свій `LifetimeScope`; усі authored-об'єкти лежать під ним. Об'єкт поруч зі scope контейнер не бачить. Стереже `ProductionSceneContractValidator.ValidateSingleRoot`, виправляє меню `Fodinae/Architecture/Move Scene Roots Under Composition Root`.
+- UI Toolkit використовує єдине дерево стилів через `KernTheme.tss`; статична структура живе в UXML. Видимість перемикається класом `is-hidden` через `UIState`, а координати екрана — через `RuntimePanelUtils.ScreenToPanel`.
+- Кожна сцена має рівно один корінь — свій `LifetimeScope`; усі authored-об'єкти лежать під ним. Об'єкт поруч зі scope контейнер не бачить. Стереже `ProductionSceneContractValidator.ValidateSingleRoot`, виправляє меню `Kern/Architecture/Move Scene Roots Under Composition Root`.
 - `RegisterInstance` не інжектить вручну створені об'єкти. Не резолвіть контейнер у `Awake`, `OnEnable` або `Start`.
 - `VolumeProfile.Add<T>()` створює компонент лише в пам'яті; editor-код має додати його через `AssetDatabase.AddObjectToAsset()` перед збереженням.
 - Не маскуйте дефекти очищенням Unity cache, повторною компіляцією, FPS-cap, frame skipping або throttling. Зміни гарячих шляхів робіть лише після відтворення чи строгого підтвердження причини.

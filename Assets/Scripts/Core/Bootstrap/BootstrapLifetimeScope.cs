@@ -3,24 +3,24 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Audio.Backend;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.Core.Localization;
-using Fodinae.Game.Managers;
-using Fodinae.AssetPipeline;
-using Fodinae.Networking;
-using Fodinae.Networking.Auth;
-using Fodinae.Networking.Connection;
-using Fodinae.Rendering;
-using Fodinae.UI;
+using Kern.Audio.Backend;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
+using Kern.Core.Localization;
+using Kern.Game.Managers;
+using Kern.AssetPipeline;
+using Kern.Networking;
+using Kern.Networking.Auth;
+using Kern.Networking.Connection;
+using Kern.Rendering;
+using Kern.UI;
 using MinesServer.Networking.Connection.Client;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using VContainer;
 using VContainer.Unity;
 
-namespace Fodinae.Core
+namespace Kern.Core
 {
     [DefaultExecutionOrder(-30000)]
     public class BootstrapLifetimeScope : LifetimeScope, IMainMenuNavigation, ISceneNavigator
@@ -404,7 +404,7 @@ namespace Fodinae.Core
             // identity providers do not route authentication through it.
             builder.Register<DummyConnection>(Lifetime.Singleton).AsSelf().AsImplementedInterfaces();
             builder.Register<DummyWorldMapSource>(Lifetime.Singleton);
-            builder.RegisterEntryPoint<Fodinae.Networking.Connection.WorldEntryPreparation>()
+            builder.RegisterEntryPoint<Kern.Networking.Connection.WorldEntryPreparation>()
                 .As<IWorldEntryPreparation>();
             builder.Register<GameTokenStore>(Lifetime.Singleton).As<IGameTokenStore>();
             builder.Register<RuntimeDebugSettings>(Lifetime.Singleton).As<IRuntimeDebugSettings>();

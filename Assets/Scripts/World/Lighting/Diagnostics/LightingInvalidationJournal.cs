@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Fodinae.World.Lighting.Diagnostics;
+namespace Kern.World.Lighting.Diagnostics;
 
 public struct InvalidationFrameRecord
 {
