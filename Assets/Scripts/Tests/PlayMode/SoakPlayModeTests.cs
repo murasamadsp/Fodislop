@@ -99,7 +99,7 @@ public sealed class SoakPlayModeTests
         Assert.That(final.LifetimeScopes, Is.EqualTo(baseline.LifetimeScopes), "Lifetime scopes accumulated.");
         Assert.That(final.GameObjects, Is.LessThanOrEqualTo(baseline.GameObjects), "Game objects accumulated.");
         Assert.That(final.RenderTextures, Is.LessThanOrEqualTo(baseline.RenderTextures), "Render textures accumulated.");
-        AssertNoRegression("managed memory", baseline.ManagedBytes, final.ManagedBytes);
+        AssertNoManagedMemoryGrowth(baseline.ManagedBytes, final.ManagedBytes, SceneCycles);
         AssertNoRegression("p95 frame time", P95(cycleFrames.Take(5)), P95(cycleFrames.Skip(SceneCycles - 5)));
     }
 
@@ -309,6 +309,22 @@ public sealed class SoakPlayModeTests
         double[] ordered = samples.SelectMany(sample => sample).OrderBy(value => value).ToArray();
         Assert.That(ordered, Is.Not.Empty);
         return ordered[(int)Math.Ceiling(ordered.Length * 0.95) - 1];
+    }
+
+    // Тест-раннер хранит каждое сообщение лога за время теста вместе со
+    // стеком: на цикл Menu/Game это около 120 КБ, которые принадлежат не игре.
+    // Удержанная игровая сессия — десятки мегабайт на цикл, её этот запас не
+    // скрывает.
+    private const long TestRunnerLogBytesPerCycle = 256 * 1024;
+
+    private static void AssertNoManagedMemoryGrowth(long baseline, long final, int cycles)
+    {
+        long allowed = (long)(baseline * AllowedRegression) + (TestRunnerLogBytesPerCycle * cycles);
+        Assert.That(
+            final,
+            Is.LessThanOrEqualTo(allowed),
+            $"managed memory grew from {baseline / 1048576.0:F1} MB to {final / 1048576.0:F1} MB over {cycles} cycles " +
+            $"(limit {allowed / 1048576.0:F1} MB).");
     }
 
     private static void AssertNoRegression(string metric, double baseline, double final)
