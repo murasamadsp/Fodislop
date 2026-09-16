@@ -227,8 +227,8 @@ namespace Kern.Networking.Connection
                     "Expected a valid host/IP and a port in [1, 65535].");
             }
 
-            Debug.Log($"[Connection] Transport: TcpConnection {address}:{port} (Darkar25 MinesServerNetworking).");
-            return new TcpConnection(address, port);
+            Debug.Log($"[Connection] Transport: ManagedTcpConnection {address}:{port} (fallback transport, NetCoreServer receive-loop is broken).");
+            return new ManagedTcpConnection(address, port);
         }
 
         public void Disconnect()

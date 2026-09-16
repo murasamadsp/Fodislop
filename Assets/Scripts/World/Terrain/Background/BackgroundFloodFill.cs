@@ -326,7 +326,7 @@ public sealed class BackgroundFloodFill
                 }
 
                 CachedCellInfo n = _sourceCells[nx, ny];
-                if ((n.Properties & CellConfigProperties.Passable) == 0 || n.Type == CellType.Unloaded)
+                if (!IsFloorCell(n.Type, n.Properties))
                 {
                     continue;
                 }

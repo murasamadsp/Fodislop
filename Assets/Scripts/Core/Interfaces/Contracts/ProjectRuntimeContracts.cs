@@ -27,9 +27,12 @@ public static class ProjectRuntimeContracts
 
     public static class ClientConfiguration
     {
-        public const bool DefaultUseDummyConnection = true;
+        // По умолчанию — реальный сервер 127.0.0.1:8090 (порт сервера из
+        // appsettings.json, ключ Mines3:Port; прежний дефолт 7777 с портом
+        // сервера не совпадал).
+        public const bool DefaultUseDummyConnection = false;
         public const string DefaultServerHost = "127.0.0.1";
-        public const int DefaultServerPort = 7777;
+        public const int DefaultServerPort = 8090;
         public const bool DefaultHDREnabled = true;
     }
 
