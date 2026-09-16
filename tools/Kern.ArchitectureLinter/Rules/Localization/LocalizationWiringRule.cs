@@ -16,7 +16,7 @@ namespace Kern.ArchitectureLinter.Rules.Localization;
 /// </summary>
 public sealed class LocalizationWiringRule : IRule
 {
-    public string Id => "FOD-LOCALIZATION-WIRING";
+    public string Id => "KERN-LOCALIZATION-WIRING";
     public string Description => "Localization wiring validation";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

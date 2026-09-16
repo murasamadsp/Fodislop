@@ -13,7 +13,7 @@ namespace Kern.ArchitectureLinter.Rules.Rules;
 /// </summary>
 public sealed class OversizedFileRule : IRule
 {
-    public string Id => "FOD-OVERSIZED-FILE";
+    public string Id => "KERN-OVERSIZED-FILE";
     public string Description => "Oversized production file detection";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

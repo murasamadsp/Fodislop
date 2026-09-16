@@ -221,8 +221,6 @@ namespace Kern.UI.HUD.Player.View
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
 
-            UILayoutTier.Attach(_doc.rootVisualElement);
-
             LoadTemplate(_doc.rootVisualElement);
 
             if (_model != null)
@@ -280,6 +278,7 @@ namespace Kern.UI.HUD.Player.View
             TemplateContainer tree = template.Instantiate();
             tree.AddToClassList("ui-fullscreen");
             tree.pickingMode = PickingMode.Ignore;
+            UILayoutTier.Attach(tree);
             _hudRoot = tree;
             root.Add(tree);
 

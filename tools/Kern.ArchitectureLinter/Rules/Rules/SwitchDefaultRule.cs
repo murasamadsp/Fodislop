@@ -14,7 +14,7 @@ public sealed class SwitchDefaultRule : IRule
 {
     private static readonly Regex SwitchRegex = new(@"^\s*switch\s*\(\s*[\w.]+\s*\)\s*$", RegexOptions.Compiled);
 
-    public string Id => "FOD-SWITCH-DEFAULT";
+    public string Id => "KERN-SWITCH-DEFAULT";
     public string Description => "Switch statements with 3+ cases must have default";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

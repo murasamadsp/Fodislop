@@ -430,12 +430,8 @@ public sealed class RuntimeAssetPathsTests
     {
         PostProcessRuntimeState.SetDisplayCalibration(
             float.NaN,
-            float.PositiveInfinity,
-            float.NegativeInfinity);
+            float.PositiveInfinity);
 
-        Assert.That(
-            PostProcessRuntimeState.DisplayGamma,
-            Is.EqualTo(DisplaySettings.DefaultGamma));
         Assert.That(
             PostProcessRuntimeState.DisplayPaperWhiteNits,
             Is.EqualTo(DisplaySettings.DefaultPaperWhite));
@@ -448,7 +444,6 @@ public sealed class RuntimeAssetPathsTests
     public void PostProcessRuntimeState_DisplayPeakNeverFallsBelowPaperWhite()
     {
         PostProcessRuntimeState.SetDisplayCalibration(
-            DisplaySettings.DefaultGamma,
             DisplaySettings.PaperWhiteMax,
             DisplaySettings.PeakBrightnessMin);
 

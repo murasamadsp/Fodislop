@@ -125,7 +125,7 @@ xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer dire
 - Фактический Unity: 6000.6.0f1, URP17.6.0.
 - URP source: `Library/PackageCache/com.unity.render-pipelines.universal@8457e85b8184`.
 - Core source: `Library/PackageCache/com.unity.render-pipelines.core@2d66c71e606e`.
-- Source linter: `dotnet run --project tools/Kern.ArchitectureLinter --no-restore -- --rule FOD-DISPLAY-TRANSFORM` — проходил, защищает разделение стадий, includes, отсутствие дубля Luminance и guarded HDR gamut access.
+- Source linter: `dotnet run --project tools/Kern.ArchitectureLinter --no-restore -- --rule KERN-DISPLAY-TRANSFORM` — проходил, защищает разделение стадий, includes, отсутствие дубля Luminance и guarded HDR gamut access.
 - Временный внешний compile harness: `/private/tmp/kern-hdr-check.EMH9rP/Check.csproj`, лог `build.log`. Сборка runtime исходников без запуска Unity: 0 errors, 43 warnings. Это не полноценная asmdef/Unity/Metal верификация.
 - Generated Unity csproj ранее содержали устаревшие пути; не путать ошибки окружения с ошибками исходников.
 - Упоминавшийся ранее `tools/Kern.SettingsProbe` теперь отсутствует. Не заявлять повторный прогон 2771 теста: свежая попытка завершилась отсутствием пути.

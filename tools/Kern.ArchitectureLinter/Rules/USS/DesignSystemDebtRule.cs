@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.USS;
 /// </summary>
 public sealed class DesignSystemDebtRule : IRule
 {
-    public string Id => "FOD-DESIGN-SYSTEM-DEBT";
+    public string Id => "KERN-DESIGN-SYSTEM-DEBT";
     public string Description => "Design system debt ceiling enforcement";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

@@ -15,7 +15,7 @@ namespace Kern.ArchitectureLinter.Rules.UI;
 /// </summary>
 public sealed class OneRoadInitRule : IRule
 {
-    public string Id => "FOD-ONE-ROAD-INIT";
+    public string Id => "KERN-ONE-ROAD-INIT";
     public string Description => "Single-road view initialization enforcement";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

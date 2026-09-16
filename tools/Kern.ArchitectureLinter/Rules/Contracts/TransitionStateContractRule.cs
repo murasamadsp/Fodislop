@@ -19,7 +19,7 @@ namespace Kern.ArchitectureLinter.Rules.Contracts;
 /// </summary>
 public sealed class TransitionStateContractRule : IRule
 {
-    public string Id => "FOD-TRANSITION-STATE";
+    public string Id => "KERN-TRANSITION-STATE";
     public string Description => "Scene transition state contract validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

@@ -12,7 +12,7 @@ public sealed class ScriptMetaRule : IRule
 {
     private static readonly Regex GuidRegex = new Regex(@"^guid:\s*([0-9a-f]{32})\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
 
-    public string Id => "FOD-SCRIPT-META";
+    public string Id => "KERN-SCRIPT-META";
     public string Description => "Script meta GUID integrity";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

@@ -17,7 +17,7 @@ public sealed class LocalizationRule : IRule
         @"\\?\""(?<key>[a-z][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\\?\""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public string Id => "FOD-LOCALIZATION";
+    public string Id => "KERN-LOCALIZATION";
     public string Description => "Localization parity and wiring checks";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

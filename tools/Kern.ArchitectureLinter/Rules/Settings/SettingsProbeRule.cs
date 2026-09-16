@@ -12,7 +12,7 @@ namespace Kern.ArchitectureLinter.Rules.Settings;
 /// </summary>
 public sealed class SettingsProbeRule : IRule
 {
-    public string Id => "FOD-SETTINGS-PROBE";
+    public string Id => "KERN-SETTINGS-PROBE";
     public string Description => "Settings validation probe (defaults, clamps, ranges, buses)";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

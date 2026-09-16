@@ -23,7 +23,7 @@ public sealed class SettingsWiringRule : IRule
         ["PostProcessController"] = new[] { "EnsureVolumeSetup", "ApplyClientConfig" }
     };
 
-    public string Id => "FOD-SETTINGS-WIRING";
+    public string Id => "KERN-SETTINGS-WIRING";
     public string Description => "Settings wiring and dead field detection";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

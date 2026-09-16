@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.Rendering;
 /// </summary>
 public sealed class LightingSetterInvalidationRule : IRule
 {
-    public string Id => "FOD-LIGHTING-SETTER-INVALIDATION";
+    public string Id => "KERN-LIGHTING-SETTER-INVALIDATION";
     public string Description => "LightingEngine setter invalidation validation";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

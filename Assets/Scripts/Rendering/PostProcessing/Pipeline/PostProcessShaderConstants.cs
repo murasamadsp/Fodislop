@@ -34,7 +34,6 @@ internal static class PostProcessShaderConstants
     public static readonly int ContrastID = Shader.PropertyToID("_Contrast");
     public static readonly int SaturationID = Shader.PropertyToID("_Saturation");
     public static readonly int CdlSaturationID = Shader.PropertyToID("_CdlSaturation");
-    public static readonly int GammaID = Shader.PropertyToID("_Gamma");
     public static readonly int DisplayPaperWhiteNitsID = Shader.PropertyToID("_DisplayPaperWhiteNits");
     public static readonly int DisplayPeakRelativeID = Shader.PropertyToID("_DisplayPeakRelative");
     public static readonly int PostDebugViewID = Shader.PropertyToID("_PostDebugView");

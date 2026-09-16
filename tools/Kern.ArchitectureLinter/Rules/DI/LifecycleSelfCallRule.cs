@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.DI;
 /// </summary>
 public sealed class LifecycleSelfCallRule : IRule
 {
-    public string Id => "FOD-LIFECYCLE-SELF-CALL";
+    public string Id => "KERN-LIFECYCLE-SELF-CALL";
     public string Description => "Lifecycle methods must not call themselves";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

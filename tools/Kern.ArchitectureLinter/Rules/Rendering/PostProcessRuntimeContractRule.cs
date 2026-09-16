@@ -47,7 +47,7 @@ public sealed class PostProcessRuntimeContractRule : IRule
             ]),
     ];
 
-    public string Id => "FOD-POSTPROCESS-RUNTIME";
+    public string Id => "KERN-POSTPROCESS-RUNTIME";
     public string Description => "Post-process and IMGUI runtime lifecycle contracts";
     public RuleSeverity Severity => RuleSeverity.Error;
 

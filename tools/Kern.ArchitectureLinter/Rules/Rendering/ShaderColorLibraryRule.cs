@@ -17,7 +17,7 @@ public sealed class ShaderColorLibraryRule : IRule
         "Luminance", "RGBToHSV", "HSVToRGB",
     };
 
-    public string Id => "FOD-SHADER-COLOR";
+    public string Id => "KERN-SHADER-COLOR";
     public string Description => "Shader color library include checks";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

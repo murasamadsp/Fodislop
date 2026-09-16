@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.Contracts;
 /// </summary>
 public sealed class SceneContractRule : IRule
 {
-    public string Id => "FOD-SCENE-CONTRACT";
+    public string Id => "KERN-SCENE-CONTRACT";
     public string Description => "Serialized scene contract validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

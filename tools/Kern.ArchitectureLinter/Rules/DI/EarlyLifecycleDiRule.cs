@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.DI;
 /// </summary>
 public sealed class EarlyLifecycleDiRule : IRule
 {
-    public string Id => "FOD-EARLY-LIFECYCLE-DI";
+    public string Id => "KERN-EARLY-LIFECYCLE-DI";
     public string Description => "Early lifecycle DI access validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

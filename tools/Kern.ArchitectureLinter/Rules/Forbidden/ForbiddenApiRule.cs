@@ -105,7 +105,7 @@ public sealed class ForbiddenApiRule : IRule
         ["Assets/Scripts/Tests/Editor/Core/LocalPlayerStateFuzzTests.cs"] = new[] { "new GameObject" },
     };
 
-    public string Id => "FOD-FORBIDDEN-API";
+    public string Id => "KERN-FORBIDDEN-API";
     public string Description => "Forbidden API usage detection";
     public RuleSeverity Severity => RuleSeverity.Error;
 

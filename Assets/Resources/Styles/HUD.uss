@@ -10,12 +10,74 @@
     bottom: 0;
 }
 
-.hud-fps-counter-container {
+.hud-top-pill-container {
     position: absolute;
     top: var(--space-4);
     left: 0;
     right: 0;
     align-items: center;
+}
+
+.hud-top-pill {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-1) var(--space-4);
+    background-color: var(--surface-void-shade);
+    border-color: var(--border-subtle);
+    border-width: 1px;
+    border-radius: var(--radius-md);
+}
+
+.hud-top-pill-version {
+    -unity-font-definition: var(--face-data);
+    font-size: var(--size-xs);
+    color: var(--text-tertiary);
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-center;
+}
+
+.hud-top-pill-divider {
+    width: 1px;
+    height: 12px;
+    background-color: var(--border-line);
+    margin-left: var(--space-3);
+    margin-right: var(--space-3);
+}
+
+.hud-top-pill-fps {
+    -unity-font-definition: var(--face-data);
+    font-size: var(--size-xs);
+    color: var(--light-solid);
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-center;
+}
+
+.hud-top-pill-asset {
+    flex-direction: row;
+    align-items: center;
+}
+
+.hud-top-pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background-color: var(--state-ok);
+    margin-right: var(--space-2);
+}
+
+.hud-top-pill-dot.is-loading {
+    background-color: var(--accent-gold);
+}
+
+.hud-top-pill-asset-text {
+    -unity-font-definition: var(--face-data);
+    font-size: var(--size-xs);
+    color: var(--text-secondary);
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-center;
 }
 
 .hud-fps-counter {
@@ -830,4 +892,18 @@
     -unity-font-style: bold;
     margin-bottom: var(--space-2);
     -unity-text-align: middle-center;
+}
+
+/* ─── Указатель миссии ─── */
+
+.mission-arrow {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-top-width: 4px;
+    border-right-width: 4px;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-top-color: var(--accent-gold);
+    border-right-color: var(--accent-gold);
 }

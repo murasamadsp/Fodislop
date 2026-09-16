@@ -15,7 +15,7 @@ namespace Kern.ArchitectureLinter.Rules.Localization;
 /// </summary>
 public sealed class HardcodedTextRule : IRule
 {
-    public string Id => "FOD-HARDCODED-TEXT";
+    public string Id => "KERN-HARDCODED-TEXT";
     public string Description => "Hardcoded text detection";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

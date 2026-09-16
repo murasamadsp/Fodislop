@@ -643,7 +643,6 @@
   "settings.display.section_title": "显示",
   "settings.display.section_desc": "分辨率、窗口模式与帧率。",
   "settings.display.hdr_output": "HDR 输出",
-  "settings.display.gamma": "伽马",
   "settings.display.paper_white": "纸张白度 (尼特)",
   "settings.display.peak_brightness": "峰值亮度 (尼特)",
   "settings.post_process.section_title": "后期处理",

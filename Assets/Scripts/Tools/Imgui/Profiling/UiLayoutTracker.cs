@@ -374,7 +374,7 @@ public sealed class UiLayoutTracker : IDisposable
     private readonly List<UIDocument> _documentScratch = [];
 
     // Документы собираются обходом корней загруженных сцен: поиск по всем
-    // объектам (FindObjectsByType) запрещён (FOD-FORBIDDEN-API).
+    // объектам (FindObjectsByType) запрещён (KERN-FORBIDDEN-API).
     private List<UIDocument> CollectDocuments()
     {
         _documents.Clear();

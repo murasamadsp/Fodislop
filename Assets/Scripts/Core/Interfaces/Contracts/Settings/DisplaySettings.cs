@@ -8,9 +8,6 @@ namespace Kern.Core;
 [Serializable]
 public sealed class DisplaySettings
 {
-    public const float GammaMin = 1.8f;
-    public const float GammaMax = 2.6f;
-    public const float DefaultGamma = 2.2f;
     public const float PaperWhiteMin = 100f;
     public const float PaperWhiteMax = 400f;
     public const float DefaultPaperWhite = 200f;
@@ -57,11 +54,6 @@ public sealed class DisplaySettings
     [SettingUnbounded("Режим выборки — перечисление; проверяется на определённость.")]
     [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPixelSamplingMode -> CameraFollow + Shader.SetGlobalFloat(_PixelArtFiltering)")]
     public PixelSamplingMode PixelSampling = PixelSamplingMode.SmoothFiltered;
-
-    [SettingRange(GammaMin, GammaMax)]
-    [SettingLabel("settings.display.gamma")]
-    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetGamma / PostProcessRuntimeState.SetDisplayCalibration")]
-    public float Gamma = DefaultGamma;
 
     [SettingRange(PaperWhiteMin, PaperWhiteMax)]
     [SettingLabel("settings.display.paper_white")]

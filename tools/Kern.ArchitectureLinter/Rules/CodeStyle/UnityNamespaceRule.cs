@@ -15,7 +15,7 @@ namespace Kern.ArchitectureLinter.Rules.CodeStyle;
 /// </summary>
 public sealed class UnityNamespaceRule : IRule
 {
-    public string Id => "FOD-UNITY-NAMESPACE";
+    public string Id => "KERN-UNITY-NAMESPACE";
     public string Description => "Unity types must use block namespace";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

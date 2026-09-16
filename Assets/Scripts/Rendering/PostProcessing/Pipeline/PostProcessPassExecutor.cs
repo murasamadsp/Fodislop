@@ -327,7 +327,6 @@ internal static class PostProcessPassExecutor
             cmd.SetComputeVectorParam(data.PostProcessCS, VignetteCenterID, data.VignetteCenter);
         }
 
-        cmd.SetComputeFloatParam(data.PostProcessCS, GammaID, data.Gamma);
         // Keep the shader finite even if a stale/partially initialized HDR
         // output profile reaches the pass before display reconciliation.
         cmd.SetComputeFloatParam(

@@ -15,7 +15,7 @@ namespace Kern.ArchitectureLinter.Rules.UI;
 /// </summary>
 public sealed class SilentUiNoopRule : IRule
 {
-    public string Id => "FOD-SILENT-UI-NOOP";
+    public string Id => "KERN-SILENT-UI-NOOP";
     public string Description => "Silent UI no-op detection";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

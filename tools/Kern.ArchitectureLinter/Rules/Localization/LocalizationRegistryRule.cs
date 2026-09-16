@@ -13,7 +13,7 @@ namespace Kern.ArchitectureLinter.Rules.Localization;
 /// </summary>
 public sealed class LocalizationRegistryRule : IRule
 {
-    public string Id => "FOD-LOCALIZATION-REGISTRY";
+    public string Id => "KERN-LOCALIZATION-REGISTRY";
     public string Description => "Localization registry validation";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

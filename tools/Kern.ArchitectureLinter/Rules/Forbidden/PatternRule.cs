@@ -83,7 +83,7 @@ public sealed class PatternRule : IRule
         (new Regex(@"\b(PauseMenu\.IsMenuOpen|ChatInput\.IsFocused|ProgrammatorGrid\.IsOpen)\b"), "static UI state access outside the UI layer (compose IInputBlocker)", @"^Assets/Scripts/UI/", null),
     };
 
-    public string Id => "FOD-PATTERN";
+    public string Id => "KERN-PATTERN";
     public string Description => "Forbidden architectural pattern detection";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

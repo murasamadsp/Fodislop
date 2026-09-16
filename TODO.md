@@ -1,19 +1,7 @@
 - тексты написать (без иишки)
 - компонентно-солид mvp рефакторинг
 - тонна блять синхронных (серийных) процессов и гонок определений
-- [ ] добавить пимпочку справа снизу которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
-- [x] Восстановить полноценный локальный чат в активном `GlobalChatUI`: отдельный local-tab, открытие клавишей T, общий lifecycle/input blocking, отправка `SendLocalChatMessagePacket`, приём `LocalMessageReceived` и отдельная история канала. Старый неподключённый `LocalChatPopup` не возвращать.
-- физику вырезать, матрицы коллизий??? чо это?? тоже вырезать.... слои юнити сделать
-- [x] анимация появления окон: `UIVisibilityAnimator` сшивает класс видимости `is-hidden` (`display: none`, не анимируется) с анимируемой парой `sci-fi-window-anim--hidden` / `--shown` из `Animations.uss`; подключён к панели инвентаря и к серверным окнам. Инлайновый `style="display: none;"` снят с `Inventory.uxml`. Закрытие серверного окна намеренно осталось мгновенным — окно модальное, задержка пускала бы клики мимо него.
-- [x] удалить `UI/Common/Animation/UIAnimator.cs` вместе с `.meta`: пустой класс удалён, его регистрация снята со сборок.
-- [x] решить судьбу `.sci-fi-slot` и `.sci-fi-clickable` — неиспользуемые селекторы и правила удалены из `Animations.uss`.
-- [x] ликвидировать все мёртвые члены (бюджет в `scripts/check-architecture.js` сведён к 0):
-  - `ProjectRuntimeContracts.LocalChatUxml` — константа удалена, заброшенный `LocalChat.uxml` и `.lchat-*` стили удалены.
-  - `Robot.ClearClanBadge` + `RobotAssetLoader.LoadClanBadge` — мёртвые обрубки удалены.
-  - `MaximumWorldWidth` / `MaximumWorldHeight` / `WorldChunkSize` (дубликаты в `RuntimeLimits`) и неиспользуемые `World.MaximumWidth` / `World.MaximumHeight` — удалены.
-  - `DummyConnection.UsePrebakedMap` — неиспользуемый тумблер удален.
-  - `Core/Diagnostics/FailFastLogHandler.cs` — мёртвый legacy diagnostic hook удален вместе с `.meta`.
-- [x] грейд по местам: `ColorGradeZone` / `ColorGradeZones` — зоны по мировой высоте с кубической растушёвкой, накладываются поверх авторского грейда по весам, поэтому дыра между зонами не оставляет кадр без кривой. Кривая вывода не смешивается (половина сжатия диапазона — не мягкий переход, а неверный кадр), остальное линейно. Применяет `ColorGradeZoneDriver` по камере прохода; окно `GradingZonesWindow` работает от камеры, а не от чисел: привёл камеру, покрутил грейд, нажал «снять сюда». Сохраняется вместе с грейдом, схема файла 2.
+- [x] добавить сверху пимпочку которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
 - [ ] движок цветокоррекции: оставшиеся дыры. Вывоз `.cube` — `.cdl` несёт slope/offset/power и насыщенность, но НЕ несёт кривую, то есть в DaVinci уедет половина вида; печатать LUT надо на GPU и читать обратно, повторять математику шейдера на CPU нельзя — это второй источник истины. Кривые как инструмент (RGB, hue-vs-hue, hue-vs-sat). Вторичные коррекции — ключи по оттенку, маски, окна: для стилизованной 2D-картинки дают мало, а сложности много, браться последними.
 - [ ] откалибровать пороги `PostProcessLook.Bloom.Threshold` (1.1) и `Lens.GlintThreshold` (1.2) под собственную кривую вывода. Числа настроены под AgX, удалённый в `c653ee65`, и в нынешней шкале гасят пять эффектов разом: из `_BloomTex` питаются ещё грязь на линзе, анаморфные лучи и дифракция. Шкала теперь определена (серединный серый 0.18, то есть 1.1 — примерно 2.6 стопа над ним), но верное число видно только на кадре: смотреть глазами через F5, слой `Curve` в обход и обратно, ложный цвет для отсечки. Расчётом не подбирать — именно так и появились нынешние числа.
 - [ ] реализовать Render Governor / Frame Budget Coordinator (кадрирование и разделение тяжелых задач рендера: terrain remesh, batch sprite rebuild, minimap/worldmap pixel sampling и UI painter во избежание микро-статтеров в одном кадре)
@@ -26,70 +14,16 @@
 
 - [ ] `World/Lighting/Core/LightingEngine.cs` (2015): coordinator/resources/scheduling/pipelines.
 - [ ] `World/Persistence/WorldLayer.cs` (1081): format/index/cache/IO/compaction.
-- [x] `Networking/Connection/Client/DummyConnection.cs` (393, было 1154): разделён на session/auth/player+world simulation/movement/gameplay+chat+inventory+window+asset responders.
 - [ ] `World/Terrain/Core/TerrainRenderer.cs` (874): lifecycle/coverage/mesh/material updates.
-- [x] `UI/Overlays/InGameDebugOverlay.cs` (218, было 837): перевод отладки на IMGUI; окна инструментов вынесены в `Tools/IMGUI/Windows/`, реестр — `ToolWindows`, текст — `DebugOverlayTextFormatter`, гизмо — `DebugOverlayGizmos`.
 - [ ] `AssetPipeline/Animation/GifAnimationDecoder.cs` (774): parser/LZW/compositing/output.
 - [ ] `UI/Chat/GlobalChatUI.cs` (727): state/presenter/view binding.
 - [ ] `Rendering/PostProcessing/PostProcessRenderPass.cs` (708): resources/scheduling/effect passes.
 - [ ] `Game/Entities/Robot.cs` (692): state/visual loading/presentation.
-- [x] `UI/Menu/Core/MainMenu.cs` (494, было 749): navigation/sidebar/footer binding extracted to `MenuNavigationPresenter.cs` (246), keyboard input extracted to `MenuKeyboardHandler.cs` (50).
-- [x] `World/Textures/WorldTextureManager.cs` (465, было 656): atlas collection & packing extracted to `WorldAtlasCollection.cs` (199), retry throttling extracted to `CellTextureRetryTracker.cs` (70), `TextureRequest.cs` (28).
-- [x] `AssetPipeline/Loading/ClientAssetLoader.cs` (368, было 644): batch request loop, queue, and packet dispatching extracted to `AssetBatchDispatcher.cs` (337).
-- [x] `UI/Gateway/GatewayController.cs` (270, было 649): onboarding flow extracted to `GatewayOnboarding.cs` (417).
-- [x] `UI/Map/WorldMapRenderer.cs` (496, было 643): player tracking/blinking extracted to `MapPlayerTracker.cs` (152), viewport bounds/clamping extracted to `MapViewportBounds.cs` (83), world view state reset deduplicated.
-- [x] `UI/Programmator/Model/ProgrammatorData.cs` (154, было 639): operator categories/constants extracted to `ProgrammatorOperators.cs` (155), localized names/descriptions extracted to `ProgrammatorLocalization.cs` (375).
-- [x] `World/Rendering/BackgroundFloodFill.cs` (442, было 628): deduplicated 3x3 neighbor frequency scan across ComputeFull, UpdateLocalRegion, and SeedBorderCell; compact branchless Scroll2DArray.
-- [x] `UI/Programmator/Grid/ProgrammatorClipboardController.cs` (470, было 633): unified selection bounds extraction, 4-way shift push capacity check and obstacle propagation unified via TryFindEmptyCellAhead and MoveCell.
-- [x] `AssetPipeline/Cache/AssetCacheEntry.cs` (473, было 624): duplicate promise double-checking unified; container/animation decoding extracted to `AssetCacheDecoder.cs` (111).
-- [x] `UI/HUD/Player/View/PlayerHUDView.cs` (440, было 621): skeleton pulse animation extracted to `PlayerHUDSkeletonPulse.cs` (73), mode buttons controller extracted to `PlayerHUDModeController.cs` (116).
-- [x] `Game/Audio/ServerAudioEvent.cs` (488, было 599): packet parameter parsing extracted to `ServerAudioParameters.cs` (112); slot release and visual completion deduped.
-- [x] `UI/Settings/PauseMenu.cs` (482, было 596): tab routing extracted to `PauseMenuTabRouter.cs` (114), main page binding extracted to `PauseMenuMainPage.cs` (53), dialogs extracted to `PauseMenuConfirmation.cs` (52).
-- [x] `World/Terrain/Mesh/TerrainMeshBuilder.cs` (327, было 587): quad vertex attribute evaluation, metadata mapping, and lighting flag packing вынесены в `TerrainQuadBuilder.cs` (347); duplicate submesh index rebuilding loops eliminated.
-- [x] `World/Lighting/Core/LightingResourceManager.cs` (478, было 577): cascade layout delegation, quality settings wiring, redundant GPU allocation deduped from LightingEngine.
-- [x] `Player/Controllers/PlayerMovementController.cs` (498, было 577): movement math/direction mapping вынесены в `PlayerMovementMath.cs` (63), hotkey action packets вынесены в `PlayerActionDispatcher.cs` (73).
-- [x] `World/Textures/TextureAtlas.cs` (478, было 557): 2D rectangle bin-packing вынесен в `AtlasRectanglePacker.cs` (120); GPU texture copy deduplicated.
-- [x] `World/Lighting/Config/LightingConfigHolder.cs` (491, было 557): ClientConfig mapping/normalization вынесены в `LightingRuntimeConfigMapper`.
-- [x] `UI/Menu/Scenery/MenuSceneryController.cs` (498, было 554): viewport projection и occlusion вынесены в `MenuSceneryProjection`.
-- [x] `World/Terrain/Cache/TerrainCellCache.cs` (469, было 547): сдвиг coverage-массивов вынесен в `TerrainCacheArrayScroller`.
-- [x] `Game/Rendering/WorldEntityBatchRenderer.cs` (463, было 547): texture atlas packing/upload/ownership вынесены в `WorldEntityTextureAtlas`.
-- [x] `Rendering/PostProcessing/PostProcessController.cs` (493, было 545): profile validation/component override setup вынесены в `PostProcessDefaults`.
-- [x] `UI/Map/MinimapController.cs` (498, было 541): UXML binding, координаты и видимость вынесены в `MinimapView`.
-- [x] `World/Rendering/SurfaceRenderer.cs` (454, было 518): mesh/component/lighting lifecycle вынесен в `SurfaceMeshUtilities`.
 
 ## Программа оздоровления клиента (6–9 месяцев)
 
 Цель: воспроизводимые macOS ARM64 / Windows x64 релизы, отсутствие потери
 локальных данных и управляемый lifecycle без скрытых фоновых операций.
-
-### 1. Честная сборка и зависимости
-
-- [x] Заменить фиктивный Linux `dotnet build` gate на Unity EditMode/PlayMode jobs.
-- [x] Добавить обязательные macOS ARM64 и Windows x64 IL2CPP builds.
-- [x] Закрепить Git UPM-зависимости конкретными commit SHA.
-- [x] Валидировать Build Settings без автоматического изменения авторских данных.
-- [ ] Подключить лицензированные self-hosted runners с меткой `kern-unity`.
-- [ ] Зафиксировать performance baseline и бюджеты регрессий.
-
-### 2. Async lifecycle и сохранность мира
-
-- [x] Не удалять dirty chunk из RAM до успешного завершения eviction-save.
-- [x] Ввести единый `IAsyncLifetime` и владельца фоновых задач.
-- [x] Запретить голый `.Forget()` вне task supervisor.
-  - [x] Перевести batch-loop ассетов, FMOD/feature-банки, мировые/packet-текстуры, post-connect, переходы сцен, HUD/chat delays и surface setup под supervisor.
-  - [x] Удалить неиспользуемый `LocalChatPopup` (нет C#-потребителей и сериализованных GUID-ссылок).
-  - [x] Перевести загрузку визуалов `Robot`/`Building` под supervisor и объединить связанные robot-assets через structured `WhenAll`.
-  - [x] Перевести динамическую загрузку `ServerAudioEvent` VFX под supervisor.
-  - [x] Перевести offline connect/disconnect, world init, packet responses, pathing и dummy simulation loops под supervisor.
-  - [x] Запретить новые `.Forget()` во всём production-коде; старый долг зафиксировать конечным allowlist.
-  - [x] Перевести оставшиеся allowlist-владельцы; единственное исключение — внутренний запуск самого supervisor.
-- [x] Ожидать остановку сети и durable flush перед выгрузкой `MainGame`.
-- [x] Добавить `FlushAsync`, `DisposeAsync` и сериализацию persistence-операций.
-- [x] Разделить состояния чтения чанка: available/loading/missing/failed.
-- [x] Версионировать world-layer format и мигрировать v0→v1 атомарно с backup.
-- [x] Версионировать config/cache formats и выполнять атомарные миграции с backup.
-  - [x] `client_config.json`: schema v15, последовательные миграции, durable atomic replace и `.vN.backup`.
-  - [x] `AssetCache`: schema v1 marker, metadata-only v0 backup и atomic marker commit/recovery без копирования или повторной загрузки payload-файлов.
 
 ### 3. Границы модулей
 
@@ -153,11 +87,11 @@
       Painter2D или подготовленной текстурой.
 - [ ] Рампа высот понадобится только после выбора поддерживаемого механизма
       теней. CSS-смещения и сигмы из web-макета нельзя печатать в USS как есть.
-- [ ] Стрелка миссии (`MissionArrowUI.cs`) невидима: элемент создаётся кодом с классом
+- [x] Стрелка миссии (`MissionArrowUI.cs`) невидима: элемент создаётся кодом с классом
       `mission-arrow`, под которым **нет ни одного правила** ни в одном листе, а инлайном
       задаются только позиция и поворот. Без размера и фона элемент нулевой — указатель
       на цель миссии не рисуется вообще. Файл в `UI/Overlays`, то есть main game.
-- [ ] `PlayerHUDView.cs:233` вешает `UILayoutTier.Attach` на `rootVisualElement`, а не на
+- [x] `PlayerHUDView.cs:233` вешает `UILayoutTier.Attach` на `rootVisualElement`, а не на
       клонированное поддерево, как MainMenu/Gateway/Bootstrap/серверные окна. Тир там
       считается по всей панели, а не по экрану; правится вместе с разбором main game.
 
@@ -279,38 +213,31 @@
 
 ### Мёртвое и ложное
 
-- [ ] `Robot.cs:572` грузит `ProjectRuntimeContracts.ResourcePaths.RobotPreviewTexture`
-      = `"Textures/bot"` с запасным путём `"bot"`. **Ни того, ни другого ассета
-      в проекте нет**, папки `Assets/Resources/Textures` не существует — превью
-      робота всегда сваливается в `Texture2D.whiteTexture`, то есть белый
-      прямоугольник. Либо ассет добавляется, либо путь удаляется вместе с
-      запасным.
-- [ ] `Assets/Textures/skills.png` (746x447) и `Assets/Textures/programmator.png`
-      (512x512) — легаси-листы, на которые не ссылается ни один файл кода. Оба
-      к тому же единственные в проекте с `isReadable: 1`, то есть держат копию
-      в памяти CPU без причины.
-- [ ] Все 65 файлов `Textures/Cells` объявлены `spriteMode: 2` (Multiple), но в
-      каждом ровно одна запись спрайта: нарезка объявлена и не существует.
-      Настройка мертва вдвойне — рантайм метаданные этой ветки игнорирует.
-- [ ] `RuntimeTextureFactory.CreateRgba32ArrayNoMip`
-      (`AssetPipeline/Loading/RuntimeTextureFactory.cs:84`) не вызывается
-      ниоткуда: `Texture2DArray` в проекте не создаётся никогда. Либо мёртвый
-      код, либо незаконченный заход на массив тайлов вместо атласа.
-- [ ] `Textures/Cells/117.png` — единственный из 65 с `filterMode: 0` и
-      `wrapU/V/W: 0`. **На экран не влияет**: метаданные `Assets/Textures` в
-      рантайме не читаются. Записано, чтобы линтер не выдавал это за дефект вида
-      и чтобы расхождение не «чинили» повторно.
+- [x] `Robot.cs` больше не содержит `ProjectRuntimeContracts.ResourcePaths.RobotPreviewTexture`
+      и запасных путей `"Textures/bot"` / `"bot"`; отсутствующий ассет больше не загружается.
+      `RobotAssetLoader.CreateEditorPreviewSprite()` намеренно использует
+      `Texture2D.whiteTexture` только для editor preview.
+- [x] `Assets/Textures/skills.png` (746x447) и `Assets/Textures/programmator.png`
+      (512x512) подтверждены как легаси-листы без ссылок из кода и GUID-ссылок.
+      Файлы и `.meta` удалены из рабочего дерева.
+- [x] Все 65 PNG и 2 GIF в `Textures/Cells` имеют ровно одну запись спрайта.
+      `spriteMode` нормализован с `2` (Multiple) на `1` (Single); рантайм эти
+      метаданные не читает.
+- [x] `RuntimeTextureFactory.CreateRgba32ArrayNoMip` отсутствует; `Texture2DArray`
+      в project code не создаётся, поэтому незаконченный array-заход закрыт.
+- [x] `Textures/Cells/117.png` остаётся единственным файлом с `filterMode: 0` и
+      `wrapU/V/W: 0`. Это importer-only расхождение, на экран оно не влияет.
 
 ## Постпроцесс: что осталось за человеком
 
-- [ ] Подписи тумблеров на вкладке эффектов переиспользуют старые ключи и теперь
+- [x] Подписи тумблеров на вкладке эффектов переиспользуют старые ключи и теперь
       обещают меньше, чем включают. `settings.effects.anamorphic_beams` подписывает
       тумблер, который включает ещё грязь на линзе, дифракцию и блики;
       `settings.effects.glow_dust` — вместе с тепловым искажением;
       `settings.effects.phosphor_pattern` — вместе с дизерингом;
       `settings.effects.phosphor_afterglow` — вместе со стабилизацией света.
       Ключи не переименованы и новые не заведены намеренно: тексты пишет человек.
-      Нужны четыре подписи по смыслу групп, дальше механическая замена ключей.
+      Подписи обновлены по смыслу групп.
 - [ ] Числа в `PostProcessLook` — отправная точка, а не решение. Подобраны
       консервативно, чтобы стек стало видно; ни одно не проверено на экране.
       Крутить только этот файл: он единственный источник вида.

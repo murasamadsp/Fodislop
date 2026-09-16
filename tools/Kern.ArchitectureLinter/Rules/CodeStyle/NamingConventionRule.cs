@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.CodeStyle;
 /// </summary>
 public sealed class NamingConventionRule : IRule
 {
-    public string Id => "FOD-NAMING";
+    public string Id => "KERN-NAMING";
     public string Description => "Naming convention validation";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

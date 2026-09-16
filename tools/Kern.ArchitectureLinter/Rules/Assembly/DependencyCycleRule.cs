@@ -11,7 +11,7 @@ public sealed class DependencyCycleRule : IRule
 {
     private static readonly string[] KernAssemblyPrefixes = { "Kern" };
 
-    public string Id => "FOD-DEP-CYCLE";
+    public string Id => "KERN-DEP-CYCLE";
     public string Description => "Dependency cycle detection between Kern assemblies";
     public RuleSeverity Severity => RuleSeverity.Error;
 

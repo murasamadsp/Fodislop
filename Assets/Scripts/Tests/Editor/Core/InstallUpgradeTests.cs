@@ -201,7 +201,7 @@ public sealed class InstallUpgradeTests
         ClientConfigLoader.MigrationBackupPath(ConfigPath, schemaVersion);
 
     // Файл прошлого релиза: те же секции, что пишет текущий клиент, но со
-    // старым номером схемы. Поля между схемами 26 и 28 не добавлялись, только
+    // старым номером схемы. Поля между схемами 26 и 29 не добавлялись, только
     // удалялись (см. WithRemovedToneMappingFields).
     private string PreviousReleaseConfig(int schemaVersion, PixelSamplingMode pixelSampling)
     {

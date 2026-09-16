@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 
 using System;
 using Kern.Core;
@@ -36,6 +36,8 @@ namespace Kern.UI
         private Label? _loadingSpinnerLabel;
         private Label? _loadingStatusLabel;
         private Label? _loadingProgressLabel;
+        private VisualElement? _topAssetDot;
+        private Label? _topAssetLabel;
         private IVisualElementScheduledItem? _spinnerSchedule;
         private bool _loadingOverlayVisible;
         private float _nextRefreshTime;
@@ -112,30 +114,36 @@ namespace Kern.UI
                 _gameManager.OnWorldLoaded -= OnWorldLoaded;
             }
 
+            _topAssetDot = null;
+            _topAssetLabel = null;
             _root?.RemoveFromHierarchy();
         }
 
         private void Update()
         {
-            if (_root == null || !_loadingOverlayVisible)
+            if (Time.unscaledTime < _nextRefreshTime)
             {
                 return;
             }
 
-            if (Time.unscaledTime >= _nextRefreshTime)
-            {
-                _nextRefreshTime = Time.unscaledTime + 0.25f;
-                if (_loadingStatusLabel != null)
-                {
-                    string statusText = GetLoadingStatusText();
-                    if (_loadingStatusLabel.text != statusText)
-                    {
-                        _loadingStatusLabel.text = statusText;
-                    }
-                }
+            _nextRefreshTime = Time.unscaledTime + 0.25f;
 
-                Refresh();
+            if (_topAssetLabel == null && _document?.rootVisualElement != null)
+            {
+                _topAssetDot = _document.rootVisualElement.Q<VisualElement>("AssetStatusDot");
+                _topAssetLabel = _document.rootVisualElement.Q<Label>("AssetStatusLabel");
             }
+
+            if (_root != null && _loadingOverlayVisible && _loadingStatusLabel != null)
+            {
+                string statusText = GetLoadingStatusText();
+                if (_loadingStatusLabel.text != statusText)
+                {
+                    _loadingStatusLabel.text = statusText;
+                }
+            }
+
+            Refresh();
         }
 
         private string GetLoadingStatusText()
@@ -246,6 +254,10 @@ namespace Kern.UI
                 loadingRoot.pickingMode = PickingMode.Ignore;
             }
 
+            VisualElement? docRoot = _document.rootVisualElement;
+            _topAssetDot = docRoot?.Q<VisualElement>("AssetStatusDot");
+            _topAssetLabel = docRoot?.Q<Label>("AssetStatusLabel");
+
             StartSpinner();
             Refresh();
         }
@@ -285,13 +297,18 @@ namespace Kern.UI
 
         private void Refresh()
         {
-            if (_assetLoader == null || _loadingStatusLabel == null || _loadingProgressLabel == null)
+            if (_assetLoader == null)
             {
                 return;
             }
 
-            _loadingStatusLabel.text = GetLoadingStatusText();
+            if (_loadingStatusLabel != null)
+            {
+                _loadingStatusLabel.text = GetLoadingStatusText();
+            }
+
             UpdateProgressText();
+            UpdateTopStatusPill();
         }
 
         private void UpdateProgressText()
@@ -306,6 +323,34 @@ namespace Kern.UI
             _loadingProgressLabel.text = pending > 0 || queued > 0
                 ? _loc.Get("assetload.active", pending, queued)
                 : string.Empty;
+        }
+
+        private void UpdateTopStatusPill()
+        {
+            if (_topAssetLabel == null || _assetLoader == null)
+            {
+                return;
+            }
+
+            int pending = _assetLoader.PendingAssetCount;
+            int queued = _assetLoader.QueuedAssetCount;
+            bool terrainReady = _terrainRenderer?.IsReadyForGameplay ?? true;
+
+            if (!terrainReady)
+            {
+                _topAssetLabel.text = "Terrain...";
+                _topAssetDot?.EnableInClassList("is-loading", true);
+            }
+            else if (pending > 0 || queued > 0)
+            {
+                _topAssetLabel.text = $"Assets: {pending + queued}";
+                _topAssetDot?.EnableInClassList("is-loading", true);
+            }
+            else
+            {
+                _topAssetLabel.text = "Assets OK";
+                _topAssetDot?.EnableInClassList("is-loading", false);
+            }
         }
     }
 }

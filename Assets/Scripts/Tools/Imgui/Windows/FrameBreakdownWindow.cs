@@ -417,6 +417,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
             case Tab.Memory: BuildMemoryRows(rows); break;
             case Tab.Search: BuildSearchRows(rows); break;
             case Tab.Scene: BuildSceneRows(rows); break;
+            default: throw new ArgumentOutOfRangeException(nameof(_tab), _tab, "Unhandled frame breakdown tab");
         }
     }
 

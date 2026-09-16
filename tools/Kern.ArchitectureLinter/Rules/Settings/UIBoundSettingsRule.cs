@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.Settings;
 /// </summary>
 public sealed class UIBoundSettingsRule : IRule
 {
-    public string Id => "FOD-UI-BOUND-SETTINGS";
+    public string Id => "KERN-UI-BOUND-SETTINGS";
     public string Description => "UI settings bound control validation";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

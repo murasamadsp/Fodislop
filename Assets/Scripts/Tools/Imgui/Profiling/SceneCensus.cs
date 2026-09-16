@@ -93,7 +93,7 @@ public sealed class SceneCensus
 
         // DontDestroyOnLoad не обходится: достать эту сцену можно только
         // объектом-зондом, а создавать объекты в обход фабрики и переносить их
-        // между сценами запрещено (FOD-FORBIDDEN-API). Все игровые объекты
+        // между сценами запрещено (KERN-FORBIDDEN-API). Все игровые объекты
         // лежат под LifetimeScope своих сцен.
 
         snapshot.Roots.Sort((a, b) => b.Objects.CompareTo(a.Objects));

@@ -33,7 +33,7 @@ public sealed class DeadMembersRule : IRule
 
     private static readonly string[] ClassUnityAttrs = { "CustomEditor", "MenuItem", "BuildPlayerProcessor", "InitializeOnLoad" };
 
-    public string Id => "FOD-DEAD-MEMBERS";
+    public string Id => "KERN-DEAD-MEMBERS";
     public string Description => "Dead member detection";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

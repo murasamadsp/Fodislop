@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.Scene;
 /// </summary>
 public sealed class CompositionRootSceneScanRule : IRule
 {
-    public string Id => "FOD-COMPOSITION-ROOT-SCAN";
+    public string Id => "KERN-COMPOSITION-ROOT-SCAN";
     public string Description => "Composition root scene scan prohibition";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

@@ -19,7 +19,7 @@ public sealed class BlockNamespaceRule : IRule
         "UnityEngine.Rendering.VolumeComponent",
     ];
 
-    public string Id => "FOD-BLOCK-NAMESPACE";
+    public string Id => "KERN-BLOCK-NAMESPACE";
     public string Description => "Unity-inheriting types must use block namespace (not file-scoped)";
     public RuleSeverity Severity => RuleSeverity.Warning;
 

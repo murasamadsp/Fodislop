@@ -67,7 +67,7 @@ public sealed class ClientConfigMigrationTests
 
 
     [Test]
-    public void Migrate_V22DegradedGamma_ResetsToDefault()
+    public void Migrate_V22Config_IgnoresRemovedDisplayGamma()
     {
         var migration = new ClientConfigMigration(_profile);
         string json = @"{
@@ -81,7 +81,7 @@ public sealed class ClientConfigMigrationTests
 
         Assert.That(migrated, Is.True);
         Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
-        Assert.That(config.Display.Gamma, Is.EqualTo(DisplaySettings.DefaultGamma).Within(1e-5f));
+        Assert.That(JsonUtility.ToJson(config), Does.Not.Contain("Gamma"));
     }
 
     [Test]
@@ -147,7 +147,7 @@ public sealed class ClientConfigMigrationTests
     }
 
     [Test]
-    public void Migrate_Schema27Config_MigratesToSchema28()
+    public void Migrate_Schema27Config_MigratesToSchema29()
     {
         var migration = new ClientConfigMigration(_profile);
         var config = new ClientConfig
@@ -163,7 +163,7 @@ public sealed class ClientConfigMigrationTests
         bool migrated = migration.Migrate(config, "{}");
 
         Assert.That(migrated, Is.True);
-        Assert.That(config.SchemaVersion, Is.EqualTo(28));
+        Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
         if (UIScaleUtility.IsRetinaOrHighDpi)
         {
             Assert.That(config.Interface.UIScale, Is.EqualTo(UIScaleUtility.RetinaDefaultScale));

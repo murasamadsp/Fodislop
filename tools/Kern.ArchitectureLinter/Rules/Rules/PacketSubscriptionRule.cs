@@ -15,7 +15,7 @@ namespace Kern.ArchitectureLinter.Rules.Rules;
 /// </summary>
 public sealed class PacketSubscriptionRule : IRule
 {
-    public string Id => "FOD-PACKET-SUBSCRIPTION";
+    public string Id => "KERN-PACKET-SUBSCRIPTION";
     public string Description => "Packet subscription symmetry";
     public RuleSeverity Severity => RuleSeverity.Warning;
     public bool RequiresAssemblies => false;

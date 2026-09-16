@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.DI;
 /// </summary>
 public sealed class ConfigureReentrancyRule : IRule
 {
-    public string Id => "FOD-CONFIGURE-REENTRANCY";
+    public string Id => "KERN-CONFIGURE-REENTRANCY";
     public string Description => "Configure reentrancy validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

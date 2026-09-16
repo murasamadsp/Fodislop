@@ -58,7 +58,7 @@ public sealed class UssStylesheetRule : IRule
     private static readonly Regex BadFuncRegex = new(@"\b(calc|min|max|clamp|color-mix)\s*\(", RegexOptions.Compiled);
     private static readonly Regex RelativeUnits = new(@"(?<![\w-])[0-9.]+(em|rem|ch|ex|vw|vh|vmin|vmax)(?![\w-])", RegexOptions.Compiled);
 
-    public string Id => "FOD-USS-STYLESHEET";
+    public string Id => "KERN-USS-STYLESHEET";
     public string Description => "USS stylesheet validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

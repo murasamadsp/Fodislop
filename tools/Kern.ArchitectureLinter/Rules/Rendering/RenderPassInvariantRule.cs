@@ -8,13 +8,12 @@ using Kern.ArchitectureLinter.Scanning;
 namespace Kern.ArchitectureLinter.Rules.Rendering;
 
 /// <summary>
-/// Render passes must not hardcode effect bypasses, unconditional overrides of .active,
-/// or hardcoded gamma/exposure outside debug bypass flags (BypassPostProcessEffects).
+/// Render passes must not hardcode effect bypasses or unconditional overrides of .active.
 /// Ported from check-architecture.js checkRenderPassInvariants().
 /// </summary>
 public sealed class RenderPassInvariantRule : IRule
 {
-    public string Id => "FOD-RENDER-PASS-INVARIANT";
+    public string Id => "KERN-RENDER-PASS-INVARIANT";
     public string Description => "Render pass invariant validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;
@@ -23,7 +22,6 @@ public sealed class RenderPassInvariantRule : IRule
 
     private static readonly Regex BypassBlock = new(@"if \(\s*(?:PostProcessRuntimeState\.)?BypassPostProcessEffects\s*\)", RegexOptions.Compiled);
     private static readonly Regex EffectDisable = new(@"^\s*(?:bloomActive|vignetteActive|cgActive|eigengrauActive|mbActive)\s*=\s*false\s*;", RegexOptions.Multiline);
-    private static readonly Regex GammaAssign = new(@"^\s*_displayGamma\s*=\s*[0-9.]+f?\s*;", RegexOptions.Multiline);
 
     public Task<IReadOnlyList<RuleViolation>> EvaluateAsync(
         IReadOnlyList<AssemblyDefinition> assemblies,
@@ -67,17 +65,6 @@ public sealed class RenderPassInvariantRule : IRule
                 {
                     RuleId = Id,
                     Message = $"строка {i + 1}: Безусловное отключение эффекта ({line.Trim()}) вне BypassPostProcessEffects. Эффекты должны управляться volume компонентами.",
-                    Severity = Severity,
-                    TypeName = $"{RenderPassPath}:{i + 1}"
-                });
-            }
-
-            if (GammaAssign.IsMatch(line))
-            {
-                violations.Add(new RuleViolation
-                {
-                    RuleId = Id,
-                    Message = $"строка {i + 1}: Хардкод присваивания _displayGamma ({line.Trim()}) вне BypassPostProcessEffects. Гамма должна управляться DisplaySettings.DisplayGamma.",
                     Severity = Severity,
                     TypeName = $"{RenderPassPath}:{i + 1}"
                 });

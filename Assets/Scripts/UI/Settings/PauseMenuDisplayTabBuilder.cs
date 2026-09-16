@@ -211,14 +211,6 @@ internal sealed class PauseMenuDisplayTabBuilder
         syncContext.text = _loc.Get("settings.display.sync_editor");
         UIState.SetHidden(syncContext, !Application.isEditor);
 
-        VisualElement gammaSlider = PauseMenuUIFactory.CreateBoundSlider<DisplaySettings>(
-            nameof(DisplaySettings.Gamma),
-            _loc,
-            () => _clientConfig.Config.Display.Gamma,
-            value => _displayManager.SetGamma(value),
-            _refreshers);
-        displaySection.Add(gammaSlider);
-
         Toggle hdrToggle = hdrOutputGroup.Q<Toggle>("HDRToggle") ??
             throw new InvalidOperationException("[PauseMenu] HDRToggle is missing from PauseMenu.uxml.");
         hdrToggle.label = _loc.Get("menu.settings.hdr");
@@ -268,7 +260,6 @@ internal sealed class PauseMenuDisplayTabBuilder
             });
             hdrRetry.SetEnabled(HDROutput.Status == HDROutputController.Phase.Failed && HDROutput.CanSwitch);
             UIState.SetHidden(hdrRetry, HDROutput.Status != HDROutputController.Phase.Failed);
-            gammaSlider.SetEnabled(!hdrOn);
             paperWhiteSlider.SetEnabled(hdrOn);
             peakBrightnessSlider.SetEnabled(hdrOn);
         }

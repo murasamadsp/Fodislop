@@ -56,17 +56,9 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
 
         if (config.SchemaVersion < 23)
         {
-            // Схема 23: сброс калибровки SDR-гаммы к авторскому значению
-            // при деградации до минимума. Здесь же сбрасывалась белая точка
-            // тонмаппинга, но самого тонмаппинга больше нет (схема 27), и
-            // поля тоже: шаг сохранён ради гаммы, ступень схемы удалять
-            // нельзя — по ней считаются все последующие.
-            if (config.Display != null &&
-                Mathf.Approximately(config.Display.Gamma, DisplaySettings.GammaMin))
-            {
-                config.Display.Gamma = DisplaySettings.DefaultGamma;
-            }
-
+            // Схема 23 сохраняла исторический сброс SDR-гаммы при деградации
+            // до минимума. Поле удалено из текущей схемы, поэтому миграция
+            // ничего не меняет, но ступень остаётся для старых конфигов.
             config.SchemaVersion = 23;
             migrated = true;
         }
@@ -134,6 +126,14 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
             migrated = true;
         }
 
+        if (config.SchemaVersion < 29)
+        {
+            // Схема 29 удаляет пользовательскую SDR-гамму. JsonUtility
+            // отбрасывает legacy-поле Gamma при чтении, поэтому достаточно
+            // продвинуть версию и перезаписать конфиг без этого поля.
+            config.SchemaVersion = 29;
+            migrated = true;
+        }
         if (config.SchemaVersion > ClientConfig.CurrentSchemaVersion)
         {
             // JsonUtility уже отбросил неизвестные поля будущей схемы. Тихое

@@ -13,7 +13,7 @@ namespace Kern.ArchitectureLinter.Rules.Settings;
 /// </summary>
 public sealed class SettingConsumerTargetRule : IRule
 {
-    public string Id => "FOD-SETTING-CONSUMER-TARGET";
+    public string Id => "KERN-SETTING-CONSUMER-TARGET";
     public string Description => "SettingConsumer target validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

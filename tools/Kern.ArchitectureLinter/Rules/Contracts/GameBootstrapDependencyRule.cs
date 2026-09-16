@@ -18,7 +18,7 @@ namespace Kern.ArchitectureLinter.Rules.Contracts;
 /// </summary>
 public sealed class GameBootstrapDependencyRule : IRule
 {
-    public string Id => "FOD-GAME-BOOTSTRAP-DEPENDENCY";
+    public string Id => "KERN-GAME-BOOTSTRAP-DEPENDENCY";
     public string Description => "GameBootstrap startup dependency contract";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

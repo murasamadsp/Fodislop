@@ -165,15 +165,9 @@ namespace Kern.Rendering.PostProcessing
                 nameof(EigengrauComponent));
             MotionBlurComponent mb = RequireComponent(_motionBlur, nameof(MotionBlurComponent));
 
-            // Обход не трогает статики: правится только то, что уходит в кадр.
-            // Раньше здесь стоял сброс гаммы, то есть включение тумблера стирало
-            // калибровку дисплея навсегда — выключение обратно возвращало не
-            // настройки игрока, а значения по умолчанию, и разница списывалась
-            // на «постпроцесс что-то сломал».
+            // Обход не трогает статику: правится только то, что уходит в кадр.
             bool bypass = PostProcessRuntimeState.BypassPostProcessEffects ||
                 PostProcessRuntimeState.TemporaryBypass;
-            float displayGamma =
-                bypass ? DisplaySettings.DefaultGamma : PostProcessRuntimeState.DisplayGamma;
 
             bool bloomActive = !bypass && !_displayPass &&
                 bloom.active && bloom.IsActive();
@@ -302,7 +296,6 @@ namespace Kern.Rendering.PostProcessing
 
             bool passNeeded = _displayPass
                 ? diagnosticsActive || vignetteActive || eigengrauActive || temporalActive ||
-                    (!hdrOutput && Mathf.Abs(displayGamma - DisplaySettings.DefaultGamma) > 0.001f) ||
                     !activeGrade.IsDisplayNeutral
                 : diagnosticsActive || bloomActive || cgActive || !activeGrade.IsCreativeNeutral;
             if (!passNeeded)
@@ -397,7 +390,6 @@ namespace Kern.Rendering.PostProcessing
                 passData.ColorFilter = cg.colorFilter.value;
                 passData.Contrast = cg.contrast.value;
                 passData.Saturation = cg.saturation.value;
-                passData.Gamma = displayGamma;
                 ColorGradeSnapshot grade = activeGrade;
                 passData.CdlSaturation = grade.CdlSaturation;
                 passData.PostDebugView = _displayPass ? (int)PostProcessRuntimeState.DebugView : 0;

@@ -62,7 +62,6 @@ internal sealed class PostProcessPassData
     public float Contrast;
     public float Saturation;
     public float CdlSaturation;
-    public float Gamma;
     public float DisplayPaperWhiteNits;
     public float DisplayPeakRelative;
     public int PostDebugView;

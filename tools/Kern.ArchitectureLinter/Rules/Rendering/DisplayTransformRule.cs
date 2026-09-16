@@ -13,7 +13,7 @@ public sealed class DisplayTransformRule : IRule
 {
     private const RegexOptions Invariant = RegexOptions.CultureInvariant;
 
-    public string Id => "FOD-DISPLAY-TRANSFORM";
+    public string Id => "KERN-DISPLAY-TRANSFORM";
     public string Description => "Display transform shader and Render Graph invariants";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;
@@ -113,12 +113,6 @@ public sealed class DisplayTransformRule : IRule
                     path,
                     $"toLms and fromLms are not inverses (worst deviation {worstDeviation:F6}).");
             }
-        }
-
-        if (Regex.IsMatch(source, @"pow\(\s*color\s*,\s*max\(\s*displayGamma", Invariant) ||
-            Regex.IsMatch(source, @"2\.2\s*/\s*_Gamma", Invariant))
-        {
-            AddViolation(violations, path, "The display-linear curve must not apply display gamma.");
         }
 
         Require(

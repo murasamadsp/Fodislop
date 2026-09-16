@@ -16,7 +16,7 @@ public sealed class MonoBehaviourAccessRule : IRule
         "LateUpdate", "FixedUpdate", "OnValidate", "Reset"
     };
 
-    public string Id => "FOD-MONO-ACCESS";
+    public string Id => "KERN-MONO-ACCESS";
     public string Description => "MonoBehaviour lifecycle method accessibility";
     public RuleSeverity Severity => RuleSeverity.Warning;
 

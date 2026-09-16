@@ -17,7 +17,7 @@ namespace Kern.ArchitectureLinter.Rules.Contracts;
 /// </summary>
 public sealed class EditorSceneAuthoringContractRule : IRule
 {
-    public string Id => "FOD-EDITOR-SCENE-AUTHORING";
+    public string Id => "KERN-EDITOR-SCENE-AUTHORING";
     public string Description => "Editor scene authoring contract validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

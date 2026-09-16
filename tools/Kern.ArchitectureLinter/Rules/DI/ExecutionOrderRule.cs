@@ -16,7 +16,7 @@ public sealed class ExecutionOrderRule : IRule
         ["Kern.World.MapManager"] = -10000,
     };
 
-    public string Id => "FOD-EXECUTION-ORDER";
+    public string Id => "KERN-EXECUTION-ORDER";
     public string Description => "DefaultExecutionOrder contract validation";
     public RuleSeverity Severity => RuleSeverity.Error;
 

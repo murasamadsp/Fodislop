@@ -146,6 +146,7 @@ namespace Kern.UI
                 return true;
             }
 
+            // Панель может быть ещё не готова к моменту первой привязки; повторная попытка при необходимости.
             _document = _injectedDocument;
             if (_document == null || _document.rootVisualElement == null)
             {

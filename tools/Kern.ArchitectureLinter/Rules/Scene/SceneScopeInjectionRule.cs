@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.Scene;
 /// </summary>
 public sealed class SceneScopeInjectionRule : IRule
 {
-    public string Id => "FOD-SCENE-SCOPE-INJECTION";
+    public string Id => "KERN-SCENE-SCOPE-INJECTION";
     public string Description => "Scene scope injection validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

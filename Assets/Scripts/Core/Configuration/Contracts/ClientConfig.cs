@@ -8,7 +8,7 @@ namespace Kern.Core;
 [Serializable]
 public class ClientConfig
 {
-    public const int CurrentSchemaVersion = 28;
+    public const int CurrentSchemaVersion = 29;
 
     public int SchemaVersion;
     public AudioSettings Audio = new();

@@ -14,7 +14,7 @@ namespace Kern.ArchitectureLinter.Rules.Scene;
 /// </summary>
 public sealed class UITransitionGuardRule : IRule
 {
-    public string Id => "FOD-UI-TRANSITION-GUARD";
+    public string Id => "KERN-UI-TRANSITION-GUARD";
     public string Description => "UI transition guard validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

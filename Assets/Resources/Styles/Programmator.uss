@@ -159,7 +159,9 @@
     padding: var(--space-5);
     flex-direction: column;
     width: 618px;
-    min-height: 520px;
+    max-width: 96%;
+    max-height: 94%;
+    overflow: hidden;
 }
 
 .prog-panel--running {
@@ -323,6 +325,30 @@
 /* Высота сетки: 12 рядов × 38 px = 456 px (все ряды фиксированного размера). */
 .prog-grid-scroll {
     max-height: 456px;
+    flex-shrink: 1;
+    overflow: scroll;
+}
+
+.tier--compact .prog-panel {
+    width: auto;
+    max-width: 98%;
+    max-height: 96%;
+    padding: var(--space-3);
+}
+
+.tier--compact .prog-grid-container {
+    width: auto;
+    max-width: 100%;
+}
+
+.tier--compact .prog-cell {
+    width: 24px;
+    height: 24px;
+    margin: 1px;
+}
+
+.tier--compact .prog-cell-label {
+    font-size: 8px;
 }
 
 .prog-cell {

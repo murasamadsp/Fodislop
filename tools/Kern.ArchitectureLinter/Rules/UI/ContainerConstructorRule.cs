@@ -15,7 +15,7 @@ namespace Kern.ArchitectureLinter.Rules.UI;
 /// </summary>
 public sealed class ContainerConstructorRule : IRule
 {
-    public string Id => "FOD-CONTAINER-CONSTRUCTOR";
+    public string Id => "KERN-CONTAINER-CONSTRUCTOR";
     public string Description => "VContainer constructor choice validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

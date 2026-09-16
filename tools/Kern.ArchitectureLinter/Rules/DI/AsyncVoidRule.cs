@@ -18,7 +18,7 @@ public sealed class AsyncVoidRule : IRule
         "UnityEditor.Editor"
     };
 
-    public string Id => "FOD-ASYNC-VOID";
+    public string Id => "KERN-ASYNC-VOID";
     public string Description => "async void methods outside event handlers in MonoBehaviours";
     public RuleSeverity Severity => RuleSeverity.Warning;
 

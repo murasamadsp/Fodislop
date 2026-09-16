@@ -17,7 +17,7 @@ namespace Kern.ArchitectureLinter.Rules.Contracts;
 /// </summary>
 public sealed class SceneReadinessContractRule : IRule
 {
-    public string Id => "FOD-SCENE-READINESS";
+    public string Id => "KERN-SCENE-READINESS";
     public string Description => "Scene readiness contract validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

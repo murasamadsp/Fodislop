@@ -11,7 +11,7 @@ public sealed class InjectAttributeRule : IRule
 {
     private static readonly string InjectAttribute = "VContainer.InjectAttribute";
 
-    public string Id => "FOD-INJECT-ATTRIBUTE";
+    public string Id => "KERN-INJECT-ATTRIBUTE";
     public string Description => "[Inject] attribute usage validation";
     public RuleSeverity Severity => RuleSeverity.Error;
 

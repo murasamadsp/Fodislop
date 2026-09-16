@@ -26,7 +26,7 @@ public sealed class AssemblyGraphRule : IRule
 
     private static readonly Regex TypeReferenceRegex = new Regex(@"(?:\w+|\.)?\s*\b([A-Z]\w*)\b(\s*=(?!=))?", RegexOptions.Compiled);
 
-    public string Id => "FOD-ASSEMBLY-GRAPH";
+    public string Id => "KERN-ASSEMBLY-GRAPH";
     public string Description => "Assembly graph and namespace visibility";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

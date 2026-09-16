@@ -13,7 +13,7 @@ public sealed class ResourcePathsRule : IRule
 {
     private const string ContractsPath = "Assets/Scripts/Core/Interfaces/Contracts/ProjectRuntimeContracts.cs";
 
-    public string Id => "FOD-RESOURCE-PATHS";
+    public string Id => "KERN-RESOURCE-PATHS";
     public string Description => "ResourcePaths validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

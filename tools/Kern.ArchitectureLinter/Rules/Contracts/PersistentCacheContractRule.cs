@@ -15,7 +15,7 @@ namespace Kern.ArchitectureLinter.Rules.Contracts;
 /// </summary>
 public sealed class PersistentCacheContractRule : IRule
 {
-    public string Id => "FOD-PERSISTENT-CACHE";
+    public string Id => "KERN-PERSISTENT-CACHE";
     public string Description => "Persistent cache contract validation";
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;

@@ -18,6 +18,7 @@ namespace Kern.UI
         private float _runningSum;
         private float _nextDisplayUpdate;
         private Label? _fpsLabel;
+        private Label? _versionLabel;
 
         [Inject]
         private UIDocument _document = null!;
@@ -71,6 +72,7 @@ namespace Kern.UI
         protected void OnDestroy()
         {
             _fpsLabel = null;
+            _versionLabel = null;
         }
 
         protected void Update()
@@ -149,6 +151,11 @@ namespace Kern.UI
 
             VisualElement? root = _document.rootVisualElement;
             _fpsLabel = root?.Q<Label>("FPSCounterLabel");
+            _versionLabel = root?.Q<Label>("BuildVersionLabel");
+            if (_versionLabel != null)
+            {
+                _versionLabel.text = $"v{Application.version}";
+            }
         }
     }
 }

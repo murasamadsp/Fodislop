@@ -49,7 +49,6 @@ float _Contrast;
 float4 _ContrastControls;
 float _Saturation;
 float _CdlSaturation;
-float _Gamma;
 float _DisplayPaperWhiteNits;
 float _DisplayPeakRelative;
 
@@ -567,12 +566,10 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
     // ПОРЯДОК СЛОЁВ. Сначала кадр приводится к дисплею, и только потом на
     // него ложится то, что принадлежит экрану, а не сцене.
     //
-    // Раньше виньетка, зерно и пользовательская гамма стояли ДО кривой
-    // вывода, и кривая переделывала их все: носок поднимал затемнение
-    // виньетки, наклон менял амплитуду зерна, а гамма переставала быть
-    // калибровкой дисплея, потому что после неё с цветом работали ещё три
-    // преобразования. Калибровка обязана быть последней операцией на пути
-    // к экрану, иначе она калибрует не экран.
+    // Раньше виньетка и зерно стояли ДО кривой вывода, и кривая переделывала
+    // их: носок поднимал затемнение виньетки, а наклон менял амплитуду зерна.
+    // Калибровка обязана быть последней операцией на пути к экрану, иначе она
+    // калибрует не экран.
     // ------------------------------------------------------------------
     if (!showBefore)
     {
@@ -618,13 +615,6 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
             ? lerp(float3(1.0, 1.0, 1.0), _EigengrauColor.rgb / maxTint, 0.35)
             : float3(1.0, 1.0, 1.0);
         color = max(0.0, color + grain * amplitude * grainTint);
-    }
-
-    // SDR calibration remains relative to the neutral 2.2 preference.
-    // No PQ/sRGB output encoding occurs here: URP performs it once, later.
-    if (_DisplayPeakRelative <= 0.01 && abs(_Gamma - 2.2) > 0.001)
-    {
-        color = pow(max(color, 0.0), 2.2 / max(_Gamma, 0.1));
     }
 
     // ------------------------------------------------------------------
