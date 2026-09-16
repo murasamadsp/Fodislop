@@ -89,10 +89,11 @@ public sealed class ChunkLruCache<T>
             _loadedChunks.Remove(chunkIndex);
         }
 
-        if (_loadedChunks.Count >= _maxCapacity)
-        {
-            EvictOldest();
-        }
+        // Пока чанки грязные, вытеснять нечего, и кэш растёт выше ёмкости.
+        // Вытеснение одного чанка на вставку держало бы его на этом пике
+        // навсегда, поэтому вытесняется всё, что уже можно. Здесь, а не при
+        // завершении записи: та идёт в пуле потоков, а кэш меняется на главном.
+        TrimTo(_maxCapacity - 1);
 
         _loadedChunks[chunkIndex] = chunk;
         var node = _lruList.AddFirst(chunkIndex);
@@ -168,12 +169,19 @@ public sealed class ChunkLruCache<T>
         _detachedDirtyChunks.Clear();
     }
 
-    private void EvictOldest()
+    private void TrimTo(int count)
+    {
+        while (_loadedChunks.Count > count && EvictOldest())
+        {
+        }
+    }
+
+    private bool EvictOldest()
     {
         LinkedListNode<int>? evictionNode = FindEvictionNode();
         if (evictionNode == null)
         {
-            return;
+            return false;
         }
 
         int oldestIndex = evictionNode.Value;
@@ -187,6 +195,7 @@ public sealed class ChunkLruCache<T>
         _loadedChunks.Remove(oldestIndex);
         _lruIndexMap.Remove(oldestIndex);
         _lruList.Remove(evictionNode);
+        return true;
     }
 
     private LinkedListNode<int>? FindEvictionNode()

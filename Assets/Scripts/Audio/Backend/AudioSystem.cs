@@ -67,6 +67,11 @@ namespace Kern.Audio.Backend
             UnityAudioSettings.OnAudioConfigurationChanged -= OnAudioConfigurationChanged;
         }
 
+        private void OnDestroy()
+        {
+            _backend?.StopAll();
+        }
+
         private void OnAudioConfigurationChanged(bool deviceChanged)
         {
             if (!deviceChanged)

@@ -12,10 +12,13 @@
         "Kern.Networking",
         "Kern.AssetPipeline",
         "Kern.World",
+        "Kern.Persistence",
         "MinesServer.Data",
         "MinesServer.Networking",
         "MinesServer.Networking.Connection",
         "MinesServer.Networking.Connection.Client",
+        "Unity.InputSystem",
+        "FMODUnity",
         "UniTask",
         "VContainer"
     ],

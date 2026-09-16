@@ -117,6 +117,11 @@ namespace Kern.World.Lighting
         private int _atlasEntryCount => _resources.AtlasEntryCount;
         private bool GpuPipelineInitialized => _resources.GpuPipelineInitialized;
 
+        // Для интеграционных тестов жизненного цикла GPU-ресурсов.
+        internal bool IsGpuPipelineInitialized => GpuPipelineInitialized;
+
+        internal LightingResources GpuResources => _resources.Registry;
+
         [Inject]
         private LightingGeometryRegistry _lightingGeometryRegistry = null!;
         [Inject]

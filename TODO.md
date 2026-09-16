@@ -185,11 +185,16 @@
 
 ### 5. Системная проверка релиза
 
-- [ ] Покрыть reconnect, pause/resume, disk failures и UI input PlayMode-тестами.
-- [ ] Добавить GPU lifecycle integration tests для lighting.
-- [ ] Сделать dummy-сценарии детерминированными через virtual clock.
-- [ ] Добавить nightly soak: 50 переходов сцен, reconnect storm и streaming карты.
-- [ ] Проверять миграцию двух предыдущих форматов и clean/upgrade install.
+- [x] Покрыть reconnect, pause/resume, disk failures и UI input PlayMode-тестами.
+  - `ReconnectPlayModeTests`, `PauseResumePlayModeTests`, `DiskFailurePlayModeTests`, `UIInputPlayModeTests`; общая обвязка — `PlayModeHarness`.
+- [x] Добавить GPU lifecycle integration tests для lighting.
+  - `LightingGpuLifecyclePlayModeTests` (категория `GPU`).
+- [x] Сделать dummy-сценарии детерминированными через virtual clock.
+  - `IDummyClock`: `RealtimeDummyClock` в игре, `VirtualDummyClock` в тестах; `DummyClockContractTests` не пускает обход часов.
+- [x] Добавить nightly soak: 50 переходов сцен, reconnect storm и streaming карты.
+  - `SoakPlayModeTests` (категория `Soak`), задача `macos-soak` в CI; метрики пишутся в `persistentDataPath/Soak`.
+- [x] Проверять миграцию двух предыдущих форматов и clean/upgrade install.
+  - `InstallUpgradeTests`: конфиг 26/27, кэш ассетов v0/v1, карта v0/v1 на одной папке данных.
 
 Критерии завершения: обе production-сборки запускаются из чистого checkout;
 50 циклов Menu/Game не оставляют задач, подписок и объектов; fault-injection не

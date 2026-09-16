@@ -182,7 +182,15 @@ namespace Kern.Networking.Connection
                 Connection.OnReceived -= OnReceived;
                 Connection.OnConnected -= OnConnected;
                 Connection.OnDisconnected -= OnDisconnected;
-                (Connection as IDisposable)?.Dispose();
+
+                // DummyConnection — синглтон Bootstrap и переиспользуется на
+                // следующем подключении; Dispose закрыл бы его состояние мира
+                // навсегда. Освобождается только одноразовый сокетный транспорт.
+                if (!ReferenceEquals(Connection, _dummyConnection))
+                {
+                    (Connection as IDisposable)?.Dispose();
+                }
+
                 Connection = null;
             }
 

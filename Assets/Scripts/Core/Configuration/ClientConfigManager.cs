@@ -22,7 +22,6 @@ namespace Kern.Core
         private bool _initialized;
         private ConfigSaveScheduler? _saveScheduler;
         private ClientConfigRepository? _repository;
-        private ClientConfigMigration? _migration;
         private ClientConfigValidator? _validator;
 
         [Inject]
@@ -35,9 +34,6 @@ namespace Kern.Core
 
         private ClientConfigRepository _Repository =>
             _repository ??= new ClientConfigRepository(GetConfigPath());
-
-        private ClientConfigMigration _Migration =>
-            _migration ??= new ClientConfigMigration(_graphicsQualityProfile);
 
         private ClientConfigValidator _Validator =>
             _validator ??= new ClientConfigValidator(_graphicsQualityProfile);
@@ -77,6 +73,15 @@ namespace Kern.Core
             _SaveScheduler.Flush();
         }
 
+        // Свёрнутое приложение система вправе завершить без OnApplicationQuit.
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused)
+            {
+                _SaveScheduler.Flush();
+            }
+        }
+
         private void OnDisable()
         {
             // Выход из Play Mode в редакторе OnApplicationQuit не вызывает.
@@ -87,29 +92,12 @@ namespace Kern.Core
 
         public void Load()
         {
-            ClientConfigRepository repository = _Repository;
-            if (!repository.Exists)
-            {
-                ApplyDefaults();
-                Save();
-                return;
-            }
-
-            ClientConfigRepository.LoadedConfig loaded = repository.Load();
-            int sourceSchemaVersion = loaded.Config.SchemaVersion;
-            bool migrated = _Migration.Migrate(loaded.Config, loaded.Json);
-            _Validator.Validate(loaded.Config);
-            Config = loaded.Config;
-            if (migrated)
-            {
-                repository.Save(
-                    Config,
-                    GetMigrationBackupPath(repository.ConfigPath, sourceSchemaVersion));
-            }
-
+            ClientConfigLoader.Result result =
+                new ClientConfigLoader(_Repository, _graphicsQualityProfile).LoadOrCreate();
+            Config = result.Config;
             Debug.Log(
-                $"[ClientConfigManager] Config loaded and validated from {repository.ConfigPath}; " +
-                $"GraphicsPreset={Config.GraphicsPreset}");
+                $"[ClientConfigManager] Config {result.Outcome} (schema {result.SourceSchemaVersion}) " +
+                $"at {_Repository.ConfigPath}; GraphicsPreset={Config.GraphicsPreset}");
         }
 
         public void ApplyDefaults()
@@ -227,11 +215,6 @@ namespace Kern.Core
             _Validator.Validate(Config);
             _SaveScheduler.Queue();
             Debug.Log("[ClientConfigManager] Queued deferred config save");
-        }
-
-        private static string GetMigrationBackupPath(string configPath, int sourceSchemaVersion)
-        {
-            return $"{configPath}.v{sourceSchemaVersion}.backup";
         }
     }
 }

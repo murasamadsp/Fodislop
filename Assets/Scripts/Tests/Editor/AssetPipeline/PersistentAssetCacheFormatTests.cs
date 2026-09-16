@@ -55,6 +55,18 @@ public sealed class PersistentAssetCacheFormatTests
     }
 
     [Test]
+    public void EnsureCurrent_FreshInstall_WritesCurrentMarkerWithoutMigrationBackup()
+    {
+        PersistentAssetCacheFormat.EnsureCurrent(_cachePath);
+
+        Assert.That(
+            File.ReadAllText(Path.Combine(_cachePath, PersistentAssetCacheFormat.MarkerFileName)).Trim(),
+            Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion.ToString()));
+        Assert.That(File.Exists(Path.Combine(_cachePath, PersistentAssetCacheFormat.LegacyBackupFileName)), Is.False);
+        Assert.That(File.Exists(Path.Combine(_cachePath, PersistentAssetCacheFormat.MigrationStagingFileName)), Is.False);
+    }
+
+    [Test]
     public void EnsureCurrent_RecoversInterruptedMarkerCommitWithoutTouchingPayloads()
     {
         Directory.CreateDirectory(_cachePath);

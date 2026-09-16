@@ -364,6 +364,7 @@ namespace Kern.Core
 
             // DummyConnection emulates the game server in offline mode. External
             // identity providers do not route authentication through it.
+            builder.Register<RealtimeDummyClock>(Lifetime.Singleton).As<IDummyClock>();
             builder.Register<DummyConnection>(Lifetime.Singleton).AsSelf().AsImplementedInterfaces();
             builder.Register<DummyWorldMapSource>(Lifetime.Singleton);
             builder.RegisterEntryPoint<Kern.Networking.Connection.WorldEntryPreparation>()

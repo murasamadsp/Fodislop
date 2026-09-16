@@ -9,9 +9,9 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket)
+internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummyClock clock)
 {
-    private readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages();
+    private readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages(DummyClockTime.UnixMilliseconds(clock));
     private System.Drawing.Color _chatColor =
         System.Drawing.Color.FromArgb(255, 200, 180, 100);
 
@@ -36,9 +36,10 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket)
 
     public void SendGlobal(SendChatMessagePacket packet)
     {
+        long now = DummyClockTime.UnixMilliseconds(clock);
         var message = new ChatMessagePacket(
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            now,
+            now,
             999,
             1,
             _chatColor,
@@ -48,9 +49,8 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket)
         sendPacket(new ServerPacket(new ChatMessageListPacket("global", [message])));
     }
 
-    private static ChatMessagePacket[] CreateSeedMessages()
+    private static ChatMessagePacket[] CreateSeedMessages(long now)
     {
-        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var gray = System.Drawing.Color.FromArgb(255, 120, 120, 120);
         var green = System.Drawing.Color.FromArgb(255, 80, 220, 80);
         var blue = System.Drawing.Color.FromArgb(255, 80, 140, 255);

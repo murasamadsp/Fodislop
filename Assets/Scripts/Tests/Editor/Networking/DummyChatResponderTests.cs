@@ -19,7 +19,7 @@ public sealed class DummyChatResponderTests
     public void SetUp()
     {
         _sent = [];
-        _responder = new DummyChatResponder(_sent.Add);
+        _responder = new DummyChatResponder(_sent.Add, new VirtualDummyClock(seed: 1));
     }
 
     [Test]

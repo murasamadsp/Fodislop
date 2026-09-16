@@ -33,6 +33,7 @@ using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
+using VContainer;
 
 namespace MinesServer.Networking.Connection.Client;
 public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegionRequester
@@ -42,30 +43,56 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     private readonly IRuntimeDebugSettings _debugSettings;
     private readonly DummyConnectionSession _session = new();
     private readonly DummyScenarioController _scenario;
+    private readonly IDummyClock _clock;
 
     public void RequestWorldRegion(string worldCodeName, RectInt serverRegion)
     {
         _worldState.QueueTerrainRegion(worldCodeName, serverRegion, SendPacket);
     }
 
+    [Inject]
     public DummyConnection(
         ITextureStorageService textureStorage,
         IItemCatalog itemCatalog,
         IAsyncOperationSupervisor operations,
         IRuntimeDebugSettings debugSettings,
         IOfflineScenarioSettings scenarioSettings,
-        DummyWorldMapSource worldMaps)
+        DummyWorldMapSource worldMaps,
+        IDummyClock clock)
+        : this(
+            textureStorage,
+            itemCatalog,
+            operations,
+            debugSettings,
+            scenarioSettings,
+            (IDummyWorldMapSource)worldMaps,
+            new DummyTokenStore(),
+            clock)
     {
+    }
+
+    internal DummyConnection(
+        ITextureStorageService textureStorage,
+        IItemCatalog itemCatalog,
+        IAsyncOperationSupervisor operations,
+        IRuntimeDebugSettings debugSettings,
+        IOfflineScenarioSettings scenarioSettings,
+        IDummyWorldMapSource worldMaps,
+        DummyTokenStore tokenStore,
+        IDummyClock clock)
+    {
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _textureStorage = textureStorage;
         _operations = operations;
         _debugSettings = debugSettings;
         _scenario = new DummyScenarioController(scenarioSettings);
         _worldState = new DummyWorldSimulationState(operations, worldMaps);
-        _authSession = new DummyAuthSession();
+        _authSession = new DummyAuthSession(tokenStore, clock);
         _missionRunner = new DummyMissionRunner(SendPacket);
         _buffManager = new DummyBuffManager(
             SendPacket,
             operations,
+            clock,
             LoopAlive);
         _inventoryResponder = new DummyInventoryResponder(
             SendPacket,
@@ -92,14 +119,16 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         // через реконнекты — фиксированный источник мусора).
         _chatSimulator = new DummyChatSimulator(
             SendPacket,
-            () => LoopAlive(_session.LifecycleVersion),
-            operations);
-        _chatResponder = new DummyChatResponder(SendPacket);
-        _adminCommands = new DummyAdminCommands(SendPacket, _playerState, _worldState);
+            LoopAlive,
+            operations,
+            clock);
+        _chatResponder = new DummyChatResponder(SendPacket, clock);
+        _adminCommands = new DummyAdminCommands(SendPacket, _playerState, _worldState, clock);
         _clanManager = new DummyClanManager(SendPacket);
         _pathFinder = new DummyPathFinder(SendPacket, _worldState.GetCellConfig);
         _movementResponder = new DummyMovementResponder(
             operations,
+            clock,
             _playerState,
             _worldState,
             _teleportManager,
@@ -114,6 +143,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _missionRunner,
             _inventoryResponder,
             _chatSimulator,
+            clock,
             SendPacket,
             _mockBotId);
         _windowResponder = new DummyWindowResponder(
@@ -125,6 +155,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _missionRunner);
         _worldStartup = new DummyWorldStartupResponder(
             operations,
+            clock,
             itemCatalog,
             _worldState,
             _playerState,
@@ -149,6 +180,9 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     public event Action? OnDisconnected;
     public event Action? OnDisconnecting;
     public event Action? OnConnecting;
+
+    // Всё, что клиент отправил офлайн-серверу; для тестов и отладочных инструментов.
+    internal event Action<ClientPacket>? ClientPacketSent;
 
     private readonly DummyAuthSession _authSession;
     private readonly DummyMissionRunner _missionRunner;
@@ -198,7 +232,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
 
     private async UniTask ConnectAsync(int lifecycleVersion)
     {
-        await UniTask.Yield();
+        await _clock.Yield();
 
         if (_scenario.StallsConnection)
         {
@@ -242,12 +276,12 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         OnDisconnecting?.Invoke();
         _operations.Run(
             "dummy_disconnect",
-            _ => DisconnectAsync(lifecycleVersion));
+            cancellationToken => DisconnectAsync(lifecycleVersion, cancellationToken));
     }
 
-    private async UniTask DisconnectAsync(int lifecycleVersion)
+    private async UniTask DisconnectAsync(int lifecycleVersion, CancellationToken cancellationToken)
     {
-        await UniTask.Delay(100);
+        await _clock.Delay(100, cancellationToken);
 
         if (!_session.TryCompleteDisconnect(lifecycleVersion))
         {
@@ -290,6 +324,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
 
     public void SendAsync(ClientPacket packet)
     {
+        ClientPacketSent?.Invoke(packet);
         if (packet.Data is ActionClientPacket actionPacket)
         {
             _actionResponder.Handle(actionPacket);
@@ -335,7 +370,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
                     return;
                 }
 
-                _operations.Run("dummy_world_init", _ => InitWorldAsync());
+                _operations.Run("dummy_world_init", InitWorldAsync);
                 break;
             case RuntimeAssetRequestPacket runtimeAssets:
                 _operations.Run(
@@ -396,9 +431,17 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
                 break;
         }
     }
-    private UniTask InitWorldAsync()
+    // Отключение или переподключение отменяет незавершённый вход в мир: это
+    // штатно и не должно уходить в лог как сбой.
+    private async UniTask InitWorldAsync(CancellationToken cancellationToken)
     {
-        return _worldState.EnsureInitializedAsync(InitWorldCoreAsync);
+        try
+        {
+            await _worldState.EnsureInitializedAsync(InitWorldCoreAsync);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     private UniTask InitWorldCoreAsync()

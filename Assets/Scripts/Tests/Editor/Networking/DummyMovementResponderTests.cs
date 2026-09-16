@@ -27,6 +27,7 @@ public sealed class DummyMovementResponderTests
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             supervisor,
+            new VirtualDummyClock(seed: 1),
             player,
             world,
             teleports,
@@ -58,6 +59,7 @@ public sealed class DummyMovementResponderTests
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             supervisor,
+            new VirtualDummyClock(seed: 1),
             player,
             world,
             teleports,

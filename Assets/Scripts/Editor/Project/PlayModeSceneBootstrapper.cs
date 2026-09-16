@@ -38,12 +38,28 @@ public static class PlayModeSceneBootstrapper
         }
     }
 
+    private const string TestRunnerScenePrefix = "InitTestScene";
+
     private static void OnPlayModeStateChanged(PlayModeStateChange stateChange)
     {
         if (stateChange == PlayModeStateChange.ExitingEditMode)
         {
+            // Тест-раннер входит в Play Mode со своей служебной сценой и ждёт
+            // именно её. Подмена на Bootstrap оставляла раннер без сцены, и
+            // PlayMode-тесты висели до таймаута. Тесты поднимают Bootstrap сами.
+            if (EditorSceneManager.GetActiveScene().name.StartsWith(TestRunnerScenePrefix, System.StringComparison.Ordinal))
+            {
+                EditorSceneManager.playModeStartScene = null;
+                SessionState.SetString(ProjectRuntimeContracts.EditorSession.PlayModeTargetScene, string.Empty);
+                return;
+            }
+
             EnsurePlayModeStartScene();
             CaptureSelectedTargetScene();
+        }
+        else if (stateChange == PlayModeStateChange.EnteredEditMode)
+        {
+            EnsurePlayModeStartScene();
         }
     }
 

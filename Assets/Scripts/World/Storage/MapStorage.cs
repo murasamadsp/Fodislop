@@ -11,6 +11,7 @@ using Kern.World;
 using Kern.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
+using VContainer;
 
 namespace Kern.World;
 public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStorage
@@ -23,10 +24,33 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     private const string MapExtension = ".map";
     private const string BackupMapSuffix = ".backup.map";
 
+    private readonly string? _dataRoot;
+    private readonly Func<string, Stream> _openMapFile = WorldLayer<CellType>.OpenMapFile;
+
+    [Inject]
     public MapStorage(IAsyncOperationSupervisor operations)
     {
         _operations = operations;
     }
+
+    // Корень данных задаётся явно в тестах установки и обновления; в игре это
+    // Application.persistentDataPath.
+    internal MapStorage(
+        IAsyncOperationSupervisor operations,
+        string dataRoot,
+        Func<string, Stream>? openMapFile = null)
+        : this(operations)
+    {
+        if (string.IsNullOrWhiteSpace(dataRoot))
+        {
+            throw new ArgumentException("Data root is required.", nameof(dataRoot));
+        }
+
+        _dataRoot = dataRoot;
+        _openMapFile = openMapFile ?? WorldLayer<CellType>.OpenMapFile;
+    }
+
+    private string _DataRoot => _dataRoot ?? Application.persistentDataPath;
 
     private bool _isInitialized;
     private string _worldCodeName = string.Empty;
@@ -45,7 +69,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     public string MapFilePath => _mapFilePath ?? throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
 
     public string BackupMapFilePath => _isInitialized
-        ? Path.Combine(Application.persistentDataPath, _worldCodeName + BackupMapSuffix)
+        ? Path.Combine(_DataRoot, _worldCodeName + BackupMapSuffix)
         : throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
 
     public bool IsReady => _isInitialized && _cellLayer != null;
@@ -137,7 +161,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             throw new ArgumentOutOfRangeException($"[MapStorage] Invalid chunk calculation: {widthChunks}x{heightChunks}");
         }
 
-        string path = Path.Combine(Application.persistentDataPath, worldCodeName + MapExtension);
+        string path = Path.Combine(_DataRoot, worldCodeName + MapExtension);
         try
         {
             string? directory = Path.GetDirectoryName(path);
@@ -154,6 +178,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 widthChunks,
                 heightChunks,
                 _operations,
+                _openMapFile,
                 ProjectRuntimeContracts.World.ChunkSize,
                 maxRamChunks: ProjectRuntimeContracts.World.ResidentChunkCacheCapacity);
             IsDisposed = false;
@@ -400,34 +425,65 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         bool durable,
         CancellationToken cancellationToken = default)
     {
-        await _persistenceGate.WaitAsync(cancellationToken);
+        await AcquireGateOnMainThreadAsync(cancellationToken);
+        bool releasedInPool = false;
         try
         {
-            // Продолжение после WaitAsync может оказаться в пуле потоков, а
-            // снимок чанков обязан сниматься там же, где кэш меняется.
-            await UniTask.SwitchToMainThread();
             if (_cellLayer == null || !_isInitialized || IsDisposed)
             {
                 return;
             }
 
+            // Снимок снимается на главном потоке, там же, где меняется кэш.
+            // При отказе записи WorldLayer.WriteSnapshot сам возвращает
+            // отметки грязных чанков.
             WorldLayer<CellType> layer = _cellLayer;
             var snapshot = layer.TakeDirtySnapshot();
-            try
+            Exception? failure = null;
+            await UniTask.RunOnThreadPool(
+                () =>
+                {
+                    try
+                    {
+                        WriteSnapshotCore(layer, snapshot, durable);
+                    }
+                    catch (Exception exception)
+                    {
+                        failure = exception;
+                    }
+                    finally
+                    {
+                        releasedInPool = true;
+                        _persistenceGate.Release();
+                    }
+                },
+                configureAwait: false);
+
+            await UniTask.SwitchToMainThread();
+            if (failure != null)
             {
-                await UniTask.RunOnThreadPool(() => WriteSnapshotCore(layer, snapshot, durable));
-            }
-            catch
-            {
-                await UniTask.SwitchToMainThread();
-                layer.RestoreDirty(snapshot);
-                throw;
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
             }
         }
         finally
         {
-            _persistenceGate.Release();
-            await UniTask.SwitchToMainThread();
+            if (!releasedInPool)
+            {
+                _persistenceGate.Release();
+            }
+        }
+    }
+
+    // Семафор записи берётся только синхронно на главном потоке, а асинхронная
+    // запись отпускает его в пуле потоков, не возвращаясь на главный. Иначе
+    // синхронный Flush на выходе из игры блокировал главный поток в ожидании
+    // семафора, который держала запись, ждущая этот же главный поток.
+    private async UniTask AcquireGateOnMainThreadAsync(CancellationToken cancellationToken)
+    {
+        await UniTask.SwitchToMainThread(cancellationToken);
+        while (!_persistenceGate.Wait(0))
+        {
+            await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
         }
     }
 
@@ -491,29 +547,52 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
 
     public async UniTask DisposeAsync(CancellationToken cancellationToken = default)
     {
-        await _persistenceGate.WaitAsync(cancellationToken);
+        await AcquireGateOnMainThreadAsync(cancellationToken);
+        bool releasedInPool = false;
         try
         {
             // Тот же снимок, что во FlushAsync: WorldLayer.Dispose иначе
             // перебирал бы грязные чанки в пуле потоков. Снимок снимается на
             // главном потоке, в пул уходят только его запись и закрытие файла.
-            await UniTask.SwitchToMainThread();
             WorldLayer<CellType>? layer = _isInitialized && !IsDisposed ? _cellLayer : null;
             var snapshot = layer?.TakeDirtySnapshot();
-            await UniTask.RunOnThreadPool(() =>
-            {
-                if (layer != null && snapshot != null)
+            Exception? failure = null;
+            await UniTask.RunOnThreadPool(
+                () =>
                 {
-                    WriteSnapshotCore(layer, snapshot, durable: true);
-                }
+                    try
+                    {
+                        if (layer != null && snapshot != null)
+                        {
+                            WriteSnapshotCore(layer, snapshot, durable: true);
+                        }
 
-                DisposeCore();
-            });
+                        DisposeCore();
+                    }
+                    catch (Exception exception)
+                    {
+                        failure = exception;
+                    }
+                    finally
+                    {
+                        releasedInPool = true;
+                        _persistenceGate.Release();
+                    }
+                },
+                configureAwait: false);
+
+            await UniTask.SwitchToMainThread();
+            if (failure != null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+            }
         }
         finally
         {
-            _persistenceGate.Release();
-            await UniTask.SwitchToMainThread();
+            if (!releasedInPool)
+            {
+                _persistenceGate.Release();
+            }
         }
     }
 

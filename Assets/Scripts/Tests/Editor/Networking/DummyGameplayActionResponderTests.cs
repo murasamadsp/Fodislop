@@ -25,8 +25,10 @@ public sealed class DummyGameplayActionResponderTests
         using var world = new DummyWorldSimulationState(operations, new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
         var teleports = new DummyTeleportManager(sent.Add, [], operations);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
+        var clock = new VirtualDummyClock(seed: 1);
         using var movement = new DummyMovementResponder(
             operations,
+            clock,
             player,
             world,
             teleports,
@@ -47,7 +49,8 @@ public sealed class DummyGameplayActionResponderTests
             movement,
             new DummyMissionRunner(sent.Add),
             inventory,
-            new DummyChatSimulator(sent.Add, () => false, operations),
+            new DummyChatSimulator(sent.Add, _ => false, operations, clock),
+            clock,
             sent.Add,
             456);
 

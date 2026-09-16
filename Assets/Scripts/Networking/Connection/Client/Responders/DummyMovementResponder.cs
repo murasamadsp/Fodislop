@@ -17,6 +17,7 @@ namespace MinesServer.Networking.Connection.Client;
 
 internal sealed class DummyMovementResponder(
     IAsyncOperationSupervisor operations,
+    IDummyClock clock,
     DummyPlayerSimulationState playerState,
     DummyWorldSimulationState worldState,
     DummyTeleportManager teleportManager,
@@ -301,9 +302,9 @@ internal sealed class DummyMovementResponder(
             supervisorToken);
         try
         {
-            await UniTask.Delay(
+            await clock.Delay(
                 ignoreCollision() ? 20 : 200,
-                cancellationToken: linkedCancellation.Token);
+                linkedCancellation.Token);
             await worldState.SendChunksAroundAsync(
                 playerState.X,
                 playerState.Y,
@@ -367,7 +368,7 @@ internal sealed class DummyMovementResponder(
                         playerState.Y,
                         (byte)direction),
                 ])));
-                await UniTask.Delay(100, cancellationToken: cancellationToken);
+                await clock.Delay(100, cancellationToken);
             }
         }
         catch (OperationCanceledException)

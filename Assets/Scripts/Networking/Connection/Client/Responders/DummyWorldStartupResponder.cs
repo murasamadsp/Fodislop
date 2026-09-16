@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Kern;
@@ -21,6 +22,7 @@ namespace MinesServer.Networking.Connection.Client;
 
 internal sealed class DummyWorldStartupResponder(
     IAsyncOperationSupervisor operations,
+    IDummyClock clock,
     IItemCatalog itemCatalog,
     DummyWorldSimulationState worldState,
     DummyPlayerSimulationState playerState,
@@ -31,8 +33,6 @@ internal sealed class DummyWorldStartupResponder(
     Action<ServerPacket> sendPacket,
     Func<int, bool> loopAlive)
 {
-    private static readonly System.Random _Rng = new();
-
     public async UniTask InitializeAsync(
         string worldCodeName,
         int lifecycleVersion,
@@ -62,7 +62,7 @@ internal sealed class DummyWorldStartupResponder(
         await worldState.SendChunksAroundAsync(playerState.X, playerState.Y, sendPacket);
 
         SendSkillProgress();
-        chatSimulator.SendChatMock();
+        chatSimulator.SendChatMock(lifecycleVersion);
         StartStatusSimulation(lifecycleVersion);
 
         sendPacket(new ServerPacket(
@@ -143,11 +143,13 @@ internal sealed class DummyWorldStartupResponder(
     {
         operations.Run(
             "dummy_bot_loop",
-            _ => DummyBotRunner.RunCircularBots(
+            cancellationToken => DummyBotRunner.RunCircularBots(
                 6,
                 lifecycleVersion,
+                clock,
                 sendPacket,
-                () => loopAlive(lifecycleVersion)));
+                () => loopAlive(lifecycleVersion),
+                cancellationToken));
     }
 
     private void StartStatusSimulation(int lifecycleVersion)
@@ -156,8 +158,8 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(default(ClearStatusPacket)));
         buffManager.SendStatusPackets();
         buffManager.StartBuffLoop(lifecycleVersion);
-        operations.Run("dummy_ping_loop", _ => SendPingLoopAsync(lifecycleVersion));
-        operations.Run("dummy_online_loop", _ => SendOnlineLoopAsync(lifecycleVersion));
+        operations.Run("dummy_ping_loop", cancellationToken => SendPingLoopAsync(lifecycleVersion, cancellationToken));
+        operations.Run("dummy_online_loop", cancellationToken => SendOnlineLoopAsync(lifecycleVersion, cancellationToken));
         buffManager.StartDailyBonusLoop(lifecycleVersion);
     }
 
@@ -188,26 +190,26 @@ internal sealed class DummyWorldStartupResponder(
         ])));
     }
 
-    private async UniTask SendPingLoopAsync(int lifecycleVersion)
+    private async UniTask SendPingLoopAsync(int lifecycleVersion, CancellationToken cancellationToken)
     {
-        await UniTask.Delay(2000);
+        await clock.Delay(2000, cancellationToken);
         while (loopAlive(lifecycleVersion))
         {
             sendPacket(new ServerPacket(new PingPacket(
-                DateTimeOffset.UtcNow.Ticks,
-                _Rng.Next(15, 60))));
-            await UniTask.Delay(5000);
+                clock.UtcNowTicks,
+                clock.Random.Next(15, 60))));
+            await clock.Delay(5000, cancellationToken);
         }
     }
 
-    private async UniTask SendOnlineLoopAsync(int lifecycleVersion)
+    private async UniTask SendOnlineLoopAsync(int lifecycleVersion, CancellationToken cancellationToken)
     {
-        await UniTask.Delay(3000);
+        await clock.Delay(3000, cancellationToken);
         while (loopAlive(lifecycleVersion))
         {
-            ushort players = (ushort)(38 + _Rng.Next(0, 9));
+            ushort players = (ushort)(38 + clock.Random.Next(0, 9));
             sendPacket(new ServerPacket(new OnlinePacket(players, 3)));
-            await UniTask.Delay(12000);
+            await clock.Delay(12000, cancellationToken);
         }
     }
 }

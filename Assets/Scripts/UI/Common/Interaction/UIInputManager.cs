@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Kern.UI;
@@ -9,6 +10,7 @@ namespace Kern.UI;
 public sealed class UIInputManager
 {
     private readonly List<VisualElement> _modalStack = [];
+    private int _escapeConsumedFrame = -1;
 
     public bool IsChatFocused { get; set; }
 
@@ -27,6 +29,16 @@ public sealed class UIInputManager
 
     public bool IsInputBlocked =>
         IsModalOpen || IsChatFocused || IsPauseMenuOpen || IsProgrammatorOpen;
+
+    // Escape за кадр обрабатывает ровно один владелец. Порядок Update между
+    // чатом и меню паузы не задан: без этого одно нажатие закрывало чат и тут
+    // же открывало меню.
+    public bool IsEscapeConsumedThisFrame => _escapeConsumedFrame == Time.frameCount;
+
+    public void ConsumeEscape()
+    {
+        _escapeConsumedFrame = Time.frameCount;
+    }
 
     public void PushModal(VisualElement modalElement)
     {

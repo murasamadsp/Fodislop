@@ -208,6 +208,7 @@ namespace Kern.UI
 
             if (Keyboard.current.escapeKey.wasPressedThisFrame)
             {
+                _uiInput.ConsumeEscape();
                 Hide();
             }
         }

@@ -11,6 +11,8 @@ using Kern.Core;
 using UnityEngine;
 
 [assembly: InternalsVisibleTo("Kern.Tests.Editor")]
+[assembly: InternalsVisibleTo("Kern.Tests.PlayMode")]
+[assembly: InternalsVisibleTo("Kern.World")]
 
 namespace Kern.Persistence;
 public sealed class WorldLayer<T> : IWorldLayer<T>
@@ -43,7 +45,8 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
     private readonly HashSet<int> _loggedChunkLoadFailures = [];
     private bool _chunkDiskFailureCapLogged;
 
-    private FileStream? _fileStream;
+    private Stream? _fileStream;
+    private readonly Func<string, Stream> _openFile;
 
     // One reader for the layer's lifetime, used under _ioLock. A reader per
     // chunk load allocated its buffers and UTF8 decoder on every load.
@@ -56,7 +59,22 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         IAsyncOperationSupervisor operations,
         int CHUNK_SIZE = ProjectRuntimeContracts.World.ChunkSize,
         int maxRamChunks = 1000)
+        : this(filePath, WIDTH_CHUNKS, HEIGHT_CHUNKS, operations, OpenMapFile, CHUNK_SIZE, maxRamChunks)
     {
+    }
+
+    // openFile подменяется в тестах отказов диска; в игре это OpenMapFile.
+    internal WorldLayer(
+        string filePath,
+        int WIDTH_CHUNKS,
+        int HEIGHT_CHUNKS,
+        IAsyncOperationSupervisor operations,
+        Func<string, Stream> openFile,
+        int CHUNK_SIZE = ProjectRuntimeContracts.World.ChunkSize,
+        int maxRamChunks = 1000)
+    {
+        _openFile = openFile ?? throw new ArgumentNullException(nameof(openFile));
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("World layer file path is required.", nameof(filePath));
@@ -592,9 +610,9 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                     return;
                 }
 
-                if (flushToDisk)
+                if (flushToDisk && _fileStream is FileStream file)
                 {
-                    _fileStream.Flush(true);
+                    file.Flush(true);
                 }
                 else
                 {
@@ -694,9 +712,12 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         }
     }
 
+    internal static Stream OpenMapFile(string path) =>
+        new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096);
+
     private void InitializeFile()
     {
-        _fileStream = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096);
+        _fileStream = _openFile(_filePath);
 
         bool valid = WorldLayerFileHeader.TryReadHeader(
             _fileStream,

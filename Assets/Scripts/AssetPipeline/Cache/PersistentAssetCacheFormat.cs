@@ -23,6 +23,11 @@ internal static class PersistentAssetCacheFormat
         }
 
         string normalizedPath = Path.GetFullPath(cachePath);
+
+        // Пустой каталог — чистая установка, а не кэш v0: мигрировать нечего,
+        // и резервная копия «формата v0» была бы ложной.
+        bool freshInstall = !Directory.Exists(normalizedPath) ||
+            !Directory.EnumerateFileSystemEntries(normalizedPath).GetEnumerator().MoveNext();
         Directory.CreateDirectory(normalizedPath);
 
         string markerPath = Path.Combine(normalizedPath, MarkerFileName);
@@ -55,6 +60,12 @@ internal static class PersistentAssetCacheFormat
             }
 
             CommitVersionMarker(markerPath, stagingPath, replaceExisting: true);
+            return;
+        }
+
+        if (freshInstall)
+        {
+            CommitVersionMarker(markerPath, stagingPath, replaceExisting: false);
             return;
         }
 

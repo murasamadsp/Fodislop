@@ -87,6 +87,20 @@ public sealed class DummyConnectionSessionTests
     }
 
     [Test]
+    public void ConnectDuringDisconnect_SupersedesTheLateDisconnectCompletion()
+    {
+        var session = new DummyConnectionSession();
+        session.TryBeginConnect(out int firstVersion);
+        session.TryCompleteConnect(firstVersion);
+        Assert.That(session.TryBeginDisconnect(out int disconnectVersion), Is.True);
+
+        Assert.That(session.TryBeginConnect(out int reconnectVersion), Is.True);
+        Assert.That(session.TryCompleteDisconnect(disconnectVersion), Is.False);
+        Assert.That(session.TryCompleteConnect(reconnectVersion), Is.True);
+        Assert.That(session.Status, Is.EqualTo(ConnectionStatus.Connected));
+    }
+
+    [Test]
     public void Stop_InvalidatesAliveGeneration()
     {
         var session = new DummyConnectionSession();

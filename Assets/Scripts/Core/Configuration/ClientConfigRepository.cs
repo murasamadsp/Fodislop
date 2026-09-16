@@ -46,8 +46,20 @@ internal sealed class ClientConfigRepository
                 ex);
         }
 
-        ClientConfig config = JsonUtility.FromJson<ClientConfig>(json) ??
+        ClientConfig? config;
+        try
+        {
+            config = JsonUtility.FromJson<ClientConfig>(json);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidDataException($"Client config '{_configPath}' is not valid JSON.", ex);
+        }
+
+        if (config == null)
+        {
             throw new InvalidDataException($"Client config '{_configPath}' is empty or invalid.");
+        }
 
         ValidateCurrentSchemaPresence(json, config);
         return new LoadedConfig(config, json);

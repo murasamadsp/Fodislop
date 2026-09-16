@@ -24,6 +24,7 @@ internal sealed class DummyGameplayActionResponder(
     DummyMissionRunner missionRunner,
     DummyInventoryResponder inventoryResponder,
     DummyChatSimulator chatSimulator,
+    IDummyClock clock,
     Action<ServerPacket> sendPacket,
     ushort playerBotId)
 {
@@ -136,7 +137,7 @@ internal sealed class DummyGameplayActionResponder(
 
         long[]? contents = playerState.AddToBasket(
             basketIndex,
-            UnityEngine.Random.Range(1, 101));
+            clock.Random.Next(1, 101));
         if (contents != null)
         {
             sendPacket(new ServerPacket(new BasketPacket(50000, contents)));

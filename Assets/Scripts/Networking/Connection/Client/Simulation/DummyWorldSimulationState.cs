@@ -456,11 +456,24 @@ internal sealed class DummyWorldSimulationState(
     {
         _operations.Run(
             "dummy_stream_chunks",
-            cancellationToken => SendChunksAroundAsync(
-                playerX,
-                playerY,
-                sendPacket,
-                cancellationToken));
+            cancellationToken => QueuedStreamAsync(playerX, playerY, sendPacket, cancellationToken));
+    }
+
+    // Новый запрос подкачки отменяет предыдущий: при частых телепортах это
+    // штатно, и отменённая подкачка не должна уходить в лог как ошибка.
+    private async UniTask QueuedStreamAsync(
+        ushort playerX,
+        ushort playerY,
+        Action<ServerPacket> sendPacket,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await SendChunksAroundAsync(playerX, playerY, sendPacket, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     public void Reset()

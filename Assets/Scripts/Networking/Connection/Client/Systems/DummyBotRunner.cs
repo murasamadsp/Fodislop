@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using MinesServer.Data;
@@ -23,7 +24,13 @@ internal static class DummyBotRunner
         "Vex",
     };
 
-    public static async UniTask RunCircularBots(int count, int lifecycleVersion, Action<ServerPacket> sendPacket, Func<bool> loopAlive)
+    public static async UniTask RunCircularBots(
+        int count,
+        int lifecycleVersion,
+        IDummyClock clock,
+        Action<ServerPacket> sendPacket,
+        Func<bool> loopAlive,
+        CancellationToken cancellationToken)
     {
         const int BASE_ID = 1000;
         const float CENTER_X = 30f;
@@ -64,7 +71,7 @@ internal static class DummyBotRunner
             }
 
             sendPacket(new ServerPacket(new HBPacket(positions)));
-            await UniTask.Delay(100);
+            await clock.Delay(100, cancellationToken);
         }
     }
 }

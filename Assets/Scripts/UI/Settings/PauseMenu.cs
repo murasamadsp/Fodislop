@@ -89,6 +89,13 @@ namespace Kern.UI
                     return;
                 }
 
+                // Escape в открытом чате принадлежит чату, даже если его
+                // Update в этом кадре ещё не выполнялся.
+                if (!_isOpen && (_uiInput.IsChatFocused || _uiInput.IsEscapeConsumedThisFrame))
+                {
+                    return;
+                }
+
                 ToggleMenu();
             }
         }
