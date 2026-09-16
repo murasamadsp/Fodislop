@@ -126,7 +126,7 @@ namespace Fodinae.Networking.Connection
                     break; // сервер закрыл соединение
                 }
 
-                _buffer.Put(chunk, 0, read);
+                _buffer.Put(chunk, read);
                 while (_buffer.TryTake(out var frame))
                 {
                     ServerPacket packet;
