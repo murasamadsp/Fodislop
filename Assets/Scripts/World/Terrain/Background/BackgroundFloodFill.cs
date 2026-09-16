@@ -298,7 +298,7 @@ public sealed class BackgroundFloodFill
                 }
 
                 var n = cellCache.GetCell(nx + 1, ny + 1);
-                if ((n.Properties & CellConfigProperties.Passable) == 0 || n.Type == CellType.Unloaded)
+                if (!IsFloorCell(n.Type, n.Properties))
                 {
                     continue;
                 }

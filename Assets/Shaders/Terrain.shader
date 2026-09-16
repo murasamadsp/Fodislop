@@ -81,6 +81,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float3 worldPosition : TEXCOORD6;
                 float4 glowData     : TEXCOORD7;
                 nointerpolation float atlasIndex : TEXCOORD8;
+                nointerpolation float isForeground : TEXCOORD9;
             };
 
             TEXTURE2D(_BaseMap);
@@ -266,6 +267,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.glowData = cell.glowData;
                 output.animData = cell.animData;
                 output.packedData = cell.packedData;
+                output.isForeground = cell.layer > 0.5 ? 1.0 : 0.0;
                 return output;
             #endif
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
@@ -277,6 +279,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.worldPosition = TransformObjectToWorld(input.positionOS.xyz);
                 output.glowData = input.glowAttr;
                 output.animData = input.animData;
+                output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.packedData = input.packedData;
                 output.atlasIndex = 0.0;
 
@@ -569,10 +572,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 // Тень получает только фон. Блоки все одной высоты и друг на
                 // друга не падают, а бит 64 — как раз физическая масса
-                // переднего плана.
+                // переднего плана. Заливка под блоком AO не получает: её видно
+                // сквозь полупрозрачные текстуры, и затемнение превращало её в
+                // чёрный.
                 #ifdef FODINAE_WORLD_LIGHTING
                 uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
-                if ((shadowFlags & 64u) == 0u)
+                if ((shadowFlags & 64u) == 0u && input.isForeground > 0.5)
                 {
                     litRGB *= 1.0 - GetAmbientOcclusion(input.worldPosition.xy);
                 }
