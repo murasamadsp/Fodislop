@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Kern.Tools.Imgui.Profiling;
 using UnityEngine;
 
 namespace Kern.Tools.Imgui.Windows;

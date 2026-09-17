@@ -9,6 +9,8 @@ namespace Kern.Rendering.PostProcessing.Workbench;
 // size limit.
 internal static class GradingScopesOptions
 {
+    internal readonly record struct Option(string Label, int Value);
+
     internal static readonly Option[] DebugViewOptions =
     [
         new("обычный", (int)PostProcessDebugView.None),
