@@ -1,6 +1,6 @@
 #nullable enable
 
-using Darkar25.Fodina.World.Network.Packets;
+using MinesServer.Networking.Server.Packets.Connection;
 
 namespace MinesServer.Networking.Connection.Client;
 
