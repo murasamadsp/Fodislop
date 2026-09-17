@@ -78,13 +78,6 @@ public sealed class ColorGradeCurve
         }
     }
 
-    public Vector4[] ToShaderPoints()
-    {
-        var result = new Vector4[MaxPoints];
-        WriteShaderPoints(result);
-        return result;
-    }
-
     // Без выделения: проход пишет в свой буфер каждый кадр.
     public void WriteShaderPoints(Vector4[] destination)
     {

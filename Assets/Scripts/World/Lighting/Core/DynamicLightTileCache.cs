@@ -43,8 +43,8 @@ internal sealed class DynamicLightTileCache
     // does not reallocate the atlas.
     private const int TileQuantum = 64;
 
-    private readonly Dictionary<int, int> _slotByLightId = new();
-    private int[] _lightIdBySlot = Array.Empty<int>();
+    private readonly Dictionary<int, int> _slotByLightID = new();
+    private int[] _lightIDBySlot = Array.Empty<int>();
     private bool[] _slotInUse = Array.Empty<bool>();
     private int[] _slotSeenFrame = Array.Empty<int>();
     private bool[] _slotValid = Array.Empty<bool>();
@@ -156,7 +156,7 @@ internal sealed class DynamicLightTileCache
         Tiles = tiles;
         TileInfos = new ComputeBuffer(capacity, TileInfoStride, ComputeBufferType.Structured);
 
-        Array.Resize(ref _lightIdBySlot, capacity);
+        Array.Resize(ref _lightIDBySlot, capacity);
         Array.Resize(ref _slotInUse, capacity);
         Array.Resize(ref _slotSeenFrame, capacity);
         Array.Resize(ref _slotValid, capacity);
@@ -179,12 +179,12 @@ internal sealed class DynamicLightTileCache
 
     // Keeps the slots of lamps still present, frees those of lamps gone, and
     // gives new lamps free slots. Call once per solve, before SlotOf.
-    public void AssignSlots(ReadOnlySpan<int> lightIds)
+    public void AssignSlots(ReadOnlySpan<int> lightIDs)
     {
         _frame++;
-        for (int i = 0; i < lightIds.Length; i++)
+        for (int i = 0; i < lightIDs.Length; i++)
         {
-            if (_slotByLightId.TryGetValue(lightIds[i], out int slot))
+            if (_slotByLightID.TryGetValue(lightIDs[i], out int slot))
             {
                 _slotSeenFrame[slot] = _frame;
             }
@@ -194,16 +194,16 @@ internal sealed class DynamicLightTileCache
         {
             if (_slotInUse[slot] && _slotSeenFrame[slot] != _frame)
             {
-                _slotByLightId.Remove(_lightIdBySlot[slot]);
+                _slotByLightID.Remove(_lightIDBySlot[slot]);
                 _slotInUse[slot] = false;
                 _slotValid[slot] = false;
             }
         }
 
         int freeSearch = 0;
-        for (int i = 0; i < lightIds.Length; i++)
+        for (int i = 0; i < lightIDs.Length; i++)
         {
-            if (_slotByLightId.ContainsKey(lightIds[i]))
+            if (_slotByLightID.ContainsKey(lightIDs[i]))
             {
                 continue;
             }
@@ -216,12 +216,12 @@ internal sealed class DynamicLightTileCache
             _slotInUse[freeSearch] = true;
             _slotValid[freeSearch] = false;
             _slotSeenFrame[freeSearch] = _frame;
-            _lightIdBySlot[freeSearch] = lightIds[i];
-            _slotByLightId.Add(lightIds[i], freeSearch);
+            _lightIDBySlot[freeSearch] = lightIDs[i];
+            _slotByLightID.Add(lightIDs[i], freeSearch);
         }
     }
 
-    public int SlotOf(int lightId) => _slotByLightId[lightId];
+    public int SlotOf(int lightID) => _slotByLightID[lightID];
 
     public Vector2Int TileOffset(int slot) =>
         new((slot % _columns) * _tileWidth, (slot / _columns) * _tileHeight);
@@ -244,8 +244,8 @@ internal sealed class DynamicLightTileCache
     {
         ReleaseGpuResources();
         ReleasePolar();
-        _slotByLightId.Clear();
-        _lightIdBySlot = Array.Empty<int>();
+        _slotByLightID.Clear();
+        _lightIDBySlot = Array.Empty<int>();
         _slotInUse = Array.Empty<bool>();
         _slotSeenFrame = Array.Empty<int>();
         _slotValid = Array.Empty<bool>();

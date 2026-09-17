@@ -56,7 +56,6 @@ internal static class PostProcessShaderConstants
     public static readonly int ContrastControls2ID = Shader.PropertyToID("_ContrastControls2");
     public static readonly int DisplayGrade0ID = Shader.PropertyToID("_DisplayGrade0");
     public static readonly int DisplayGrade1ID = Shader.PropertyToID("_DisplayGrade1");
-    public static readonly int DisplayGradePathPowerID = Shader.PropertyToID("_DisplayGradePathPower");
     public static readonly int GamutCompressionID = Shader.PropertyToID("_GamutCompression");
     public static readonly int BakedGradeLutID = Shader.PropertyToID("_BakedGradeLut");
     public static readonly int BakedGradeLutTexID = Shader.PropertyToID("_BakedGradeLutTex");

@@ -135,7 +135,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _pathFinder,
             SendPacket,
             () => _debugSettings.IgnoreCollision,
-            _mockBotId);
+            _mockBotID);
         _actionResponder = new DummyGameplayActionResponder(
             _playerState,
             _worldState,
@@ -145,7 +145,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _chatSimulator,
             clock,
             SendPacket,
-            _mockBotId);
+            _mockBotID);
         _windowResponder = new DummyWindowResponder(
             SendPacket,
             _buffManager,
@@ -201,7 +201,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     private readonly DummyWorldSimulationState _worldState;
     private readonly DummyWorldStartupResponder _worldStartup;
 
-    private const ushort _mockBotId = 456;
+    private const ushort _mockBotID = 456;
     private readonly List<(ushort X, ushort Y)> _teleportPositions = new();
 
     // Depth warning/damage feature disabled in DummyConnection
@@ -396,7 +396,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             case SendLocalChatMessagePacket localMsg:
                 _chatResponder.SendLocal(
                     localMsg,
-                    _mockBotId,
+                    _mockBotID,
                     _playerState.X,
                     _playerState.Y);
                 break;
@@ -452,7 +452,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _PlayerName,
             _Level,
             _Currency,
-            _mockBotId);
+            _mockBotID);
     }
 
 }

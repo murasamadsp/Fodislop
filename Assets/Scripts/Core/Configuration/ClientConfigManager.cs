@@ -100,12 +100,6 @@ namespace Kern.Core
                 $"at {_Repository.ConfigPath}; GraphicsPreset={Config.GraphicsPreset}");
         }
 
-        public void ApplyDefaults()
-        {
-            Config = ClientConfigDefaults.Create(_graphicsQualityProfile);
-            Debug.Log("[ClientConfigManager] Applied authored default config values.");
-        }
-
         public void MarkGraphicsAsCustom()
         {
             if (Config.GraphicsPreset == GraphicsPreset.Custom)
@@ -140,7 +134,6 @@ namespace Kern.Core
             // всех секциях вида — этого требует инвариант валидатора. Раньше
             // здесь было два вызова, копировавших сорок полей из снимка;
             // теперь авторское значение и есть новый экземпляр секции.
-            Config.Lighting = new WorldLightingSettings();
             Config.Terrain = new TerrainSettings();
             Config.Effects = new EffectSettings();
             Config.PostProcess = new PostProcessSettings();

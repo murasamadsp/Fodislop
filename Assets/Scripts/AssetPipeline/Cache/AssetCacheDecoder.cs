@@ -11,14 +11,14 @@ internal static class AssetCacheDecoder
 {
     public readonly record struct DecodedTextureResult(
         Texture2D? Texture,
-        float Fps,
+        float FPS,
         int FrameHeight,
         int FrameCount);
 
     public readonly record struct DecodedAnimationResult(
         Sprite[] Sprites,
         Texture2D Atlas,
-        float Fps,
+        float FPS,
         int FrameHeight,
         int FrameCount);
 

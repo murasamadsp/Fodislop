@@ -21,6 +21,7 @@ internal static class Program
                 "streaming" => RunStreamingChecks(),
                 "freeze-report" => FreezeReport.Run(args[1..]),
                 "transport" => NativeHarness.RunTransport(repositoryRoot),
+                "rects" => ProbeRectTests.Run(),
                 "equivalence" => RunEquivalence(repositoryRoot, args[1..]),
                 "compile" => NativeHarness.CompileShaders(repositoryRoot, args.Length > 1 ? args[1] : null),
                 "layout" => RunLayoutChecks(),

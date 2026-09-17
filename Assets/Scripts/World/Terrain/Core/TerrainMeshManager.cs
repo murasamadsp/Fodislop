@@ -85,9 +85,9 @@ public sealed class TerrainMeshManager
         // чистить прямоугольник, которому можно доверять на всех бэкендах.
         // Поле покрывает всю сетку со смещением ноль; экранное смещение
         // возвращается сразу после, чтобы кадр камеры не съехал.
-        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, Vector4.zero);
+        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, Vector4.zero);
         commandBuffer.DrawMesh(mesh, localToWorldMatrix, materials[0], 0, materialFieldPass);
-        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, screenViewOffset);
+        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, screenViewOffset);
 
         commandBuffer.EndSample("Kern.Terrain.RenderMaterialFields");
     }

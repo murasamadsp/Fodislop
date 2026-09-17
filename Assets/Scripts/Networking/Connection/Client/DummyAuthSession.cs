@@ -23,8 +23,8 @@ internal sealed class DummyAuthSession
     {
         get
         {
-            long userId = StableUserId(SystemInfo.deviceUniqueIdentifier);
-            return $"ШАХТЁР-{100 + (int)(userId % 900)}";
+            long userID = StableUserID(SystemInfo.deviceUniqueIdentifier);
+            return $"ШАХТЁР-{100 + (int)(userID % 900)}";
         }
     }
 
@@ -43,7 +43,7 @@ internal sealed class DummyAuthSession
         return newToken;
     }
 
-    internal static long StableUserId(string? deviceIdentifier)
+    internal static long StableUserID(string? deviceIdentifier)
     {
         string seed = deviceIdentifier ?? string.Empty;
         uint hash = 2166136261u;

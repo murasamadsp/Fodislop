@@ -417,17 +417,22 @@ namespace Kern.Rendering.PostProcessing
                     grade.Whites,
                     grade.Toe,
                     grade.Shoulder);
+                // Тонмаппинг — за URP (Neutral SDR / Neutral BT2390 HDR через
+                // HDROutputReconciler). Кастомний трансформ поверх нього дає
+                // подвійне маплення, тому рантайм його не форсує: діє тільки
+                // авторський вибір, дефолт — None (bypass).
+                DisplayTransform displayTransform = activeGrade.Transform;
+
                 passData.DisplayGrade0 = new Vector4(
                     grade.WhitePoint,
                     grade.GreyOut,
-                    grade.CurveSlope,
-                    (int)grade.Transform);
+                    0f,
+                    (int)displayTransform);
                 passData.DisplayGrade1 = new Vector4(
                     grade.ShoulderPower,
                     grade.ToePower,
                     grade.ToeStops,
-                    grade.PathToWhiteAmount);
-                passData.DisplayGradePathPower = grade.PathToWhitePower;
+                    0f);
                 passData.GamutCompression = grade.GamutCompressionEnabled
                     ? Mathf.Clamp01(grade.GamutCompressionStrength)
                     : 0f;

@@ -372,7 +372,7 @@ namespace Kern.Core
             builder.Register<GameTokenStore>(Lifetime.Singleton).As<IGameTokenStore>();
             builder.Register<RuntimeDebugSettings>(Lifetime.Singleton).As<IRuntimeDebugSettings>();
             builder.Register<OfflineScenarioSettings>(Lifetime.Singleton).As<IOfflineScenarioSettings>();
-            builder.Register<VkIdentityProvider>(Lifetime.Singleton);
+            builder.Register<VKIdentityProvider>(Lifetime.Singleton);
             builder.Register<AuthenticationService>(Lifetime.Singleton).As<IAuthenticationService>();
 
             // Application-tier session state: NetworkService (Bootstrap) and

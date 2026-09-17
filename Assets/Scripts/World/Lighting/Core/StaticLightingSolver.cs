@@ -18,9 +18,9 @@ internal sealed class StaticLightingSolver
 {
     private const int MaximumDispatchGroupsPerDimension = 65535;
 
-    private static readonly ProfilerMarker CascadeMarker =
+    private static readonly ProfilerMarker _CascadeMarker =
         new("Kern.Lighting.Cascades.Record.CPU");
-    private static readonly ProfilerMarker ResolveMarker =
+    private static readonly ProfilerMarker _ResolveMarker =
         new("Kern.Lighting.Resolve.Record.CPU");
 
     private readonly LightingResourceManager _resources;
@@ -60,7 +60,7 @@ internal sealed class StaticLightingSolver
         bool allowDependencyMask,
         Vector4 worldRect)
     {
-        using var cascadeMarker = CascadeMarker.Auto();
+        using var cascadeMarker = _CascadeMarker.Auto();
         commandBuffer.BeginSample("Kern.Lighting.RadianceCascades");
         ComputeShader compute = _resources.LightingCompute!;
         int solveKernel = _resources.SolveCascadeKernel;
@@ -112,13 +112,28 @@ internal sealed class StaticLightingSolver
             }
             else
             {
+                RectInt probeRect = new RectInt(0, 0, cascade.ProbeWidth, cascade.ProbeHeight);
+                if (useDependencyMask && dirtyFieldRegions.Length > 0)
+                {
+                    // Маска вже економить DDA через early-out, але треди
+                    // слались на всю сітку. Тайт-rect ріже і треди: записи
+                    // телеметрії full/partial нижче це покажуть.
+                    ProbeRect tight = TightProbeRect(cascade, dirtyFieldRegions, worldRect);
+                    if (tight.IsEmpty)
+                    {
+                        continue;
+                    }
+
+                    probeRect = new RectInt(tight.X, tight.Y, tight.Width, tight.Height);
+                }
+
                 RecordCascade(
                     commandBuffer,
                     compute,
                     solveKernel,
                     cascadeIndex,
                     emissionField,
-                    new RectInt(0, 0, cascade.ProbeWidth, cascade.ProbeHeight),
+                    probeRect,
                     useDependencyMask,
                     dirtyFieldRegions.Length);
             }
@@ -172,10 +187,6 @@ internal sealed class StaticLightingSolver
                 cascade.ProbeHeight);
             commandBuffer.SetComputeIntParam(
                 compute,
-                LightingComputeBinder.ScrollProbeSpacingID,
-                cascade.ProbeSpacing);
-            commandBuffer.SetComputeIntParam(
-                compute,
                 LightingComputeBinder.ScrollDirectionCountID,
                 cascade.DirectionCount);
             commandBuffer.SetComputeIntParams(
@@ -197,6 +208,45 @@ internal sealed class StaticLightingSolver
                 Mathf.CeilToInt(groups / (float)groupCountX),
                 1);
         }
+    }
+
+    private ProbeRect TightProbeRect(
+        CascadeLayout cascade,
+        DirtyRegionGpu[] dirtyFieldRegions,
+        Vector4 worldRect)
+    {
+        int minX = int.MaxValue;
+        int minY = int.MaxValue;
+        int maxX = int.MinValue;
+        int maxY = int.MinValue;
+        foreach (DirtyRegionGpu region in dirtyFieldRegions)
+        {
+            if (region.MinX < minX)
+                minX = region.MinX;
+            if (region.MinY < minY)
+                minY = region.MinY;
+            if (region.MaxX > maxX)
+                maxX = region.MaxX;
+            if (region.MaxY > maxY)
+                maxY = region.MaxY;
+        }
+
+        float cellSize = ProjectRuntimeContracts.World.CellSize;
+        float cellsX = Mathf.Max(1f, worldRect.z / cellSize);
+        float cellsY = Mathf.Max(1f, worldRect.w / cellSize);
+        float texelsPerCell = Mathf.Max(
+            _resources.FieldWidth / cellsX,
+            _resources.FieldHeight / cellsY);
+        float marginTexels = texelsPerCell + cascade.ProbeSpacing + 2f;
+        return CascadeProbeRects.ForCascade(
+            minX,
+            minY,
+            maxX,
+            maxY,
+            _resources.FieldWidth,
+            _resources.FieldHeight,
+            cascade,
+            marginTexels);
     }
 
     private void RecordCascadeStrips(
@@ -256,7 +306,7 @@ internal sealed class StaticLightingSolver
         RenderTexture emissionField,
         RenderTexture directTarget)
     {
-        using var resolveMarker = ResolveMarker.Auto();
+        using var resolveMarker = _ResolveMarker.Auto();
         ComputeShader compute = _resources.LightingCompute!;
         bool transmissionDebug = debugView == LightingEngine.DebugView.Transmission;
         int resolveKernel = transmissionDebug

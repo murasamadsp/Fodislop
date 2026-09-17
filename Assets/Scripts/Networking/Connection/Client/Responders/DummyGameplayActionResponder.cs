@@ -26,7 +26,7 @@ internal sealed class DummyGameplayActionResponder(
     DummyChatSimulator chatSimulator,
     IDummyClock clock,
     Action<ServerPacket> sendPacket,
-    ushort playerBotId)
+    ushort playerBotID)
 {
     private const ushort SpawnX = 25;
     private const ushort SpawnY = 50;
@@ -155,7 +155,7 @@ internal sealed class DummyGameplayActionResponder(
         sendPacket(new ServerPacket(new TeleportPacket(SpawnX, SpawnY, false)));
         sendPacket(new ServerPacket(new HBPacket([
             new RobotPositionPacket(
-                playerBotId,
+                playerBotID,
                 SpawnX,
                 SpawnY,
                 (byte)playerState.Direction),
@@ -306,5 +306,5 @@ internal sealed class DummyGameplayActionResponder(
         sendPacket(new ServerPacket(new HBPacket([CreateAudioPacket(effect, x, y)])));
 
     private AudioPacket CreateAudioPacket(SFX effect, ushort x, ushort y) =>
-        new(effect, playerBotId, x, y, []);
+        new(effect, playerBotID, x, y, []);
 }

@@ -259,7 +259,7 @@ namespace Kern.World
 
         public static bool IsRoundableLoose(CellType type) => MapCellConfigCatalog.IsRoundableLoose(type);
 
-        public bool TryGetTileGroup(CellType type, out int groupId) => _cellCatalog.TryGetTileGroup(type, out groupId);
+        public bool TryGetTileGroup(CellType type, out int groupID) => _cellCatalog.TryGetTileGroup(type, out groupID);
 
         public Color GetCellMinimapColor(CellType type) => _cellCatalog.GetCellMinimapColor(type);
 

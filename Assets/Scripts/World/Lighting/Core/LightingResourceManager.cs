@@ -85,11 +85,11 @@ internal sealed class LightingResourceManager
 
     public readonly List<CascadeLayout> Cascades = new();
 
-    public bool GpuPipelineInitialized { get; set; }
+    public bool GPUPipelineInitialized { get; set; }
 
-    public void EnsureGpuPipelineInitialized()
+    public void EnsureGPUPipelineInitialized()
     {
-        if (GpuPipelineInitialized)
+        if (GPUPipelineInitialized)
         {
             return;
         }
@@ -101,18 +101,18 @@ internal sealed class LightingResourceManager
         {
             name = "Kern Radiance Cascades",
         };
-        GpuPipelineInitialized = true;
+        GPUPipelineInitialized = true;
         Shader.EnableKeyword("KERN_WORLD_LIGHTING");
     }
 
-    public void ReleaseGpuPipeline()
+    public void ReleaseGPUPipeline()
     {
         ReleaseResources();
 
         LightingCommandBuffer?.Release();
         LightingCommandBuffer = null;
         LightingCompute = null;
-        GpuPipelineInitialized = false;
+        GPUPipelineInitialized = false;
     }
 
     public void EnsureResources(

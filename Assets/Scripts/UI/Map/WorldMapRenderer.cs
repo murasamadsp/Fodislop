@@ -51,7 +51,6 @@ namespace Kern.UI
         private ILocalPlayerState _localPlayer = null!;
 
         private float _lastRenderTime;
-        private bool _initialRenderDone;
         private bool _renderRequested;
         private long _lastRenderedStorageRevision = -1;
         private bool _followPlayer = true;
@@ -193,7 +192,6 @@ namespace Kern.UI
             }
 
             _lastRenderedStorageRevision = -1;
-            _initialRenderDone = false;
             _renderRequested = true;
         }
 
@@ -316,7 +314,6 @@ namespace Kern.UI
                 !_manager.IsWorldInitialized || !_storage.IsReady)
             {
                 BindCellLayer(null);
-                _initialRenderDone = false;
                 _renderRequested = false;
                 return;
             }
@@ -381,7 +378,6 @@ namespace Kern.UI
 
             enabled = true;
             _lastRenderTime = -1f;
-            _initialRenderDone = false;
             _renderRequested = true;
             _lastRenderedStorageRevision = -1;
             _followPlayer = true;
@@ -459,7 +455,6 @@ namespace Kern.UI
             {
                 BindCellLayer(storage.CellLayer);
                 _renderRequested = true;
-                _initialRenderDone = false;
                 _lastRenderedStorageRevision = -1;
             }
 
@@ -476,7 +471,10 @@ namespace Kern.UI
                 return;
             }
 
-            if (_initialRenderDone && Time.time - _lastRenderTime < _renderInterval)
+            // The render interval applies to every render, including the first one
+            // after Show(). _lastRenderTime starts at -1f so the first render is
+            // never throttled; subsequent renders respect the interval.
+            if (Time.time - _lastRenderTime < _renderInterval)
             {
                 return;
             }
@@ -501,7 +499,6 @@ namespace Kern.UI
             _renderRequested = false;
             _lastRenderedStorageRevision = _storage.Revision;
             _lastRenderTime = Time.time;
-            _initialRenderDone = true;
         }
 
         private float ComputeMaxZoomOut(int worldW, int worldH) =>

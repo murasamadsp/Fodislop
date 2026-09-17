@@ -74,8 +74,7 @@ float4 _PrimaryMaster; // lift, gamma, gain, offset master values
 float _Vibrance;
 float _Hue;
 float4 _DisplayGrade0; // white point, grey output, curve slope, transform
-float4 _DisplayGrade1; // shoulder power, toe power, toe stops, path-to-white
-float _DisplayGradePathPower;
+float4 _DisplayGrade1; // shoulder power, toe power, toe stops, reserved
 float _GamutCompression; // 0 выкл, 1 полное сжатие гамута на выводе
 float4 _Qualifier0; // hue center/width/softness, enabled(+)/invert(-)
 float4 _Qualifier1; // sat center/width/softness, luma center
@@ -406,8 +405,10 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
 
     // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
     // целиком: один такой пиксель на входе даёт серое полотно на выходе.
-    brightColor = min(brightColor, 65504.0);
-    brightColor = any(isnan(brightColor)) ? float3(0.0, 0.0, 0.0) : brightColor;
+    // NaN ловится сравнением (NaN != NaN), а не isnan(): Metal доказывает
+    // отсутствие NaN и вырезает вызов вместе с защитой.
+    brightColor = min(max(brightColor, 0.0), 65504.0);
+    brightColor = any(brightColor != brightColor) ? float3(0.0, 0.0, 0.0) : brightColor;
 
     _DestTex[id.xy] = float4(brightColor * _BloomTint.rgb, color.a);
 }
@@ -710,17 +711,11 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         }
         else if (_PostDebugView == 7)
         {
-            color = float3(color.r, color.r, color.r);
+            // RGB parade in one view: thirds show R|G|B as mono.
+            float third = screenUv.x < 0.3333 ? color.r : (screenUv.x < 0.6667 ? color.g : color.b);
+            color = float3(third, third, third);
         }
-        else if (_PostDebugView == 8)
-        {
-            color = float3(color.g, color.g, color.g);
-        }
-        else if (_PostDebugView == 9)
-        {
-            color = float3(color.b, color.b, color.b);
-        }
-        else if (_PostDebugView == 10 || _PostDebugView == 11)
+        else if (_PostDebugView == 8 || _PostDebugView == 9)
         {
             float maxChannel = max(color.r, max(color.g, color.b));
             float minChannel = min(color.r, min(color.g, color.b));
@@ -729,8 +724,8 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
                 : 0.999;
             bool highlightClipped = maxChannel >= clippingCeiling;
             bool shadowClipped = minChannel <= 0.0005;
-            bool marked = _PostDebugView == 10 ? highlightClipped : shadowClipped;
-            float3 marker = _PostDebugView == 10
+            bool marked = _PostDebugView == 8 ? highlightClipped : shadowClipped;
+            float3 marker = _PostDebugView == 8
                 ? float3(1.0, 0.0, 0.0)
                 : float3(0.0, 0.3, 1.0);
             color = marked ? lerp(color, marker, 0.8) : color;

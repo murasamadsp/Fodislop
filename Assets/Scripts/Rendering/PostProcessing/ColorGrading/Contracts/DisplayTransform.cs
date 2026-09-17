@@ -6,5 +6,7 @@ public enum DisplayTransform
 {
     None = 0,
 
-    Kern = 1,
+    Sdr = 1,
+
+    HdrPq1300 = 2,
 }

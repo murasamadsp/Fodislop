@@ -2,9 +2,7 @@
 
 using System;
 using System.Text;
-using Kern.Core.Localization;
 using MinesServer.Networking.Server.Packets.Chat;
-using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
 namespace Kern.UI;
@@ -33,20 +31,6 @@ internal static class ChatMessageFormatter
         sb.Append('>');
         sb.Append(msg.Message);
         sb.Append("</color>");
-        return sb.ToString();
-    }
-
-    public static string FormatLocal(LocalChatMessagePacket packet, DateTime now, ILocalizationService loc)
-    {
-        var sb = new StringBuilder(128);
-        sb.Append("<color=#888888>[");
-        sb.Append(now.Hour.ToString("D2"));
-        sb.Append(':');
-        sb.Append(now.Minute.ToString("D2"));
-        sb.Append("]</color> <color=#B2A680>");
-        sb.Append(loc.Get("chat.local.sender", packet.BotId));
-        sb.Append("</color>: ");
-        sb.Append(packet.Text);
         return sb.ToString();
     }
 

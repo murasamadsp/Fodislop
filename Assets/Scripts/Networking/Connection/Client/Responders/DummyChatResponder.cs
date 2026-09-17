@@ -29,10 +29,10 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummy
 
     public void SendLocal(
         SendLocalChatMessagePacket packet,
-        ushort botId,
+        ushort botID,
         ushort x,
         ushort y) =>
-        sendPacket(new ServerPacket(new LocalChatMessagePacket(botId, x, y, packet.Message)));
+        sendPacket(new ServerPacket(new LocalChatMessagePacket(botID, x, y, packet.Message)));
 
     public void SendGlobal(SendChatMessagePacket packet)
     {

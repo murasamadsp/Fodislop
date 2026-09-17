@@ -24,7 +24,7 @@ internal sealed class DummyMovementResponder(
     DummyPathFinder pathFinder,
     Action<ServerPacket> sendPacket,
     Func<bool> ignoreCollision,
-    ushort playerBotId) : IDisposable
+    ushort playerBotID) : IDisposable
 {
     private CancellationTokenSource? _pathCancellation;
     private CancellationTokenSource? _pendingMoveLoadCancellation;
@@ -111,7 +111,7 @@ internal sealed class DummyMovementResponder(
     {
         sendPacket(new ServerPacket(new HBPacket([
             new RobotPositionPacket(
-                playerBotId,
+                playerBotID,
                 playerState.X,
                 playerState.Y,
                 (byte)playerState.Direction),
@@ -363,7 +363,7 @@ internal sealed class DummyMovementResponder(
                 previousY = nextY;
                 sendPacket(new ServerPacket(new HBPacket([
                     new RobotPositionPacket(
-                        playerBotId,
+                        playerBotID,
                         playerState.X,
                         playerState.Y,
                         (byte)direction),

@@ -79,11 +79,11 @@ namespace Kern.World.Terrain
         private readonly TerrainMeshManager _meshManager = new();
         private readonly TerrainMaterialManager _materialManager = new();
         private readonly TerrainDoorOverlayRenderer _doorOverlayRenderer = new();
-        private readonly TerrainCellIdMesh _cellIdMesh = new();
+        private readonly TerrainCellIDMesh _cellIDMesh = new();
 
         // Экран рисует только видимое окно с полем: запас сетки нужен
         // освещению и сдвигу, но не кадру.
-        private readonly TerrainCellIdMesh _visibleIdMesh = new();
+        private readonly TerrainCellIDMesh _visibleIDMesh = new();
         private Vector4 _viewOffset;
         private int _visibleWidth;
         private int _visibleHeight;
@@ -156,7 +156,7 @@ namespace Kern.World.Terrain
 
         public bool IsReadyForGameplay =>
             _isInitialized &&
-            _cellIdMesh.Mesh != null &&
+            _cellIDMesh.Mesh != null &&
             _cellsCommitted &&
             _materialManager.Materials.Length > 0 &&
             _pendingTextureCellTypes.Count == 0;
@@ -346,8 +346,8 @@ namespace Kern.World.Terrain
                 _subscribedCellLayer = null;
             }
 
-            _cellIdMesh.Dispose();
-            _visibleIdMesh.Dispose();
+            _cellIDMesh.Dispose();
+            _visibleIDMesh.Dispose();
             _cellBuilder.Dispose();
             _doorOverlayRenderer.Dispose();
             _materialManager.CleanupMaterials();
@@ -382,10 +382,10 @@ namespace Kern.World.Terrain
                 ReadOnlySpan<char> id = filename.AsSpan(
                     "Cells/".Length,
                     (extensionIndex >= 0 ? extensionIndex : filename.Length) - "Cells/".Length);
-                if (int.TryParse(id, out int cellTypeId) &&
-                    (uint)cellTypeId <= ushort.MaxValue)
+                if (int.TryParse(id, out int cellTypeID) &&
+                    (uint)cellTypeID <= ushort.MaxValue)
                 {
-                    _pendingTextureCellTypes.Add((CellType)cellTypeId);
+                    _pendingTextureCellTypes.Add((CellType)cellTypeID);
                 }
             }
         }
@@ -642,7 +642,7 @@ namespace Kern.World.Terrain
                 _cellCache.EnsureCapacity(_meshWidth, _meshHeight);
                 _precalc.EnsureCapacity(_meshWidth, _meshHeight);
                 _cellBuilder.EnsureCapacity(_meshWidth, _meshHeight, _cellSize);
-                _cellIdMesh.EnsureSize(_meshWidth, _meshHeight, _cellSize);
+                _cellIDMesh.EnsureSize(_meshWidth, _meshHeight, _cellSize);
                 _backgroundFloodFill.Allocate(_meshWidth, _meshHeight);
 
                 _needsRefresh = true;
@@ -878,7 +878,7 @@ namespace Kern.World.Terrain
                 worldRect,
                 transform.localToWorldMatrix,
                 _materialManager.CellMaterials,
-                _cellIdMesh.Mesh,
+                _cellIDMesh.Mesh,
                 _viewOffset);
         }
 
@@ -921,18 +921,18 @@ namespace Kern.World.Terrain
             int offsetX = Mathf.Clamp(presentationMinX - _lastGridPos.x, 0, _meshWidth - width);
             int offsetY = Mathf.Clamp(presentationMinY - _lastGridPos.y, 0, _meshHeight - height);
 
-            _visibleIdMesh.EnsureSize(width, height, _cellSize, _meshWidth, _meshHeight);
+            _visibleIDMesh.EnsureSize(width, height, _cellSize, _meshWidth, _meshHeight);
             var offset = new Vector4(offsetX, offsetY, 0f, 0f);
             if (offset != _viewOffset)
             {
                 _viewOffset = offset;
-                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, offset);
+                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, offset);
             }
 
-            if (_meshFilter != null && _meshFilter.sharedMesh != _visibleIdMesh.Mesh)
+            if (_meshFilter != null && _meshFilter.sharedMesh != _visibleIDMesh.Mesh)
             {
-                _meshFilter.sharedMesh = _visibleIdMesh.Mesh;
-                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, _viewOffset);
+                _meshFilter.sharedMesh = _visibleIDMesh.Mesh;
+                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, _viewOffset);
             }
         }
 
@@ -940,7 +940,7 @@ namespace Kern.World.Terrain
         // окна публикуется вместе с ними: шейдер берёт по нему кольцевой адрес.
         private void SyncCellTextures()
         {
-            if (!_cellTexturesDirty || _lastGridPos.x == int.MinValue || _cellIdMesh.Mesh == null)
+            if (!_cellTexturesDirty || _lastGridPos.x == int.MinValue || _cellIDMesh.Mesh == null)
             {
                 return;
             }
@@ -1157,7 +1157,7 @@ namespace Kern.World.Terrain
                 return true;
             }
 
-            if (_storage == null || !_storage.IsReady || _mapManager == null || _cellIdMesh.Mesh == null)
+            if (_storage == null || !_storage.IsReady || _mapManager == null || _cellIDMesh.Mesh == null)
             {
                 return false;
             }
@@ -1211,7 +1211,7 @@ namespace Kern.World.Terrain
 
         private void UpdateTextureCells(int minX, int minY)
         {
-            if (_mapManager == null || _cellIdMesh.Mesh == null || _textureService == null)
+            if (_mapManager == null || _cellIDMesh.Mesh == null || _textureService == null)
             {
                 return;
             }

@@ -16,7 +16,7 @@ public interface IMapDataProvider
     bool IsStandaloneMode { get; }
     CellConfigurationPacket GetCellConfig(CellType type);
     float GetMoveCooldown(CellType cellType);
-    bool TryGetTileGroup(CellType type, out int groupId);
+    bool TryGetTileGroup(CellType type, out int groupID);
     Color GetCellMinimapColor(CellType type);
     void UpdateMovementSpeeds(MovementSpeedPacket packet);
     void LoadWorldInit(WorldInitPacket packet);

@@ -13,9 +13,9 @@ public static class ColorGradeFile
     // 21: кривые «X против Y» хранят сдвиг/множитель вокруг нейтрали 0.5, а не
     // абсолютное значение. Старые кривые в новый смысл честно не переводятся.
     // 22: сжатие гамута на выводе (вкл/выкл и сила).
-    private const int CurrentVersion = 22;
-    private const int GamutCompressionVersion = 22;
-    private const int RelativeSelectiveCurvesVersion = 21;
+    // 23: path-to-white удалён из шейдера — поля больше не пишутся; старые
+    // файлы читаются (лишние поля JsonUtility игнорирует).
+    private const int CurrentVersion = 23;
     private const string FileName = "color_grade.json";
 
     public static string Path => System.IO.Path.Combine(Application.persistentDataPath, FileName);
@@ -85,22 +85,10 @@ public static class ColorGradeFile
         try
         {
             string json = File.ReadAllText(presetPath);
-            if (!HasRequiredPayloadFields(json))
-            {
-                Debug.LogWarning($"[ColorGrade] Пресет {presetPath} неполон.");
-                return false;
-            }
-
             Payload? payload = JsonUtility.FromJson<Payload>(json);
-            if (payload == null || payload.Version is < 1 or > CurrentVersion)
+            if (payload == null || payload.Version < 1)
             {
-                Debug.LogWarning($"[ColorGrade] Пресет {presetPath} имеет неподдерживаемую версию.");
-                return false;
-            }
-
-            if (!HasRequiredVersionedFields(json, payload))
-            {
-                Debug.LogWarning($"[ColorGrade] Пресет {presetPath} неполон для своей версии.");
+                Debug.LogWarning($"[ColorGrade] Пресет {presetPath} не разобран.");
                 return false;
             }
 
@@ -177,12 +165,9 @@ public static class ColorGradeFile
         public Vector3 CdlMaster = new(1f, 0f, 1f);
         public float WhitePoint;
         public float GreyOut;
-        public float CurveSlope;
         public float ShoulderPower;
         public float ToePower;
         public float ToeStops;
-        public float PathToWhiteAmount;
-        public float PathToWhitePower;
         public bool GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled;
         public float GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength;
         public CurvePayload MasterCurve = new();
@@ -240,12 +225,9 @@ public static class ColorGradeFile
             CdlMaster = state.CdlMaster,
             WhitePoint = state.WhitePoint,
             GreyOut = state.GreyOut,
-            CurveSlope = state.CurveSlope,
             ShoulderPower = state.ShoulderPower,
             ToePower = state.ToePower,
             ToeStops = state.ToeStops,
-            PathToWhiteAmount = state.PathToWhiteAmount,
-            PathToWhitePower = state.PathToWhitePower,
             GamutCompressionEnabled = state.GamutCompressionEnabled,
             GamutCompressionStrength = state.GamutCompressionStrength,
             MasterCurve = ToCurvePayload(state.MasterCurve),
@@ -291,223 +273,69 @@ public static class ColorGradeFile
         try
         {
             string json = File.ReadAllText(Path);
-            if (!HasRequiredPayloadFields(json))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} неполон; грейд оставлен как есть.");
-                return false;
-            }
-
             Payload? payload = JsonUtility.FromJson<Payload>(json);
-            if (payload == null)
-            {
-                Debug.LogWarning($"[ColorGrade] Файл {Path} не разобран; грейд оставлен как есть.");
-                return false;
-            }
-
-            // Version обязателен. JsonUtility заполняет отсутствующие поля
-            // нулями, поэтому принятие безверсионного `{}` выглядело бы как
-            // успешная загрузка, но обесцвечивало кадр и прижимало кривую к
-            // минимальным границам.
-            if (payload.Version is < 1 or > CurrentVersion)
+            // Единственная проверка целостности: файл объявляет себя грейдом.
+            // Версионных гейтов по полям больше нет: запись атомарна, рваных
+            // файлов не бывает, отсутствующие поля JsonUtility зануляет, а
+            // state.Sanitize() приводит их к границам. Новых гейтов под новые
+            // поля не заводить — никогда.
+            if (payload == null || payload.Version < 1)
             {
                 Debug.LogWarning(
-                    $"[ColorGrade] Версия файла {payload.Version} не поддерживается; " +
-                    "грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 7 &&
-                CountJsonFields(json, nameof(Payload.Vibrance)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "Vibrance; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 9 &&
-                (CountJsonFields(json, nameof(Payload.Pivot)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.Shadows)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.Highlights)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.Blacks)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.Whites)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.Toe)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.Shoulder)) == 0))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "полный контрастный блок; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 10 && CountJsonFields(json, nameof(Payload.Hue)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит Hue; " +
-                    "грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 12 &&
-                (CountJsonFields(json, nameof(Payload.MasterCurve)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.RedCurve)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.GreenCurve)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.BlueCurve)) == 0))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "полный набор RGB/luma curves; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 17 &&
-                (CountJsonFields(json, nameof(Payload.HueVsHueCurve)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.HueVsSaturationCurve)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.HueVsLuminanceCurve)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.LuminanceVsSaturationCurve)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.SaturationVsSaturationCurve)) == 0))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "selective curves; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 18 &&
-                (CountJsonFields(json, nameof(Payload.PrimaryLift)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.PrimaryGamma)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.PrimaryGain)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.PrimaryOffset)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.PrimaryMaster)) == 0))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "primary wheels; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 19 &&
-                CountJsonFields(json, nameof(Payload.EnabledMask)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "enabled mask; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 13 &&
-                CountJsonFields(json, nameof(Payload.Qualifier)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит qualifier; " +
-                    "грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 6 &&
-                CountJsonFields(json, nameof(Payload.CdlMaster)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "CdlMaster; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 16 &&
-                CountJsonFields(json, nameof(Payload.CdlSaturation)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "CDL saturation; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 2 &&
-                !HasRequiredZonePayloadFields(json, payload.Zones, payload.Version))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Секция зон в {Path} неполна; грейд оставлен как есть.");
+                    $"[ColorGrade] Файл {Path} не разобран; грейд оставлен как есть.");
                 return false;
             }
 
             state.Transform = (DisplayTransform)payload.Transform;
             state.Exposure = payload.Exposure;
             state.Contrast = payload.Contrast;
-            state.Pivot = payload.Version >= 9 ? payload.Pivot : 0.5f;
-            state.Shadows = payload.Version >= 9 ? payload.Shadows : 0f;
-            state.Highlights = payload.Version >= 9 ? payload.Highlights : 0f;
-            state.Blacks = payload.Version >= 9 ? payload.Blacks : 0f;
-            state.Whites = payload.Version >= 9 ? payload.Whites : 0f;
-            state.Toe = payload.Version >= 9 ? payload.Toe : 0f;
-            state.Shoulder = payload.Version >= 9 ? payload.Shoulder : 0f;
+            state.Pivot = payload.Pivot;
+            state.Shadows = payload.Shadows;
+            state.Highlights = payload.Highlights;
+            state.Blacks = payload.Blacks;
+            state.Whites = payload.Whites;
+            state.Toe = payload.Toe;
+            state.Shoulder = payload.Shoulder;
             state.Saturation = payload.Saturation;
-            state.CdlSaturation = payload.Version >= 16 ? payload.CdlSaturation : 1f;
-            state.Vibrance = payload.Version >= 7 ? payload.Vibrance : 0f;
-            state.Hue = payload.Version >= 10 ? payload.Hue : 0f;
+            state.CdlSaturation = payload.CdlSaturation;
+            state.Vibrance = payload.Vibrance;
+            state.Hue = payload.Hue;
             state.Temperature = payload.Temperature;
             state.Tint = payload.Tint;
             state.Slope = payload.Slope;
             state.Offset = payload.Offset;
             state.Power = payload.Power;
-            state.PrimaryLift = payload.Version >= 18 ? payload.PrimaryLift : Vector3.zero;
-            state.PrimaryGamma = payload.Version >= 18 ? payload.PrimaryGamma : Vector3.one;
-            state.PrimaryGain = payload.Version >= 18 ? payload.PrimaryGain : Vector3.one;
-            state.PrimaryOffset = payload.Version >= 18 ? payload.PrimaryOffset : Vector3.zero;
-            state.PrimaryMaster = payload.Version >= 18
-                ? payload.PrimaryMaster
-                : new Vector4(0f, 1f, 1f, 0f);
-            state.CdlMaster = payload.Version >= 6
-                ? payload.CdlMaster
-                : new Vector3(1f, 0f, 1f);
+            state.PrimaryLift = payload.PrimaryLift;
+            state.PrimaryGamma = payload.PrimaryGamma;
+            state.PrimaryGain = payload.PrimaryGain;
+            state.PrimaryOffset = payload.PrimaryOffset;
+            state.PrimaryMaster = payload.PrimaryMaster;
+            state.CdlMaster = payload.CdlMaster;
             state.WhitePoint = payload.WhitePoint;
             state.GreyOut = payload.GreyOut;
-            state.CurveSlope = payload.CurveSlope;
             state.ShoulderPower = payload.ShoulderPower;
             state.ToePower = payload.ToePower;
             state.ToeStops = payload.ToeStops;
-            state.PathToWhiteAmount = payload.PathToWhiteAmount;
-            state.PathToWhitePower = payload.PathToWhitePower;
-            state.GamutCompressionEnabled = payload.Version >= GamutCompressionVersion
-                ? payload.GamutCompressionEnabled
-                : PostProcessLook.Grade.GamutCompressionEnabled;
-            state.GamutCompressionStrength = payload.Version >= GamutCompressionVersion
-                ? payload.GamutCompressionStrength
-                : PostProcessLook.Grade.GamutCompressionStrength;
-            if (payload.Version >= 12)
-            {
-                LoadCurve(state.MasterCurve, payload.MasterCurve);
-                LoadCurve(state.RedCurve, payload.RedCurve);
-                LoadCurve(state.GreenCurve, payload.GreenCurve);
-                LoadCurve(state.BlueCurve, payload.BlueCurve);
-            }
+            state.GamutCompressionEnabled = payload.GamutCompressionEnabled;
+            state.GamutCompressionStrength = payload.GamutCompressionStrength;
+            LoadCurve(state.MasterCurve, payload.MasterCurve);
+            LoadCurve(state.RedCurve, payload.RedCurve);
+            LoadCurve(state.GreenCurve, payload.GreenCurve);
+            LoadCurve(state.BlueCurve, payload.BlueCurve);
             state.HueVsHueCurve.Reset();
             state.HueVsSaturationCurve.Reset();
             state.HueVsLuminanceCurve.Reset();
             state.LuminanceVsSaturationCurve.Reset();
             state.SaturationVsSaturationCurve.Reset();
-            if (payload.Version >= RelativeSelectiveCurvesVersion)
-            {
-                LoadCurve(state.HueVsHueCurve, payload.HueVsHueCurve);
-                LoadCurve(state.HueVsSaturationCurve, payload.HueVsSaturationCurve);
-                LoadCurve(state.HueVsLuminanceCurve, payload.HueVsLuminanceCurve);
-                LoadCurve(state.LuminanceVsSaturationCurve, payload.LuminanceVsSaturationCurve);
-                LoadCurve(state.SaturationVsSaturationCurve, payload.SaturationVsSaturationCurve);
-            }
-            else if (payload.Version >= 17)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version}: кривые Hue/Luminance/Saturation " +
-                    "были в старом абсолютном формате и сброшены в нейтраль. Остальной грейд загружен.");
-            }
+            LoadCurve(state.HueVsHueCurve, payload.HueVsHueCurve);
+            LoadCurve(state.HueVsSaturationCurve, payload.HueVsSaturationCurve);
+            LoadCurve(state.HueVsLuminanceCurve, payload.HueVsLuminanceCurve);
+            LoadCurve(state.LuminanceVsSaturationCurve, payload.LuminanceVsSaturationCurve);
+            LoadCurve(state.SaturationVsSaturationCurve, payload.SaturationVsSaturationCurve);
             state.Qualifier.Reset();
-            if (payload.Version >= 13)
-            {
-                LoadQualifier(state.Qualifier, payload.Qualifier);
-            }
+            LoadQualifier(state.Qualifier, payload.Qualifier);
             state.ClearLut();
-            if (payload.Version >= 13 &&
-                !string.IsNullOrWhiteSpace(payload.LutPath))
+            if (!string.IsNullOrWhiteSpace(payload.LutPath))
             {
                 if (state.LoadLut(payload.LutPath, out string lutError))
                 {
@@ -519,16 +347,13 @@ public static class ColorGradeFile
                     Debug.LogWarning($"[ColorGrade] Lut не загружен: {lutError}");
                 }
             }
-            state.EnabledMask = payload.Version >= 19
-                ? payload.EnabledMask
-                : (1 << 6) - 1;
+            state.EnabledMask = payload.EnabledMask;
             state.ClearPreviewOverrides();
             state.Sanitize();
             ColorGradeZonePayloads.Into(
                 zones,
                 payload.ZonesEnabled,
-                payload.Zones,
-                payload.Version);
+                payload.Zones);
             return true;
         }
         catch (Exception exception)
@@ -579,120 +404,7 @@ public static class ColorGradeFile
             value.y.ToString("F6", culture), " ",
             value.z.ToString("F6", culture));
 
-    private static bool HasRequiredPayloadFields(string json)
-    {
-        // JsonUtility не отличает отсутствующее поле от честного нуля. Без
-        // этой проверки оборванный, но синтаксически валидный JSON вроде
-        // { "Version": 2 } успешно загружался и заменял почти весь look
-        // минимальными значениями после Sanitize().
-        string[] requiredFields =
-        [
-            nameof(Payload.Version),
-            nameof(Payload.Transform),
-            nameof(Payload.Exposure),
-            nameof(Payload.Contrast),
-            nameof(Payload.Saturation),
-            nameof(Payload.Temperature),
-            nameof(Payload.Tint),
-            nameof(Payload.Slope),
-            nameof(Payload.Offset),
-            nameof(Payload.Power),
-            nameof(Payload.WhitePoint),
-            nameof(Payload.GreyOut),
-            nameof(Payload.CurveSlope),
-            nameof(Payload.ShoulderPower),
-            nameof(Payload.ToePower),
-            nameof(Payload.ToeStops),
-            nameof(Payload.PathToWhiteAmount),
-            nameof(Payload.PathToWhitePower),
-        ];
 
-        foreach (string field in requiredFields)
-        {
-            if (CountJsonFields(json, field) == 0)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool HasRequiredVersionedFields(string json, Payload payload)
-    {
-        if (payload.Version >= 7 && CountJsonFields(json, nameof(Payload.Vibrance)) == 0)
-        {
-            return false;
-        }
-
-        if (payload.Version >= 9 &&
-            (CountJsonFields(json, nameof(Payload.Pivot)) == 0 ||
-             CountJsonFields(json, nameof(Payload.Shadows)) == 0 ||
-             CountJsonFields(json, nameof(Payload.Highlights)) == 0 ||
-             CountJsonFields(json, nameof(Payload.Blacks)) == 0 ||
-             CountJsonFields(json, nameof(Payload.Whites)) == 0 ||
-             CountJsonFields(json, nameof(Payload.Toe)) == 0 ||
-             CountJsonFields(json, nameof(Payload.Shoulder)) == 0))
-        {
-            return false;
-        }
-
-        if (payload.Version >= 10 && CountJsonFields(json, nameof(Payload.Hue)) == 0)
-        {
-            return false;
-        }
-
-        if (payload.Version >= 12 &&
-            (CountJsonFields(json, nameof(Payload.MasterCurve)) == 0 ||
-             CountJsonFields(json, nameof(Payload.RedCurve)) == 0 ||
-             CountJsonFields(json, nameof(Payload.GreenCurve)) == 0 ||
-             CountJsonFields(json, nameof(Payload.BlueCurve)) == 0))
-        {
-            return false;
-        }
-
-        if (payload.Version >= 6 && CountJsonFields(json, nameof(Payload.CdlMaster)) == 0)
-        {
-            return false;
-        }
-
-        if (payload.Version >= 13 && CountJsonFields(json, nameof(Payload.Qualifier)) == 0)
-        {
-            return false;
-        }
-
-        if (payload.Version >= 16 && CountJsonFields(json, nameof(Payload.CdlSaturation)) == 0)
-        {
-            return false;
-        }
-
-        if (payload.Version >= 17 &&
-            (CountJsonFields(json, nameof(Payload.HueVsHueCurve)) == 0 ||
-             CountJsonFields(json, nameof(Payload.HueVsSaturationCurve)) == 0 ||
-             CountJsonFields(json, nameof(Payload.HueVsLuminanceCurve)) == 0 ||
-             CountJsonFields(json, nameof(Payload.LuminanceVsSaturationCurve)) == 0 ||
-             CountJsonFields(json, nameof(Payload.SaturationVsSaturationCurve)) == 0))
-        {
-            return false;
-        }
-
-        if (payload.Version >= 18 &&
-            (CountJsonFields(json, nameof(Payload.PrimaryLift)) == 0 ||
-             CountJsonFields(json, nameof(Payload.PrimaryGamma)) == 0 ||
-             CountJsonFields(json, nameof(Payload.PrimaryGain)) == 0 ||
-             CountJsonFields(json, nameof(Payload.PrimaryOffset)) == 0 ||
-             CountJsonFields(json, nameof(Payload.PrimaryMaster)) == 0))
-        {
-            return false;
-        }
-
-        if (payload.Version >= 19 && CountJsonFields(json, nameof(Payload.EnabledMask)) == 0)
-        {
-            return false;
-        }
-
-        return HasRequiredZonePayloadFields(json, payload.Zones, payload.Version);
-    }
 
     private static CurvePayload ToCurvePayload(ColorGradeCurve curve) => new()
     {
@@ -787,116 +499,7 @@ public static class ColorGradeFile
         return samples;
     }
 
-    private static bool HasRequiredZonePayloadFields(
-        string json,
-        ColorGradeZonePayload[]? zones,
-        int payloadVersion)
-    {
-        if (zones == null ||
-            CountJsonFields(json, nameof(Payload.ZonesEnabled)) == 0 ||
-            CountJsonFields(json, nameof(Payload.Zones)) == 0)
-        {
-            return false;
-        }
 
-        string[] zoneOnlyFields =
-        [
-            nameof(ColorGradeZonePayload.Name),
-            nameof(ColorGradeZonePayload.CenterY),
-            nameof(ColorGradeZonePayload.HalfHeight),
-            nameof(ColorGradeZonePayload.Feather),
-        ];
-        foreach (string field in zoneOnlyFields)
-        {
-            if (CountJsonFields(json, field) < zones.Length)
-            {
-                return false;
-            }
-        }
-
-        // Эти имена один раз уже есть у базового look, поэтому ожидается
-        // базовое поле плюс поле каждой зоны. Так валидный, но оборванный JSON
-        // не превращает хвост зоны в нулевые значения JsonUtility.
-        if (zones.Length > 0)
-        {
-            int expected = zones.Length + 1;
-            string[] gradeFields =
-            [
-                nameof(ColorGradeZonePayload.Transform),
-                nameof(ColorGradeZonePayload.Temperature),
-                nameof(ColorGradeZonePayload.Tint),
-                nameof(ColorGradeZonePayload.Slope),
-                nameof(ColorGradeZonePayload.Offset),
-                nameof(ColorGradeZonePayload.Power),
-                nameof(ColorGradeZonePayload.WhitePoint),
-                nameof(ColorGradeZonePayload.GreyOut),
-                nameof(ColorGradeZonePayload.CurveSlope),
-                nameof(ColorGradeZonePayload.ShoulderPower),
-                nameof(ColorGradeZonePayload.ToePower),
-                nameof(ColorGradeZonePayload.ToeStops),
-                nameof(ColorGradeZonePayload.PathToWhiteAmount),
-                nameof(ColorGradeZonePayload.PathToWhitePower),
-            ];
-            foreach (string field in gradeFields)
-            {
-                if (CountJsonFields(json, field) < expected)
-                {
-                    return false;
-                }
-            }
-
-            // v3 добавила отсутствовавшие раньше параметры полного грейда.
-            if (payloadVersion >= 3 &&
-                (CountJsonFields(json, nameof(ColorGradeZonePayload.Exposure)) < expected ||
-                 CountJsonFields(json, nameof(ColorGradeZonePayload.Contrast)) < expected ||
-                 CountJsonFields(json, nameof(ColorGradeZonePayload.Saturation)) < expected))
-            {
-                return false;
-            }
-
-            if (payloadVersion >= 18 &&
-                (CountJsonFields(json, nameof(ColorGradeZonePayload.PrimaryLift)) < expected ||
-                 CountJsonFields(json, nameof(ColorGradeZonePayload.PrimaryGamma)) < expected ||
-                 CountJsonFields(json, nameof(ColorGradeZonePayload.PrimaryGain)) < expected ||
-                 CountJsonFields(json, nameof(ColorGradeZonePayload.PrimaryOffset)) < expected ||
-                 CountJsonFields(json, nameof(ColorGradeZonePayload.PrimaryMaster)) < expected))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static int CountJsonFields(string json, string field)
-    {
-        string token = $"\"{field}\"";
-        int count = 0;
-        int start = 0;
-        while (start < json.Length)
-        {
-            int index = json.IndexOf(token, start, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                break;
-            }
-
-            int afterToken = index + token.Length;
-            while (afterToken < json.Length && char.IsWhiteSpace(json[afterToken]))
-            {
-                afterToken++;
-            }
-
-            if (afterToken < json.Length && json[afterToken] == ':')
-            {
-                count++;
-            }
-
-            start = index + token.Length;
-        }
-
-        return count;
-    }
 
     private static void WriteAtomically(string path, string contents)
     {
@@ -1016,12 +619,9 @@ public static class ColorGradeFile
         builder.AppendLine($"        public static Vector3 CdlMaster => {VectorSource(state.CdlMaster, culture)};");
         builder.AppendLine();
         Constant(builder, culture, "GreyOut", state.GreyOut);
-        Constant(builder, culture, "CurveSlope", state.CurveSlope);
         Constant(builder, culture, "ShoulderPower", state.ShoulderPower);
         Constant(builder, culture, "ToePower", state.ToePower);
         Constant(builder, culture, "ToeStops", state.ToeStops);
-        Constant(builder, culture, "PathToWhiteAmount", state.PathToWhiteAmount);
-        Constant(builder, culture, "PathToWhitePower", state.PathToWhitePower);
         builder.AppendLine("    }");
         return builder.ToString();
     }

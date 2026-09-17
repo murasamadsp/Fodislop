@@ -4,7 +4,6 @@ using System;
 using Kern.Core;
 using Kern.World.Lighting.Quality;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace Kern.Rendering;
 
@@ -33,7 +32,6 @@ public struct GraphicsQualitySettings : IEquatable<GraphicsQualitySettings>
 
     public static readonly int[] AntiAliasingSampleCounts = [0, 2, 4, 8];
 
-    [FormerlySerializedAs("LightingPixelsPerCell")]
     [Range(1, 8)]
     [SettingLabel("settings.lighting.density")]
     [Tooltip("Нижняя граница lighting-пикселей на клетку. Фактическое разрешение считается от render target базовой камеры.")]

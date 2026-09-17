@@ -9,13 +9,13 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 namespace Kern.Networking.Auth;
-public readonly struct VkSession
+public readonly struct VKSession
 {
     public string AccessToken { get; init; }
     public long UserID { get; init; }
     public string FirstName { get; init; }
     public string LastName { get; init; }
-    public string AvatarUrl { get; init; }
+    public string AvatarURL { get; init; }
     public long ExpiresAtUnix { get; init; }
 
     public string DisplayName => string.IsNullOrEmpty(FirstName)
@@ -25,13 +25,11 @@ public readonly struct VkSession
     public bool IsValid => UserID > 0 && ExpiresAtUnix > DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 }
 
-public readonly struct VkAuthResult
-{
-    public bool Success { get; init; }
-    public VkSession Session { get; init; }
-    public string GameToken { get; init; }
-    public string Error { get; init; }
-}
+public readonly record struct VKAuthResult(
+    bool Success,
+    VKSession Session,
+    string GameToken,
+    string Error);
 
 public readonly record struct AuthenticationResult(
     bool Success,
@@ -42,19 +40,19 @@ public interface IAuthenticationService
 {
     bool HasStoredCredentials { get; }
 
-    bool HasVkSession { get; }
+    bool HasVKSession { get; }
 
-    string VkDisplayName { get; }
+    string VKDisplayName { get; }
 
-    UniTask<AuthenticationResult> LoginWithVkAsync();
+    UniTask<AuthenticationResult> LoginWithVKAsync();
 }
 
 public sealed class AuthenticationService : IAuthenticationService
 {
-    private readonly VkIdentityProvider _vk;
+    private readonly VKIdentityProvider _vk;
     private readonly IGameTokenStore _tokens;
 
-    public AuthenticationService(VkIdentityProvider vk, IGameTokenStore tokens)
+    public AuthenticationService(VKIdentityProvider vk, IGameTokenStore tokens)
     {
         _vk = vk;
         _tokens = tokens;
@@ -62,13 +60,13 @@ public sealed class AuthenticationService : IAuthenticationService
 
     public bool HasStoredCredentials => _tokens.HasToken;
 
-    public bool HasVkSession => _vk.HasValidSession;
+    public bool HasVKSession => _vk.HasValidSession;
 
-    public string VkDisplayName => _vk.LoadSession().DisplayName;
+    public string VKDisplayName => _vk.LoadSession().DisplayName;
 
-    public async UniTask<AuthenticationResult> LoginWithVkAsync()
+    public async UniTask<AuthenticationResult> LoginWithVKAsync()
     {
-        VkAuthResult result = await _vk.LoginAsync();
+        VKAuthResult result = await _vk.LoginAsync();
         if (!result.Success)
         {
             return new AuthenticationResult(false, string.Empty, result.Error);
@@ -79,42 +77,42 @@ public sealed class AuthenticationService : IAuthenticationService
     }
 }
 
-public sealed class VkIdentityProvider
+public sealed class VKIdentityProvider
 {
     public const string DefaultClientID = "";
 
-    private const string DeviceIDKey = "Vk.DeviceId";
-    private const string AccessTokenKey = "Vk.AccessToken";
-    private const string UserIDKey = "Vk.UserID";
-    private const string UserNameKey = "Vk.UserName";
-    private const string AvatarKey = "Vk.AvatarUrl";
-    private const string ExpiresAtKey = "Vk.ExpiresAt";
+    private const string DeviceIDKey = "VK.DeviceId";
+    private const string AccessTokenKey = "VK.AccessToken";
+    private const string UserIDKey = "VK.UserID";
+    private const string UserNameKey = "VK.UserName";
+    private const string AvatarKey = "VK.AvatarUrl";
+    private const string ExpiresAtKey = "VK.ExpiresAt";
 
-    private const string DeviceAuthorizeUrl = "https://id.vk.com/oauth2/device_authorize";
-    private const string DeviceTokenUrl = "https://id.vk.com/oauth2/device_token";
+    private const string DeviceAuthorizeURL = "https://id.vk.com/oauth2/device_authorize";
+    private const string DeviceTokenURL = "https://id.vk.com/oauth2/device_token";
 
     public bool HasValidSession => LoadSession().IsValid;
 
-    public VkSession LoadSession()
+    public VKSession LoadSession()
     {
         long expiresAt = long.TryParse(PlayerPrefs.GetString(ExpiresAtKey, "0"), out long e) ? e : 0;
-        return new VkSession
+        return new VKSession
         {
             AccessToken = PlayerPrefs.GetString(AccessTokenKey, string.Empty),
             UserID = long.TryParse(PlayerPrefs.GetString(UserIDKey, "0"), out long userID) ? userID : 0,
             FirstName = PlayerPrefs.GetString(UserNameKey, string.Empty),
             LastName = string.Empty,
-            AvatarUrl = PlayerPrefs.GetString(AvatarKey, string.Empty),
+            AvatarURL = PlayerPrefs.GetString(AvatarKey, string.Empty),
             ExpiresAtUnix = expiresAt,
         };
     }
 
-    public async UniTask<VkAuthResult> LoginAsync()
+    public async UniTask<VKAuthResult> LoginAsync()
     {
         string clientID = ResolveClientID();
-        string backendUrl = ProjectRuntimeContracts.Authentication.VKBackendUrl;
+        string backendURL = ProjectRuntimeContracts.Authentication.VKBackendURL;
         if (string.IsNullOrWhiteSpace(clientID) ||
-            !Uri.TryCreate(backendUrl, UriKind.Absolute, out Uri backendUri) ||
+            !Uri.TryCreate(backendURL, UriKind.Absolute, out Uri backendUri) ||
             !string.Equals(backendUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             return Error("gateway.auth.vk_not_configured");
@@ -123,7 +121,7 @@ public sealed class VkIdentityProvider
         string deviceID = LoadOrCreateDeviceID();
         string state = RandomToken(16);
         string codeVerifier = RandomToken(64);
-        string codeChallenge = Base64Url(Sha256(codeVerifier));
+        string codeChallenge = Base64URL(Sha256(codeVerifier));
 
         try
         {
@@ -136,7 +134,7 @@ public sealed class VkIdentityProvider
             authorizeForm.AddField("code_challenge", codeChallenge);
             authorizeForm.AddField("code_challenge_method", "S256");
 
-            string authorizeJson = await PostJsonAsync(DeviceAuthorizeUrl, authorizeForm);
+            string authorizeJson = await PostJsonAsync(DeviceAuthorizeURL, authorizeForm);
             var authorize = JsonUtility.FromJson<DeviceAuthorizeResponse>(authorizeJson);
             if (!string.IsNullOrEmpty(authorize.error))
             {
@@ -164,11 +162,11 @@ public sealed class VkIdentityProvider
                 tokenForm.AddField("state", state);
                 tokenForm.AddField("code_verifier", codeVerifier);
 
-                string tokenJson = await PostJsonAsync(DeviceTokenUrl, tokenForm);
+                string tokenJson = await PostJsonAsync(DeviceTokenURL, tokenForm);
                 var token = JsonUtility.FromJson<DeviceTokenResponse>(tokenJson);
                 if (!string.IsNullOrEmpty(token.access_token))
                 {
-                    return await ExchangeWithBackendAsync(token.access_token, clientID, deviceID, backendUrl);
+                    return await ExchangeWithBackendAsync(token.access_token, clientID, deviceID, backendURL);
                 }
 
                 switch (token.error)
@@ -190,51 +188,50 @@ public sealed class VkIdentityProvider
         }
         catch (Exception e)
         {
-            Debug.LogError($"[VkAuth] flow failed: {e.Message}");
+            Debug.LogError($"[VKAuth] flow failed: {e.Message}");
             return Error("gateway.auth.vk_network");
         }
     }
 
     public static string ResolveClientID()
     {
-        string configured = ProjectRuntimeContracts.Authentication.VKClientId;
+        string configured = ProjectRuntimeContracts.Authentication.VKClientID;
         return string.IsNullOrWhiteSpace(configured) ? DefaultClientID : configured;
     }
 
-    private static async UniTask<VkAuthResult> ExchangeWithBackendAsync(
+    private static async UniTask<VKAuthResult> ExchangeWithBackendAsync(
         string accessToken,
         string clientID,
         string deviceID,
-        string backendUrl)
+        string backendURL)
     {
         var form = new WWWForm();
         form.AddField("access_token", accessToken);
         form.AddField("client_id", clientID);
         form.AddField("device_id", deviceID);
-        string json = await PostJsonAsync(backendUrl, form);
+        string json = await PostJsonAsync(backendURL, form);
         var response = JsonUtility.FromJson<BackendExchangeResponse>(json);
         if (response == null || string.IsNullOrWhiteSpace(response.game_token) || response.user_id <= 0)
         {
             return Error(response?.error ?? "VK backend returned an invalid session");
         }
 
-        var session = new VkSession
+        var session = new VKSession
         {
             AccessToken = string.Empty,
             UserID = response.user_id,
             FirstName = response.first_name ?? string.Empty,
             LastName = response.last_name ?? string.Empty,
-            AvatarUrl = response.avatar_url ?? string.Empty,
+            AvatarURL = response.avatar_url ?? string.Empty,
             ExpiresAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + Math.Max(response.expires_in, 60),
         };
 
-        PlayerPrefs.DeleteKey(AccessTokenKey);
         PlayerPrefs.SetString(UserIDKey, session.UserID.ToString());
         PlayerPrefs.SetString(UserNameKey, session.FirstName);
-        PlayerPrefs.SetString(AvatarKey, session.AvatarUrl);
+        PlayerPrefs.SetString(AvatarKey, session.AvatarURL);
         PlayerPrefs.SetString(ExpiresAtKey, session.ExpiresAtUnix.ToString());
         PlayerPrefs.Save();
-        return new VkAuthResult
+        return new VKAuthResult
         {
             Success = true,
             Session = session,
@@ -272,16 +269,30 @@ public sealed class VkIdentityProvider
     private static string RandomToken(int length)
     {
         const string alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
-        var bytes = new byte[length];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(bytes);
-        }
-
+        int alphabetLen = alphabet.Length;
+        // Rejection sampling keeps every output byte uniformly distributed over
+        // the alphabet; a plain modulo would bias low indices because 256 is not
+        // divisible by alphabetLen.
         var sb = new StringBuilder(length);
-        foreach (byte b in bytes)
+        var buffer = new byte[length];
+        int buffered = 0;
+        while (sb.Length < length)
         {
-            sb.Append(alphabet[b % alphabet.Length]);
+            if (buffered == 0)
+            {
+                using var rng = RandomNumberGenerator.Create();
+                rng.GetBytes(buffer);
+                buffered = length;
+            }
+
+            byte b = buffer[--buffered];
+            int idx = b % alphabetLen;
+            // Reject biased remainder: values above the largest multiple of
+            // alphabetLen that fits in a byte would skew the distribution.
+            if (b < 256 - (256 % alphabetLen))
+            {
+                sb.Append(alphabet[idx]);
+            }
         }
 
         return sb.ToString();
@@ -293,12 +304,12 @@ public sealed class VkIdentityProvider
         return sha.ComputeHash(Encoding.UTF8.GetBytes(value));
     }
 
-    private static string Base64Url(byte[] data) =>
+    private static string Base64URL(byte[] data) =>
         Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private static VkAuthResult Error(string message)
+    private static VKAuthResult Error(string message)
     {
-        return new VkAuthResult { Success = false, Error = message };
+        return new VKAuthResult { Success = false, Error = message };
     }
 
     [Serializable]

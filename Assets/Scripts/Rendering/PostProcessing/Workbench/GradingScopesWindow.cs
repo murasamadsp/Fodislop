@@ -28,9 +28,7 @@ internal sealed class GradingScopesWindow : ToolWindow
         new("luma", (int)PostProcessDebugView.LumaOnly),
         new("sat", (int)PostProcessDebugView.SaturationOnly),
         new("matte", (int)PostProcessDebugView.QualifierMatte),
-        new("R", (int)PostProcessDebugView.SoloRed),
-        new("G", (int)PostProcessDebugView.SoloGreen),
-        new("B", (int)PostProcessDebugView.SoloBlue),
+        new("RGB", (int)PostProcessDebugView.RgbParade),
     ];
 
     private static readonly Option[] CompareOptions =
@@ -173,9 +171,7 @@ internal sealed class GradingScopesWindow : ToolWindow
                 "чёрный — нейтральный, белый — максимальная насыщенность",
             PostProcessDebugView.QualifierMatte =>
                 "белое — выбранная qualifier-маска, чёрное — исключённые пиксели",
-            PostProcessDebugView.SoloRed => "только красный канал",
-            PostProcessDebugView.SoloGreen => "только зелёный канал",
-            PostProcessDebugView.SoloBlue => "только синий канал",
+            PostProcessDebugView.RgbParade => "трети R|G|B монохромом",
             _ => "кадр показывается без отладочной разметки",
         };
         GUILayout.Label(explanation, WrappedLabelStyle);

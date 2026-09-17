@@ -69,11 +69,6 @@ public sealed class RobotLighting
         }
     }
 
-    public void SetIntensity(float intensity, LightingEngine? lightingEngine)
-    {
-        _dynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
-    }
-
     public void SetColor(Color color, LightingEngine? lightingEngine)
     {
         _dynamicLightColor = new Color(

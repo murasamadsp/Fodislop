@@ -14,11 +14,6 @@ public enum TerrainCellState
 
 public struct CachedCellData
 {
-    public readonly bool HasAnimatedGlow =>
-        State == TerrainCellState.Loaded &&
-        Animation != CellAnimationType.None &&
-        (Properties & CellConfigProperties.Glowing) != 0;
-
     public TerrainCellState State;
     public CellType Type;
     public CellConfigProperties Properties;

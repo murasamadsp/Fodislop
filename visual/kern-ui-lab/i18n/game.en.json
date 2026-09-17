@@ -111,8 +111,6 @@
   "settings.effects.grain": "Grain",
   "settings.effects.motion_blur": "Motion Blur",
   "settings.effects.local_sharpness": "Local Sharpness",
-  "settings.effects.anamorphic_beams": "Lens Effects",
-  "settings.effects.glow_dust": "Glow and Heat Haze",
   "settings.effects.phosphor_pattern": "Phosphor and Dithering",
   "settings.effects.phosphor_afterglow": "Afterglow and Light Stabilization",
   "settings.debug.tools": "Developer Tools",

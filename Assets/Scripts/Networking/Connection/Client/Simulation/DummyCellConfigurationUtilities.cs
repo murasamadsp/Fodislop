@@ -134,9 +134,9 @@ internal static class DummyCellConfigurationUtilities
 
     private static void ApplyMapColors(CellConfigurationPacket[] configs)
     {
-        for (int cellId = 0; cellId < configs.Length; cellId++)
+        for (int cellID = 0; cellID < configs.Length; cellID++)
         {
-            configs[cellId] = configs[cellId] with { Color = DummyMapColors.Get(cellId) };
+            configs[cellID] = configs[cellID] with { Color = DummyMapColors.Get(cellID) };
         }
     }
 

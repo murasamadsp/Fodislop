@@ -38,8 +38,8 @@ public static class ProjectRuntimeContracts
 
     public static class Authentication
     {
-        public const string VKClientId = "";
-        public const string VKBackendUrl = "";
+        public const string VKClientID = "";
+        public const string VKBackendURL = "";
     }
 
     public static class Chat

@@ -5,14 +5,19 @@ using Kern.Rendering;
 
 namespace Kern.Core;
 
-// Путь конфига на старте: чистая установка, обновление или обычный запуск.
+// Путь конфига на старте: чистая установка или обычный запуск.
 //
-// Отделён от ClientConfigManager, чтобы установку и обновление можно было
+// Легаси запрещено: никаких пошаговых миграций старых схем, никаких
+// LegacySchema-классов, никаких бэкапов версий. Файл чужой версии —
+// это чужой файл: сбрасывается на дефолты и перезаписывается.
+// Сверка стандартных пресетов — текущее поведение, не миграция:
+// выполняется при каждой загрузке.
+//
+// Отделён от ClientConfigManager, чтобы установку и сброс можно было
 // проверить на временной папке, без MonoBehaviour и persistentDataPath.
 internal sealed class ClientConfigLoader
 {
     private readonly ClientConfigRepository _repository;
-    private readonly ClientConfigMigration _migration;
     private readonly ClientConfigValidator _validator;
     private readonly GraphicsQualityProfile _graphicsQualityProfile;
 
@@ -21,7 +26,6 @@ internal sealed class ClientConfigLoader
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _graphicsQualityProfile = graphicsQualityProfile ??
             throw new ArgumentNullException(nameof(graphicsQualityProfile));
-        _migration = new ClientConfigMigration(graphicsQualityProfile);
         _validator = new ClientConfigValidator(graphicsQualityProfile);
     }
 
@@ -29,16 +33,13 @@ internal sealed class ClientConfigLoader
     {
         CreatedDefaults,
         Loaded,
-        Migrated,
+        ResetToDefaults,
     }
 
     public readonly record struct Result(ClientConfig Config, Outcome Outcome, int SourceSchemaVersion);
 
-    public static string MigrationBackupPath(string configPath, int sourceSchemaVersion) =>
-        $"{configPath}.v{sourceSchemaVersion}.backup";
-
-    // Файл, который нельзя прочитать, провалидировать или который новее
-    // клиента, не переписывается: исключение уходит наверх, диск не тронут.
+    // Файл, который нельзя прочитать или провалидировать, не переписывается:
+    // исключение уходит наверх, диск не тронут.
     public Result LoadOrCreate()
     {
         if (!_repository.Exists)
@@ -51,14 +52,47 @@ internal sealed class ClientConfigLoader
 
         ClientConfigRepository.LoadedConfig loaded = _repository.Load();
         int sourceSchemaVersion = loaded.Config.SchemaVersion;
-        bool migrated = _migration.Migrate(loaded.Config, loaded.Json);
-        _validator.Validate(loaded.Config);
-        if (!migrated)
+        if (sourceSchemaVersion != ClientConfig.CurrentSchemaVersion)
         {
-            return new Result(loaded.Config, Outcome.Loaded, sourceSchemaVersion);
+            ClientConfig defaults = ClientConfigDefaults.Create(_graphicsQualityProfile);
+            _validator.Validate(defaults);
+            _repository.Save(defaults);
+            return new Result(defaults, Outcome.ResetToDefaults, sourceSchemaVersion);
         }
 
-        _repository.Save(loaded.Config, MigrationBackupPath(_repository.ConfigPath, sourceSchemaVersion));
-        return new Result(loaded.Config, Outcome.Migrated, sourceSchemaVersion);
+        GraphicsPreset presetBefore = loaded.Config.GraphicsPreset;
+        GraphicsQualitySettings qualityBefore = loaded.Config.GraphicsQualitySettings;
+
+        ReconcileStandardPreset(loaded.Config);
+        _validator.Validate(loaded.Config);
+        if (loaded.Config.GraphicsPreset != presetBefore ||
+            loaded.Config.GraphicsQualitySettings != qualityBefore)
+        {
+            _repository.Save(loaded.Config);
+        }
+
+        return new Result(loaded.Config, Outcome.Loaded, sourceSchemaVersion);
+    }
+
+    private void ReconcileStandardPreset(ClientConfig config)
+    {
+        if (!GraphicsQualityProfile.IsStandard(config.GraphicsPreset))
+        {
+            return;
+        }
+
+        GraphicsQualitySettings standardSettings =
+            _graphicsQualityProfile.Get(config.GraphicsPreset);
+        if (config.GraphicsQualitySettings != standardSettings)
+        {
+            config.GraphicsQualitySettings = standardSettings;
+        }
+
+        if (!SettingSchema.MatchesDefaults(config.Terrain) ||
+            !SettingSchema.MatchesDefaults(config.Effects) ||
+            !SettingSchema.MatchesDefaults(config.PostProcess))
+        {
+            config.GraphicsPreset = GraphicsPreset.Custom;
+        }
     }
 }

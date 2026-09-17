@@ -93,11 +93,10 @@ public sealed class ForbiddenApiRule : IRule
         },
         // RuntimeTextureFactory creates textures
         ["Assets/Scripts/AssetPipeline/Loading/RuntimeTextureFactory.cs"] = new[] { "new Texture2D" },
-        // Legacy auth token storage (TODO: migrate to ClientConfigManager)
+        // Токены auth/VK живут в PlayerPrefs: перенос в ClientConfig требует
+        // PlayMode-проверки login/logout, без неё миграцию не делать.
         ["Assets/Scripts/Networking/Auth/AuthTokenManager.cs"] = new[] { "PlayerPrefs" },
-        ["Assets/Scripts/Networking/Auth/VkAuthService.cs"] = new[] { "PlayerPrefs" },
-        ["Assets/Scripts/UI/Gateway/AuthGate.cs"] = new[] { "PlayerPrefs" },
-        ["Assets/Scripts/UI/Gateway/GatewayController.cs"] = new[] { "PlayerPrefs" },
+        ["Assets/Scripts/Networking/Auth/VKAuthService.cs"] = new[] { "PlayerPrefs" },
         // Tests need to create objects
         ["Assets/Scripts/Tests/Editor/Core/LocalPlayerStateTests.cs"] = new[] { "new GameObject" },
         ["Assets/Scripts/Tests/Editor/Core/ProductionSceneContractValidatorTests.cs"] = new[] { "new GameObject" },

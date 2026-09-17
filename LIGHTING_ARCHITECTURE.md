@@ -166,11 +166,12 @@ Current policy is conservative:
 
 - initial state, resource resize, quality/config changes and geometry changes use full static solve;
 - region invalidation can use dependency mask when the region did not move and the cost estimate is favourable;
-- region movement currently uses full solve;
+- with the mask, each cascade dispatches a tight probe rect (`CascadeProbeRects`: dirty bounds expanded by interval reach + margin, 50% fallback to full) instead of the full grid; the per-entry early-out stays as a second net. Telemetry splits `cascadeFullEntries` vs `cascadePartialEntries`;
+- region movement currently uses full solve (the mask path only covers geometry edits without region move; region-move hitch is untouched by it);
 - atlas scroll/reuse code exists but is disabled after a visual correctness regression;
 - dynamic light movement does not invalidate static cascades.
 
-The dependency-mask path currently dispatches the full cascade grid and early-outs unchanged entries. It reduces DDA work only when the mask rejects enough candidates; it does not yet reduce dispatch thread count.
+The dependency-mask path dispatches a tight per-cascade probe rect and early-outs unchanged entries inside it. It reduces DDA work when the mask rejects candidates and dispatch threads when the dirty area is small (far cascades with huge intervals fall back to full grid, where they are cheapest).
 
 ## Streaming policy
 

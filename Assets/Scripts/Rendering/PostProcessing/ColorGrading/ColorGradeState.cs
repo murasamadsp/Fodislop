@@ -41,10 +41,6 @@ public sealed class ColorGradeState
     public const float VibranceMax = 1f;
     public const float HueMin = -180f;
     public const float HueMax = 180f;
-    public const float HueShiftMin = -180f;
-    public const float HueShiftMax = 180f;
-    public const float HueLuminanceMin = -1f;
-    public const float HueLuminanceMax = 1f;
     public const float ContrastMin = -0.5f;
     public const float ContrastMax = 0.5f;
     public const float PivotMin = 0.1f;
@@ -55,16 +51,10 @@ public sealed class ColorGradeState
     public const float WhitePointMax = 8f;
     public const float GreyOutMin = 0.05f;
     public const float GreyOutMax = 0.5f;
-    public const float CurveSlopeMin = 0.5f;
-    public const float CurveSlopeMax = 2f;
     public const float CurvePowerMin = 1f;
     public const float CurvePowerMax = 8f;
     public const float ToeStopsMin = 4f;
     public const float ToeStopsMax = 20f;
-    public const float PathToWhiteAmountMin = 0f;
-    public const float PathToWhiteAmountMax = 1f;
-    public const float PathToWhitePowerMin = 1f;
-    public const float PathToWhitePowerMax = 8f;
     public const float GamutCompressionStrengthMin = 0f;
     public const float GamutCompressionStrengthMax = 1f;
 
@@ -142,17 +132,11 @@ public sealed class ColorGradeState
 
     public float GreyOut { get; set; }
 
-    public float CurveSlope { get; set; }
-
     public float ShoulderPower { get; set; }
 
     public float ToePower { get; set; }
 
     public float ToeStops { get; set; }
-
-    public float PathToWhiteAmount { get; set; }
-
-    public float PathToWhitePower { get; set; }
 
     public bool GamutCompressionEnabled { get; set; } = PostProcessLook.Grade.GamutCompressionEnabled;
 
@@ -366,12 +350,9 @@ public sealed class ColorGradeState
         CdlMaster = new Vector3(1f, 0f, 1f);
         WhitePoint = PostProcessLook.Grade.WhitePoint;
         GreyOut = PostProcessLook.Grade.GreyOut;
-        CurveSlope = PostProcessLook.Grade.CurveSlope;
         ShoulderPower = PostProcessLook.Grade.ShoulderPower;
         ToePower = PostProcessLook.Grade.ToePower;
         ToeStops = PostProcessLook.Grade.ToeStops;
-        PathToWhiteAmount = PostProcessLook.Grade.PathToWhiteAmount;
-        PathToWhitePower = PostProcessLook.Grade.PathToWhitePower;
         GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled;
         GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength;
         MasterCurve.Reset();
@@ -437,12 +418,9 @@ public sealed class ColorGradeState
                 Transform = PostProcessLook.Grade.Transform;
                 WhitePoint = PostProcessLook.Grade.WhitePoint;
                 GreyOut = PostProcessLook.Grade.GreyOut;
-                CurveSlope = PostProcessLook.Grade.CurveSlope;
                 ShoulderPower = PostProcessLook.Grade.ShoulderPower;
                 ToePower = PostProcessLook.Grade.ToePower;
                 ToeStops = PostProcessLook.Grade.ToeStops;
-                PathToWhiteAmount = PostProcessLook.Grade.PathToWhiteAmount;
-                PathToWhitePower = PostProcessLook.Grade.PathToWhitePower;
                 GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled;
                 GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength;
                 MasterCurve.Reset();
@@ -459,7 +437,7 @@ public sealed class ColorGradeState
     public void Sanitize()
     {
         EnabledMask &= (1 << LayerCount) - 1;
-        if (Transform is not (DisplayTransform.None or DisplayTransform.Kern))
+        if (Transform is not (DisplayTransform.None or DisplayTransform.Sdr or DisplayTransform.HdrPq1300))
         {
             Transform = PostProcessLook.Grade.Transform;
         }
@@ -501,7 +479,6 @@ public sealed class ColorGradeState
             FiniteClamp(CdlMaster.z, PowerMin, PowerMax, 1f));
         WhitePoint = FiniteClamp(WhitePoint, WhitePointMin, WhitePointMax, PostProcessLook.Grade.WhitePoint);
         GreyOut = FiniteClamp(GreyOut, GreyOutMin, GreyOutMax, PostProcessLook.Grade.GreyOut);
-        CurveSlope = FiniteClamp(CurveSlope, CurveSlopeMin, CurveSlopeMax, PostProcessLook.Grade.CurveSlope);
         ShoulderPower = FiniteClamp(
             ShoulderPower,
             CurvePowerMin,
@@ -509,16 +486,6 @@ public sealed class ColorGradeState
             PostProcessLook.Grade.ShoulderPower);
         ToePower = FiniteClamp(ToePower, CurvePowerMin, CurvePowerMax, PostProcessLook.Grade.ToePower);
         ToeStops = FiniteClamp(ToeStops, ToeStopsMin, ToeStopsMax, PostProcessLook.Grade.ToeStops);
-        PathToWhiteAmount = FiniteClamp(
-            PathToWhiteAmount,
-            PathToWhiteAmountMin,
-            PathToWhiteAmountMax,
-            PostProcessLook.Grade.PathToWhiteAmount);
-        PathToWhitePower = FiniteClamp(
-            PathToWhitePower,
-            PathToWhitePowerMin,
-            PathToWhitePowerMax,
-            PostProcessLook.Grade.PathToWhitePower);
         GamutCompressionStrength = FiniteClamp(
             GamutCompressionStrength,
             GamutCompressionStrengthMin,
@@ -594,12 +561,9 @@ public sealed class ColorGradeState
         source.Toe == Toe &&
         source.Shoulder == Shoulder &&
         source.GreyOut == GreyOut &&
-        source.CurveSlope == CurveSlope &&
         source.ShoulderPower == ShoulderPower &&
         source.ToePower == ToePower &&
         source.ToeStops == ToeStops &&
-        source.PathToWhiteAmount == PathToWhiteAmount &&
-        source.PathToWhitePower == PathToWhitePower &&
         source.GamutCompressionEnabled == GamutCompressionEnabled &&
         source.GamutCompressionStrength == GamutCompressionStrength &&
         ReferenceEquals(source.Lut, Lut) &&
@@ -644,12 +608,9 @@ public sealed class ColorGradeState
         Toe = Toe,
         Shoulder = Shoulder,
         GreyOut = GreyOut,
-        CurveSlope = CurveSlope,
         ShoulderPower = ShoulderPower,
         ToePower = ToePower,
         ToeStops = ToeStops,
-        PathToWhiteAmount = PathToWhiteAmount,
-        PathToWhitePower = PathToWhitePower,
         GamutCompressionEnabled = GamutCompressionEnabled,
         GamutCompressionStrength = GamutCompressionStrength,
         MasterCurve = MasterCurve.Clone(),
@@ -766,8 +727,6 @@ public sealed class ColorGradeState
 
     public float EffectiveSaturation => IsActive(ColorGradeLayer.Saturation) ? Saturation : 1f;
 
-    public float EffectiveVibrance => IsActive(ColorGradeLayer.Saturation) ? Vibrance : 0f;
-
     private static float FiniteClamp(float value, float minimum, float maximum, float fallback) =>
         float.IsNaN(value) || float.IsInfinity(value)
             ? fallback
@@ -823,12 +782,9 @@ public sealed class ColorGradeState
         CdlMaster = snapshot.CdlMaster;
         WhitePoint = snapshot.WhitePoint;
         GreyOut = snapshot.GreyOut;
-        CurveSlope = snapshot.CurveSlope;
         ShoulderPower = snapshot.ShoulderPower;
         ToePower = snapshot.ToePower;
         ToeStops = snapshot.ToeStops;
-        PathToWhiteAmount = snapshot.PathToWhiteAmount;
-        PathToWhitePower = snapshot.PathToWhitePower;
         GamutCompressionEnabled = snapshot.GamutCompressionEnabled;
         GamutCompressionStrength = snapshot.GamutCompressionStrength;
         CopyCurve(MasterCurve, snapshot.MasterCurve);
@@ -925,12 +881,9 @@ public sealed class ColorGradeState
             left.CdlMaster == right.CdlMaster &&
             left.WhitePoint == right.WhitePoint &&
             left.GreyOut == right.GreyOut &&
-            left.CurveSlope == right.CurveSlope &&
             left.ShoulderPower == right.ShoulderPower &&
             left.ToePower == right.ToePower &&
             left.ToeStops == right.ToeStops &&
-            left.PathToWhiteAmount == right.PathToWhiteAmount &&
-            left.PathToWhitePower == right.PathToWhitePower &&
             left.GamutCompressionEnabled == right.GamutCompressionEnabled &&
             left.GamutCompressionStrength == right.GamutCompressionStrength &&
             ReferenceEquals(left.Lut, right.Lut) &&

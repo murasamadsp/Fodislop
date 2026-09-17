@@ -28,10 +28,10 @@ public sealed class ClientConfigDecompositionContractTests
     public void ExtractedConfigResponsibilities_HaveDedicatedTypes()
     {
         Assert.That(ReadConfigurationSource("ClientConfigRepository.cs"), Does.Contain("File.Replace"));
-        Assert.That(ReadConfigurationSource("ClientConfigMigration.cs"), Does.Contain("config.SchemaVersion = 22"));
+        Assert.That(ReadConfigurationSource("ClientConfigLoader.cs"), Does.Contain("ResetToDefaults"));
         Assert.That(ReadConfigurationSource("ClientConfigValidator.cs"), Does.Contain("public void Validate"));
         Assert.That(ReadConfigurationSource("ClientConfigDefaults.cs"), Does.Contain("public static ClientConfig Create"));
-        Assert.That(ReadConfigurationSource("ClientConfigLoader.cs"), Does.Contain("_migration.Migrate(loaded.Config, loaded.Json)"));
+        Assert.That(ReadConfigurationSource("ClientConfigLoader.cs"), Does.Not.Contain("Migrate("));
     }
 
     private static string ReadConfigurationSource(string fileName)

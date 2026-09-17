@@ -90,7 +90,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     // Радиус держится здесь и в Terrain.shader порознь: там он в пикселях
     // экрана, тут в текселях поля, и сводить их в одну константу нечем.
     // Вид показывает источник, а не готовую тень.
-    if (_DebugView == 10) // AmbientOcclusion
+    if (_DebugView == 9) // AmbientOcclusion
     {
         float nearby = SampleOccupancy(float2(pixel) + 0.5, _TerrainAmbientOcclusionMip);
         float occlusion = saturate(sqrt(nearby) * _TerrainAmbientOcclusionStrength);
@@ -159,17 +159,11 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    if (_DebugView == 7) // DirectRadiance (combined)
-    {
-        _Result[pixel] = float4(combinedDirect.rgb, 1.0);
-        return;
-    }
-
     float solid = saturate(material.a);
     // The bounce term reaches the image only when bounce is on, or in its own
     // debug view. Otherwise it was evaluated per pixel and then discarded.
     float3 bounce = 0.0;
-    if (_EnableDiffuseBounce != 0 || _DebugView == 8)
+    if (_EnableDiffuseBounce != 0 || _DebugView == 7)
     {
         bounce = (1.0 - solid) * SampleBounceFiltered(pixel, uv);
         if (solid > 0.0)
@@ -178,7 +172,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         }
     }
 
-    if (_DebugView == 8) // DiffuseBounce
+    if (_DebugView == 7) // DiffuseBounce
     {
         _Result[pixel] = float4(bounce, 1.0);
         return;
@@ -189,22 +183,28 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     float3 directAndBounce = bounceTerm + combinedDirect.rgb;
     float3 ambient = _AmbientColor.rgb;
 
-    if (_DebugView == 9) // Exposure (false-color zebras)
+    if (_DebugView == 8) // Exposure (false-color zebras)
     {
-        float maximumLight = max(_MaximumLightMultiplier, 0.0001);
+        // Шкала в стопах от белого, а не от единицы: контент HDR by design
+        // (эмиссия до EmissionScale), а URP Neutral гасит света плавно.
+        // Красный — только то что сгорит и после тонмаппа (выше потолка
+        // _MaximumLightMultiplier, +3 стопа), жёлтое — рабочий HDR-запас.
+        float ceiling = max(_MaximumLightMultiplier, 1.0);
         float3 result = ambient + directAndBounce;
         float peak = Max3(result);
+        float stops = log2(max(peak, 1e-4));
+        float ceilingStops = log2(ceiling);
         float3 falseColor = float3(0.0, 0.0, 0.0);
-        if (peak > maximumLight)
+        if (peak > ceiling)
         {
-            // Overexposed / clipped -> bright red
+            // Blown even after tonemap -> bright red
             falseColor = float3(1.0, 0.1, 0.1);
         }
         else if (peak > 1.0)
         {
-            // High dynamic range (1.0 to maximumLight) -> yellow-orange
-            float t = (peak - 1.0) / max(maximumLight - 1.0, 0.0001);
-            falseColor = lerp(float3(0.3, 0.9, 0.2), float3(1.0, 0.7, 0.0), saturate(t));
+            // HDR headroom, 0..+3 stops -> green-yellow-orange
+            float t = saturate(stops / max(ceilingStops, 1e-4));
+            falseColor = lerp(float3(0.3, 0.9, 0.2), float3(1.0, 0.7, 0.0), t);
         }
         else if (peak > 0.05)
         {

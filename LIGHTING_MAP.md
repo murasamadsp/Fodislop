@@ -5,7 +5,7 @@
 ## Симптом → где смотреть
 
 | Симптом | Файл | Точка входа |
-|---|---|---|
+| - | - | - |
 | Фриз при переходе через границу окна | `Assets/Scripts/Networking/Connection/Client/Systems/DummyMapStreamer.cs` | `SendMapChunksAroundAsync` |
 | Чанк применяется и вызывает каскад событий | `Assets/Scripts/World/Persistence/WorldLayer.cs` | `SetRegion`, `BeginChunkLoadBatch`, `EndChunkLoadBatch` |
 | Packet batch применяется | `Assets/Scripts/Networking/Processors/MapRegionProcessor.cs` | `Process`, `BeginBatch`, `EndBatch` |
@@ -54,7 +54,7 @@ Camera
 - Static cascade atlas scroll/reuse is **disabled** after a visual regression.
 - Full static solve still happens on region movement and relevant geometry invalidation.
 - Dependency mask exists, but first prototype still launches the full cascade dispatch grid.
-- `DummyMapStreamer` yields during payload preparation every four newly prepared chunks.
+- `DummyMapStreamer` yields only while a chunk is still loading (no artificial yield per N chunks).
 - Packet apply and terrain update remain synchronous boundaries.
 - `IsTerrainWindowResident` samples one cell per intersecting chunk; this is a weak completeness check and a likely place to inspect for one-frame squares.
 - `terrainFullPopulateCount = 1` in the latest dump, while terrain rebuilds and chunk loads are repeated.

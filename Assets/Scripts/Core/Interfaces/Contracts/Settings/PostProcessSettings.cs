@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Kern.Rendering.PostProcessing;
 
 namespace Kern.Core;
 
@@ -13,9 +14,11 @@ public sealed class PostProcessSettings
     public const float ContrastMax = 0.5f;
     public const float SaturationMin = 0f;
     public const float SaturationMax = 2f;
-    public const float DefaultExposure = 0f;
-    public const float DefaultContrast = 0f;
-    public const float DefaultSaturation = 1f;
+
+    // Дефолти — авторський вигляд, єдиний дім у PostProcessLook.
+    public const float DefaultExposure = PostProcessLook.ColorGrading.Exposure;
+    public const float DefaultContrast = PostProcessLook.ColorGrading.Contrast;
+    public const float DefaultSaturation = PostProcessLook.ColorGrading.Saturation;
 
     [SettingRange(ExposureMin, ExposureMax)]
     [SettingLabel("settings.effects.exposure")]

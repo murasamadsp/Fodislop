@@ -27,7 +27,4 @@ public readonly record struct StreamingPlan(
     StreamingPlanKind Kind,
     StreamingWindow Current,
     StreamingWindow Target,
-    Vector2Int Delta)
-{
-    public bool ChangesWindow => Kind is not StreamingPlanKind.Keep;
-}
+    Vector2Int Delta);

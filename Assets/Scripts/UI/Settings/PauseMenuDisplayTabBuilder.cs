@@ -220,7 +220,7 @@ internal sealed class PauseMenuDisplayTabBuilder
         Button hdrRetry = hdrOutputGroup.Q<Button>("HDRRetry") ??
             throw new InvalidOperationException("[PauseMenu] HDRRetry is missing from PauseMenu.uxml.");
         hdrRetry.text = _loc.Get("settings.display.hdr_retry");
-        hdrRetry.clicked += HDROutput.Retry;
+        hdrRetry.clicked += () => HDROutput.RetryRead();
 
         VisualElement paperWhiteSlider = PauseMenuUIFactory.CreateBoundSlider<DisplaySettings>(
             nameof(DisplaySettings.PaperWhiteNits),
@@ -258,8 +258,8 @@ internal sealed class PauseMenuDisplayTabBuilder
                     ? "settings.display.hdr_inactive" : "settings.display.hdr_fixed_off",
                 _ => "settings.display.hdr_pending",
             });
-            hdrRetry.SetEnabled(HDROutput.Status == HDROutputController.Phase.Failed && HDROutput.CanSwitch);
-            UIState.SetHidden(hdrRetry, HDROutput.Status != HDROutputController.Phase.Failed);
+            hdrRetry.SetEnabled(HDROutput.Status == HDROutputController.Phase.Failed || HDROutput.CanRetryRead);
+            UIState.SetHidden(hdrRetry, HDROutput.Status != HDROutputController.Phase.Failed && !HDROutput.CanRetryRead);
             paperWhiteSlider.SetEnabled(hdrOn);
             peakBrightnessSlider.SetEnabled(hdrOn);
         }

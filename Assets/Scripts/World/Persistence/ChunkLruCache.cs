@@ -55,8 +55,6 @@ public sealed class ChunkLruCache<T>
 
     public IEnumerable<int> LoadedIndices => _loadedChunks.Keys;
 
-    public IEnumerable<int> DirtyIndices => _dirtyChunks;
-
     public bool Contains(int chunkIndex) => _loadedChunks.ContainsKey(chunkIndex);
 
     public bool IsDirty(int chunkIndex) => _dirtyChunks.Contains(chunkIndex);

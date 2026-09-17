@@ -8,7 +8,7 @@ namespace Kern.World.Lighting;
 
 internal sealed class IndirectLightingSolver
 {
-    private static readonly ProfilerMarker CompositeMarker =
+    private static readonly ProfilerMarker _compositeMarker =
         new("Kern.Lighting.Composite.Record.CPU");
 
     private readonly LightingResourceManager _resources;
@@ -47,7 +47,7 @@ internal sealed class IndirectLightingSolver
 
     public void RecordComposite(CommandBuffer commandBuffer)
     {
-        using var compositeMarker = CompositeMarker.Auto();
+        using var compositeMarker = _compositeMarker.Auto();
         commandBuffer.BeginSample("Kern.Lighting.Composite");
         ComputeShader compute = _resources.LightingCompute!;
         int kernel = _resources.CompositeLightingKernel;

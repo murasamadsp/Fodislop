@@ -359,7 +359,6 @@ public static class Program
             typeof(AccessibilitySettings),
             typeof(ConnectionSettings),
             typeof(PostProcessSettings),
-            typeof(WorldLightingSettings),
             typeof(TerrainSettings),
             typeof(EffectSettings),
         ];
@@ -381,7 +380,6 @@ public static class Program
         Run<AccessibilitySettings>();
         Run<ConnectionSettings>();
         Run<PostProcessSettings>();
-        Run<WorldLightingSettings>();
         Run<TerrainSettings>();
         Run<EffectSettings>();
         return;
@@ -463,7 +461,6 @@ public static class Program
         TestSection<AccessibilitySettings>();
         TestSection<ConnectionSettings>();
         TestSection<PostProcessSettings>();
-        TestSection<WorldLightingSettings>();
         TestSection<TerrainSettings>();
         TestSection<EffectSettings>();
 
@@ -699,7 +696,7 @@ public static class Program
 
     private sealed class StubConfigManager : Kern.Core.Interfaces.IClientConfigManager
     {
-        public ClientConfig Config { get; set; } = new() { Lighting = new WorldLightingSettings() };
+        public ClientConfig Config { get; set; } = new();
         public string ConfigFilePath => "test_config.json";
         public GraphicsPreset SelectedGraphicsPreset => GraphicsPreset.Medium;
         public void EnsureInitialized() { }

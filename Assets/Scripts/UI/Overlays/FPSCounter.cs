@@ -25,7 +25,7 @@ namespace Kern.UI
         [Inject]
         private NetworkStatusModel _networkStatus = null!;
 
-        public float CurrentFps { get; private set; }
+        public float CurrentFPS { get; private set; }
 
         public int PingMs => _networkStatus.PingMs;
 
@@ -44,7 +44,7 @@ namespace Kern.UI
             }
 
             _runningSum = initialDelta * SampleSize;
-            CurrentFps = 1f / initialDelta;
+            CurrentFPS = 1f / initialDelta;
         }
 
         protected void Start()
@@ -78,18 +78,18 @@ namespace Kern.UI
         protected void Update()
         {
             float delta = Time.unscaledDeltaTime;
-            if (float.IsNaN(delta) || float.IsInfinity(delta) || delta < 0f)
+            if (delta <= 0f)
             {
-                delta = 0f;
+                return;
             }
 
             _runningSum -= _frameTimes[_frameIndex];
-            _frameTimes[_frameIndex] = delta;
             _runningSum += delta;
+            _frameTimes[_frameIndex] = delta;
             _frameIndex = (_frameIndex + 1) % SampleSize;
 
             float averageDelta = _runningSum / SampleSize;
-            CurrentFps = averageDelta > 0f ? 1f / averageDelta : 0f;
+            CurrentFPS = averageDelta > 0f ? 1f / averageDelta : 0f;
 
             if (_document != null && !_document.enabled)
             {
@@ -108,7 +108,7 @@ namespace Kern.UI
 
             _nextDisplayUpdate = Time.unscaledTime + 0.25f;
             _displayBuilder.Clear();
-            _displayBuilder.Append("FPS: ").Append((int)CurrentFps)
+            _displayBuilder.Append("FPS: ").Append((int)CurrentFPS)
                 .Append(" (").Append((averageDelta * 1000f).ToString("F1"))
                 .Append("ms)  Ping: ").Append(_networkStatus.PingMs)
                 .Append("ms  Robots: ").Append(_networkStatus.OnlinePlayers)

@@ -13,14 +13,14 @@ internal sealed class LightingPresentation
 {
     public const string WorldLightingKeyword = "KERN_WORLD_LIGHTING";
 
-    private static readonly int WorldLightTextureID = Shader.PropertyToID("_WorldLightTexture");
-    private static readonly int WorldLightRectID = Shader.PropertyToID("_WorldLightRect");
-    private static readonly int WorldLightDebugViewID = Shader.PropertyToID("_WorldLightDebugView");
-    private static readonly int WorldLightTextureSizeID = Shader.PropertyToID("_WorldLightTextureSize");
-    private static readonly int WorldEmissionScaleID = Shader.PropertyToID("_WorldEmissionScale");
-    private static readonly int WorldLightPerBlockID = Shader.PropertyToID("_WorldLightPerBlock");
-    private static readonly int WorldOccupancyTextureID = Shader.PropertyToID("_WorldOccupancyTexture");
-    private static readonly int WorldOccupancyYFlipID = Shader.PropertyToID("_WorldOccupancyYFlip");
+    private static readonly int _worldLightTextureID = Shader.PropertyToID("_WorldLightTexture");
+    private static readonly int _worldLightRectID = Shader.PropertyToID("_WorldLightRect");
+    private static readonly int _worldLightDebugViewID = Shader.PropertyToID("_WorldLightDebugView");
+    private static readonly int _worldLightTextureSizeID = Shader.PropertyToID("_WorldLightTextureSize");
+    private static readonly int _worldEmissionScaleID = Shader.PropertyToID("_WorldEmissionScale");
+    private static readonly int _worldLightPerBlockID = Shader.PropertyToID("_WorldLightPerBlock");
+    private static readonly int _worldOccupancyTextureID = Shader.PropertyToID("_WorldOccupancyTexture");
+    private static readonly int _worldOccupancyYFlipID = Shader.PropertyToID("_WorldOccupancyYFlip");
 
     private readonly LightingResourceManager _resources;
     private bool _disabledStatePublished;
@@ -45,12 +45,12 @@ internal sealed class LightingPresentation
         }
 
         Shader.DisableKeyword(WorldLightingKeyword);
-        Shader.SetGlobalTexture(WorldLightTextureID, Texture2D.whiteTexture);
-        Shader.SetGlobalVector(WorldLightRectID, new Vector4(-1000f, -1000f, 2000f, 2000f));
-        Shader.SetGlobalVector(WorldLightTextureSizeID, new Vector4(1, 1, 1, 1));
-        Shader.SetGlobalInteger(WorldLightDebugViewID, 0);
-        Shader.SetGlobalInteger(WorldLightPerBlockID, 0);
-        Shader.SetGlobalFloat(WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
+        Shader.SetGlobalTexture(_worldLightTextureID, Texture2D.whiteTexture);
+        Shader.SetGlobalVector(_worldLightRectID, new Vector4(-1000f, -1000f, 2000f, 2000f));
+        Shader.SetGlobalVector(_worldLightTextureSizeID, new Vector4(1, 1, 1, 1));
+        Shader.SetGlobalInteger(_worldLightDebugViewID, 0);
+        Shader.SetGlobalInteger(_worldLightPerBlockID, 0);
+        Shader.SetGlobalFloat(_worldEmissionScaleID, LightingConfigHolder.EmissionScale);
         _disabledStatePublished = true;
     }
 
@@ -71,27 +71,27 @@ internal sealed class LightingPresentation
 
         Shader.EnableKeyword(WorldLightingKeyword);
         _disabledStatePublished = false;
-        Shader.SetGlobalTexture(WorldLightTextureID, lightmap);
+        Shader.SetGlobalTexture(_worldLightTextureID, lightmap);
         if (_resources.MaterialField != null)
         {
-            Shader.SetGlobalTexture(WorldOccupancyTextureID, _resources.MaterialField);
+            Shader.SetGlobalTexture(_worldOccupancyTextureID, _resources.MaterialField);
             Shader.SetGlobalInteger(
-                WorldOccupancyYFlipID,
+                _worldOccupancyYFlipID,
                 SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
         }
 
-        Shader.SetGlobalInteger(WorldLightDebugViewID, (int)debugView);
-        Shader.SetGlobalInteger(WorldLightPerBlockID, qualityMode == LightingQualityMode.PerBlock ? 1 : 0);
-        Shader.SetGlobalFloat(WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
+        Shader.SetGlobalInteger(_worldLightDebugViewID, (int)debugView);
+        Shader.SetGlobalInteger(_worldLightPerBlockID, qualityMode == LightingQualityMode.PerBlock ? 1 : 0);
+        Shader.SetGlobalFloat(_worldEmissionScaleID, LightingConfigHolder.EmissionScale);
         Shader.SetGlobalVector(
-            WorldLightTextureSizeID,
+            _worldLightTextureSizeID,
             new Vector4(
                 lightmap.width,
                 lightmap.height,
                 1f / lightmap.width,
                 1f / lightmap.height));
         Shader.SetGlobalVector(
-            WorldLightRectID,
+            _worldLightRectID,
             new Vector4(
                 visibleRegion.x * cellSize,
                 visibleRegion.y * cellSize,

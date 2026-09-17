@@ -60,20 +60,18 @@ namespace Kern.UI.Backgrounds
                 hideFlags = HideFlags.HideAndDontSave
             };
 
-            _mesh.SetVertices(new Vector3[]
-            {
+            _mesh.SetVertices(new Vector3[] {
                 new(-1f, -1f, 0f),
                 new(1f, -1f, 0f),
                 new(-1f, 1f, 0f),
-                new(1f, 1f, 0f)
+                new(1f, 1f, 0f),
             });
 
-            _mesh.SetUVs(0, new Vector2[]
-            {
+            _mesh.SetUVs(0, new Vector2[] {
                 new(0f, 0f),
                 new(1f, 0f),
                 new(0f, 1f),
-                new(1f, 1f)
+                new(1f, 1f),
             });
 
             _mesh.SetTriangles(new[] { 0, 2, 1, 1, 2, 3 }, 0);

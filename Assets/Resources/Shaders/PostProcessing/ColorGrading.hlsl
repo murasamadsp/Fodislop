@@ -491,40 +491,63 @@ inline float3 ApplyDisplayCurves(float3 color)
 
 inline float3 ApplyDisplayTransform(float3 color)
 {
-    // DisplayTransform.None is a deliberate exact bypass. This keeps the
-    // neutral/default pipeline bit-identical while allowing the authored DRT
-    // to use the complete display-grade controls when enabled.
+    // _DisplayGrade0.w: 0 = None (exact bypass for curve before/after checks),
+    // 1 = SDR (Khronos PBR Neutral), 2 = HDR PQ 1300 (BT.2390-style EETF in
+    // paper-relative units, peak ~= 1300/203 ~= 6.4).
+    //
+    // Single exit, no early returns: Metal treats a function with early exits
+    // as possibly-uninitialized and warns at the kernel (see ApplyCubeLut,
+    // CompressDisplayGamut for the same shape).
     float3 result = color;
-    if ((int)_DisplayGrade0.w != 0)
-    {
-      float whitePoint = max(_DisplayGrade0.x, 1e-4);
+    int mode = (int)_DisplayGrade0.w;
+
+    float whitePoint = max(_DisplayGrade0.x, 1e-4);
     float greyOut = clamp(_DisplayGrade0.y, 0.05, 0.5);
-    float slope = max(_DisplayGrade0.z, 1e-3);
     float shoulderPower = max(_DisplayGrade1.x, 1e-3);
     float toePower = max(_DisplayGrade1.y, 1e-3);
     float toeStops = clamp(_DisplayGrade1.z, 0.0, 32.0);
-    float pathAmount = saturate(_DisplayGrade1.w);
-    float pathPower = max(_DisplayGradePathPower, 1e-3);
 
-      float3 scene = max(color, 0.0) / whitePoint;
-    float toeFloor = exp2(-toeStops);
-    scene = max(scene - toeFloor, 0.0) / max(1.0 - toeFloor, 1e-4);
-    scene = pow(scene, 1.0 / max(slope * toePower, 1e-3));
+    if (mode == 2)
+    {
+        // HDR EETF: identity at and below paper white, smooth exponential
+        // shoulder above it asymptoting to the display peak. Input is
+        // paper-relative (DisplayFinal divides absolute nits by paperWhite),
+        // output stays paper-relative for ToDisplayOutput + URP PQ encode.
+        float peakRelative = max(_DisplayPeakRelative, 1.0);
+        float3 x = max(color, 0.0);
+        float toeFloor = exp2(-toeStops);
+        float3 lifted = max(x - toeFloor, 0.0) / max(1.0 - toeFloor, 1e-4);
+        float3 toe = pow(lifted / (1.0 + lifted), toePower / max(shoulderPower, 1e-3));
+        float midIn = max((0.18 / whitePoint - toeFloor) / max(1.0 - toeFloor, 1e-4), 0.0);
+        float midToe = pow(midIn / (1.0 + midIn), toePower / max(shoulderPower, 1e-3));
+        toe *= greyOut / max(midToe, 1e-4);
+        float3 over = max(x - 1.0, 0.0);
+        float3 shoulder = 1.0 + (peakRelative - 1.0) * (1.0 - exp(-over / max(peakRelative - 1.0, 1e-3)));
+        result = max(lerp(toe, shoulder, step(1.0, x)), 0.0);
+    }
+    else if (mode == 1)
+    {
+        // SDR: Khronos PBR Neutral. Industry standard for "no look" HDR
+        // handling: everything below white passes through bit-identical
+        // (no washed mids, no hue shift), only over-white compresses smoothly
+        // into display range. whitePoint sets what scene value is white.
+        float3 neutral = max(color, 0.0) / whitePoint;
+        float startCompression = 0.8 - 0.04;
+        float desaturation = 0.15;
+        float x = min(neutral.r, min(neutral.g, neutral.b));
+        float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+        neutral -= offset;
+        float peak = max(neutral.r, max(neutral.g, neutral.b));
+        if (peak >= startCompression)
+        {
+            float d = 1.0 - startCompression;
+            float newPeak = 1.0 - d * d / (peak + d - startCompression);
+            neutral *= newPeak / max(peak, 1e-6);
+            float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+            neutral = lerp(neutral, newPeak.xxx, g);
+        }
 
-    float3 mapped = scene / (1.0 + scene);
-    float midInput = (0.18 / whitePoint - toeFloor) / max(1.0 - toeFloor, 1e-4);
-    midInput = pow(max(midInput, 0.0), 1.0 / max(slope * toePower, 1e-3));
-    float midMapped = midInput / (1.0 + midInput);
-    mapped *= greyOut / max(midMapped, 1e-4);
-
-    mapped = 1.0 - pow(max(1.0 - saturate(mapped), 0.0), shoulderPower);
-    // Path-to-white is a bounded display roll-off. Cap only its local input
-    // before the high exponent so extreme finite HDR values cannot overflow
-    // into Inf; the scene value itself remains untouched for the other terms.
-    float3 pathInput = min(max(scene, 0.0), 16.0);
-    float3 pathToWhite = 1.0 - exp(-pow(pathInput, pathPower));
-    mapped = lerp(mapped, pathToWhite, pathAmount);
-      result = max(mapped, 0.0);
+        result = max(neutral, 0.0);
     }
 
     return result;

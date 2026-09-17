@@ -20,18 +20,18 @@ namespace Kern.World.Lighting;
 /// </summary>
 internal sealed class LightingUpdateCoordinator
 {
-    private static readonly ProfilerMarker UpdateMarker =
+    private static readonly ProfilerMarker _UpdateMarker =
         new("Kern.Lighting.UpdateLighting.CPU");
-    private static readonly AllocationLedger.Entry AllocationEntry =
+    private static readonly AllocationLedger.Entry _AllocationEntry =
         AllocationLedger.Register("Свет — обновление");
-    private static readonly ProfilerMarker BuildCommandsMarker =
+    private static readonly ProfilerMarker _BuildCommandsMarker =
         new("Kern.Lighting.BuildCommands.CPU");
-    private static readonly ProfilerMarker ExecuteCommandsMarker =
+    private static readonly ProfilerMarker _ExecuteCommandsMarker =
         new("Kern.Lighting.ExecuteCommands.CPU");
 
     private readonly LightingResourceManager _resources;
     private readonly LightingRuntimeState _state;
-    private readonly LightingGpuLifecycle _gpuLifecycle;
+    private readonly LightingGPULifecycle _gpuLifecycle;
     private readonly LightingFrameExecutor _frameExecutor;
     private readonly LightingPresentation _presentation;
     private readonly LightingGeometryRegistry _geometryRegistry;
@@ -43,7 +43,7 @@ internal sealed class LightingUpdateCoordinator
     public LightingUpdateCoordinator(
         LightingResourceManager resources,
         LightingRuntimeState state,
-        LightingGpuLifecycle gpuLifecycle,
+        LightingGPULifecycle gpuLifecycle,
         LightingFrameExecutor frameExecutor,
         LightingPresentation presentation,
         LightingGeometryRegistry geometryRegistry,
@@ -76,8 +76,8 @@ internal sealed class LightingUpdateCoordinator
         LightingEngine.DebugView debugView,
         bool bypassLightingCompute)
     {
-        using var updateMarker = UpdateMarker.Auto();
-        using var allocationScope = AllocationLedger.Measure(AllocationEntry);
+        using var updateMarker = _UpdateMarker.Auto();
+        using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
         if (terrainRenderer == null)
         {
             throw new ArgumentNullException(nameof(terrainRenderer));
@@ -130,12 +130,14 @@ internal sealed class LightingUpdateCoordinator
         }
         _state.LastVisibleRegion = lightingRegion;
 
-        _state.ActivatePendingRegionIfVisible(
+        const int maxInvalidationAreaPerFrame = 32 * 32 * 2; // Safe per-frame cascade budget
+        _state.ActivatePendingRegionsBudgeted(
             new RectInt(
                 visibleMinX,
                 visibleMinY,
                 visibleWidth,
-                visibleHeight));
+                visibleHeight),
+            maxInvalidationAreaPerFrame);
 
         int gridWidth = Mathf.RoundToInt(lightingRegion.z);
         int gridHeight = Mathf.RoundToInt(lightingRegion.w);
@@ -154,11 +156,19 @@ internal sealed class LightingUpdateCoordinator
             _state.HasDynamicRadianceState = false;
         }
 
+        Vector2Int regionDelta = regionChanged && !float.IsNaN(previousLightingRegion.x)
+            ? new Vector2Int(
+                Mathf.RoundToInt(lightingRegion.x - previousLightingRegion.x),
+                Mathf.RoundToInt(lightingRegion.y - previousLightingRegion.y))
+            : Vector2Int.zero;
+
+        // Atlas scrolling / partial strips creates seams and radial ray discontinuities
+        // across cascade tiers when the window shifts. Rebuilding static radiance for
+        // the full region when it changes ensures crisp, seam-free lighting without phase drift.
+        bool canReuseStaticAtlas = false;
+
         if (regionChanged)
         {
-            // A region rebuild redraws the whole material field, so any
-            // queued chunk invalidation inside the old window is already
-            // represented by this solve.
             _state.ClearPendingRegionInvalidation();
         }
 
@@ -198,16 +208,11 @@ internal sealed class LightingUpdateCoordinator
         int dynamicLightCount;
         bool dynamicLightsChanged;
         bool rebuildFields = _state.FieldDirty || regionChanged || geometryChanged;
-        Vector2Int regionDelta = regionChanged && !float.IsNaN(previousLightingRegion.x)
-            ? new Vector2Int(
-                Mathf.RoundToInt(lightingRegion.x - previousLightingRegion.x),
-                Mathf.RoundToInt(lightingRegion.y - previousLightingRegion.y))
-            : Vector2Int.zero;
         bool allowStaticDependencyMask = !resourcesResized &&
-            !regionChanged &&
+            (!regionChanged || canReuseStaticAtlas) &&
             !contributorGeometryChanged &&
             _state.ActiveRegionInvalidations.Count > 0;
-        bool reuseStaticAtlas = false;
+        bool reuseStaticAtlas = canReuseStaticAtlas;
         if (rebuildFields)
         {
             _telemetry.LightingFieldRebuildCount++;
@@ -215,7 +220,7 @@ internal sealed class LightingUpdateCoordinator
         try
         {
             long buildStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            using (BuildCommandsMarker.Auto())
+            using (_BuildCommandsMarker.Auto())
             {
                 commandBuffer.BeginSample("Kern.RadianceCascades");
                 if (_state.DynamicSolveInProgress)
@@ -287,7 +292,7 @@ internal sealed class LightingUpdateCoordinator
                 _telemetry.LightingCommandBufferBytes = commandBuffer.sizeInBytes;
                 _telemetry.ActiveDynamicLights = dynamicLightCount;
                 long executeStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                using (ExecuteCommandsMarker.Auto())
+                using (_ExecuteCommandsMarker.Auto())
                 {
                     Graphics.ExecuteCommandBuffer(commandBuffer);
                 }
@@ -327,9 +332,11 @@ internal sealed class LightingUpdateCoordinator
         }
     }
 
-    private static bool IsReusableRegionDelta(Vector2Int delta)
+    private static bool IsReusableRegionDelta(Vector2Int delta, int width, int height)
     {
         return delta != Vector2Int.zero &&
+            Mathf.Abs(delta.x) < width &&
+            Mathf.Abs(delta.y) < height &&
             (delta.x % 8) == 0 &&
             (delta.y % 8) == 0;
     }

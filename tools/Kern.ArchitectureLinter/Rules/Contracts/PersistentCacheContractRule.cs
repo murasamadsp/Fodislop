@@ -10,7 +10,8 @@ namespace Kern.ArchitectureLinter.Rules.Contracts;
 /// Validates persistent asset cache contract:
 /// - PersistentAssetCache must serialize per-entry access and atomically persist
 /// - Manifest must validate schema v2 length and SHA-256
-/// - Format must migrate v1 to schema v2
+/// - Format stamps the current marker; payload layout is identical across
+///   versions, so there are no migrations, backups or staging.
 /// Ported from check-architecture.js checkPersistentAssetCacheContract().
 /// </summary>
 public sealed class PersistentCacheContractRule : IRule
@@ -73,13 +74,15 @@ public sealed class PersistentCacheContractRule : IRule
         {
             var format = File.ReadAllText(formatPath);
             if (!format.Contains("CurrentSchemaVersion = 2") ||
-                !format.Contains("VersionOneBackupFileName") ||
-                !format.Contains("CommitVersionMarker"))
+                !format.Contains("MarkerFileName") ||
+                format.Contains("BackupFileName") ||
+                format.Contains("MigrationStaging") ||
+                format.Contains("Migrate"))
             {
                 violations.Add(new RuleViolation
                 {
                     RuleId = Id,
-                    Message = "Persistent cache format должен мигрировать v1 к schema v2 через durable marker commit.",
+                    Message = "Persistent cache format должен штамповать маркер текущей схемы без миграций, бэкапов и staging.",
                     Severity = Severity,
                     TypeName = "Assets/Scripts/AssetPipeline/Cache/PersistentAssetCacheFormat.cs"
                 });

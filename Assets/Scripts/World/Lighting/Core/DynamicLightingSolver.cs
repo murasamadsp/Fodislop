@@ -71,7 +71,7 @@ internal sealed class DynamicLightingSolver
         }
 
         System.ReadOnlySpan<DynamicLightGpuData> lights = _lightManager.UploadedLights;
-        System.ReadOnlySpan<int> lightIds = _lightManager.UploadedLightIds;
+        System.ReadOnlySpan<int> lightIDs = _lightManager.UploadedLightIDs;
         int count = Mathf.Min(lightCount, lights.Length);
         if (_lampRects.Length < count)
         {
@@ -203,7 +203,7 @@ internal sealed class DynamicLightingSolver
             }
         }
 
-        _tileCache.AssignSlots(lightIds.Slice(0, count));
+        _tileCache.AssignSlots(lightIDs.Slice(0, count));
 
         _tileCache.EnsurePolar(widestRayFan, longestRay * LightingComputeBinder.LampEmitterPointCount);
 
@@ -230,7 +230,7 @@ internal sealed class DynamicLightingSolver
         {
             DynamicLightGpuData light = lights[lightIndex];
             RectInt rect = _lampRects[lightIndex];
-            int slot = _tileCache.SlotOf(lightIds[lightIndex]);
+            int slot = _tileCache.SlotOf(lightIDs[lightIndex]);
             Vector2Int tileOffset = _tileCache.TileOffset(slot);
             _lampTileInfos[lightIndex] = new DynamicLightTileCache.TileInfo(rect, tileOffset);
             if (rect.width <= 0 ||

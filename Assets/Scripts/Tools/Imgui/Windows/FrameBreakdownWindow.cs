@@ -453,11 +453,11 @@ public sealed class FrameBreakdownWindow : ToolWindow
             AddSeries(rows, "· главный поток — активная работа", _timings.MainThread, scale, ToolTheme.Warning);
             AddSeries(rows, "· ожидание вывода — отдельная метрика", _timings.PresentWait, scale, ToolTheme.Warning);
             AddSeries(rows, "· поток рендера", _timings.RenderThread, scale, ToolTheme.FrameGraphColor);
-            if (_timings.GpuSampledFrames > 0)
+            if (_timings.GPUSampledFrames > 0)
             {
-                AddSeries(rows, "· видеокарта — последние доступные замеры", _timings.Gpu, scale, ToolTheme.FrameGraphColor);
+                AddSeries(rows, "· видеокарта — последние доступные замеры", _timings.GPU, scale, ToolTheme.FrameGraphColor);
                 rows.Add(new Row(RowKind.Text,
-                    $"GPU-замеров {_timings.GpuSampledFrames} из {_timings.SampledFrames} уникальных кадров за сеанс окна; " +
+                    $"GPU-замеров {_timings.GPUSampledFrames} из {_timings.SampledFrames} уникальных кадров за сеанс окна; " +
                     "пропуски не считаются нулевой стоимостью."));
             }
             else
@@ -770,11 +770,11 @@ public sealed class FrameBreakdownWindow : ToolWindow
             SystemInfo.supportsGpuRecorder
                 ? $"GPU-рекордеры поддерживаются ({SystemInfo.graphicsDeviceType}). Нули значат, что пасс не оборачивает команды в сэмплер."
                 : $"GPU-рекордеры не поддерживаются на {SystemInfo.graphicsDeviceType} в этом режиме: время по пассам недоступно, нули ниже — не замер."));
-        if (_timings.GpuSampledFrames > 0)
+        if (_timings.GPUSampledFrames > 0)
         {
             rows.Add(new Row(
                 RowKind.Text,
-                $"Последние доступные GPU-замеры (FrameTimingManager): {_timings.Gpu.Average:F2} мс, пик {_timings.Gpu.Peak:F2}"));
+                $"Последние доступные GPU-замеры (FrameTimingManager): {_timings.GPU.Average:F2} мс, пик {_timings.GPU.Peak:F2}"));
         }
 
         AddStageGroup(rows, _gpu, ToolTheme.FrameGraphColor);
@@ -976,7 +976,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
     {
         string label = title ?? probe.Title;
         string? pin = pinnable ? probe.MarkerName : null;
-        if (probe.GpuUnsupported)
+        if (probe.GPUUnsupported)
         {
             rows.Add(new Row(RowKind.Text, $"{label}  —  у маркера нет GPU-метки", Pin: pin));
             return;

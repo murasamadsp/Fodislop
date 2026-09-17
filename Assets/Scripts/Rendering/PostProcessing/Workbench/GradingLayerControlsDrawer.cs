@@ -65,8 +65,6 @@ internal sealed class GradingLayerControlsDrawer
 
     public string? Status => _status;
 
-    public bool StatusIsError => _statusIsError;
-
     public void ResetState()
     {
         ReleaseWheelTexture();
@@ -317,24 +315,27 @@ internal sealed class GradingLayerControlsDrawer
     {
         GUILayout.Label("КРИВЫЕ ТОНА", ToolTheme.SectionLabel);
         if (GUILayout.Button(
-                _state.Transform == DisplayTransform.None
-                    ? "Display transform: None"
-                    : "Display transform: Kern",
+                _state.Transform switch
+                {
+                    DisplayTransform.Sdr => "Display transform: SDR",
+                    DisplayTransform.HdrPq1300 => "Display transform: HDR PQ 1300",
+                    _ => "Display transform: None",
+                },
                 ToolTheme.SecondaryButton))
         {
-            _state.Transform = _state.Transform == DisplayTransform.None
-                ? DisplayTransform.Kern
-                : DisplayTransform.None;
+            _state.Transform = _state.Transform switch
+            {
+                DisplayTransform.None => DisplayTransform.Sdr,
+                DisplayTransform.Sdr => DisplayTransform.HdrPq1300,
+                _ => DisplayTransform.None,
+            };
         }
 
         _state.WhitePoint = Slider("white-point", "white point", _state.WhitePoint, 0.25f, 8f);
         _state.GreyOut = Slider("grey-out", "grey output", _state.GreyOut, 0.05f, 0.5f);
-        _state.CurveSlope = Slider("curve-slope", "curve slope", _state.CurveSlope, 0.5f, 2f);
         _state.ToePower = Slider("toe-power", "toe power", _state.ToePower, 1f, 8f);
         _state.ToeStops = Slider("toe-stops", "toe stops", _state.ToeStops, 4f, 20f);
         _state.ShoulderPower = Slider("shoulder-power", "shoulder power", _state.ShoulderPower, 1f, 8f);
-        _state.PathToWhiteAmount = Slider("path-to-white", "path to white", _state.PathToWhiteAmount, 0f, 1f);
-        _state.PathToWhitePower = Slider("path-power", "path power", _state.PathToWhitePower, 1f, 8f);
 
         // Слайдер рисуется всегда и только гасится: появление контрола в том же
         // событии, где нажали тумблер, ломает раскладку IMGUI.

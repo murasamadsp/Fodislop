@@ -111,8 +111,6 @@
   "settings.effects.grain": "Зернистость",
   "settings.effects.motion_blur": "Размытие движения",
   "settings.effects.local_sharpness": "Локальная чёткость",
-  "settings.effects.anamorphic_beams": "Эффекты объектива",
-  "settings.effects.glow_dust": "Свечение и тепловая дымка",
   "settings.effects.phosphor_pattern": "Люминофор и дизеринг",
   "settings.effects.phosphor_afterglow": "Послесвечение и стабилизация света",
   "settings.debug.tools": "Инструменты разработчика",

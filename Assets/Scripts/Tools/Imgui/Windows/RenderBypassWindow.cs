@@ -230,8 +230,6 @@ public sealed class RenderBypassWindow : ToolWindow
         }
     }
 
-    public static void CycleLightingView(LightingEngine lighting) => StepLightingView(lighting, 1);
-
     private static void StepLightingView(LightingEngine lighting, int step)
     {
         int total = System.Enum.GetValues(typeof(LightingEngine.DebugView)).Length;

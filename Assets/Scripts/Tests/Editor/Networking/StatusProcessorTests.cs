@@ -57,8 +57,10 @@ public class StatusProcessorTests
 
     private sealed class StubNetworkService : INetworkService
     {
-        public event Action? PacketBatchStarted;
-        public event Action? PacketBatchCompleted;
+        // События требует INetworkService; стаб их не raises — пустые
+        // акцессоры вместо CS0067.
+        public event Action? PacketBatchStarted { add { } remove { } }
+        public event Action? PacketBatchCompleted { add { } remove { } }
 
         public bool SentPong { get; private set; }
 

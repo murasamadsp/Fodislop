@@ -373,7 +373,7 @@ public sealed class MenuModalManager
         // Theme.uss. Раньше код писал поверх неё инлайн, и класс не значил
         // ничего: активная вкладка оставалась активной навсегда, потому что
         // снять инлайн можно только инлайном.
-        foreach (var pane in new[] { _settingsPaneGraphics, _settingsPaneAudio, _settingsPaneControls, _settingsPaneNetwork })
+        foreach (var pane in (ReadOnlySpan<VisualElement?>)[_settingsPaneGraphics, _settingsPaneAudio, _settingsPaneControls, _settingsPaneNetwork])
         {
             pane?.EnableInClassList(SettingsPaneActiveClass, ReferenceEquals(pane, targetPane));
         }

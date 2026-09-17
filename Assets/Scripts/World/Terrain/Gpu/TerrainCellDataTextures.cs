@@ -26,17 +26,17 @@ public sealed class TerrainCellDataTextures : IDisposable
     // one full upload; this is a cost governor, not a patch-count cutoff.
     private const long PatchSetupEquivalentTexels = 16L * 16L;
 
-    public static readonly int ColorId = Shader.PropertyToID("_TerrainCellColor");
-    public static readonly int MetaId = Shader.PropertyToID("_TerrainCellMeta");
-    public static readonly int AtlasRectId = Shader.PropertyToID("_TerrainCellAtlasRect");
-    public static readonly int TileSizeId = Shader.PropertyToID("_TerrainCellTileSize");
-    public static readonly int AnimationId = Shader.PropertyToID("_TerrainCellAnimation");
-    public static readonly int WorldId = Shader.PropertyToID("_TerrainCellWorld");
-    public static readonly int GlowId = Shader.PropertyToID("_TerrainCellGlow");
-    public static readonly int GridOffsetsId = Shader.PropertyToID("_TerrainGridOffsets");
-    public static readonly int GridSizeId = Shader.PropertyToID("_TerrainCellGridSize");
-    public static readonly int OriginId = Shader.PropertyToID("_TerrainCellOrigin");
-    public static readonly int ViewOffsetId = Shader.PropertyToID("_TerrainCellViewOffset");
+    public static readonly int ColorID = Shader.PropertyToID("_TerrainCellColor");
+    public static readonly int MetaID = Shader.PropertyToID("_TerrainCellMeta");
+    public static readonly int AtlasRectID = Shader.PropertyToID("_TerrainCellAtlasRect");
+    public static readonly int TileSizeID = Shader.PropertyToID("_TerrainCellTileSize");
+    public static readonly int AnimationID = Shader.PropertyToID("_TerrainCellAnimation");
+    public static readonly int WorldID = Shader.PropertyToID("_TerrainCellWorld");
+    public static readonly int GlowID = Shader.PropertyToID("_TerrainCellGlow");
+    public static readonly int GridOffsetsID = Shader.PropertyToID("_TerrainGridOffsets");
+    public static readonly int GridSizeID = Shader.PropertyToID("_TerrainCellGridSize");
+    public static readonly int OriginID = Shader.PropertyToID("_TerrainCellOrigin");
+    public static readonly int ViewOffsetID = Shader.PropertyToID("_TerrainCellViewOffset");
 
     private sealed class Channel<T>(TextureFormat format, string name)
         where T : struct
@@ -328,16 +328,16 @@ public sealed class TerrainCellDataTextures : IDisposable
             return;
         }
 
-        Shader.SetGlobalTexture(ColorId, _color.Target);
-        Shader.SetGlobalTexture(MetaId, _meta.Target);
-        Shader.SetGlobalTexture(AtlasRectId, _atlasRect.Target);
-        Shader.SetGlobalTexture(TileSizeId, _tileSize.Target);
-        Shader.SetGlobalTexture(AnimationId, _animation.Target);
-        Shader.SetGlobalTexture(WorldId, _world.Target);
-        Shader.SetGlobalTexture(GlowId, _glow.Target);
-        Shader.SetGlobalTexture(GridOffsetsId, _gridOffsets.Target);
-        Shader.SetGlobalVector(GridSizeId, new Vector4(MeshWidth, MeshHeight, cellSize, distortion ? 1f : 0f));
-        Shader.SetGlobalVector(OriginId, new Vector4(originX, originY, 0f, 0f));
+        Shader.SetGlobalTexture(ColorID, _color.Target);
+        Shader.SetGlobalTexture(MetaID, _meta.Target);
+        Shader.SetGlobalTexture(AtlasRectID, _atlasRect.Target);
+        Shader.SetGlobalTexture(TileSizeID, _tileSize.Target);
+        Shader.SetGlobalTexture(AnimationID, _animation.Target);
+        Shader.SetGlobalTexture(WorldID, _world.Target);
+        Shader.SetGlobalTexture(GlowID, _glow.Target);
+        Shader.SetGlobalTexture(GridOffsetsID, _gridOffsets.Target);
+        Shader.SetGlobalVector(GridSizeID, new Vector4(MeshWidth, MeshHeight, cellSize, distortion ? 1f : 0f));
+        Shader.SetGlobalVector(OriginID, new Vector4(originX, originY, 0f, 0f));
     }
 
     public void Dispose()

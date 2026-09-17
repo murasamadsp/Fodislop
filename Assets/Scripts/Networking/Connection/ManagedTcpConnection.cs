@@ -99,7 +99,7 @@ namespace Kern.Networking.Connection
 
                 RunReadLoop(client, _stream);
             }
-            catch (Exception ex) when (_disposing)
+            catch (Exception) when (_disposing)
             {
                 // Явное закрытие: событие уже отправил Disconnect().
             }

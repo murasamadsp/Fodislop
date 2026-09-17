@@ -28,11 +28,10 @@ namespace Kern.World.Lighting
             Transmission = 4,
             StaticDirect = 5,
             DynamicDirect = 6,
-            DirectRadiance = 7,
-            DiffuseBounce = 8,
-            Exposure = 9,
+            DiffuseBounce = 7,
+            Exposure = 8,
 
-            AmbientOcclusion = 10,
+            AmbientOcclusion = 9,
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -60,7 +59,7 @@ namespace Kern.World.Lighting
         private IndirectLightingSolver? _indirectLightingSolver;
         private GeometryLightingSolver? _geometryLightingSolver;
         private LightingFrameExecutor? _lightingFrameExecutor;
-        private LightingGpuLifecycle? _lightingGpuLifecycle;
+        private LightingGPULifecycle? _lightingGPULifecycle;
         private LightingPresentation? _lightingPresentation;
         private LightingUpdateCoordinator? _lightingUpdateCoordinator;
         private readonly LightingInvalidationJournal _journal = new();
@@ -89,8 +88,8 @@ namespace Kern.World.Lighting
                 _lightingGeometryRegistry,
                 _telemetry);
 
-        private LightingGpuLifecycle GpuLifecycle =>
-            _lightingGpuLifecycle ??= new LightingGpuLifecycle(
+        private LightingGPULifecycle GPULifecycle =>
+            _lightingGPULifecycle ??= new LightingGPULifecycle(
                 _resources,
                 FrameExecutor);
 
@@ -101,7 +100,7 @@ namespace Kern.World.Lighting
             _lightingUpdateCoordinator ??= new LightingUpdateCoordinator(
                 _resources,
                 _runtimeState,
-                GpuLifecycle,
+                GPULifecycle,
                 FrameExecutor,
                 Presentation,
                 _lightingGeometryRegistry,
@@ -115,12 +114,11 @@ namespace Kern.World.Lighting
         private int _bounceWidth => _resources.BounceWidth;
         private int _bounceHeight => _resources.BounceHeight;
         private int _atlasEntryCount => _resources.AtlasEntryCount;
-        private bool GpuPipelineInitialized => _resources.GpuPipelineInitialized;
 
         // Для интеграционных тестов жизненного цикла GPU-ресурсов.
-        internal bool IsGpuPipelineInitialized => GpuPipelineInitialized;
+        internal bool IsGPUPipelineInitialized => _resources.GPUPipelineInitialized;
 
-        internal LightingResources GpuResources => _resources.Registry;
+        internal LightingResources GPUResources => _resources.Registry;
 
         [Inject]
         private LightingGeometryRegistry _lightingGeometryRegistry = null!;
@@ -202,7 +200,7 @@ namespace Kern.World.Lighting
 
         public int DroppedDynamicLightCount => _dynamicLightManager.DroppedCount;
 
-        public IReadOnlyList<int> DroppedDynamicLightIds => _dynamicLightManager.DroppedLightIds;
+        public IReadOnlyList<int> DroppedDynamicLightIDs => _dynamicLightManager.DroppedLightIDs;
 
         public ulong SolveCount => _runtimeState.SolveCount;
 
@@ -400,7 +398,7 @@ namespace Kern.World.Lighting
 
             if (_lightingQualityMode == LightingQualityMode.Off)
             {
-                DisableGpuLighting();
+                DisableGPULighting();
             }
         }
 
@@ -417,7 +415,7 @@ namespace Kern.World.Lighting
         private void OnDestroy()
         {
 
-            ReleaseGpuPipeline();
+            ReleaseGPUPipeline();
             Shader.DisableKeyword(LightingPresentation.WorldLightingKeyword);
         }
 
@@ -555,21 +553,21 @@ namespace Kern.World.Lighting
                 BypassLightingCompute);
         }
 
-        private void DisableGpuLighting()
+        private void DisableGPULighting()
         {
-            ReleaseGpuPipeline();
+            ReleaseGPUPipeline();
             Presentation.PublishDisabled();
         }
 
-        private void ReleaseGpuPipeline()
+        private void ReleaseGPUPipeline()
         {
-            if (_lightingGpuLifecycle != null)
+            if (_lightingGPULifecycle != null)
             {
-                _lightingGpuLifecycle.ReleasePipeline();
+                _lightingGPULifecycle.ReleasePipeline();
                 return;
             }
 
-            _resources.ReleaseGpuPipeline();
+            _resources.ReleaseGPUPipeline();
             _dynamicLightManager.ResetUploadState();
         }
 
@@ -580,7 +578,7 @@ namespace Kern.World.Lighting
             GraphicsQualityProfile.ValidateSettings(settings, preset.ToString());
             bool technicalSettingsChanged = _qualitySettings != settings;
             LightingQualityMode previousQuality = _lightingQualityMode;
-            if (technicalSettingsChanged && GpuPipelineInitialized)
+            if (technicalSettingsChanged && _resources.GPUPipelineInitialized)
             {
                 ReleaseResources();
             }
@@ -598,7 +596,7 @@ namespace Kern.World.Lighting
 
             if (resolvedQuality == LightingQualityMode.Off)
             {
-                DisableGpuLighting();
+                DisableGPULighting();
             }
             else
             {
@@ -667,9 +665,9 @@ namespace Kern.World.Lighting
 
         private void ReleaseResources()
         {
-            if (_lightingGpuLifecycle != null)
+            if (_lightingGPULifecycle != null)
             {
-                GpuLifecycle.ReleaseResources();
+                GPULifecycle.ReleaseResources();
             }
             else
             {

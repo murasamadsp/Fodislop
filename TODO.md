@@ -3,8 +3,10 @@
 - тонна блять синхронных (серийных) процессов и гонок определений
 - [x] добавить сверху пимпочку которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
 - [ ] движок цветокоррекции: оставшиеся дыры. Вывоз `.cube` — `.cdl` несёт slope/offset/power и насыщенность, но НЕ несёт кривую, то есть в DaVinci уедет половина вида; печатать LUT надо на GPU и читать обратно, повторять математику шейдера на CPU нельзя — это второй источник истины. Кривые как инструмент (RGB, hue-vs-hue, hue-vs-sat). Вторичные коррекции — ключи по оттенку, маски, окна: для стилизованной 2D-картинки дают мало, а сложности много, браться последними.
-- [ ] откалибровать пороги `PostProcessLook.Bloom.Threshold` (1.1) и `Lens.GlintThreshold` (1.2) под собственную кривую вывода. Числа настроены под AgX, удалённый в `c653ee65`, и в нынешней шкале гасят пять эффектов разом: из `_BloomTex` питаются ещё грязь на линзе, анаморфные лучи и дифракция. Шкала теперь определена (серединный серый 0.18, то есть 1.1 — примерно 2.6 стопа над ним), но верное число видно только на кадре: смотреть глазами через F5, слой `Curve` в обход и обратно, ложный цвет для отсечки. Расчётом не подбирать — именно так и появились нынешние числа.
+- [ ] Xcode GPU capture: блум 8×8 проти 16×16 (тредгрупи). Контекст: спроба 16×16 дала 146 fps проти 151 fps (6.85мс проти 6.62мс, +0.23мс ≈ шум). Відкочено на 8×8. Потрібен full Xcode (не CLT) + Development Build + Attach to Process + Capture GPU Frame → Shader Profiler: occupancy % і registers/thread у BloomPrefilter/Downsample/Upsample. Якщо occupancy падає на 16 — гіпотеза тиску регістрів доведена, питання закрите. Зняти капчу до/після, цифри сюди.
+- [ ] откалибровать порог `PostProcessLook.Bloom.Threshold` (1.6 — относительный: во сколько раз пиксель ярче локального фона, не абсолютный). `Lens.GlintThreshold` в коде нет вообще; грязи на линзе, анаморфных лучей, дифракции и heat haze в пайплайне нет — `_BloomTex` ест только блум. Верное число видно только на кадре: смотреть глазами через F5, false color для отсечки. Расчётом не подбирать — именно так и появились прежние числа.
 - [ ] реализовать Render Governor / Frame Budget Coordinator (кадрирование и разделение тяжелых задач рендера: terrain remesh, batch sprite rebuild, minimap/worldmap pixel sampling и UI painter во избежание микро-статтеров в одном кадре)
+- [ ] Распараллелить сборку бендов террейна Jobs/Burst: бенды независимы по строкам, писать в NativeArray. НЕ трогать флудфилл (уже параллельный+инкрементальный) и скролл-reuse (выключен обоснованно). Сначала доказать striped-бенч на F1 frametime, потом мержить.
 
 ## Реестр огромных production C# файлов
 
@@ -12,13 +14,13 @@
 а не механически превращён в `partial`. Новые файлы больше 500 строк запрещены;
 текущий конечный debt-list охраняется архитектурным линтером и сокращается до нуля.
 
-- [ ] `World/Lighting/Core/LightingEngine.cs` (2015): coordinator/resources/scheduling/pipelines.
-- [ ] `World/Persistence/WorldLayer.cs` (1081): format/index/cache/IO/compaction.
-- [ ] `World/Terrain/Core/TerrainRenderer.cs` (874): lifecycle/coverage/mesh/material updates.
-- [ ] `AssetPipeline/Animation/GifAnimationDecoder.cs` (774): parser/LZW/compositing/output.
-- [ ] `UI/Chat/GlobalChatUI.cs` (727): state/presenter/view binding.
-- [ ] `Rendering/PostProcessing/PostProcessRenderPass.cs` (708): resources/scheduling/effect passes.
-- [ ] `Game/Entities/Robot.cs` (692): state/visual loading/presentation.
+- [ ] `World/Lighting/Core/LightingEngine.cs` (682, было 2015: coordinator/resources/scheduling/pipelines частично вынесены в солверы, но лимит 500 всё ещё превышен).
+- [ ] `World/Persistence/WorldLayer.cs` (938, было 1081): format/index/cache/IO/compaction.
+- [ ] `World/Terrain/Core/TerrainRenderer.cs` (1280, было 874 — ВЫРОС): lifecycle/coverage/mesh/material updates.
+- [x] `AssetPipeline/Animation/GifAnimationDecoder.cs` (319, было 774): parser/LZW/compositing/output — распилили ниже лимита.
+- [ ] `UI/Chat/GlobalChatUI.cs` (516, было 727): state/presenter/view binding.
+- [ ] `Rendering/PostProcessing/Pipeline/PostProcessRenderPass.cs` (659, было 708): resources/scheduling/effect passes.
+- [x] `Game/Entities/Robot.cs` (461, было 692): state/visual loading/presentation — распилили ниже лимита.
 
 ## Программа оздоровления клиента (6–9 месяцев)
 
@@ -127,8 +129,8 @@
   - `IDummyClock`: `RealtimeDummyClock` в игре, `VirtualDummyClock` в тестах; `DummyClockContractTests` не пускает обход часов.
 - [x] Добавить nightly soak: 50 переходов сцен, reconnect storm и streaming карты.
   - `SoakPlayModeTests` (категория `Soak`), задача `macos-soak` в CI; метрики пишутся в `persistentDataPath/Soak`.
-- [x] Проверять миграцию двух предыдущих форматов и clean/upgrade install.
-  - `InstallUpgradeTests`: конфиг 26/27, кэш ассетов v0/v1, карта v0/v1 на одной папке данных.
+- [x] Проверять clean install и сброс чужих форматов (конфиг/кэш/карта).
+  - `InstallUpgradeTests`: чужая версия конфига → ResetToDefaults, чужая карта → пересоздание, чужой маркер кеша → перештамповка, всё на одной папке данных. Миграций нет.
 
 Критерии завершения: обе production-сборки запускаются из чистого checkout;
 50 циклов Menu/Game не оставляют задач, подписок и объектов; fault-injection не
@@ -137,7 +139,9 @@
 ## Графика: приведение арта к системе
 
 Разбор показал, что рендер не является узким местом: каскадный свет
-(`WorldLighting.compute`, 885 строк), AgX, dual-Kawase блум, MRT-поле материалов
+(`WorldLighting.compute`, 228 строк + `Lighting/*.hlsl` — ядра разъехались по
+инклудам, было 885 в одном файле), стоковый URP-тонмап (AgX удалён, сейчас
+Neutral / Neutral BT2390), dual-Kawase блум, MRT-поле материалов
 и HDR уже дают больше, чем в них подаётся. Весь разрыв — в слое ассетов:
 326 PNG без единого общего правила. Направление выбрано: сначала арт-библия,
 затем перерисовка руками, затем линтер как храповик. Ничего из раздела не
@@ -238,9 +242,15 @@
       `settings.effects.phosphor_afterglow` — вместе со стабилизацией света.
       Ключи не переименованы и новые не заведены намеренно: тексты пишет человек.
       Подписи обновлены по смыслу групп.
+      [2026-09] УСТАРЕЛО: ключей `anamorphic_beams`, `glow_dust`, `phosphor_*`
+      больше нет ни в коде, ни в локализации — удалены как мёртвые. Тумблеры
+      1:1: bloom / vignette / eigengrau / motion_blur.
 - [ ] Числа в `PostProcessLook` — отправная точка, а не решение. Подобраны
       консервативно, чтобы стек стало видно; ни одно не проверено на экране.
       Крутить только этот файл: он единственный источник вида.
 - [ ] Тонмап впервые заработает на ярких местах мира. До сих пор всё выше
       единицы срезалось в белый, и как выглядит каскадный свет после кривой AgX
       никто не видел — ни одна из правок этого захода в Unity не проверялась.
+      [2026-09] Частично закрыто: тонмаппит стоковый URP (Neutral SDR /
+      Neutral BT2390 HDR через HDROutputReconciler), кастомная кривая в bypass.
+      Глазами всё равно не проверено.

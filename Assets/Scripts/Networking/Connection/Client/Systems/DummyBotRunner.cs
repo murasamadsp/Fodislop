@@ -41,14 +41,14 @@ internal static class DummyBotRunner
         var bots = new List<(ushort id, string name, float cx, float cy, float r, float a, float speed)>();
         for (int i = 0; i < count; i++)
         {
-            ushort botId = (ushort)(BASE_ID + i);
-            sendPacket(new ServerPacket(new RobotInfoPacket(botId, 1000, 0,
+            ushort botID = (ushort)(BASE_ID + i);
+            sendPacket(new ServerPacket(new RobotInfoPacket(botID, 1000, 0,
                 "Skin/bee.png", "Tail/default.png", names[i % names.Length])));
 
             float radius = 2.5f + (i % 3);
             float angle = (float)(i * (Math.PI * 2d / count));
             float speed = 0.45f + ((i % 2) * 0.1f);
-            bots.Add((botId, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
+            bots.Add((botID, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
         }
 
         while (loopAlive())

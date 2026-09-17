@@ -77,4 +77,35 @@ public sealed class LightingRuntimeStateTests
             Is.False);
         Assert.That(state.FieldDirty, Is.False);
     }
+
+    [Test]
+    public void BudgetedActivationPrioritizesNearestRegionAndDefersExcess()
+    {
+        var state = new LightingRuntimeState
+        {
+            FieldDirty = false,
+        };
+        // Viewport: center at (16, 16), size (32, 32)
+        RectInt viewport = new(0, 0, 32, 32);
+        RectInt nearCenter = new(14, 14, 4, 4); // area = 16
+        RectInt farCorner = new(28, 28, 4, 4);  // area = 16
+
+        state.QueueRegionInvalidation(farCorner);
+        state.QueueRegionInvalidation(nearCenter);
+
+        // Budget maxAreaCells = 16 allows only 1 region per frame
+        bool activated = state.ActivatePendingRegionsBudgeted(viewport, maxAreaCells: 16);
+
+        Assert.That(activated, Is.True);
+        Assert.That(state.ActiveRegionInvalidations, Has.Count.EqualTo(1));
+        Assert.That(state.ActiveRegionInvalidations, Does.Contain(nearCenter), "Nearest region must activate first");
+
+        // Next frame activates the deferred far region
+        state.CompleteActiveRegionInvalidation();
+        bool nextActivated = state.ActivatePendingRegionsBudgeted(viewport, maxAreaCells: 16);
+
+        Assert.That(nextActivated, Is.True);
+        Assert.That(state.ActiveRegionInvalidations, Has.Count.EqualTo(1));
+        Assert.That(state.ActiveRegionInvalidations, Does.Contain(farCorner), "Deferred region must activate in next slice");
+    }
 }

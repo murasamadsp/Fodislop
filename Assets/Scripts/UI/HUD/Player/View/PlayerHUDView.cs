@@ -228,21 +228,14 @@ namespace Kern.UI.HUD.Player.View
                 _model.OnSkillProgress += OnSkillProgress;
                 _model.OnStatusLinesChanged += OnStatusLinesChanged;
                 _model.OnMissionChanged += OnMissionChanged;
-            }
-
-            if (_model != null)
-            {
                 _model.OnDailyBonusChanged += OnDailyBonusChanged;
+                _model.OnStatsChanged += RefreshAll;
+                _isLoaded = _model.Health > 0 || _model.Level > 0;
             }
 
             _bonusController.UpdateDailyBonusPanel(_model);
 
             _basketView.RebuildRows();
-            if (_model != null)
-            {
-                _model.OnStatsChanged += RefreshAll;
-                _isLoaded = _model.Health > 0 || _model.Level > 0;
-            }
 
             if (!_isLoaded && _hudRoot != null)
             {
@@ -357,11 +350,6 @@ namespace Kern.UI.HUD.Player.View
 
         private void RefreshAll()
         {
-            if (this == null)
-            {
-                return;
-            }
-
             var stats = _model;
             if (stats == null)
             {

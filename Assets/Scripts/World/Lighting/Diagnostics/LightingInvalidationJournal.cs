@@ -50,17 +50,6 @@ public sealed class LightingInvalidationJournal
         }
     }
 
-    public InvalidationFrameRecord? GetLatest()
-    {
-        if (_count == 0)
-        {
-            return null;
-        }
-
-        int lastIndex = (_head - 1 + Capacity) % Capacity;
-        return _records[lastIndex];
-    }
-
     public List<InvalidationFrameRecord> GetRecent(int maxCount)
     {
         var result = new List<InvalidationFrameRecord>(Math.Min(_count, maxCount));

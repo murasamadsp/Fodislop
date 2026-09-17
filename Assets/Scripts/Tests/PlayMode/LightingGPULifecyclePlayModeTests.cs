@@ -19,7 +19,7 @@ namespace Kern.Tests.PlayMode;
 // освобождение при выходе. Нужна видеокарта с compute-шейдерами.
 [TestFixture]
 [Category("GPU")]
-public sealed class LightingGpuLifecyclePlayModeTests
+public sealed class LightingGPULifecyclePlayModeTests
 {
     private const string TestDummyToken = "playmode-lighting-gpu-token";
 
@@ -81,9 +81,9 @@ public sealed class LightingGpuLifecyclePlayModeTests
         yield return SelectAndSettle(GraphicsPreset.High);
 
         Assert.That(lighting.IsInitialized, Is.True);
-        Assert.That(lighting.IsGpuPipelineInitialized, Is.True);
-        Assert.That(lighting.GpuResources.Output.Lightmap, Is.Not.Null);
-        Assert.That(lighting.GpuResources.Output.Lightmap!.IsCreated(), Is.True);
+        Assert.That(lighting.IsGPUPipelineInitialized, Is.True);
+        Assert.That(lighting.GPUResources.Output.Lightmap, Is.Not.Null);
+        Assert.That(lighting.GPUResources.Output.Lightmap!.IsCreated(), Is.True);
         Assert.That(Shader.IsKeywordEnabled(LightingPresentation.WorldLightingKeyword), Is.True);
 
         yield return AssertSolvesAfterInvalidation(lighting, "Lighting did not re-solve an invalidated world.");
@@ -113,7 +113,7 @@ public sealed class LightingGpuLifecyclePlayModeTests
                 string duplicates = string.Join(", ", live.Where(entry => entry.Value > 1).Select(entry => $"{entry.Key}×{entry.Value}"));
                 Assert.That(duplicates, Is.Empty, $"Preset {preset} (round {round}) left stale lighting targets alive.");
 
-                if (lighting.IsGpuPipelineInitialized)
+                if (lighting.IsGPUPipelineInitialized)
                 {
                     yield return AssertSolvesAfterInvalidation(lighting, $"Lighting did not solve after switching to {preset}.");
                 }

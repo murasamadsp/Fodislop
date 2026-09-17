@@ -317,10 +317,20 @@ public sealed class RuntimeAssetPathsTests
         Assert.That(zone.Saturation, Is.EqualTo(PostProcessLook.ColorGrading.Saturation));
     }
 
+    // with-вирази на init-пропах снапшота вимагають IsExternalInit, якого нема
+    // в тестовій збірці: йдемо через mutable стейт (ctor = ResetToLook, тобто
+    // ті ж дефолти що FromLook) і чисту авторську конверсію без превью.
+    private static ColorGradeSnapshot GradeWithTemperature(float temperature)
+    {
+        var state = new ColorGradeState();
+        state.Temperature = temperature;
+        return state.ToAuthoredSnapshot();
+    }
+
     [Test]
     public void ColorGradeZoneDriver_DisabledZonesRestoreBaseGrade()
     {
-        ColorGradeSnapshot modified = ColorGradeSnapshot.FromLook().WithTemperature(40f);
+        ColorGradeSnapshot modified = GradeWithTemperature(40f);
         PostProcessRuntimeState.SetColorGrade(modified);
         var zones = new ColorGradeZones
         {
@@ -355,7 +365,7 @@ public sealed class RuntimeAssetPathsTests
             centerY: 20f,
             halfHeight: 5f,
             feather: 5f,
-            grade: ColorGradeSnapshot.FromLook().WithTemperature(25f),
+            grade: GradeWithTemperature(25f),
             exposure: 1.25f,
             contrast: 0.2f,
             saturation: 0.7f));
@@ -404,7 +414,7 @@ public sealed class RuntimeAssetPathsTests
             centerY: 50f,
             halfHeight: 10f,
             feather: 5f,
-            grade: ColorGradeSnapshot.FromLook().WithTemperature(-30f),
+            grade: GradeWithTemperature(-30f),
             exposure: -1.0f,
             centerX: 200f,
             halfWidth: 50f));

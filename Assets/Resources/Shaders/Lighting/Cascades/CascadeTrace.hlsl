@@ -12,18 +12,21 @@ bool DirtySegmentOverlap(float2 start, float2 end)
 {
     float2 segmentMin = min(start, end);
     float2 segmentMax = max(start, end);
+    bool overlap = false;
     [loop]
-    for (int dirtyIndex = 0; dirtyIndex < _DirtyRegionCount; dirtyIndex++)
+    for (int dirtyIndex = 0;
+        dirtyIndex < _DirtyRegionCount && !overlap;
+        dirtyIndex++)
     {
         int4 dirty = _DirtyRegions[dirtyIndex];
         if (segmentMax.x >= dirty.x && segmentMin.x <= dirty.z &&
             segmentMax.y >= dirty.y && segmentMin.y <= dirty.w)
         {
-            return true;
+            overlap = true;
         }
     }
 
-    return false;
+    return overlap;
 }
 
 bool CascadeEntryMayChange(int2 probe, uint directionIndex)
@@ -37,58 +40,63 @@ bool CascadeEntryMayChange(int2 probe, uint directionIndex)
     float2 rayDirection = float2(rayCosine, raySine);
     float2 intervalStart = origin + rayDirection * _CascadeInterval.x;
     float2 intervalEnd = origin + rayDirection * _CascadeInterval.y;
+
+    // Single exit: Metal treats early returns as possibly-uninitialized.
+    bool changed = false;
     if (_HasFarCascade == 0)
     {
-        return DirtySegmentOverlap(intervalStart, intervalEnd);
+        changed = DirtySegmentOverlap(intervalStart, intervalEnd);
     }
-
-    uint directionBranchCount = clamp(
-        (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
-        1u,
-        4u);
-    uint farDirectionBase = directionIndex * directionBranchCount;
-    float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
-    int2 farProbeBase = int2(floor(farProbePosition));
-
-    [loop]
-    for (uint farDirectionBranch = 0u;
-        farDirectionBranch < directionBranchCount;
-        farDirectionBranch++)
+    else
     {
-        uint farDirection = (farDirectionBase + farDirectionBranch) %
-            (uint)_FarCascadeDirectionCount;
-        [unroll]
-        for (int farY = 0; farY < 2; farY++)
+        uint directionBranchCount = clamp(
+            (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
+            1u,
+            4u);
+        uint farDirectionBase = directionIndex * directionBranchCount;
+        float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
+        int2 farProbeBase = int2(floor(farProbePosition));
+
+        [loop]
+        for (uint farDirectionBranch = 0u;
+            farDirectionBranch < directionBranchCount && !changed;
+            farDirectionBranch++)
         {
+            uint farDirection = (farDirectionBase + farDirectionBranch) %
+                (uint)_FarCascadeDirectionCount;
             [unroll]
-            for (int farX = 0; farX < 2; farX++)
+            for (int farY = 0; farY < 2 && !changed; farY++)
             {
-                int2 farProbe = clamp(
-                    farProbeBase + int2(farX, farY),
-                    int2(0, 0),
-                    _FarCascadeProbeSize - 1);
-                int farIndex = _FarCascadeOffset +
-                    (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
-                    _FarCascadeDirectionCount + (int)farDirection;
-                float farAngle = (float(farDirection) + 0.5) * PI2 /
-                    float(_FarCascadeDirectionCount);
-                float farSine;
-                float farCosine;
-                sincos(farAngle, farSine, farCosine);
-                float2 farOrigin =
-                    (float2(farProbe) + 0.5) * _FarCascadeProbeSpacing;
-                float2 childIntervalStart = farOrigin +
-                    float2(farCosine, farSine) * _FarCascadeInterval.x;
-                if (_CascadeChangedMask[farIndex] != 0 ||
-                    DirtySegmentOverlap(intervalStart, childIntervalStart))
+                [unroll]
+                for (int farX = 0; farX < 2 && !changed; farX++)
                 {
-                    return true;
+                    int2 farProbe = clamp(
+                        farProbeBase + int2(farX, farY),
+                        int2(0, 0),
+                        _FarCascadeProbeSize - 1);
+                    int farIndex = _FarCascadeOffset +
+                        (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
+                        _FarCascadeDirectionCount + (int)farDirection;
+                    float farAngle = (float(farDirection) + 0.5) * PI2 /
+                        float(_FarCascadeDirectionCount);
+                    float farSine;
+                    float farCosine;
+                    sincos(farAngle, farSine, farCosine);
+                    float2 farOrigin =
+                        (float2(farProbe) + 0.5) * _FarCascadeProbeSpacing;
+                    float2 childIntervalStart = farOrigin +
+                        float2(farCosine, farSine) * _FarCascadeInterval.x;
+                    if (_CascadeChangedMask[farIndex] != 0 ||
+                        DirtySegmentOverlap(intervalStart, childIntervalStart))
+                    {
+                        changed = true;
+                    }
                 }
             }
         }
     }
 
-    return false;
+    return changed;
 }
 
 [numthreads(64, 1, 1)]

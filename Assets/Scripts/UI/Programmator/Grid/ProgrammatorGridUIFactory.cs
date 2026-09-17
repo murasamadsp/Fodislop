@@ -391,9 +391,9 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     {
         int idx = (_data.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
                   + (row * ProgrammatorData.COLS) + col;
-        int opId = _data.Codes[idx];
-        var action = (ProgAction)opId;
-        string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? _loc.Get(n) : _loc.Get("programmator.code", opId);
+        int opID = _data.Codes[idx];
+        var action = (ProgAction)opID;
+        string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? _loc.Get(n) : _loc.Get("programmator.code", opID);
         string desc = ProgrammatorData.OPERATOR_DESCRIPTIONS.TryGetValue(action, out var d) ? _loc.Get(d) : string.Empty;
         string text = string.IsNullOrEmpty(desc)
             ? _loc.Get("programmator.cell", col, row, name)

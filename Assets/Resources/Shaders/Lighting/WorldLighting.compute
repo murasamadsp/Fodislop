@@ -96,7 +96,6 @@ int _CascadeMaskEnabled;
 // ============================================================================
 
 StructuredBuffer<DynamicLight> _DynamicLights;
-int _DynamicLightCount;
 
 int2 _DynamicDispatchOrigin;
 int2 _DynamicDispatchSize;
@@ -166,7 +165,6 @@ int2 _CascadeDispatchSize;
 int _ScrollCascadeOffset;
 int _ScrollCascadeEntryCount;
 int2 _ScrollProbeSize;
-int _ScrollProbeSpacing;
 int _ScrollDirectionCount;
 int2 _ScrollDeltaProbes;
 

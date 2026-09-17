@@ -1,6 +1,6 @@
 # Kern agent guidance
 
-Kern — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask і пакетах `darkar25.kern.*`.
+Kern — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask і пакетах `darkar25.fodina.*`.
 
 ## Межі дозволів
 
@@ -9,6 +9,8 @@ Kern — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.6, 
 - Не виконуйте Git-відкат або переписування історії без прямого запиту в поточному повідомленні: `reset`, `restore`, checkout для відновлення, `revert`, `clean`, amend, rebase чи force-push. Не відновлюйте файли з `HEAD`, stash або reflog і не просіть такого дозволу з власної ініціативи.
 - Не редагуйте текстом `.prefab`, `.unity` або `.asset`; змінюйте їх лише через явно дозволений Unity Editor API/Inspector. Зберігайте GUID і `.meta`.
 - Наявні зміни в робочому дереві належать користувачеві. Не перезаписуйте й не включайте їх у свої зміни без потреби.
+- НІКОЛИ НЕ РОБИ --no-verify!
+- Комміть завжди все: усі зміни робочого дерева одним коммітом (`git add -A && git commit`), без дроблення на частини і без вибіркового стейджингу, якщо користувач прямо не попросив інакше.
 
 ## Виконання задач
 
@@ -72,7 +74,7 @@ Kern — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.6, 
    - `BlockLighting`
 4. Любое изменение transport стадий (CascadeTrace, LampPolar, BounceCache) должно увеличивать `LightingDdaSegments` или `LightingDdaTexelVisits` в `IFrameTelemetry` — это ключевые метрики стоимости.
 5. После изменения transport math проверь:
-   - Все debug views (0–10) показывают ожидаемую картину
+   - Все debug views (0–9) показывают ожидаемую картину
    - `LightingDdaSegments` / `LightingDdaTexelVisits` не выросли неожиданно
    - FPS не упал (сравни с baseline)
 6. Не добавляй «quality step budget» или frame skipping в DDA — стены должны быть точными.

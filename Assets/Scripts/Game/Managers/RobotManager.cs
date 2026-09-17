@@ -114,7 +114,7 @@ public sealed class RobotManager(
         LocalPlayerBotID = botID;
 
         // Если фабричный бот под этим id был создан до того, как сервер
-        // сообщил наш BotId (PlayerInfoPacket), — заменяем его игровым
+        // сообщил наш BotID (PlayerInfoPacket), — заменяем его игровым
         // объектом локального игрока, иначе метаданные/визуалы навсегда
         // достанутся фабричному боту и world-readiness gate не сойдётся.
         var pmc = localPlayer.Current;
@@ -125,19 +125,6 @@ public sealed class RobotManager(
             Object.Destroy(existing.gameObject);
             _robots.Remove(botID);
             Debug.Log($"{TAG} Replaced factory bot {botID} with local player robot");
-        }
-    }
-
-    public void RemoveRobot(uint botID)
-    {
-        if (_robots.TryGetValue(botID, out var robot))
-        {
-            Object.Destroy(robot.gameObject);
-            _robots.Remove(botID);
-        }
-        else
-        {
-            Debug.LogWarning($"{TAG} RemoveRobot: bot {botID} not found");
         }
     }
 

@@ -16,8 +16,6 @@ public readonly record struct WorldCoord(float X, float Y)
         return new CellCoord((int)MathF.Floor(X / s), (int)MathF.Floor(Y / s));
     }
 
-    public Vector2 ToVector2() => new(X, Y);
-
     public static implicit operator Vector2(WorldCoord c) => new(c.X, c.Y);
     public static implicit operator WorldCoord(Vector2 v) => new(v.x, v.y);
     public static implicit operator Vector3(WorldCoord c) => new(c.X, c.Y, 0f);
@@ -30,12 +28,9 @@ public readonly record struct WorldCoord(float X, float Y)
 public readonly record struct CellCoord(int X, int Y)
 {
     public WorldCoord ToWorldCenter(float cellSize) => new((X + 0.5f) * cellSize, (Y + 0.5f) * cellSize);
-    public WorldCoord ToWorldMin(float cellSize) => new(X * cellSize, Y * cellSize);
 
     public ServerCellCoord ToServer(int worldHeight) =>
         new(X, CoordinateUtils.UnityToServerY(Y, worldHeight));
-
-    public Vector2Int ToVector2Int() => new(X, Y);
 
     public static implicit operator Vector2Int(CellCoord c) => new(c.X, c.Y);
     public static implicit operator CellCoord(Vector2Int v) => new(v.x, v.y);
@@ -50,8 +45,6 @@ public readonly record struct ServerCellCoord(int X, int Y)
     public CellCoord ToUnityCell(int worldHeight) =>
         new(X, (int)MathF.Floor(CoordinateUtils.ServerToUnityY(Y, worldHeight)));
 
-    public Vector2Int ToVector2Int() => new(X, Y);
-
     public static implicit operator Vector2Int(ServerCellCoord c) => new(c.X, c.Y);
     public static implicit operator ServerCellCoord(Vector2Int v) => new(v.x, v.y);
 }
@@ -61,8 +54,6 @@ public readonly record struct ServerCellCoord(int X, int Y)
 /// </summary>
 public readonly record struct FieldPixelCoord(int X, int Y)
 {
-    public Vector2Int ToVector2Int() => new(X, Y);
-
     public static implicit operator Vector2Int(FieldPixelCoord c) => new(c.X, c.Y);
     public static implicit operator FieldPixelCoord(Vector2Int v) => new(v.x, v.y);
 }

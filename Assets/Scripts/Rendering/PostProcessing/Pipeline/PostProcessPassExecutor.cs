@@ -340,10 +340,6 @@ internal static class PostProcessPassExecutor
         cmd.SetComputeIntParam(data.PostProcessCS, PostDebugViewID, data.PostDebugView);
         cmd.SetComputeVectorParam(data.PostProcessCS, DisplayGrade0ID, data.DisplayGrade0);
         cmd.SetComputeVectorParam(data.PostProcessCS, DisplayGrade1ID, data.DisplayGrade1);
-        cmd.SetComputeFloatParam(
-            data.PostProcessCS,
-            DisplayGradePathPowerID,
-            data.DisplayGradePathPower);
         cmd.SetComputeFloatParam(data.PostProcessCS, GamutCompressionID, data.GamutCompression);
         cmd.SetComputeVectorArrayParam(data.PostProcessCS, MasterCurveID, data.MasterCurvePoints);
         cmd.SetComputeVectorArrayParam(data.PostProcessCS, RedCurveID, data.RedCurvePoints);

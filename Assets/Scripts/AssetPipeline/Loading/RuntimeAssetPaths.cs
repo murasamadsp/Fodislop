@@ -38,7 +38,7 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
             TexturesFolderName);
         string markerPath = Path.Combine(extractedRoot, ".manifest");
         string manifest = await DownloadTextAsync(
-            CombineStreamingUri(Application.streamingAssetsPath, "Textures.manifest"));
+            CombineStreamingURI(Application.streamingAssetsPath, "Textures.manifest"));
         if (!File.Exists(markerPath) ||
             !string.Equals(await File.ReadAllTextAsync(markerPath), manifest, System.StringComparison.Ordinal))
         {
@@ -67,7 +67,7 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
 
                 Directory.CreateDirectory(directory);
                 byte[] bytes = await DownloadBytesAsync(
-                    CombineStreamingUri(
+                    CombineStreamingURI(
                         Application.streamingAssetsPath,
                         $"Textures/{relativeFile}"));
                 await File.WriteAllBytesAsync(destination, bytes);
@@ -235,7 +235,7 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
         return request.downloadHandler.data;
     }
 
-    private static string CombineStreamingUri(string root, string relativePath)
+    private static string CombineStreamingURI(string root, string relativePath)
     {
         string encodedPath = string.Join(
             "/",

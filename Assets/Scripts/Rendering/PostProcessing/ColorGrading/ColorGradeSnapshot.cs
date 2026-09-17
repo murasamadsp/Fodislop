@@ -57,17 +57,11 @@ public readonly record struct ColorGradeSnapshot
 
     public float GreyOut { get; init; }
 
-    public float CurveSlope { get; init; }
-
     public float ShoulderPower { get; init; }
 
     public float ToePower { get; init; }
 
     public float ToeStops { get; init; }
-
-    public float PathToWhiteAmount { get; init; }
-
-    public float PathToWhitePower { get; init; }
 
     public bool GamutCompressionEnabled { get; init; }
 
@@ -117,11 +111,9 @@ public readonly record struct ColorGradeSnapshot
         Saturation = PostProcessLook.ColorGrading.Saturation;
         Pivot = 0.5f;
         GreyOut = PostProcessLook.Grade.GreyOut;
-        CurveSlope = PostProcessLook.Grade.CurveSlope;
         ShoulderPower = PostProcessLook.Grade.ShoulderPower;
         ToePower = PostProcessLook.Grade.ToePower;
         ToeStops = PostProcessLook.Grade.ToeStops;
-        PathToWhitePower = PostProcessLook.Grade.PathToWhitePower;
         GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled;
         GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength;
         // Общие нейтральные экземпляры, а не новые. Этот конструктор вызывает
@@ -180,22 +172,13 @@ public readonly record struct ColorGradeSnapshot
         Hue = 0f,
         CdlMaster = new Vector3(1f, 0f, 1f),
         GreyOut = PostProcessLook.Grade.GreyOut,
-        CurveSlope = PostProcessLook.Grade.CurveSlope,
         ShoulderPower = PostProcessLook.Grade.ShoulderPower,
         ToePower = PostProcessLook.Grade.ToePower,
         ToeStops = PostProcessLook.Grade.ToeStops,
-        PathToWhiteAmount = PostProcessLook.Grade.PathToWhiteAmount,
-        PathToWhitePower = PostProcessLook.Grade.PathToWhitePower,
         GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled,
         GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength,
         LutIntensity = 0f,
         LutColorSpace = ColorGradeLutColorSpace.LinearRec709,
-    };
-
-    [ExcludeFromCodeCoverage]
-    public ColorGradeSnapshot WithTemperature(float temperature) => this with
-    {
-        Temperature = temperature,
     };
 
     public ColorGradeSnapshot BlendTo(ColorGradeSnapshot other, float weight)
@@ -241,12 +224,9 @@ public readonly record struct ColorGradeSnapshot
             Hue = Mathf.Lerp(Hue, other.Hue, t),
             CdlMaster = Vector3.Lerp(CdlMaster, other.CdlMaster, t),
             GreyOut = Mathf.Lerp(GreyOut, other.GreyOut, t),
-            CurveSlope = Mathf.Lerp(CurveSlope, other.CurveSlope, t),
             ShoulderPower = Mathf.Lerp(ShoulderPower, other.ShoulderPower, t),
             ToePower = Mathf.Lerp(ToePower, other.ToePower, t),
             ToeStops = Mathf.Lerp(ToeStops, other.ToeStops, t),
-            PathToWhiteAmount = Mathf.Lerp(PathToWhiteAmount, other.PathToWhiteAmount, t),
-            PathToWhitePower = Mathf.Lerp(PathToWhitePower, other.PathToWhitePower, t),
             GamutCompressionEnabled = t > 0.5f ? other.GamutCompressionEnabled : GamutCompressionEnabled,
             GamutCompressionStrength = Mathf.Lerp(GamutCompressionStrength, other.GamutCompressionStrength, t),
             // Ссылки, а не клоны — как и на краях t<=0 и t>=1 выше. Получатель
@@ -368,7 +348,7 @@ public readonly record struct ColorGradeSnapshot
         return new ColorGradeSnapshot
         {
             EnabledMask = EnabledMask & ((1 << 6) - 1),
-            Transform = Transform is DisplayTransform.None or DisplayTransform.Kern
+            Transform = Transform is DisplayTransform.None or DisplayTransform.Sdr or DisplayTransform.HdrPq1300
                 ? Transform
                 : defaults.Transform,
             Exposure = FiniteClamp(
@@ -464,11 +444,6 @@ public readonly record struct ColorGradeSnapshot
                 ColorGradeState.GreyOutMin,
                 ColorGradeState.GreyOutMax,
                 defaults.GreyOut),
-            CurveSlope = FiniteClamp(
-                CurveSlope,
-                ColorGradeState.CurveSlopeMin,
-                ColorGradeState.CurveSlopeMax,
-                defaults.CurveSlope),
             ShoulderPower = FiniteClamp(
                 ShoulderPower,
                 ColorGradeState.CurvePowerMin,
@@ -484,16 +459,6 @@ public readonly record struct ColorGradeSnapshot
                 ColorGradeState.ToeStopsMin,
                 ColorGradeState.ToeStopsMax,
                 defaults.ToeStops),
-            PathToWhiteAmount = FiniteClamp(
-                PathToWhiteAmount,
-                ColorGradeState.PathToWhiteAmountMin,
-                ColorGradeState.PathToWhiteAmountMax,
-                defaults.PathToWhiteAmount),
-            PathToWhitePower = FiniteClamp(
-                PathToWhitePower,
-                ColorGradeState.PathToWhitePowerMin,
-                ColorGradeState.PathToWhitePowerMax,
-                defaults.PathToWhitePower),
             GamutCompressionEnabled = GamutCompressionEnabled,
             GamutCompressionStrength = FiniteClamp(
                 GamutCompressionStrength,

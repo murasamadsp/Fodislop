@@ -194,10 +194,4 @@ public readonly record struct TerrainFramePlan(
     RectInt CameraViewport,
     RectInt LightingViewport,
     bool DimensionsChanged,
-    bool ShouldProcess)
-{
-    public bool IsPendingTarget =>
-        ShouldProcess &&
-        ActiveWindow == CommittedWindow &&
-        RequestedWindow != CommittedWindow;
-}
+    bool ShouldProcess);

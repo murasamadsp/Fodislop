@@ -29,7 +29,7 @@ public readonly record struct DynamicLightSource(
 public sealed class DynamicLightManager
 {
     private readonly SortedDictionary<int, DynamicLightSource> _externalLights = new();
-    private readonly List<int> _lastDroppedDynamicLightIds = new();
+    private readonly List<int> _lastDroppedDynamicLightIDs = new();
     private DynamicLightGpuData[] _dynamicLights = new DynamicLightGpuData[1];
     private int _lastDynamicLightCount;
     private int _lastDroppedDynamicLightCount;
@@ -45,12 +45,12 @@ public sealed class DynamicLightManager
         new(_dynamicLights, 0, _lastDynamicLightCount);
 
     // Caller ids of UploadedLights, index for index.
-    public System.ReadOnlySpan<int> UploadedLightIds =>
-        new(_uploadedLightIds, 0, _lastDynamicLightCount);
+    public System.ReadOnlySpan<int> UploadedLightIDs =>
+        new(_uploadedLightIDs, 0, _lastDynamicLightCount);
 
-    private int[] _uploadedLightIds = new int[1];
+    private int[] _uploadedLightIDs = new int[1];
     public int DroppedCount => _lastDroppedDynamicLightCount;
-    public IReadOnlyList<int> DroppedLightIds => _lastDroppedDynamicLightIds;
+    public IReadOnlyList<int> DroppedLightIDs => _lastDroppedDynamicLightIDs;
     public bool IsDirty => _externalLightsDirty;
 
     public void ClearDirty() => _externalLightsDirty = false;
@@ -107,7 +107,7 @@ public sealed class DynamicLightManager
         if (_dynamicLights.Length != capacity)
         {
             _dynamicLights = new DynamicLightGpuData[capacity];
-            _uploadedLightIds = new int[capacity];
+            _uploadedLightIDs = new int[capacity];
         }
     }
 
@@ -115,7 +115,7 @@ public sealed class DynamicLightManager
     {
         _lastDynamicLightCount = 0;
         _lastDroppedDynamicLightCount = 0;
-        _lastDroppedDynamicLightIds.Clear();
+        _lastDroppedDynamicLightIDs.Clear();
     }
 
     public int UploadDynamicLights(
@@ -129,26 +129,26 @@ public sealed class DynamicLightManager
         int dynamicLightCount = 0;
         int previousDynamicLightCount = _lastDynamicLightCount;
         uploadedLightsChanged = false;
-        _lastDroppedDynamicLightIds.Clear();
+        _lastDroppedDynamicLightIDs.Clear();
 
         foreach (KeyValuePair<int, DynamicLightSource> pair in _externalLights)
         {
             DynamicLightSource source = pair.Value;
             if (dynamicLightCount >= maximumLightCount)
             {
-                _lastDroppedDynamicLightIds.Add(pair.Key);
+                _lastDroppedDynamicLightIDs.Add(pair.Key);
                 continue;
             }
 
             if (source.Intensity <= 0f)
             {
-                _lastDroppedDynamicLightIds.Add(pair.Key);
+                _lastDroppedDynamicLightIDs.Add(pair.Key);
                 continue;
             }
 
             if (!IntersectsWorldRect(source.Position, 16f, worldRect, cellSize))
             {
-                _lastDroppedDynamicLightIds.Add(pair.Key);
+                _lastDroppedDynamicLightIDs.Add(pair.Key);
                 continue;
             }
 
@@ -163,7 +163,7 @@ public sealed class DynamicLightManager
                 uploadedLightsChanged = true;
             }
 
-            _uploadedLightIds[dynamicLightCount] = pair.Key;
+            _uploadedLightIDs[dynamicLightCount] = pair.Key;
             _dynamicLights[dynamicLightCount++] = dynamicLight;
         }
 
@@ -173,7 +173,7 @@ public sealed class DynamicLightManager
         }
 
         _lastDynamicLightCount = dynamicLightCount;
-        _lastDroppedDynamicLightCount = _lastDroppedDynamicLightIds.Count;
+        _lastDroppedDynamicLightCount = _lastDroppedDynamicLightIDs.Count;
 
         if (uploadedLightsChanged && dynamicLightCount > 0 && dynamicLightBuffer != null)
         {

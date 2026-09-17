@@ -12,9 +12,9 @@ namespace Kern.ArchitectureLinter.Rules.Rules;
 public sealed class DeadMembersRule : IRule
 {
     private static readonly Regex DeclarationRegex = new Regex(
-        @"^(public|internal|protected)\s+" +
-        @"(?:static|readonly|const|sealed|override|virtual|abstract|new|partial|async|extern|unsafe)*\s+" +
-        @"(?:[\w<>\[\],.?]+)\s+(\w+)\s*(?:\{|\()|=|;",
+        @"^\s*(public|internal|protected)\s+" +
+        @"(?:static|readonly|const|sealed|override|virtual|abstract|new|partial|async|extern|unsafe)*\s*" +
+        @"(?:[\w<>\[\],.?]+)\s+(\w+)\s*(?:\{|\(|=|;)",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
     private static readonly HashSet<string> UnityMessages = new(StringComparer.Ordinal)
@@ -24,6 +24,7 @@ public sealed class DeadMembersRule : IRule
         "OnApplicationPause", "OnApplicationFocus", "OnLowMemory", "OnValidate", "Reset",
         "OnPreRender", "OnPostRender", "OnRenderImage", "OnBecameVisible", "OnBecameInvisible",
         "Dispose", "Configure", "Construct", "Main", "Equals", "GetHashCode", "ToString",
+        "Compare", "CompareTo", "GetEnumerator",
         "Create", "AddRenderPasses", "RecordRenderGraph", "Execute", "OnCameraSetup",
         "OnCameraCleanup", "IsActive", "IsTileCompatible", "ApplyLocalizedText",
         "GetPostprocessOrder", "GetVersion", "OnPreprocessTexture", "OnPostprocessTexture",
@@ -101,6 +102,9 @@ public sealed class DeadMembersRule : IRule
                 var ifaces = bases.Select(b => b.Trim().Split('<')[0].Trim()).Where(b => !string.IsNullOrEmpty(b)).ToList();
                 classInterfaces[cls] = ifaces;
             }
+            // Приватные (в т.ч. вложенные) классы тоже реализуют интерфейсы
+            // (IComparer и т.п., вызываемые рантаймом): маппим их тоже, иначе
+            // их методы-имплементации флагаются как мёртвые.
         }
 
         // Collect declarations from production files
@@ -110,9 +114,11 @@ public sealed class DeadMembersRule : IRule
         foreach (var (file, relative) in productionFiles)
         {
             var raw = File.ReadAllText(file);
-            var stripped = Regex.Replace(raw, @"/\*[\s\S]*?\*/", "");
-            stripped = Regex.Replace(stripped, @"^\s*//.*$", "", RegexOptions.Multiline);
-            stripped = Regex.Replace(stripped, @"//.*$", "");
+            // StripComments зберігає \n: інакше номери рядків і вікно
+            // атрибутів вище декларації зсуваються (порожній рядок перед
+            // коментом з'їдався разом із переводом). Строки ріжуться
+            // першими, щоб `//` всередині літералів (URL) не їв код.
+            var stripped = SourceScanner.StripComments(StripStringLiterals(raw));
             sources[relative] = stripped;
 
             var lines = raw.Split('\n');
@@ -165,7 +171,7 @@ public sealed class DeadMembersRule : IRule
                     string? declaringClass = null;
                     for (var j = lineIndex - 1; j >= 0 && j >= lineIndex - 30; j--)
                     {
-                        var m2 = Regex.Match(rawLines2[j], @"^(?:\s*)(?:public|internal|protected|sealed|static)\s+.*class\s+(\w+)");
+                        var m2 = Regex.Match(rawLines2[j], @"^(?:\s*)(?:public|internal|protected|private|sealed|static)\s+.*class\s+(\w+)");
                         if (m2.Success)
                         {
                             declaringClass = m2.Groups[1].Value;
@@ -203,7 +209,7 @@ public sealed class DeadMembersRule : IRule
                     string? declaringClass2 = null;
                     for (var j = lineIndex - 1; j >= 0 && j >= lineIndex - 30; j--)
                     {
-                        var m2 = Regex.Match(rawLines3[j], @"^(?:\s*)(?:public|internal|protected|sealed|static)\s+.*class\s+(\w+)");
+                        var m2 = Regex.Match(rawLines3[j], @"^(?:\s*)(?:public|internal|protected|private|sealed|static)\s+.*class\s+(\w+)");
                         if (m2.Success)
                         {
                             declaringClass2 = m2.Groups[1].Value;
@@ -232,8 +238,43 @@ public sealed class DeadMembersRule : IRule
             }
         }
 
-        // Build haystack
-        var haystack = string.Join("\n", sources.Values);
+        // Build haystack: string literals do NOT count as uses. A name mentioned
+        // only in a log message, JSON key or UI label is not a reference —
+        // counting it kept real dead code alive. Real code uses survive:
+        // nameof(Foo) stays code, interpolation holes {Foo} are preserved,
+        // reflection GetMethod("Foo")/GetField("Foo") is collected below.
+        //
+        // Uses are counted across ALL files (production, tests, editor,
+        // tools): a member exercised only by tests or tools is alive, not
+        // dead. Declarations are collected from production files only.
+        var reflectionUses = new Dictionary<string, int>(StringComparer.Ordinal);
+        var haystackParts = new List<string>();
+        foreach (string file in allFiles)
+        {
+            string relative = SourceScanner.GetProjectRelativePath(projectRoot, file);
+            string code;
+            if (!sources.TryGetValue(relative, out string? productionCode))
+            {
+                code = SourceScanner.StripComments(File.ReadAllText(file));
+            }
+            else
+            {
+                code = productionCode;
+            }
+
+            foreach (Match m in Regex.Matches(
+                code,
+                @"(?:GetMethod|GetField|GetProperty|Invoke)\s*\(\s*""(\w+)"""))
+            {
+                var reflectionName = m.Groups[1].Value;
+                reflectionUses.TryGetValue(reflectionName, out int reflectionCount);
+                reflectionUses[reflectionName] = reflectionCount + 1;
+            }
+
+            haystackParts.Add(StripStringLiterals(code));
+        }
+
+        var haystack = string.Join("\n", haystackParts);
 
         foreach (var (name, places) in declarations)
         {
@@ -246,6 +287,9 @@ public sealed class DeadMembersRule : IRule
                     haystack,
                     $@"\[\s*{Regex.Escape(shortAttributeName)}(?:\s|\(|\])").Count;
             }
+
+            if (reflectionUses.TryGetValue(name, out int reflectionBonus))
+                uses += reflectionBonus;
 
             if (uses <= places.Count)
             {
@@ -263,5 +307,129 @@ public sealed class DeadMembersRule : IRule
         }
 
         return Task.FromResult<IReadOnlyList<RuleViolation>>(violations);
+    }
+
+    // Replaces every string/char literal with blank space, preserving
+    // interpolation holes so $"...{Foo}..." still counts as a use of Foo.
+    // Verbatim ($@"...", @"...") and escaped quotes are handled.
+    private static string StripStringLiterals(string code)
+    {
+        var result = new System.Text.StringBuilder(code.Length);
+        int i = 0;
+        while (i < code.Length)
+        {
+            char c = code[i];
+            bool isInterpolated = c == '$' && i + 1 < code.Length && (code[i + 1] == '"' || (code[i + 1] == '@' && i + 2 < code.Length && code[i + 2] == '"'));
+            bool isVerbatimStart = c == '@' && i + 1 < code.Length && code[i + 1] == '"';
+            if (c == '"' || isInterpolated || isVerbatimStart)
+            {
+                bool verbatim = false;
+                bool interpolated = false;
+                if (isInterpolated)
+                {
+                    interpolated = true;
+                    result.Append(' ');
+                    i++;
+                    if (i < code.Length && code[i] == '@')
+                    {
+                        verbatim = true;
+                        result.Append(' ');
+                        i++;
+                    }
+
+                    result.Append(' ');
+                    i++;
+                }
+                else if (isVerbatimStart)
+                {
+                    verbatim = true;
+                    result.Append("  ");
+                    i += 2;
+                }
+                else
+                {
+                    i++;
+                }
+
+                int holeDepth = 0;
+                while (i < code.Length)
+                {
+                    char d = code[i];
+                    if (interpolated && d == '{')
+                    {
+                        if (i + 1 < code.Length && code[i + 1] == '{')
+                        {
+                            result.Append("  ");
+                            i += 2;
+                            continue;
+                        }
+
+                        holeDepth++;
+                        result.Append(d);
+                        i++;
+                        continue;
+                    }
+
+                    if (holeDepth > 0)
+                    {
+                        if (d == '}')
+                        {
+                            holeDepth--;
+                        }
+
+                        result.Append(d);
+                        i++;
+                        continue;
+                    }
+
+                    if (!verbatim && d == '\\')
+                    {
+                        result.Append("  ");
+                        i += 2;
+                        continue;
+                    }
+
+                    if (d == '"')
+                    {
+                        if (verbatim && i + 1 < code.Length && code[i + 1] == '"')
+                        {
+                            result.Append("  ");
+                            i += 2;
+                            continue;
+                        }
+
+                        result.Append(' ');
+                        i++;
+                        break;
+                    }
+
+                    result.Append(' ');
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (c == '\'' && i + 2 < code.Length)
+            {
+                int end = i + 1;
+                if (code[end] == '\\')
+                    end += 2;
+                else
+                    end += 1;
+                if (end < code.Length && code[end] == '\'')
+                {
+                    for (int k = i; k <= end; k++)
+                        result.Append(' ');
+                    i = end + 1;
+                    continue;
+                }
+            }
+
+            result.Append(c);
+            i++;
+        }
+
+        return result.ToString();
     }
 }

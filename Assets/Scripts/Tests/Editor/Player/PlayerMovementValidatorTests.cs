@@ -227,9 +227,9 @@ public class PlayerMovementValidatorTests
         public float GetMoveCooldown(CellType cellType) =>
             cellType == CellType.Empty ? emptyCooldown : normalCooldown;
 
-        public bool TryGetTileGroup(CellType type, out int groupId)
+        public bool TryGetTileGroup(CellType type, out int groupID)
         {
-            groupId = 0;
+            groupID = 0;
             return false;
         }
 

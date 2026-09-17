@@ -85,7 +85,6 @@ internal sealed class PostProcessPassData
     public Vector3 ContrastControls2;
     public Vector4 DisplayGrade0;
     public Vector4 DisplayGrade1;
-    public float DisplayGradePathPower;
     public float GamutCompression;
     public Vector4[] MasterCurvePoints = null!;
     public Vector4[] RedCurvePoints = null!;

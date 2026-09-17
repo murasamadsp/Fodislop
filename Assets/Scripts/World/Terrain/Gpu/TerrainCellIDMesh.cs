@@ -16,7 +16,7 @@ namespace Kern.World.Terrain;
 // Остаётся мешем под MeshRenderer, а не процедурным вызовом: так террейн
 // сохраняет слой сортировки 2D-рендерера, материалы по атласам и проход
 // поля материалов без изменений.
-public sealed class TerrainCellIdMesh : IDisposable
+public sealed class TerrainCellIDMesh : IDisposable
 {
     private static readonly Vector2[] _Corners =
     [
@@ -81,7 +81,7 @@ public sealed class TerrainCellIdMesh : IDisposable
 
         _mesh = new Mesh
         {
-            name = "TerrainCellIdMesh",
+            name = "TerrainCellIDMesh",
             indexFormat = IndexFormat.UInt32,
             hideFlags = HideFlags.DontSave,
         };

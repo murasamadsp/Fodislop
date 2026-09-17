@@ -83,19 +83,6 @@ public static class ToolChrome
         GUI.color = previous;
     }
 
-    public static void DrawScanlines(Rect local)
-    {
-        if (Event.current.type != EventType.Repaint)
-        {
-            return;
-        }
-
-        GUI.DrawTextureWithTexCoords(
-            local,
-            ToolPalette.Scanlines,
-            new Rect(0f, 0f, 1f, local.height / 4f));
-    }
-
     public static void DrawMeter(Rect area, float normalized, Color color)
     {
         if (Event.current.type != EventType.Repaint)

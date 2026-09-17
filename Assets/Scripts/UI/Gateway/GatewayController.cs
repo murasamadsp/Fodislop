@@ -17,7 +17,6 @@ namespace Kern.UI
     public sealed class GatewayController : MonoBehaviour, ILocalizableUI
     {
         private const string MainMenuSceneName = ProjectRuntimeContracts.SceneNames.MainMenu;
-        private const string OnboardingDonePrefsKey = "OnboardingCompleted1";
 
         // Состояние ворот. Ровно один класс на корне за раз: раньше видимость
         // была своя у каждого слоя, и ничто не мешало показать вход и онбординг
@@ -162,7 +161,7 @@ namespace Kern.UI
         private void OnAuthPassed()
         {
             bool alreadyDone = !GatewayDevFlags.ForceGates
-                && PlayerPrefs.GetInt(OnboardingDonePrefsKey, 0) == 1;
+                && _clientConfig.Config.Interface.OnboardingDone;
 
             if (alreadyDone || _onboarding == null)
             {
@@ -176,8 +175,7 @@ namespace Kern.UI
 
         private void OnOnboardingFinished()
         {
-            PlayerPrefs.SetInt(OnboardingDonePrefsKey, 1);
-            PlayerPrefs.Save();
+            _clientConfig.UpdateSection(config => config.Interface, settings => settings.OnboardingDone = true);
             GoToMainMenu();
         }
 

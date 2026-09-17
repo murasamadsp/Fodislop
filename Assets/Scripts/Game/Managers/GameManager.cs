@@ -22,8 +22,6 @@ namespace Kern.Game.Managers
         Disconnected,
     }
 
-    // Чистый сервис контейнера (SCENE_STANDARD.md §1): ждёт готовности мира в
-    // тике контейнера, объекта на сцене не имеет.
     public sealed class GameManager : IWorldReadiness, ITickable, IDisposable
     {
         public GameState CurrentState { get; private set; } = GameState.Offline;
@@ -130,9 +128,6 @@ namespace Kern.Game.Managers
 
         public void NotifyWorldLoaded()
         {
-            // WorldInit can arrive again after reconnect or an offline-world
-            // restart. A published load belongs to the previous world session
-            // and must never suppress the next load notification.
             IsWorldLoaded = false;
             _worldLoadPublished = false;
             _worldLoadPending = true;
@@ -185,9 +180,6 @@ namespace Kern.Game.Managers
                     $"cellTexPending={_textureService.PendingCellTextureRequests}");
             }
 
-            // Publish monotonic loader phases from the gate itself: the same
-            // conditions that block WorldReady drive the descent loader, so the
-            // MainMenu progress bar reflects real readiness rather than a timer.
             if (player != null && player.HasServerPosition)
             {
                 _loadProgress.Report(WorldLoadPhase.SpawnSync);

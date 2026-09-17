@@ -3,18 +3,7 @@
 using UnityEngine;
 
 namespace Kern;
-public readonly struct AnimatedSpriteData
+public readonly record struct AnimatedSpriteData(Sprite[] Frames, float FPS, int FrameHeight)
 {
-    public AnimatedSpriteData(Sprite[] frames, float fps, int frameHeight)
-    {
-        Frames = frames;
-        FPS = fps;
-        FrameHeight = frameHeight;
-    }
-
-    public Sprite[] Frames { get; }
-    public float FPS { get; }
-    public int FrameHeight { get; }
-
     public float FrameDuration => 1f / Mathf.Max(1f, FPS);
 }

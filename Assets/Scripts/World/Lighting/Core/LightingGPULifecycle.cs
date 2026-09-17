@@ -9,12 +9,12 @@ namespace Kern.World.Lighting;
 /// <summary>
 /// Owns GPU resource sizing and release transitions for the lighting runtime.
 /// </summary>
-internal sealed class LightingGpuLifecycle
+internal sealed class LightingGPULifecycle
 {
     private readonly LightingResourceManager _resources;
     private readonly LightingFrameExecutor _frameExecutor;
 
-    public LightingGpuLifecycle(
+    public LightingGPULifecycle(
         LightingResourceManager resources,
         LightingFrameExecutor frameExecutor)
     {
@@ -54,12 +54,12 @@ internal sealed class LightingGpuLifecycle
 
     public void EnsurePipeline()
     {
-        _resources.EnsureGpuPipelineInitialized();
+        _resources.EnsureGPUPipelineInitialized();
     }
 
     public void ReleasePipeline()
     {
-        _resources.ReleaseGpuPipeline();
+        _resources.ReleaseGPUPipeline();
         _frameExecutor.Release();
     }
 

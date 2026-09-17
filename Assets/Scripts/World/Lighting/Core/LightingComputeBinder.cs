@@ -68,7 +68,6 @@ internal static class LightingComputeBinder
     public static readonly int ScrollCascadeOffsetID = Shader.PropertyToID("_ScrollCascadeOffset");
     public static readonly int ScrollCascadeEntryCountID = Shader.PropertyToID("_ScrollCascadeEntryCount");
     public static readonly int ScrollProbeSizeID = Shader.PropertyToID("_ScrollProbeSize");
-    public static readonly int ScrollProbeSpacingID = Shader.PropertyToID("_ScrollProbeSpacing");
     public static readonly int ScrollDirectionCountID = Shader.PropertyToID("_ScrollDirectionCount");
     public static readonly int ScrollDeltaProbesID = Shader.PropertyToID("_ScrollDeltaProbes");
     public static readonly int DirtyRegionsID = Shader.PropertyToID("_DirtyRegions");
@@ -77,7 +76,6 @@ internal static class LightingComputeBinder
     public static readonly int CascadeMaskEnabledID = Shader.PropertyToID("_CascadeMaskEnabled");
     public static readonly int BlockAveragedID = Shader.PropertyToID("_BlockAveraged");
     public static readonly int DynamicLightsID = Shader.PropertyToID("_DynamicLights");
-    public static readonly int DynamicLightCountID = Shader.PropertyToID("_DynamicLightCount");
     public static readonly int DynamicDispatchOriginID = Shader.PropertyToID("_DynamicDispatchOrigin");
     public static readonly int DynamicDispatchSizeID = Shader.PropertyToID("_DynamicDispatchSize");
     public static readonly int DynamicLightIndexID = Shader.PropertyToID("_DynamicLightIndex");

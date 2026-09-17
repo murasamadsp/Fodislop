@@ -81,7 +81,6 @@ public sealed class ShaderContractTests
             "_CellSize",
             "_CellSolidMask",
             "_DynamicLights",
-            "_DynamicLightCount",
             "_LightingCounters",
             "_DirtyRegions",
             "_DirtyRegionCount",

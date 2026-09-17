@@ -279,12 +279,6 @@ namespace Kern.Game
             _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }
 
-        public void SetDynamicLightIntensity(float intensity) => _lighting.SetIntensity(intensity, _lightingEngine);
-
-        public void SetDynamicLightColor(Color color) => _lighting.SetColor(color, _lightingEngine);
-
-        public void SetDynamicLightEnabled(bool enabled) => _lighting.SetEnabled(enabled, _lightingEngine);
-
         public void ResetDynamicLightPreferences()
         {
             if (IsLocalPlayer)

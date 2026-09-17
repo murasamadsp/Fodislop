@@ -160,31 +160,39 @@ internal sealed class PauseMenuSettingsBuilder
             return;
         }
 
-        string[] lightingDebugNames =
+        (string Key, LightingEngine.DebugView View)[] lightingDebugViews =
         [
-            "settings.debug.final_lighting",
-            "settings.debug.occupancy",
-            "settings.debug.albedo",
-            "settings.debug.emission",
-            "settings.debug.transmission",
-            "settings.debug.direct_radiance",
-            "settings.debug.diffuse_bounce",
-            "settings.debug.exposure",
+            ("settings.debug.final_lighting", LightingEngine.DebugView.FinalLighting),
+            ("settings.debug.occupancy", LightingEngine.DebugView.Occupancy),
+            ("settings.debug.albedo", LightingEngine.DebugView.Albedo),
+            ("settings.debug.emission", LightingEngine.DebugView.Emission),
+            ("settings.debug.transmission", LightingEngine.DebugView.Transmission),
+            ("settings.debug.static_direct", LightingEngine.DebugView.StaticDirect),
+            ("settings.debug.dynamic_direct", LightingEngine.DebugView.DynamicDirect),
+            ("settings.debug.diffuse_bounce", LightingEngine.DebugView.DiffuseBounce),
+            ("settings.debug.exposure", LightingEngine.DebugView.Exposure),
+            ("settings.debug.ao", LightingEngine.DebugView.AmbientOcclusion),
         ];
-        int activeDebugView = (int)_lightingEngine.ActiveDebugView;
+        int activeDebugIndex = Array.FindIndex(
+            lightingDebugViews,
+            entry => entry.View == _lightingEngine.ActiveDebugView);
+        if (activeDebugIndex < 0)
+        {
+            activeDebugIndex = 0;
+        }
+
         var lightingDebugView = new Button();
         void UpdateLightingDebugButton()
         {
             lightingDebugView.text =
                 _loc.Get("settings.debug.lighting_label") + ": " +
-                _loc.Get(lightingDebugNames[activeDebugView]);
+                _loc.Get(lightingDebugViews[activeDebugIndex].Key);
         }
 
         lightingDebugView.clicked += () =>
         {
-            activeDebugView = (activeDebugView + 1) % lightingDebugNames.Length;
-            _lightingEngine.SetDebugView(
-                (LightingEngine.DebugView)activeDebugView);
+            activeDebugIndex = (activeDebugIndex + 1) % lightingDebugViews.Length;
+            _lightingEngine.SetDebugView(lightingDebugViews[activeDebugIndex].View);
 
             UpdateLightingDebugButton();
         };
@@ -227,7 +235,7 @@ internal sealed class PauseMenuSettingsBuilder
                 $"DynamicLights={_lightingEngine.DynamicLightCount} " +
                 $"Uploaded={_lightingEngine.UploadedDynamicLightCount} " +
                 $"Dropped={_lightingEngine.DroppedDynamicLightCount} " +
-                $"DroppedIds=[{string.Join(",", _lightingEngine.DroppedDynamicLightIds)}]\n" +
+                $"DroppedIds=[{string.Join(",", _lightingEngine.DroppedDynamicLightIDs)}]\n" +
                 $"ComputeAmbient={_lightingEngine.ComputeAmbientColor} " +
                 $"ComputeEmptyExtinction={_lightingEngine.ComputeEmptyExtinction} " +
                 $"ComputeSolidExtinction={_lightingEngine.ComputeSolidExtinction}\n" +

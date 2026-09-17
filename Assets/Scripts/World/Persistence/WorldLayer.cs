@@ -130,7 +130,6 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
             allowDirtyEviction: false);
         _loadingChunks = new HashSet<int>();
 
-        WorldLayerFileHeader.MigrateLegacyFormatIfRequired(_filePath, _widthChunks, _heightChunks, _chunkSize);
         InitializeFile();
     }
 
@@ -728,7 +727,19 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
 
         if (!valid)
         {
-            if (_fileStream.Length > 0)
+            if (_fileStream.Length > 0 &&
+                WorldLayerFileHeader.TryReadFormatVersion(_fileStream) is int version &&
+                version != WorldLayerFileHeader.CurrentFormatVersion)
+            {
+                // Легаси формат не поддерживается и не мигрируется: старый
+                // файл удаляется, карта пересоздаётся и перекачивается с
+                // сервера. Данные восстановимы, формат — нет.
+                _fileStream.Dispose();
+                _fileStream = null;
+                File.Delete(_filePath);
+                _fileStream = _openFile(_filePath);
+            }
+            else if (_fileStream.Length > 0)
             {
                 // Fail-fast: a damaged map file must never be silently
                 // recreated as an empty world. Surface the failure instead.

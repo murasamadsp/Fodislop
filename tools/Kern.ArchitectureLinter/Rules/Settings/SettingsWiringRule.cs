@@ -115,8 +115,14 @@ public sealed class SettingsWiringRule : IRule
             }
         }
 
-        // UI-only wiring
-        var uiAllowed = new HashSet<string>(StringComparer.Ordinal) { "UIScale" };
+        // UI-only wiring: flow state owned by UI (scale, gateway gates).
+        // Such fields are correctly read only from UI controllers.
+        var uiAllowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "UIScale",
+            "AutoLogin",
+            "OnboardingDone",
+        };
         foreach (var field in fields)
         {
             if (MetadataFields.Contains(field) || attributeWired.Contains(field) || uiAllowed.Contains(field))

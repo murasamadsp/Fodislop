@@ -14,10 +14,7 @@ public readonly record struct MarkerInfo(
     string Name,
     ProfilerCategory Category,
     ProfilerMarkerDataUnit Unit,
-    MarkerFlags Flags)
-{
-    public bool SamplesGpu => (Flags & MarkerFlags.SampleGPU) != 0;
-}
+    MarkerFlags Flags);
 
 // Справочник всех маркеров и счётчиков, которые профайлер знает прямо сейчас.
 //
