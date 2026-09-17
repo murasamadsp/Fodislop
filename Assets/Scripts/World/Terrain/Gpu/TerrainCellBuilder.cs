@@ -225,32 +225,6 @@ public sealed class TerrainCellBuilder : IDisposable
         }
     }
 
-    private void AddTextureRefreshQuads(
-        Dictionary<CellType, HashSet<long>> quadsByType,
-        CellType cellType)
-    {
-        if (!quadsByType.TryGetValue(cellType, out HashSet<long>? quads))
-        {
-            return;
-        }
-
-        foreach (long key in quads)
-        {
-            int worldX = UnpackX(key);
-            int worldY = UnpackY(key);
-            if ((uint)(worldX - _textureRefreshWindowX) >= (uint)_width ||
-                (uint)(worldY - _textureRefreshWindowY) >= (uint)_height)
-            {
-                continue;
-            }
-
-            int quad = ((worldX - _textureRefreshWindowX) * _height) + (worldY - _textureRefreshWindowY);
-            if (_textureRefreshMarks.Add(key))
-            {
-                _textureRefreshQuads.Add(quad);
-            }
-        }
-    }
 
     // Вершины накладки дверей: клеток с дверью мало, поэтому их квады
     // собираются заново по требованию, а не хранятся для всей сетки.
