@@ -26,7 +26,7 @@ namespace Kern.Game
         private const int BATCH_SORTING_ORDER = -1;
         private const int OVERLAY_BATCH_SORTING_ORDER = 600;
         private const int TENTACLE_SORTING_ORDER = -1;
-        private static readonly float VisibilityPrefetchMargin =
+        private static readonly float _visibilityPrefetchMargin =
             StreamingPolicy.Default.AllocationQuantumCells;
 
         private static readonly ProfilerMarker _LateUpdateMarker =
@@ -38,11 +38,8 @@ namespace Kern.Game
         private readonly List<Tentacle> _tentacles = [];
         private readonly List<SpriteHandle> _sprites = [];
         private readonly SpatialShardGrid<SpriteHandle> _spatialGrid = new();
-        private readonly List<SpriteHandle> _candidateSprites = [];
-
-        private readonly List<SpriteHandle> _visibleUnderTentacles = [];
-        private readonly List<SpriteHandle> _visibleOverTentacles = [];
-        private readonly List<SpriteHandle> _visibleOverlay = [];
+        private readonly WorldEntityVisibility _visibility;
+        private readonly WorldEntityLightingEmitter _lightingEmitter;
         private Vector3[] _verts = new Vector3[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Vector2[] _uvs = new Vector2[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Color32[] _colors = new Color32[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
@@ -53,12 +50,6 @@ namespace Kern.Game
         private int _uploadedTentacleCount = -1;
         private int _uploadedSpriteCount = -1;
         private bool _geometryDirty = true;
-        private Vector3 _lastCameraPosition;
-        private float _lastCameraOrthographicSize;
-        private float _lastCameraAspect;
-        private bool _hasCameraState;
-        private Rect _cachedVisibleRect;
-        private bool _hasCachedVisibleRect;
 
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
@@ -70,20 +61,19 @@ namespace Kern.Game
         private LightingGeometryRegistry? _lightingGeometryRegistry;
 
         // Light-emitting sprites are drawn into the lighting fields from their
-        // own mesh. The revision follows only their state — camera motion
-        // rebuilds the visible batch every frame and must not re-solve light.
+        // own mesh; see WorldEntityLightingEmitter. The revision follows only
+        // their state — camera motion rebuilds the visible batch every frame
+        // and must not re-solve light.
         private Material? _batchMaterial;
-        private Mesh? _lightingMesh;
-        private Vector3[] _lightingVerts = new Vector3[4];
-        private Vector2[] _lightingUvs = new Vector2[4];
-        private Color32[] _lightingColors = new Color32[4];
-        private int[] _lightingTris = new int[6];
-        private ulong _lightingGeometryRevision = 1;
-        private int _emissiveStateHash = EmptyEmissiveStateHash;
         private bool _lightingContributorRegistered;
-        private const int EmptyEmissiveStateHash = 17;
 
-        public ulong LightingGeometryRevision => _lightingGeometryRevision;
+        public WorldEntityBatchRenderer()
+        {
+            _visibility = new WorldEntityVisibility(_spatialGrid, _visibilityPrefetchMargin);
+            _lightingEmitter = new WorldEntityLightingEmitter(_sprites, () => _batchMaterial, GetAtlasRect);
+        }
+
+        public ulong LightingGeometryRevision => _lightingEmitter.Revision;
 
         public sealed class SpriteHandle : WorldEntitySpriteHandle
         {
@@ -189,33 +179,12 @@ namespace Kern.Game
                 }
             }
 
-            UpdateEmissiveRevision();
+            _lightingEmitter.UpdateRevision();
 
             Camera? camera = _gameplayCamera?.Camera;
-            if (camera != null)
+            if (_visibility.UpdateCameraState(camera))
             {
-                Vector3 camPos = camera.transform.position;
-                float orthoSize = camera.orthographicSize;
-                float aspect = camera.aspect;
-                bool cameraChanged = !_hasCameraState ||
-                    (camPos - _lastCameraPosition).sqrMagnitude > 0.0001f ||
-                    Mathf.Abs(orthoSize - _lastCameraOrthographicSize) > 0.001f ||
-                    Mathf.Abs(aspect - _lastCameraAspect) > 0.001f;
-                if (cameraChanged &&
-                    (!TryGetVisibleRect(camera, out Rect currentVisibleRect) ||
-                    !_hasCachedVisibleRect ||
-                    !Contains(_cachedVisibleRect, currentVisibleRect)))
-                {
-                    _geometryDirty = true;
-                }
-
-                if (cameraChanged)
-                {
-                    _lastCameraPosition = camPos;
-                    _lastCameraOrthographicSize = orthoSize;
-                    _lastCameraAspect = aspect;
-                    _hasCameraState = true;
-                }
+                _geometryDirty = true;
             }
 
             if (!_geometryDirty)
@@ -235,10 +204,10 @@ namespace Kern.Game
                 return;
             }
 
-            bool hasCamera = TryGetVisibleRect(camera, out Rect visibleRect);
-            CollectVisibleSprites(hasCamera, visibleRect);
+            bool hasCamera = _visibility.TryGetVisibleRect(camera, out Rect visibleRect);
+            _visibility.Collect(_sprites, hasCamera, visibleRect, OVERLAY_BATCH_SORTING_ORDER, TENTACLE_SORTING_ORDER);
             RebuildMesh(hasCamera, visibleRect);
-            _overlayBatch?.Rebuild(_visibleOverlay, GetAtlasRect, _mesh.bounds);
+            _overlayBatch?.Rebuild(_visibility.Overlay, GetAtlasRect, _mesh.bounds);
 
             for (int i = 0; i < _sprites.Count; i++)
             {
@@ -247,88 +216,6 @@ namespace Kern.Game
 
             _geometryDirty = false;
         }
-
-        private void CollectVisibleSprites(bool hasCamera, in Rect visibleRect)
-        {
-            _visibleUnderTentacles.Clear();
-            _visibleOverTentacles.Clear();
-            _visibleOverlay.Clear();
-
-            List<SpriteHandle> source;
-            if (hasCamera)
-            {
-                _candidateSprites.Clear();
-                _spatialGrid.QueryRect(visibleRect, _candidateSprites);
-                _candidateSprites.Sort(static (left, right) => left.SortingOrder.CompareTo(right.SortingOrder));
-                source = _candidateSprites;
-            }
-            else
-            {
-                source = _sprites;
-            }
-
-            if (hasCamera)
-            {
-                _cachedVisibleRect = visibleRect;
-                _hasCachedVisibleRect = true;
-            }
-
-            for (int i = 0; i < source.Count; i++)
-            {
-                SpriteHandle handle = source[i];
-                if (!IsRenderable(handle) || (hasCamera && !IsInView(handle, true, visibleRect)))
-                {
-                    continue;
-                }
-
-                if (handle.SortingOrder >= OVERLAY_BATCH_SORTING_ORDER)
-                {
-                    _visibleOverlay.Add(handle);
-                }
-                else if (handle.SortingOrder < TENTACLE_SORTING_ORDER)
-                {
-                    _visibleUnderTentacles.Add(handle);
-                }
-                else
-                {
-                    _visibleOverTentacles.Add(handle);
-                }
-            }
-        }
-
-        private static bool TryGetVisibleRect(Camera? camera, out Rect visibleRect)
-        {
-            if (camera == null)
-            {
-                visibleRect = default;
-                return false;
-            }
-
-            Vector3 camPos = camera.transform.position;
-            float halfHeight = camera.orthographic
-                ? camera.orthographicSize
-                : Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) * Mathf.Abs(camPos.z);
-            float halfWidth = halfHeight * camera.aspect;
-
-            visibleRect = new Rect(
-                camPos.x - halfWidth - VisibilityPrefetchMargin,
-                camPos.y - halfHeight - VisibilityPrefetchMargin,
-                (halfWidth + VisibilityPrefetchMargin) * 2f,
-                (halfHeight + VisibilityPrefetchMargin) * 2f);
-            return true;
-        }
-
-        private static bool IsInView(SpriteHandle handle, bool hasCamera, in Rect visibleRect) =>
-            !hasCamera || visibleRect.Contains((Vector2)handle.GetWorldPosition());
-
-        private static bool Contains(in Rect outer, in Rect inner) =>
-            inner.xMin >= outer.xMin &&
-            inner.xMax <= outer.xMax &&
-            inner.yMin >= outer.yMin &&
-            inner.yMax <= outer.yMax;
-
-        private static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect) =>
-            !hasCamera || visibleRect.Contains((Vector2)tentacle.RootPosition);
 
         private void EnsureRenderer()
         {
@@ -377,25 +264,25 @@ namespace Kern.Game
             for (int i = 0; i < _tentacles.Count; i++)
             {
                 Tentacle tentacle = _tentacles[i];
-                if (tentacle.IsActive && IsTentacleInView(tentacle, hasCamera, visibleRect))
+                if (tentacle.IsActive && WorldEntityVisibility.IsTentacleInView(tentacle, hasCamera, visibleRect))
                 {
                     activeCount++;
                 }
             }
 
-            int activeSpriteCount = _visibleUnderTentacles.Count + _visibleOverTentacles.Count;
+            int activeSpriteCount = _visibility.UnderTentacles.Count + _visibility.OverTentacles.Count;
             int vertexCount = (activeCount * VERTS_PER_TENTACLE) + (activeSpriteCount * 4);
             int indexCount = (activeCount * TRIS_PER_TENTACLE) + (activeSpriteCount * 6);
             EnsureGeometryCapacity(vertexCount, indexCount);
 
             int vertexCursor = 0;
             int indexCursor = 0;
-            WriteSprites(_visibleUnderTentacles, ref vertexCursor, ref indexCursor);
+            WriteSprites(_visibility.UnderTentacles, ref vertexCursor, ref indexCursor);
 
             for (int i = 0; i < _tentacles.Count; i++)
             {
                 Tentacle tentacle = _tentacles[i];
-                if (!tentacle.IsActive || !IsTentacleInView(tentacle, hasCamera, visibleRect))
+                if (!tentacle.IsActive || !WorldEntityVisibility.IsTentacleInView(tentacle, hasCamera, visibleRect))
                 {
                     continue;
                 }
@@ -428,7 +315,7 @@ namespace Kern.Game
                 indexCursor += TRIS_PER_TENTACLE;
             }
 
-            WriteSprites(_visibleOverTentacles, ref vertexCursor, ref indexCursor);
+            WriteSprites(_visibility.OverTentacles, ref vertexCursor, ref indexCursor);
 
             vertexCount = vertexCursor;
             indexCount = indexCursor;
@@ -483,117 +370,14 @@ namespace Kern.Game
             _uploadedSpriteCount = activeSpriteCount;
         }
 
-        private static bool IsRenderable(SpriteHandle handle)
-        {
-            return handle.Enabled && handle.FrameAlive && handle.Sprite != null;
-        }
-
-        private void UpdateEmissiveRevision()
-        {
-            int hash = EmptyEmissiveStateHash;
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                SpriteHandle handle = _sprites[i];
-                if (!handle.EmitsLight || !IsRenderable(handle))
-                {
-                    continue;
-                }
-
-                hash = HashCode.Combine(
-                    hash,
-                    handle.Sprite!,
-                    handle.FrameLocalToWorld,
-                    handle.Color);
-            }
-
-            if (hash != _emissiveStateHash)
-            {
-                _emissiveStateHash = hash;
-                _lightingGeometryRevision++;
-            }
-        }
-
         public void RenderLightingFields(CommandBuffer commandBuffer, in LightingFieldContext context)
         {
-            if (_batchMaterial == null || _atlas == null)
+            if (_atlas == null)
             {
                 return;
             }
 
-            int emissiveCount = 0;
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                if (_sprites[i].EmitsLight && IsRenderable(_sprites[i]))
-                {
-                    emissiveCount++;
-                }
-            }
-
-            if (emissiveCount == 0)
-            {
-                return;
-            }
-
-            int pass = _batchMaterial.FindPass(ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField);
-            if (pass < 0)
-            {
-                throw new InvalidOperationException(
-                    $"World-entity material '{_batchMaterial.name}' is missing the LightingMaterialField pass.");
-            }
-
-            int vertexCount = emissiveCount * 4;
-            int indexCount = emissiveCount * 6;
-            if (_lightingVerts.Length < vertexCount)
-            {
-                Array.Resize(ref _lightingVerts, vertexCount);
-                Array.Resize(ref _lightingUvs, vertexCount);
-                Array.Resize(ref _lightingColors, vertexCount);
-            }
-
-            if (_lightingTris.Length < indexCount)
-            {
-                Array.Resize(ref _lightingTris, indexCount);
-            }
-
-            int vertexCursor = 0;
-            int indexCursor = 0;
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                SpriteHandle handle = _sprites[i];
-                if (!handle.EmitsLight || !IsRenderable(handle))
-                {
-                    continue;
-                }
-
-                WorldEntityGeometry.WriteSprite(
-                    _lightingVerts,
-                    _lightingUvs,
-                    _lightingColors,
-                    _lightingTris,
-                    handle,
-                    GetAtlasRect(handle.Sprite!.texture),
-                    vertexCursor,
-                    indexCursor);
-                vertexCursor += 4;
-                indexCursor += 6;
-            }
-
-            if (_lightingMesh == null)
-            {
-                _lightingMesh = new Mesh
-                {
-                    name = "WorldEntityLightingField",
-                    indexFormat = IndexFormat.UInt32,
-                };
-                _lightingMesh.MarkDynamic();
-            }
-
-            _lightingMesh.Clear(keepVertexLayout: true);
-            _lightingMesh.SetVertices(_lightingVerts, 0, vertexCount, MeshUpdateFlags.DontRecalculateBounds);
-            _lightingMesh.SetUVs(0, _lightingUvs, 0, vertexCount, MeshUpdateFlags.DontRecalculateBounds);
-            _lightingMesh.SetColors(_lightingColors, 0, vertexCount, MeshUpdateFlags.DontRecalculateBounds);
-            _lightingMesh.SetIndices(_lightingTris, 0, indexCount, MeshTopology.Triangles, 0, calculateBounds: false);
-            commandBuffer.DrawMesh(_lightingMesh, Matrix4x4.identity, _batchMaterial, 0, pass);
+            _lightingEmitter.RenderFields(commandBuffer, context);
         }
 
         private void WriteSprites(
@@ -645,11 +429,7 @@ namespace Kern.Game
                 _lightingContributorRegistered = false;
             }
 
-            if (_lightingMesh != null)
-            {
-                Destroy(_lightingMesh);
-                _lightingMesh = null;
-            }
+            _lightingEmitter.Dispose();
 
             if (_mesh != null)
             {

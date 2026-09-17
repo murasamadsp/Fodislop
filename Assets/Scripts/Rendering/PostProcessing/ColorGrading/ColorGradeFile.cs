@@ -23,83 +23,28 @@ public static class ColorGradeFile
     public static string CdlPath =>
         System.IO.Path.Combine(Application.persistentDataPath, "color_grade.cdl");
 
-    public static string PresetDirectory =>
-        System.IO.Path.Combine(Application.persistentDataPath, "color_grade_presets");
+    public static string PresetDirectory => ColorGradePresets.PresetDirectory;
 
-    public static string GetPresetPath(string name) =>
-        System.IO.Path.Combine(PresetDirectory, SanitizePresetName(name) + ".json");
+    public static string GetPresetPath(string name) => ColorGradePresets.GetPresetPath(name);
 
-    public static string[] ListPresets()
-    {
-        if (!Directory.Exists(PresetDirectory))
-        {
-            return Array.Empty<string>();
-        }
-
-        string[] paths = Directory.GetFiles(PresetDirectory, "*.json");
-        for (int index = 0; index < paths.Length; index++)
-        {
-            paths[index] = System.IO.Path.GetFileNameWithoutExtension(paths[index]);
-        }
-
-        Array.Sort(paths, StringComparer.OrdinalIgnoreCase);
-        return paths;
-    }
+    public static string[] ListPresets() => ColorGradePresets.ListPresets();
 
     public static bool SavePreset(
         ColorGradeState state,
         ColorGradeZones? zones,
-        string name)
-    {
-        string presetPath = GetPresetPath(name);
-        if (!Save(state, zones))
-        {
-            return false;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(PresetDirectory);
-            WriteAtomically(presetPath, File.ReadAllText(Path));
-            Debug.Log($"[ColorGrade] Пресет сохранён -> {presetPath}");
-            return true;
-        }
-        catch (Exception exception)
-        {
-            Debug.LogError($"[ColorGrade] Не удалось сохранить пресет {presetPath}: {exception.Message}");
-            return false;
-        }
-    }
+        string name) =>
+        ColorGradePresets.SavePreset(state, zones, name);
 
     public static bool TryLoadPreset(
         ColorGradeState state,
         ColorGradeZones? zones,
-        string name)
+        string name) =>
+        ColorGradePresets.TryLoadPreset(state, zones, name);
+
+    public static bool IsValidPresetPayload(string json)
     {
-        string presetPath = GetPresetPath(name);
-        if (!File.Exists(presetPath))
-        {
-            return false;
-        }
-
-        try
-        {
-            string json = File.ReadAllText(presetPath);
-            Payload? payload = JsonUtility.FromJson<Payload>(json);
-            if (payload == null || payload.Version < 1)
-            {
-                Debug.LogWarning($"[ColorGrade] Пресет {presetPath} не разобран.");
-                return false;
-            }
-
-            WriteAtomically(Path, json);
-            return TryLoad(state, zones);
-        }
-        catch (Exception exception)
-        {
-            Debug.LogError($"[ColorGrade] Не удалось загрузить пресет {presetPath}: {exception.Message}");
-            return false;
-        }
+        Payload? payload = JsonUtility.FromJson<Payload>(json);
+        return payload != null && payload.Version >= 1;
     }
 
     [Serializable]
@@ -363,46 +308,8 @@ public static class ColorGradeFile
         }
     }
 
-    public static bool ExportCdl(ColorGradeState state)
-    {
-        state.Sanitize();
-        CultureInfo culture = CultureInfo.InvariantCulture;
-        var builder = new StringBuilder();
-        builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        builder.AppendLine("<ColorDecisionList xmlns=\"urn:ASC:CDL:v1.01\">");
-        builder.AppendLine("  <ColorDecision>");
-        builder.AppendLine("    <ColorCorrection id=\"kern\">");
-        builder.AppendLine("      <SOPNode>");
-        builder.AppendLine($"        <Slope>{Triplet(state.Slope, culture)}</Slope>");
-        builder.AppendLine($"        <Offset>{Triplet(state.Offset, culture)}</Offset>");
-        builder.AppendLine($"        <Power>{Triplet(state.Power, culture)}</Power>");
-        builder.AppendLine("      </SOPNode>");
-        builder.AppendLine("      <SatNode>");
-        builder.AppendLine(
-            $"        <Saturation>{state.CdlSaturation.ToString("F6", culture)}</Saturation>");
-        builder.AppendLine("      </SatNode>");
-        builder.AppendLine("    </ColorCorrection>");
-        builder.AppendLine("  </ColorDecision>");
-        builder.AppendLine("</ColorDecisionList>");
-
-        try
-        {
-            WriteAtomically(CdlPath, builder.ToString());
-            Debug.Log($"[ColorGrade] ASC CDL -> {CdlPath}");
-            return true;
-        }
-        catch (Exception exception)
-        {
-            Debug.LogError($"[ColorGrade] Не удалось экспортировать {CdlPath}: {exception.Message}");
-            return false;
-        }
-    }
-
-    private static string Triplet(Vector3 value, CultureInfo culture) =>
-        string.Concat(
-            value.x.ToString("F6", culture), " ",
-            value.y.ToString("F6", culture), " ",
-            value.z.ToString("F6", culture));
+    public static bool ExportCdl(ColorGradeState state) =>
+        ColorGradeExporter.ExportCdl(state, CdlPath);
 
 
 
@@ -501,7 +408,7 @@ public static class ColorGradeFile
 
 
 
-    private static void WriteAtomically(string path, string contents)
+    internal static void WriteAtomically(string path, string contents)
     {
         string temporaryPath = path + ".tmp";
         try
@@ -534,131 +441,6 @@ public static class ColorGradeFile
         }
     }
 
-    private static string SanitizePresetName(string name)
-    {
-        string value = string.IsNullOrWhiteSpace(name) ? "default" : name.Trim();
-        char[] invalid = System.IO.Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(value.Length);
-        foreach (char character in value)
-        {
-            bool forbidden = Array.IndexOf(invalid, character) >= 0 ||
-                char.IsControl(character) ||
-                character == '/' ||
-                character == '\\';
-            if (!forbidden)
-            {
-                builder.Append(character);
-            }
-        }
-
-        string sanitized = builder.ToString().Trim().Trim('.');
-        return string.IsNullOrWhiteSpace(sanitized) ? "default" : sanitized;
-    }
-
-    public static string ToLookSource(ColorGradeState state)
-    {
-        state.Sanitize();
-        CultureInfo culture = CultureInfo.InvariantCulture;
-        var builder = new StringBuilder();
-        builder.AppendLine("    public static class ColorGrading");
-        builder.AppendLine("    {");
-        Constant(builder, culture, "Exposure", state.Exposure);
-        Constant(builder, culture, "Contrast", state.Contrast);
-        Constant(builder, culture, "Pivot", state.Pivot);
-        Constant(builder, culture, "Shadows", state.Shadows);
-        Constant(builder, culture, "Highlights", state.Highlights);
-        Constant(builder, culture, "Blacks", state.Blacks);
-        Constant(builder, culture, "Whites", state.Whites);
-        Constant(builder, culture, "Toe", state.Toe);
-        Constant(builder, culture, "Shoulder", state.Shoulder);
-        Constant(builder, culture, "Saturation", state.Saturation);
-        Constant(builder, culture, "CdlSaturation", state.CdlSaturation);
-        Constant(builder, culture, "Vibrance", state.Vibrance);
-        Constant(builder, culture, "Hue", state.Hue);
-        AppendCurveSource(builder, culture, "HueVsHueCurve", state.HueVsHueCurve);
-        AppendCurveSource(builder, culture, "HueVsSaturationCurve", state.HueVsSaturationCurve);
-        AppendCurveSource(builder, culture, "HueVsLuminanceCurve", state.HueVsLuminanceCurve);
-        AppendCurveSource(
-            builder,
-            culture,
-            "LuminanceVsSaturationCurve",
-            state.LuminanceVsSaturationCurve);
-        AppendCurveSource(
-            builder,
-            culture,
-            "SaturationVsSaturationCurve",
-            state.SaturationVsSaturationCurve);
-        builder.AppendLine();
-        builder.AppendLine("        public static Color Filter => Color.white;");
-        builder.AppendLine("    }");
-        builder.AppendLine();
-        builder.AppendLine("    public static class Grade");
-        builder.AppendLine("    {");
-        builder.AppendLine(
-            $"        public const DisplayTransform Transform = DisplayTransform.{state.Transform};");
-        Constant(builder, culture, "WhitePoint", state.WhitePoint);
-        Constant(builder, culture, "Temperature", state.Temperature);
-        Constant(builder, culture, "Tint", state.Tint);
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 Slope => {VectorSource(state.Slope, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 Offset => {VectorSource(state.Offset, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 Power => {VectorSource(state.Power, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 PrimaryLift => {VectorSource(state.PrimaryLift, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 PrimaryGamma => {VectorSource(state.PrimaryGamma, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 PrimaryGain => {VectorSource(state.PrimaryGain, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 PrimaryOffset => {VectorSource(state.PrimaryOffset, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector4 PrimaryMaster => {VectorSource(state.PrimaryMaster, culture)};");
-        builder.AppendLine();
-        builder.AppendLine($"        public static Vector3 CdlMaster => {VectorSource(state.CdlMaster, culture)};");
-        builder.AppendLine();
-        Constant(builder, culture, "GreyOut", state.GreyOut);
-        Constant(builder, culture, "ShoulderPower", state.ShoulderPower);
-        Constant(builder, culture, "ToePower", state.ToePower);
-        Constant(builder, culture, "ToeStops", state.ToeStops);
-        builder.AppendLine("    }");
-        return builder.ToString();
-    }
-
-    private static void Constant(StringBuilder builder, CultureInfo culture, string name, float value) =>
-        builder.AppendLine($"        public const float {name} = {value.ToString("0.######", culture)}f;");
-
-    private static string VectorSource(Vector3 value, CultureInfo culture) =>
-        string.Concat(
-            "new(", value.x.ToString("0.######", culture), "f, ",
-            value.y.ToString("0.######", culture), "f, ",
-            value.z.ToString("0.######", culture), "f)");
-
-    private static string VectorSource(Vector4 value, CultureInfo culture) =>
-        string.Concat(
-            "new(", value.x.ToString("0.######", culture), "f, ",
-            value.y.ToString("0.######", culture), "f, ",
-            value.z.ToString("0.######", culture), "f, ",
-            value.w.ToString("0.######", culture), "f)");
-
-    private static void AppendCurveSource(
-        StringBuilder builder,
-        CultureInfo culture,
-        string name,
-        ColorGradeCurve curve)
-    {
-        builder.AppendLine($"        public static Vector2[] {name} => new Vector2[]");
-        builder.AppendLine("        {");
-        for (int index = 0; index < curve.PointCount; index++)
-        {
-            Vector2 point = curve.GetPoint(index);
-            string x = point.x.ToString("F6", culture);
-            string y = point.y.ToString("F6", culture);
-            builder.AppendLine(
-                $"            new Vector2({x}f, {y}f),");
-        }
-
-        builder.AppendLine("        };");
-    }
+    public static string ToLookSource(ColorGradeState state) =>
+        ColorGradeExporter.ToLookSource(state);
 }

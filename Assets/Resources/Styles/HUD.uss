@@ -39,7 +39,7 @@
 
 .hud-top-pill-divider {
     width: 1px;
-    height: 12px;
+    height: var(--space-6);
     background-color: var(--border-line);
     margin-left: var(--space-3);
     margin-right: var(--space-3);
@@ -60,8 +60,8 @@
 }
 
 .hud-top-pill-dot {
-    width: 6px;
-    height: 6px;
+    width: var(--space-3);
+    height: var(--space-3);
     border-radius: var(--radius-pill);
     background-color: var(--state-ok);
     margin-right: var(--space-2);
@@ -108,39 +108,39 @@
 
 .hud-top-left {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: var(--space-5);
+    left: var(--space-5);
 }
 
 .hud-top-right {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: var(--space-5);
+    right: var(--space-5);
 }
 
 .hud-bottom-left {
     position: absolute;
-    bottom: 10px;
-    left: 10px;
+    bottom: var(--space-5);
+    left: var(--space-5);
 }
 
 .hud-bottom-right {
     position: absolute;
-    bottom: 10px;
-    right: 10px;
+    bottom: var(--space-5);
+    right: var(--space-5);
 }
 
 .asset-status-root {
     position: absolute;
-    right: 10px;
-    bottom: 10px;
+    right: var(--space-5);
+    bottom: var(--space-5);
     align-items: flex-end;
 }
 
 .asset-status-button {
     min-width: 38px;
     width: auto;
-    height: 28px;
+    height: var(--space-11);
     padding: 0 var(--space-4);
     background-color: var(--surface-slate-dense);
     border-color: var(--text-tertiary);
@@ -193,11 +193,11 @@
 .hud-button {
     background-color: var(--surface-raised);
     border-color: var(--border-subtle);
-    border-width: 2px;
+    border-width: var(--space-1);
     border-radius: var(--radius-sm);
     padding: 0;
     min-width: 100px;
-    height: 28px;
+    height: var(--space-11);
     font-size: var(--size-sm);
     color: var(--text-primary);
     -unity-text-align: middle-center;
@@ -228,7 +228,7 @@
     border-color: var(--border-subtle);
     border-width: 1px;
     border-radius: var(--radius-sharp);
-    height: 12px;
+    height: var(--space-6);
     width: 150px;
 }
 
@@ -239,13 +239,13 @@
 
 .hud-panel {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: var(--space-5);
+    left: var(--space-5);
     width: 240px;
     padding: var(--space-6);
     background-color: var(--surface-panel);
     border-color: var(--border-subtle);
-    border-width: 2px;
+    border-width: var(--space-1);
     flex-direction: column;
 }
 
@@ -332,7 +332,7 @@
 }
 
 .hud-hp-bar {
-    height: 14px;
+    height: var(--space-7);
     background-color: var(--surface-shelf-solid);
     border-radius: var(--radius-sm);
     flex-direction: row;
@@ -340,14 +340,14 @@
 }
 
 .hud-hp-fill {
-    height: 14px;
+    height: var(--space-7);
     border-radius: var(--radius-sm);
 }
 
 .hud-button-accent {
     background-color: var(--accent-gold);
     border-color: var(--border-subtle);
-    border-width: 2px;
+    border-width: var(--space-1);
     border-radius: var(--radius-sm);
     color: var(--surface-shelf-solid);
     font-size: var(--size-md);
@@ -361,11 +361,11 @@
 }
 
 .hud-button-close {
-    width: 24px;
-    height: 24px;
+    width: var(--space-10);
+    height: var(--space-10);
     background-color: transparent;
     color: var(--text-secondary);
-    font-size: 18px;
+    font-size: var(--size-lg);
     padding: 0;
     border-width: 0;
 }
@@ -375,7 +375,7 @@
     background-color: var(--accent-cyan-glow);
     color: var(--light-solid);
     border-color: var(--light-edge);
-    border-width: 2px;
+    border-width: var(--space-1);
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-8);
     font-size: var(--size-md);
@@ -394,13 +394,13 @@
 
 .hud-bonus-panel {
     position: absolute;
-    top: 10px;
+    top: var(--space-5);
     left: 256px;
     width: 260px;
     padding: var(--space-5);
     background-color: var(--surface-panel);
     border-color: var(--border-subtle);
-    border-width: 2px;
+    border-width: var(--space-1);
     flex-direction: column;
 }
 
@@ -427,7 +427,7 @@
     padding: var(--space-6);
     background-color: var(--surface-panel);
     border-color: var(--border-subtle);
-    border-width: 2px;
+    border-width: var(--space-1);
     flex-direction: column;
 }
 
@@ -439,8 +439,8 @@
 
 .hud-skill-container {
     position: absolute;
-    bottom: 10px;
-    right: 10px;
+    bottom: var(--space-5);
+    right: var(--space-5);
     padding: var(--space-4);
     flex-direction: column-reverse;
     align-items: flex-end;
@@ -463,14 +463,14 @@
     position: relative;
     flex-direction: column;
     align-items: center;
-    width: 24px;
+    width: var(--space-10);
 }
 
 .hud-skill-arrow {
     position: absolute;
     top: -13px;
     left: 0;
-    width: 24px;
+    width: var(--space-10);
     font-size: var(--size-xs);
     -unity-font-style: bold;
     color: var(--accent-gold);
@@ -478,7 +478,7 @@
 }
 
 .hud-skill-bar-bg {
-    width: 20px;
+    width: var(--space-9);
     height: 3px;
     background-color: var(--surface-shelf-solid);
     border-radius: var(--radius-sharp);
@@ -502,8 +502,8 @@
 }
 
 .hud-crystal-dot {
-    width: 14px;
-    height: 14px;
+    width: var(--space-7);
+    height: var(--space-7);
     margin-right: var(--space-3);
     align-self: center;
 }
@@ -514,21 +514,21 @@
 }
 
 .hud-skill-icon-image {
-    width: 24px;
-    height: 24px;
+    width: var(--space-10);
+    height: var(--space-10);
 }
 
 .hud-skill-bar-container {
-    width: 6px;
-    height: 24px;
+    width: var(--space-3);
+    height: var(--space-10);
     margin-left: var(--space-1);
     flex-direction: column;
     justify-content: flex-end;
 }
 
 .hud-skill-bar-segment {
-    width: 6px;
-    height: 2px;
+    width: var(--space-3);
+    height: var(--space-1);
 }
 
 .hud-mission-panel {
@@ -566,13 +566,13 @@
 
 .hud-mission-progress-bar {
     flex-grow: 1;
-    height: 16px;
+    height: var(--space-8);
     background-color: var(--surface-shelf-solid);
     border-radius: var(--radius-sm);
 }
 
 .hud-mission-progress-fill {
-    height: 16px;
+    height: var(--space-8);
     border-radius: var(--radius-sm);
     background-color: var(--accent-gold);
 }
@@ -581,14 +581,14 @@
     position: absolute;
     background-color: var(--surface-shelf-dense);
     border-color: var(--accent-cyan-deep);
-    border-width: 2px;
+    border-width: var(--space-1);
     border-radius: var(--radius-sm);
     font-size: var(--size-sm);
     -unity-font-style: bold;
     color: var(--text-primary);
     -unity-text-align: middle-center;
     padding: 0;
-    height: 28px;
+    height: var(--space-11);
 }
 
 .hud-btn-action:hover {
@@ -597,7 +597,7 @@
 
 .hud-toggle-btn {
     position: absolute;
-    left: 10px;
+    left: var(--space-5);
     background-color: var(--surface-crisis-dense);
 }
 
@@ -631,9 +631,9 @@
 
 .hud-btn-top-row {
     position: absolute;
-    top: 10px;
+    top: var(--space-5);
     width: 100px;
-    height: 28px;
+    height: var(--space-11);
 }
 
 /* Смещения кнопок верхнего ряда (были inline right в C#-версии) */
@@ -644,21 +644,21 @@
 .hud-bonus-button {
     position: absolute;
     left: 256px;
-    top: 10px;
+    top: var(--space-5);
     width: 90px;
     height: 50px;
 }
 
 .hud-chat-button {
     position: absolute;
-    left: 10px;
+    left: var(--space-5);
     bottom: 248px;
     width: 100px;
 }
 
 .hud-programmator-button {
     position: absolute;
-    left: 10px;
+    left: var(--space-5);
     bottom: 215px;
     width: 100px;
 }
@@ -669,8 +669,8 @@
 
 .hud-top-left {
     position: absolute;
-    top: 16px;
-    left: 16px;
+    top: var(--space-8);
+    left: var(--space-8);
     width: 280px;
 }
 
@@ -690,7 +690,7 @@
 }
 
 .hud-clan-btn {
-    height: 24px;
+    height: var(--space-10);
     padding: 0 var(--space-4);
     font-size: var(--size-2xs);
 }
@@ -725,7 +725,7 @@
 }
 
 .hud-bar-track {
-    height: 6px;
+    height: var(--space-3);
     margin-bottom: var(--space-3);
 }
 
@@ -765,7 +765,7 @@
 .hud-basket-panel {
     position: absolute;
     top: 170px;
-    left: 16px;
+    left: var(--space-8);
     width: 140px;
     padding: var(--space-4);
 }
@@ -816,7 +816,7 @@
 }
 
 .hud-mission-track {
-    height: 4px;
+    height: var(--space-2);
     margin-bottom: var(--space-2);
 }
 
@@ -834,8 +834,8 @@
 /* Правая колонка действий */
 .hud-actions-column {
     position: absolute;
-    top: 16px;
-    right: 16px;
+    top: var(--space-8);
+    right: var(--space-8);
     width: 160px;
 }
 
@@ -845,8 +845,8 @@
 }
 
 .hud-mode-led {
-    width: 6px;
-    height: 6px;
+    width: var(--space-3);
+    height: var(--space-3);
     border-radius: var(--radius-sm);
     background-color: var(--text-disabled);
     margin-right: var(--space-4);
@@ -861,8 +861,8 @@
 
 .hud-minimap-panel {
     position: absolute;
-    bottom: 16px;
-    left: 16px;
+    bottom: var(--space-8);
+    left: var(--space-8);
     padding: var(--space-3);
     background-color: var(--surface-slate-dense);
     border-width: 1px;
@@ -898,10 +898,10 @@
 
 .mission-arrow {
     position: absolute;
-    width: 24px;
-    height: 24px;
-    border-top-width: 4px;
-    border-right-width: 4px;
+    width: var(--space-10);
+    height: var(--space-10);
+    border-top-width: var(--space-2);
+    border-right-width: var(--space-2);
     border-bottom-width: 0;
     border-left-width: 0;
     border-top-color: var(--accent-gold);

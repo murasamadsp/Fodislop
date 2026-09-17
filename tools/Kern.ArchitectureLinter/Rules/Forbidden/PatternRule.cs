@@ -81,6 +81,7 @@ public sealed class PatternRule : IRule
         (new Regex(@"PlayerMovementController\.(LocalPlayer|OnLocalPlayerSpawned)"), "static local-player access (resolve ILocalPlayerState)", @"^Assets/Scripts/Core/Interfaces/ILocalPlayerState\.cs$", null),
         (new Regex(@"\b(MenuStarfield|MenuSceneryController)\.Current\b"), "static menu-scenery access (use the MainMenuLifetimeScope serialized contract)", null, null),
         (new Regex(@"\b(PauseMenu\.IsMenuOpen|ChatInput\.IsFocused|ProgrammatorGrid\.IsOpen)\b"), "static UI state access outside the UI layer (compose IInputBlocker)", @"^Assets/Scripts/UI/", null),
+        (new Regex(@"\bpartial\s+(?:class|struct|record)\b"), "partial type declaration is forbidden (decompose into separate classes/responsibilities instead)", @"^Assets/Scripts/VContainer/", null),
     };
 
     public string Id => "KERN-PATTERN";

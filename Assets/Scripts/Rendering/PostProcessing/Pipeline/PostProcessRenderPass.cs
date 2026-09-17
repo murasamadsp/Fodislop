@@ -37,19 +37,9 @@ namespace Kern.Rendering.PostProcessing
         private ColorGradingComponent? _colorGrading;
         private EigengrauComponent? _eigengrau;
 
-        // Буферы параметров грейда живут вместе с проходом: новые массивы на
-        // каждый кадр были постоянным мусором для сборщика.
-        private readonly Vector4[] _masterCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _redCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _greenCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _blueCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _hueVsHueCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _hueVsSaturationCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _hueVsLuminanceCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _luminanceVsSaturationCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _saturationVsSaturationCurvePoints = new Vector4[ColorGradeCurve.MaxPoints];
-        private readonly Vector4[] _qualifierHueSamples = new Vector4[ColorGradeQualifier.MaxHueSamples];
+
         private MotionBlurComponent? _motionBlur;
+        private readonly PostProcessPassDataAssembler.GradeScratch _gradeScratch;
         private RTHandle? _historyTexture;
         private GraphicsFormat _historyFormat;
         private bool _historyValid;
@@ -94,6 +84,17 @@ namespace Kern.Rendering.PostProcessing
             _kernelUpsample = _postProcessCS.FindKernel("BloomUpsample");
             _kernelComposite = _postProcessCS.FindKernel(displayPass ? "DisplayFinal" : "CompositeFinal");
             _kernelBakeGradeLut = displayPass ? -1 : _postProcessCS.FindKernel("BakeGradeLut");
+            _gradeScratch = new PostProcessPassDataAssembler.GradeScratch(
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeCurve.MaxPoints],
+                new Vector4[ColorGradeQualifier.MaxHueSamples]);
         }
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -192,39 +193,13 @@ namespace Kern.Rendering.PostProcessing
             }
 
             TextureDesc activeColorDesc = activeColor.GetDescriptor(renderGraph);
-            RenderTextureDescriptor historyDesc = cameraData.cameraTargetDescriptor;
-            int width = activeColorDesc.sizeMode == TextureSizeMode.Explicit
-                ? activeColorDesc.width
-                : historyDesc.width;
-            int height = activeColorDesc.sizeMode == TextureSizeMode.Explicit
-                ? activeColorDesc.height
-                : historyDesc.height;
-            width = Mathf.Max(1, width);
-            height = Mathf.Max(1, height);
-
-            // Все временные текстуры наследуют формат, dimension, slices и
-            // dynamic-scale флаги настоящего graph-ресурса. Ручная сборка из
-            // cameraTargetDescriptor теряла эти свойства и могла дать проходу
-            // размер/формат, отличный от реально активного color target.
-            TextureDesc desc = activeColorDesc;
-            desc.sizeMode = TextureSizeMode.Explicit;
-            desc.width = width;
-            desc.height = height;
-            desc.depthBufferBits = DepthBits.None;
-            desc.msaaSamples = MSAASamples.None;
-            desc.bindTextureMS = false;
-            desc.enableRandomWrite = true;
-            desc.useMipMap = false;
-            desc.autoGenerateMips = false;
-            desc.clearBuffer = false;
-
-            historyDesc.width = width;
-            historyDesc.height = height;
-            historyDesc.graphicsFormat = activeColorDesc.colorFormat;
-            historyDesc.depthBufferBits = 0;
-            historyDesc.msaaSamples = 1;
-            historyDesc.bindMS = false;
-            historyDesc.enableRandomWrite = true;
+            PostProcessPassDataAssembler.BuildPassDescriptors(
+                activeColorDesc,
+                cameraData.cameraTargetDescriptor,
+                out int width,
+                out int height,
+                out TextureDesc desc,
+                out RenderTextureDescriptor historyDesc);
 
             bool temporalActive = PostProcessRuntimeState.DebugView == PostProcessDebugView.None &&
                 PostProcessRuntimeState.CompareMode == CompareMode.Off &&
@@ -370,172 +345,33 @@ namespace Kern.Rendering.PostProcessing
                 passData.GradeGeneration = PostProcessRuntimeState.PipelineGeneration;
                 passData.HistoryReprojection = historyReprojection;
 
-                passData.BloomActive = bloomActive;
-                passData.BloomLevels = bloomLevels;
-                passData.BloomThreshold = bloom.threshold.value;
-                passData.BloomSoftKnee = bloom.softKnee.value;
-                passData.BloomRadius = bloom.radius.value;
-                passData.BloomScatter = bloom.scatter.value;
-                passData.BloomTint = bloom.tint.value;
-                passData.BloomIntensity = bloom.intensity.value;
-
-                passData.VignetteActive = vignetteActive;
-                passData.VignetteIntensity = vignette.intensity.value;
-                passData.VignetteColor = vignette.color.value;
-                passData.VignetteSmoothness = vignette.smoothness.value;
-                passData.VignetteCenter = vignette.center.value;
-
-                passData.CgActive = cgActive;
-                passData.Exposure = cg.exposure.value;
-                passData.ColorFilter = cg.colorFilter.value;
-                passData.Contrast = cg.contrast.value;
-                passData.Saturation = cg.saturation.value;
+                PostProcessPassDataAssembler.FillPassComponents(
+                    passData,
+                    bloom,
+                    vignette,
+                    cg,
+                    eigengrau,
+                    mb,
+                    bloomActive,
+                    bloomLevels,
+                    vignetteActive,
+                    cgActive,
+                    eigengrauActive,
+                    temporalActive,
+                    mbActive,
+                    _displayPass,
+                    hdrOutput,
+                    hdrGamut,
+                    paperWhite,
+                    peakNits);
                 ColorGradeSnapshot grade = activeGrade;
-                passData.CdlSaturation = grade.CdlSaturation;
                 passData.PostDebugView = _displayPass ? (int)PostProcessRuntimeState.DebugView : 0;
                 passData.CompareSplit = PostProcessRuntimeState.CompareSplit;
                 passData.CompareMode = (int)PostProcessRuntimeState.CompareMode;
                 passData.CompareBefore = PostProcessRuntimeState.CompareBefore;
-                passData.WhiteBalance = new Vector2(grade.Temperature, grade.Tint);
-                passData.CdlSlope = grade.Slope;
-                passData.CdlOffset = grade.Offset;
-                passData.CdlPower = grade.Power;
-                passData.CdlMaster = grade.CdlMaster;
-                passData.PrimaryLift = grade.PrimaryLift;
-                passData.PrimaryGamma = grade.PrimaryGamma;
-                passData.PrimaryGain = grade.PrimaryGain;
-                passData.PrimaryOffset = grade.PrimaryOffset;
-                passData.PrimaryMaster = grade.PrimaryMaster;
-                passData.Vibrance = grade.Vibrance;
-                passData.Hue = grade.Hue;
-                passData.ContrastControls = new Vector4(
-                    grade.Pivot,
-                    grade.Shadows,
-                    grade.Highlights,
-                    grade.Blacks);
-                passData.ContrastControls2 = new Vector3(
-                    grade.Whites,
-                    grade.Toe,
-                    grade.Shoulder);
-                // Тонмаппинг — за URP (Neutral SDR / Neutral BT2390 HDR через
-                // HDROutputReconciler). Кастомний трансформ поверх нього дає
-                // подвійне маплення, тому рантайм його не форсує: діє тільки
-                // авторський вибір, дефолт — None (bypass).
-                DisplayTransform displayTransform = activeGrade.Transform;
-
-                passData.DisplayGrade0 = new Vector4(
-                    grade.WhitePoint,
-                    grade.GreyOut,
-                    0f,
-                    (int)displayTransform);
-                passData.DisplayGrade1 = new Vector4(
-                    grade.ShoulderPower,
-                    grade.ToePower,
-                    grade.ToeStops,
-                    0f);
-                passData.GamutCompression = grade.GamutCompressionEnabled
-                    ? Mathf.Clamp01(grade.GamutCompressionStrength)
-                    : 0f;
-                grade.MasterCurve.WriteShaderPoints(_masterCurvePoints);
-                passData.MasterCurvePoints = _masterCurvePoints;
-                grade.RedCurve.WriteShaderPoints(_redCurvePoints);
-                passData.RedCurvePoints = _redCurvePoints;
-                grade.GreenCurve.WriteShaderPoints(_greenCurvePoints);
-                passData.GreenCurvePoints = _greenCurvePoints;
-                grade.BlueCurve.WriteShaderPoints(_blueCurvePoints);
-                passData.BlueCurvePoints = _blueCurvePoints;
-                grade.HueVsHueCurve.WriteShaderPoints(_hueVsHueCurvePoints);
-                passData.HueVsHueCurvePoints = _hueVsHueCurvePoints;
-                grade.HueVsSaturationCurve.WriteShaderPoints(_hueVsSaturationCurvePoints);
-                passData.HueVsSaturationCurvePoints = _hueVsSaturationCurvePoints;
-                grade.HueVsLuminanceCurve.WriteShaderPoints(_hueVsLuminanceCurvePoints);
-                passData.HueVsLuminanceCurvePoints = _hueVsLuminanceCurvePoints;
-                grade.LuminanceVsSaturationCurve.WriteShaderPoints(_luminanceVsSaturationCurvePoints);
-                passData.LuminanceVsSaturationCurvePoints = _luminanceVsSaturationCurvePoints;
-                grade.SaturationVsSaturationCurve.WriteShaderPoints(_saturationVsSaturationCurvePoints);
-                passData.SaturationVsSaturationCurvePoints = _saturationVsSaturationCurvePoints;
-                passData.MasterCurvePointCount = grade.MasterCurve.PointCount;
-                passData.RedCurvePointCount = grade.RedCurve.PointCount;
-                passData.GreenCurvePointCount = grade.GreenCurve.PointCount;
-                passData.BlueCurvePointCount = grade.BlueCurve.PointCount;
-                passData.HueVsHueCurvePointCount = grade.HueVsHueCurve.PointCount;
-                passData.HueVsSaturationCurvePointCount = grade.HueVsSaturationCurve.PointCount;
-                passData.HueVsLuminanceCurvePointCount = grade.HueVsLuminanceCurve.PointCount;
-                passData.LuminanceVsSaturationCurvePointCount = grade.LuminanceVsSaturationCurve.PointCount;
-                passData.SaturationVsSaturationCurvePointCount = grade.SaturationVsSaturationCurve.PointCount;
-                passData.CurveInterpolation = (int)grade.MasterCurve.Interpolation;
-                ColorGradeQualifier qualifier = grade.Qualifier;
-                passData.Qualifier0 = new Vector4(
-                    qualifier.HueCenter,
-                    qualifier.HueWidth,
-                    qualifier.HueSoftness,
-                    qualifier.Enabled ? (qualifier.Invert ? -1f : 1f) : 0f);
-                passData.Qualifier1 = new Vector4(
-                    qualifier.SaturationCenter,
-                    qualifier.SaturationWidth,
-                    qualifier.SaturationSoftness,
-                    qualifier.LuminanceCenter);
-                passData.Qualifier2 = new Vector4(
-                    qualifier.LuminanceWidth,
-                    qualifier.LuminanceSoftness,
-                    qualifier.HueShift,
-                    qualifier.Saturation);
-                passData.Qualifier3 = new Vector4(
-                    qualifier.Exposure,
-                    qualifier.Temperature,
-                    qualifier.Tint,
-                    0f);
-                passData.Qualifier4 = new Vector4(
-                    qualifier.Lift.x,
-                    qualifier.Lift.y,
-                    qualifier.Lift.z,
-                    0f);
-                passData.Qualifier5 = new Vector4(
-                    qualifier.Gamma.x,
-                    qualifier.Gamma.y,
-                    qualifier.Gamma.z,
-                    0f);
-                passData.Qualifier6 = new Vector4(
-                    qualifier.Gain.x,
-                    qualifier.Gain.y,
-                    qualifier.Gain.z,
-                    0f);
-                System.Array.Clear(_qualifierHueSamples, 0, _qualifierHueSamples.Length);
-                passData.QualifierHueSamples = _qualifierHueSamples;
-                passData.QualifierHueSampleCount = Mathf.Min(
-                    qualifier.HueSamples.Count,
-                    ColorGradeQualifier.MaxHueSamples);
-                for (int sampleIndex = 0; sampleIndex < passData.QualifierHueSampleCount; sampleIndex++)
-                {
-                    passData.QualifierHueSamples[sampleIndex] = new Vector4(
-                        qualifier.HueSamples[sampleIndex],
-                        qualifier.HueWidth,
-                        qualifier.HueSoftness,
-                        0f);
-                }
-                passData.Lut1D = grade.Lut?.Texture1D;
-                passData.Lut3D = grade.Lut?.Texture3D;
-                passData.LutType = grade.Lut == null ? 0 : (int)grade.Lut.Type;
-                passData.LutIntensity = grade.Lut == null ? 0f : grade.LutIntensity;
-                passData.LutColorSpace = (int)grade.LutColorSpace;
-                passData.LutDomainMin = grade.Lut?.DomainMin ?? Vector3.zero;
-                passData.LutDomainMax = grade.Lut?.DomainMax ?? Vector3.one;
-                passData.DisplayPaperWhiteNits = paperWhite;
-                passData.DisplayPeakRelative = hdrOutput ? peakNits / paperWhite : 0f;
-                passData.HDROutput = _displayPass && hdrOutput;
-                passData.HDRGamut = hdrGamut;
-                passData.EigengrauActive = eigengrauActive;
-                passData.EigengrauIntensity = eigengrau.intensity.value;
-                passData.EigengrauColor = eigengrau.color.value;
-                passData.EigengrauDarknessThreshold = eigengrau.darknessThreshold.value;
-                passData.EigengrauNoiseScale = eigengrau.noiseScale.value;
-                passData.EigengrauAnimationSpeed = eigengrau.animationSpeed.value;
+                PostProcessPassDataAssembler.FillGradeTransport(passData, grade, _gradeScratch);
 
                 passData.HistoryValid = _historyValid;
-                passData.MotionBlurHistory = passData.HistoryValid && _displayPass && mbActive
-                    ? mb.intensity.value
-                    : 0f;
-                passData.TemporalActive = temporalActive;
                 passData.TimeSeconds = Time.time;
 
                 // Готовый кадр лежит в промежуточной текстуре. Если цель камеры —

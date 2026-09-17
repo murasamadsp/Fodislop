@@ -13,7 +13,7 @@ namespace Kern.Tests.World.Lighting;
 [TestFixture]
 public sealed class ShaderContractTests
 {
-    private static readonly string ShaderDirectory = Path.Combine(
+    private static readonly string _shaderDirectory = Path.Combine(
         Application.dataPath,
         "Resources/Shaders/Lighting");
 
@@ -22,10 +22,10 @@ public sealed class ShaderContractTests
     {
         string[] forbiddenStageFiles =
         {
-            Path.Combine(ShaderDirectory, "Cascades/CascadeResolve.hlsl"),
-            Path.Combine(ShaderDirectory, "Dynamic/DynamicLightTrace.hlsl"),
-            Path.Combine(ShaderDirectory, "Bounce/BounceSolve.hlsl"),
-            Path.Combine(ShaderDirectory, "Composite/CompositeLighting.hlsl"),
+            Path.Combine(_shaderDirectory, "Cascades/CascadeResolve.hlsl"),
+            Path.Combine(_shaderDirectory, "Dynamic/DynamicLightTrace.hlsl"),
+            Path.Combine(_shaderDirectory, "Bounce/BounceSolve.hlsl"),
+            Path.Combine(_shaderDirectory, "Composite/CompositeLighting.hlsl"),
         };
 
         Regex ddaCallPattern = new(@"\b(TraceLightSegment|TraceRadianceSegment)\s*\(", RegexOptions.Compiled);
@@ -55,7 +55,7 @@ public sealed class ShaderContractTests
     [Test]
     public void ComputeBinderProperties_AllDeclaredInComputeShader()
     {
-        string computeFile = Path.Combine(ShaderDirectory, "WorldLighting.compute");
+        string computeFile = Path.Combine(_shaderDirectory, "WorldLighting.compute");
         Assert.That(File.Exists(computeFile), Is.True);
 
         string allShaderText = LoadShaderWithIncludes(computeFile);

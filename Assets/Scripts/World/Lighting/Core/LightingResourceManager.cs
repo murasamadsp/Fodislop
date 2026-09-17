@@ -94,9 +94,24 @@ internal sealed class LightingResourceManager
             return;
         }
 
-        LoadComputeShaderOrThrow();
-        ValidateGpuRequirements();
-        ValidateMaterialFieldPass();
+        LightingShaderValidator.LoadedLightingCompute loaded = LightingShaderValidator.LoadComputeShader();
+        LightingCompute = loaded.Compute;
+        SolveCascadeKernel = loaded.SolveCascadeKernel;
+        ScrollRadianceAtlasKernel = loaded.ScrollRadianceAtlasKernel;
+        SolveDynamicLightingKernel = loaded.SolveDynamicLightingKernel;
+        ComposeDynamicLightingKernel = loaded.ComposeDynamicLightingKernel;
+        TraceLampPolarKernel = loaded.TraceLampPolarKernel;
+        ClearDynamicDirectKernel = loaded.ClearDynamicDirectKernel;
+        ResolveDirectKernel = loaded.ResolveDirectKernel;
+        ResolveTransmissionDebugKernel = loaded.ResolveTransmissionDebugKernel;
+        SolveDiffuseBounceKernel = loaded.SolveDiffuseBounceKernel;
+        CompositeLightingKernel = loaded.CompositeLightingKernel;
+        BuildCellSolidMaskKernel = loaded.BuildCellSolidMaskKernel;
+        BuildBounceTapsKernel = loaded.BuildBounceTapsKernel;
+        BuildBounceFilterKernel = loaded.BuildBounceFilterKernel;
+
+        LightingShaderValidator.ValidateGpuRequirements();
+        LightingShaderValidator.ValidateMaterialFieldPass(LightingTexturePool.DestroyLightingObject);
         LightingCommandBuffer = new CommandBuffer
         {
             name = "Kern Radiance Cascades",
@@ -198,7 +213,7 @@ internal sealed class LightingResourceManager
         BounceWidth = bounceWidth;
         BounceHeight = bounceHeight;
 
-        _materialField = CreateTexture(
+        _materialField = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
             RenderTextureFormat.ARGB32,
@@ -206,7 +221,7 @@ internal sealed class LightingResourceManager
             FilterMode.Bilinear,
             "_LightingMaterialField",
             useMipMap: true);
-        _staticEmissionField = CreateTexture(
+        _staticEmissionField = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
             RenderTextureFormat.ARGBHalf,
@@ -214,28 +229,28 @@ internal sealed class LightingResourceManager
             FilterMode.Bilinear,
             "_StaticEmissionField",
             useMipMap: false);
-        _directTexture = CreateTexture(
+        _directTexture = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
             RenderTextureFormat.ARGBHalf,
             randomWrite: true,
             FilterMode.Bilinear,
             "_RadianceDirect");
-        _staticDirectTexture = CreateTexture(
+        _staticDirectTexture = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
             RenderTextureFormat.ARGBHalf,
             randomWrite: true,
             FilterMode.Bilinear,
             "_RadianceDirectStatic");
-        _bounceTexture = CreateTexture(
+        _bounceTexture = LightingTexturePool.CreateTexture(
             bounceWidth,
             bounceHeight,
             RenderTextureFormat.ARGBHalf,
             randomWrite: true,
             FilterMode.Bilinear,
             "_RadianceBounce");
-        _lightmapTexture = CreateTexture(
+        _lightmapTexture = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
             RenderTextureFormat.ARGBHalf,
@@ -244,7 +259,7 @@ internal sealed class LightingResourceManager
             "_WorldLightTexture");
         CellGridWidth = gridWidth;
         CellGridHeight = gridHeight;
-        _cellSolidMask = CreateTexture(
+        _cellSolidMask = LightingTexturePool.CreateTexture(
             gridWidth,
             gridHeight,
             RenderTextureFormat.ARGBHalf,
@@ -341,13 +356,13 @@ internal sealed class LightingResourceManager
 
     public void ReleaseFieldTextures()
     {
-        ReleaseTexture(ref _materialField);
-        ReleaseTexture(ref _staticEmissionField);
-        ReleaseTexture(ref _directTexture);
-        ReleaseTexture(ref _staticDirectTexture);
-        ReleaseTexture(ref _bounceTexture);
-        ReleaseTexture(ref _lightmapTexture);
-        ReleaseTexture(ref _cellSolidMask);
+        LightingTexturePool.ReleaseTexture(ref _materialField);
+        LightingTexturePool.ReleaseTexture(ref _staticEmissionField);
+        LightingTexturePool.ReleaseTexture(ref _directTexture);
+        LightingTexturePool.ReleaseTexture(ref _staticDirectTexture);
+        LightingTexturePool.ReleaseTexture(ref _bounceTexture);
+        LightingTexturePool.ReleaseTexture(ref _lightmapTexture);
+        LightingTexturePool.ReleaseTexture(ref _cellSolidMask);
         BounceTaps?.Release();
         BounceTaps = null;
         BounceFilterWeights?.Release();
@@ -451,149 +466,5 @@ internal sealed class LightingResourceManager
         (RadianceAtlas, RadianceScratchAtlas) =
             (RadianceScratchAtlas, RadianceAtlas);
         Registry.Cascade.Atlas = RadianceAtlas;
-    }
-
-    private static RenderTexture CreateTexture(
-        int width,
-        int height,
-        RenderTextureFormat format,
-        bool randomWrite,
-        FilterMode filterMode,
-        string name,
-        bool useMipMap = false)
-    {
-        var texture = new RenderTexture(
-            width,
-            height,
-            0,
-            format,
-            RenderTextureReadWrite.Linear)
-        {
-            enableRandomWrite = randomWrite,
-            useMipMap = useMipMap,
-            autoGenerateMips = false,
-            filterMode = filterMode,
-            wrapMode = TextureWrapMode.Clamp,
-            name = name,
-        };
-
-        if (!texture.Create())
-        {
-            DestroyLightingObject(texture);
-            throw new InvalidOperationException($"Failed to create required lighting target '{name}'.");
-        }
-
-        return texture;
-    }
-
-    private static void ReleaseTexture(ref RenderTexture? texture)
-    {
-        if (texture == null)
-        {
-            return;
-        }
-
-        texture.Release();
-        DestroyLightingObject(texture);
-        texture = null;
-    }
-
-    private static void DestroyLightingObject(UnityEngine.Object target)
-    {
-        if (Application.isPlaying)
-        {
-            UnityEngine.Object.Destroy(target);
-        }
-        else
-        {
-            UnityEngine.Object.DestroyImmediate(target);
-        }
-    }
-
-    private void LoadComputeShaderOrThrow()
-    {
-        if (!SystemInfo.supportsComputeShaders)
-        {
-            throw new NotSupportedException("Radiance Cascades requires compute shader support.");
-        }
-
-        LightingCompute = Resources.Load<ComputeShader>(
-            ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute) ??
-            throw new InvalidOperationException(
-                "Required compute shader Resources/Shaders/Lighting/WorldLighting.compute is missing.");
-
-        (string Name, Action<int> SetIndex)[] requiredKernels =
-        [
-            (ProjectRuntimeContracts.ComputeKernelNames.SolveCascade, k => SolveCascadeKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.ScrollRadianceAtlas, k => ScrollRadianceAtlasKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.SolveDynamicLighting, k => SolveDynamicLightingKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.ComposeDynamicLighting, k => ComposeDynamicLightingKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.TraceLampPolar, k => TraceLampPolarKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.ClearDynamicDirect, k => ClearDynamicDirectKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.ResolveDirect, k => ResolveDirectKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.ResolveTransmissionDebug, k => ResolveTransmissionDebugKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.SolveDiffuseBounce, k => SolveDiffuseBounceKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.CompositeLighting, k => CompositeLightingKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.BuildCellSolidMask, k => BuildCellSolidMaskKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.BuildBounceTaps, k => BuildBounceTapsKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.BuildBounceFilter, k => BuildBounceFilterKernel = k),
-        ];
-
-        foreach (var (kernelName, setIndex) in requiredKernels)
-        {
-            if (!LightingCompute.HasKernel(kernelName))
-            {
-                throw new InvalidOperationException(
-                    $"Radiance Cascades compute shader is missing kernel '{kernelName}'.");
-            }
-
-            int kernelIndex = LightingCompute.FindKernel(kernelName);
-            ValidateKernelSupportOrThrow(kernelName, kernelIndex);
-            setIndex(kernelIndex);
-        }
-
-    }
-
-    private void ValidateKernelSupportOrThrow(string kernelName, int kernelIndex)
-    {
-        if (LightingCompute?.IsSupported(kernelIndex) != true)
-        {
-            throw new InvalidOperationException(
-                $"Radiance Cascades kernel '{kernelName}' failed to compile for {SystemInfo.graphicsDeviceType}.");
-        }
-    }
-
-    private static void ValidateGpuRequirements()
-    {
-        if (SystemInfo.supportedRenderTargetCount < 2 ||
-            !SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGB32) ||
-            !SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGBHalf) ||
-            !SystemInfo.SupportsRandomWriteOnRenderTextureFormat(RenderTextureFormat.ARGBHalf))
-        {
-            throw new NotSupportedException(
-                "Radiance Cascades requires two MRTs, RGBA8 material, and random-write lighting targets.");
-        }
-    }
-
-    private static void ValidateMaterialFieldPass()
-    {
-        Shader terrainShader = Shader.Find(ProjectRuntimeContracts.ShaderNames.Terrain) ??
-            throw new InvalidOperationException("The terrain shader required by lighting is missing.");
-
-        var validationMaterial = new Material(terrainShader);
-
-        try
-        {
-            if (validationMaterial.FindPass(
-                    ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField) < 0)
-            {
-                throw new InvalidOperationException(
-                    "The terrain shader is missing the LightingMaterialField pass.");
-            }
-        }
-        finally
-        {
-            DestroyLightingObject(validationMaterial);
-        }
     }
 }

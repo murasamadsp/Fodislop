@@ -56,13 +56,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     private string _worldCodeName = string.Empty;
     private int _worldWidth;
     private int _worldHeight;
-    private bool _clippedRegionWarningLogged;
-    private int _regionBatchDepth;
-    private bool _batchedRegionChanged;
-    private int _batchedRegionMinX;
-    private int _batchedRegionMinY;
-    private int _batchedRegionMaxX;
-    private int _batchedRegionMaxY;
+    private readonly MapStorageRegionBatcher _regionBatcher = new();
 
     public IWorldLayer<CellType>? CellLayer => _cellLayer;
 
@@ -82,39 +76,9 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     public event Action<int, int>? CellChanged;
     public event Action<int, int, int, int>? RegionChanged;
 
-    public void BeginRegionBatch()
-    {
-        _regionBatchDepth++;
-        if (_regionBatchDepth == 1)
-        {
-            _cellLayer?.BeginChunkLoadBatch();
-        }
-    }
+    public void BeginRegionBatch() => _regionBatcher.BeginBatch(_cellLayer);
 
-    public void EndRegionBatch()
-    {
-        if (_regionBatchDepth <= 0)
-        {
-            throw new InvalidOperationException("[MapStorage] Region batch is not active.");
-        }
-
-        _regionBatchDepth--;
-        if (_regionBatchDepth != 0)
-        {
-            return;
-        }
-
-        _cellLayer?.EndChunkLoadBatch();
-        if (_batchedRegionChanged)
-        {
-            _batchedRegionChanged = false;
-            RegionChanged?.Invoke(
-                _batchedRegionMinX,
-                _batchedRegionMinY,
-                _batchedRegionMaxX - _batchedRegionMinX,
-                _batchedRegionMaxY - _batchedRegionMinY);
-        }
-    }
+    public void EndRegionBatch() => _regionBatcher.EndBatch(_cellLayer, RegionChanged);
 
     public void EnsureEditorInitialized()
     {
@@ -140,7 +104,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             throw new ArgumentException("[MapStorage] World code name cannot be null or empty", nameof(worldCodeName));
         }
 
-        worldCodeName = SanitizeWorldCodeName(worldCodeName);
+        worldCodeName = MapStorageDiskWriter.SanitizeWorldCodeName(worldCodeName);
 
         if (width <= 0 || height <= 0)
         {
@@ -150,7 +114,6 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         _worldCodeName = worldCodeName;
         _worldWidth = width;
         _worldHeight = height;
-        _clippedRegionWarningLogged = false;
         int widthChunks = (width + ProjectRuntimeContracts.World.ChunkSize - 1) /
             ProjectRuntimeContracts.World.ChunkSize;
         int heightChunks = (height + ProjectRuntimeContracts.World.ChunkSize - 1) /
@@ -164,70 +127,25 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         string path = Path.Combine(_DataRoot, worldCodeName + MapExtension);
         try
         {
-            string? directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            _mapFilePath = path;
-            _isInitialized = true;
-            CreateBackup(path);
-            _cellLayer = new WorldLayer<CellType>(
+            _cellLayer = MapStorageDiskWriter.OpenWorldLayer(
                 path,
                 widthChunks,
                 heightChunks,
                 _operations,
                 _openMapFile,
-                ProjectRuntimeContracts.World.ChunkSize,
-                maxRamChunks: ProjectRuntimeContracts.World.ResidentChunkCacheCapacity);
+                BackupMapFilePath);
+            _mapFilePath = path;
+            _isInitialized = true;
             IsDisposed = false;
             Revision++;
         }
-        catch (IOException ioEx)
+        catch
         {
             _cellLayer = null;
             _mapFilePath = null;
             _isInitialized = false;
-            throw new IOException($"[MapStorage] Could not open map file '{path}': {ioEx.Message}", ioEx);
-        }
-        catch (UnauthorizedAccessException authEx)
-        {
-            _cellLayer = null;
-            _mapFilePath = null;
-            _isInitialized = false;
-            throw new UnauthorizedAccessException($"[MapStorage] Access denied for map file '{path}': {authEx.Message}", authEx);
-        }
-        catch (OutOfMemoryException)
-        {
-            _cellLayer = null;
-            _mapFilePath = null;
             throw;
         }
-    }
-
-    private static string SanitizeWorldCodeName(string worldCodeName)
-    {
-        char[] invalid = Path.GetInvalidFileNameChars();
-        var sanitized = new System.Text.StringBuilder(worldCodeName.Length);
-        foreach (char c in worldCodeName)
-        {
-            sanitized.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
-        }
-
-        // Завершающие точка/пробел недопустимы в именах файлов Windows.
-        string result = sanitized.ToString().TrimEnd('.', ' ');
-        return string.IsNullOrEmpty(result) ? "world" : result;
-    }
-
-    private void CreateBackup(string mapPath)
-    {
-        if (!File.Exists(mapPath))
-        {
-            return;
-        }
-
-        File.Copy(mapPath, BackupMapFilePath, overwrite: true);
     }
 
     public bool IsInitialized() => _isInitialized;
@@ -299,40 +217,22 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 $"({startX},{startY}) {width}x{height}.");
         }
 
-        long expectedCellCount = (long)width * height;
-        if (width <= 0 || height <= 0 || cells.Length < expectedCellCount)
-        {
-            throw new ArgumentException(
-                $"[MapStorage] Invalid region ({startX},{startY}) {width}x{height}: " +
-                $"payload has {cells.Length} cells, expected at least {expectedCellCount}.",
-                nameof(cells));
-        }
+        _regionBatcher.ValidateRegionParameters(
+            startX,
+            startY,
+            width,
+            height,
+            cells.Length,
+            _worldWidth,
+            _worldHeight);
 
-        if (startX < 0 || startY < 0 || startX >= _worldWidth || startY >= _worldHeight)
-        {
-            string message =
-                "[MapStorage] Region " +
-                $"({startX},{startY}) {width}x{height} " +
-                $"is outside world bounds {_worldWidth}x{_worldHeight}.";
-            throw new ArgumentOutOfRangeException(
-                nameof(startX),
-                message);
-        }
-
-        int appliedWidth = Math.Min(width, _worldWidth - startX);
-        int appliedHeight = Math.Min(height, _worldHeight - startY);
-        if (appliedWidth != width || appliedHeight != height)
-        {
-            if (!_clippedRegionWarningLogged)
-            {
-                Debug.LogWarning(
-                    $"[MapStorage] Clipping padded edge regions to world bounds " +
-                    $"({_worldWidth}x{_worldHeight}); first region " +
-                    $"({startX},{startY}) {width}x{height} -> " +
-                    $"{appliedWidth}x{appliedHeight}.");
-                _clippedRegionWarningLogged = true;
-            }
-        }
+        (int appliedWidth, int appliedHeight) = _regionBatcher.ClipRegionBounds(
+            startX,
+            startY,
+            width,
+            height,
+            _worldWidth,
+            _worldHeight);
 
         // Bulk write: WorldLayer.SetRegion applies the payload chunk-by-chunk
         // with one LRU touch per chunk instead of per cell (a 32x32 region used
@@ -352,23 +252,9 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             Revision++;
             bool onlyMaterializedNewChunks =
                 _cellLayer.LastSetRegionOnlyMaterializedNewChunks;
-            if (_regionBatchDepth > 0 && !onlyMaterializedNewChunks)
+            if (_regionBatcher.Depth > 0 && !onlyMaterializedNewChunks)
             {
-                if (!_batchedRegionChanged)
-                {
-                    _batchedRegionMinX = startX;
-                    _batchedRegionMinY = startY;
-                    _batchedRegionMaxX = startX + appliedWidth;
-                    _batchedRegionMaxY = startY + appliedHeight;
-                    _batchedRegionChanged = true;
-                }
-                else
-                {
-                    _batchedRegionMinX = Math.Min(_batchedRegionMinX, startX);
-                    _batchedRegionMinY = Math.Min(_batchedRegionMinY, startY);
-                    _batchedRegionMaxX = Math.Max(_batchedRegionMaxX, startX + appliedWidth);
-                    _batchedRegionMaxY = Math.Max(_batchedRegionMaxY, startY + appliedHeight);
-                }
+                _regionBatcher.RecordRegionChange(startX, startY, appliedWidth, appliedHeight);
             }
             else if (!onlyMaterializedNewChunks)
             {
@@ -445,7 +331,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 {
                     try
                     {
-                        WriteSnapshotCore(layer, snapshot, durable);
+                        MapStorageDiskWriter.WriteSnapshot(layer, snapshot, durable, MapFilePath);
                     }
                     catch (Exception exception)
                     {
@@ -498,33 +384,12 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         var snapshot = layer.TakeDirtySnapshot();
         try
         {
-            WriteSnapshotCore(layer, snapshot, durable);
+            MapStorageDiskWriter.WriteSnapshot(layer, snapshot, durable, MapFilePath);
         }
         catch
         {
             layer.RestoreDirty(snapshot);
             throw;
-        }
-    }
-
-    private void WriteSnapshotCore(
-        WorldLayer<CellType> layer,
-        System.Collections.Generic.List<(int Index, CellType[] Chunk)> snapshot,
-        bool durable)
-    {
-        try
-        {
-            layer.WriteSnapshot(snapshot, flushToDisk: durable);
-        }
-        catch (Exception ex) when (
-            ex is IOException ||
-            ex is UnauthorizedAccessException ||
-            ex is ObjectDisposedException)
-        {
-            throw new IOException(
-                $"[MapStorage] Failed to persist map '{MapFilePath}'. " +
-                "The world cannot continue with unsaved chunks.",
-                ex);
         }
     }
 
@@ -564,7 +429,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                     {
                         if (layer != null && snapshot != null)
                         {
-                            WriteSnapshotCore(layer, snapshot, durable: true);
+                            MapStorageDiskWriter.WriteSnapshot(layer, snapshot, durable: true, MapFilePath);
                         }
 
                         DisposeCore();
@@ -617,7 +482,6 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             _worldCodeName = string.Empty;
             _worldWidth = 0;
             _worldHeight = 0;
-            _clippedRegionWarningLogged = false;
             _mapFilePath = null;
             IsDisposed = true;
             Revision++;

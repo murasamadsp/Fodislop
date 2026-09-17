@@ -28,9 +28,7 @@ namespace Kern.UI
         private VisualElement? _root;
         private VisualElement? _tree;
         private VisualElement? _mainMenuContainer;
-        private VisualElement? _loaderContainer;
-        private VisualElement? _loaderContent;
-        private MenuLoaderProgress? _loaderProgress;
+        private readonly MenuLoaderPanel _loaderPanel = new();
         private readonly MenuModalManager _modalManager = new();
         private readonly MenuNavigationPresenter _navigationPresenter = new();
 
@@ -56,7 +54,6 @@ namespace Kern.UI
         [Inject]
         private WindowCommandStream _windowCommands = null!;
 
-        private bool _loaderHiddenAtDone;
         private MenuStarfield? _sceneStarfield;
         private MenuSceneryController? _sceneScenery;
         private MenuSceneryPresenter _sceneryPresenter = null!;
@@ -211,42 +208,7 @@ namespace Kern.UI
         {
             VisualElement searchRoot = _root ?? tree;
             _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer") ?? searchRoot.Q<VisualElement>("MainMenuContainer");
-            _loaderContainer = tree.Q<VisualElement>("LoaderContainer") ?? searchRoot.Q<VisualElement>("LoaderContainer");
-            _loaderContent = tree.Q<VisualElement>("LoaderContent") ?? searchRoot.Q<VisualElement>("LoaderContent");
-            VisualElement? loaderProgressFill = tree.Q<VisualElement>("LoaderProgressFill") ?? searchRoot.Q<VisualElement>("LoaderProgressFill");
-            Label? loaderPhaseLabel = tree.Q<Label>("LoaderPhaseLabel") ?? searchRoot.Q<Label>("LoaderPhaseLabel");
-            Label? loaderPhaseCount = tree.Q<Label>("LoaderPhaseCount") ?? searchRoot.Q<Label>("LoaderPhaseCount");
-            VisualElement? loaderPhaseList = tree.Q<VisualElement>("LoaderPhaseList") ?? searchRoot.Q<VisualElement>("LoaderPhaseList");
-
-            if (_loaderContainer == null || _loaderContent == null ||
-                loaderProgressFill == null || loaderPhaseLabel == null ||
-                loaderPhaseCount == null || loaderPhaseList == null)
-            {
-                Debug.LogWarning("[MainMenu] Some loader elements missing from MainMenu.uxml, synthesizing placeholders to prevent startup crash.");
-                _loaderContainer ??= new VisualElement { name = "LoaderContainer" };
-                _loaderContent ??= new VisualElement { name = "LoaderContent" };
-                loaderProgressFill ??= new VisualElement { name = "LoaderProgressFill" };
-                loaderPhaseLabel ??= new Label { name = "LoaderPhaseLabel" };
-                loaderPhaseCount ??= new Label { name = "LoaderPhaseCount" };
-                loaderPhaseList ??= new VisualElement { name = "LoaderPhaseList" };
-
-                _loaderContainer.Add(_loaderContent);
-                _loaderContent.Add(loaderProgressFill);
-                _loaderContent.Add(loaderPhaseLabel);
-                _loaderContent.Add(loaderPhaseCount);
-                _loaderContent.Add(loaderPhaseList);
-                if (searchRoot != null && !searchRoot.Contains(_loaderContainer))
-                {
-                    searchRoot.Add(_loaderContainer);
-                }
-            }
-
-            _loaderProgress = new MenuLoaderProgress(
-                loaderProgressFill,
-                loaderPhaseLabel,
-                loaderPhaseCount,
-                loaderPhaseList,
-                _loc);
+            _loaderPanel.Bind(tree, searchRoot, _loc);
 
             _navigationPresenter.Bind(
                 tree,
@@ -255,13 +217,7 @@ namespace Kern.UI
                 CancelDescent,
                 _loc);
 
-            if (_loaderContainer != null)
-            {
-                _loaderContainer.pickingMode = PickingMode.Ignore;
-            }
-
-            UIState.Hide(_loaderContainer);
-            UIState.Hide(_loaderContent);
+            _loaderPanel.Reset();
         }
 
         protected void Update()
@@ -312,13 +268,7 @@ namespace Kern.UI
             WorldLoadPhase phase = _loadProgress != null
                 ? _loadProgress.CurrentPhase
                 : WorldLoadPhase.Handshake;
-            _loaderProgress?.UpdateProgress(phase);
-
-            if (phase == WorldLoadPhase.Done && !_loaderHiddenAtDone)
-            {
-                _loaderHiddenAtDone = true;
-                ReleaseInputToGameplay();
-            }
+            _loaderPanel.UpdateProgress(phase, ReleaseInputToGameplay);
         }
 
         private void SubscribeEvents()
@@ -356,7 +306,7 @@ namespace Kern.UI
 
             UILocalizer.Apply(_tree, _loc);
             _navigationPresenter.ApplyLocalization(_loc);
-            _loaderProgress?.RefreshLocalization();
+            _loaderPanel.RefreshLocalization();
             UILocalizer.AssertLocalized(_tree, _loc);
         }
 
@@ -384,7 +334,7 @@ namespace Kern.UI
 
         private void HideLoader()
         {
-            UIState.Hide(_loaderContainer);
+            _loaderPanel.Hide();
         }
 
         private void HideMenu()
@@ -429,8 +379,7 @@ namespace Kern.UI
 
             if (!visible)
             {
-                UIState.Show(_loaderContainer);
-                UIState.Show(_loaderContent);
+                _loaderPanel.Show();
                 UpdateLoaderProgress();
             }
         }
@@ -452,8 +401,7 @@ namespace Kern.UI
             _descentCancellation = CancellationTokenSource.CreateLinkedTokenSource(
                 destroyCancellationToken);
 
-            UIState.Show(_loaderContainer);
-            UIState.Show(_loaderContent);
+            _loaderPanel.Show();
 
             if (_windowCommands != null && _windowCommands.HasOpenWindows)
             {

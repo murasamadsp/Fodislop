@@ -20,9 +20,10 @@ public sealed class NamingConventionRule : IRule
     public bool RequiresAssemblies => false;
 
     // Pattern to match private fields: private [modifiers] Type Name = ;
-    // Excludes properties (have {), methods (have parentheses), and nested types
+    // Excludes properties (have {), expression-bodied properties (=>, not =),
+    // methods (have parentheses), and nested types
     private static readonly Regex PrivateFieldPattern = new(
-        @"^\s*private\s+(?:static\s+|readonly\s+|volatile\s+)*(?!class\b|struct\b|enum\b|interface\b)(?:[A-Za-z_][A-Za-z0-9_]*\.)*[A-Za-z_][A-Za-z0-9_]*(?:<[^>]*>)?\s*\??\s+([_A-Za-z][A-Za-z0-9_]*)\s*(?:=|;)",
+        @"^\s*private\s+(?:static\s+|readonly\s+|volatile\s+)*(?!class\b|struct\b|enum\b|interface\b)(?:[A-Za-z_][A-Za-z0-9_]*\.)*[A-Za-z_][A-Za-z0-9_]*(?:<[^>]*>)?\s*\??\s+([_A-Za-z][A-Za-z0-9_]*)\s*(?:=(?![>=])|;)",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
     // Pattern to match interface declarations

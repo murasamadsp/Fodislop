@@ -12,10 +12,10 @@ namespace Kern.Tests.Core;
 [TestFixture]
 public sealed class ArchitectureHygieneTests
 {
-    private static readonly Regex FileScopedNamespacePattern =
+    private static readonly Regex _fileScopedNamespacePattern =
         new(@"^\s*namespace\s+[A-Za-z0-9_.]+\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
 
-    private static readonly Regex UnityObjectTypePattern =
+    private static readonly Regex _unityObjectTypePattern =
         new(@":\s*(MonoBehaviour|ScriptableObject|ScriptableRendererFeature|VolumeComponent)\b", RegexOptions.Compiled);
 
     [Test]
@@ -35,9 +35,9 @@ public sealed class ArchitectureHygieneTests
             }
 
             string text = File.ReadAllText(file);
-            if (UnityObjectTypePattern.IsMatch(text))
+            if (_unityObjectTypePattern.IsMatch(text))
             {
-                if (FileScopedNamespacePattern.IsMatch(text))
+                if (_fileScopedNamespacePattern.IsMatch(text))
                 {
                     violations.Add(Path.GetRelativePath(Application.dataPath, file));
                 }

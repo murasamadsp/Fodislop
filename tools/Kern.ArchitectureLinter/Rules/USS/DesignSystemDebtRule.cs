@@ -27,7 +27,7 @@ public sealed class DesignSystemDebtRule : IRule
         ["литерал в main game"] = 321,
     };
 
-    private static readonly HashSet<string> MainGameDirs = new() { "HUD", "Map", "Chat", "Programmator", "Settings", "Overlays" };
+    private static readonly HashSet<string> MainGameDirs = new() { "HUD", "Map", "Chat", "Programmator", "Settings", "Overlays", "Inventory" };
     private static readonly HashSet<string> MainGameUss = new() { "HUD.uss", "Inventory.uss", "Chat.uss", "chat-input.uss", "Programmator.uss", "PauseMenu.uss", "Modal.uss" };
     private static readonly HashSet<string> GeneratedUss = new() { "ThemeTokens.uss", "TokenUtilities.uss" };
 

@@ -2,11 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Unity.Profiling;
 using Kern.Core;
+using static Kern.World.Lighting.StaticLightingDirty;
 
 namespace Kern.World.Lighting;
 
@@ -25,23 +25,6 @@ internal sealed class StaticLightingSolver
 
     private readonly LightingResourceManager _resources;
     private readonly IFrameTelemetry _telemetry;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct DirtyRegionGpu
-    {
-        public readonly int MinX;
-        public readonly int MinY;
-        public readonly int MaxX;
-        public readonly int MaxY;
-
-        public DirtyRegionGpu(int minX, int minY, int maxX, int maxY)
-        {
-            MinX = minX;
-            MinY = minY;
-            MaxX = maxX;
-            MaxY = maxY;
-        }
-    }
 
     public StaticLightingSolver(
         LightingResourceManager resources,
@@ -76,7 +59,11 @@ internal sealed class StaticLightingSolver
             _telemetry.LightingStaticDenseFallbackCount++;
         }
         DirtyRegionGpu[] dirtyFieldRegions = useDependencyMask
-            ? ConvertDirtyRegions(dirtyRegions, worldRect)
+            ? StaticLightingDirty.ConvertDirtyRegions(
+                dirtyRegions,
+                worldRect,
+                _resources.FieldWidth,
+                _resources.FieldHeight)
             : Array.Empty<DirtyRegionGpu>();
         _resources.EnsureDirtyRegionCapacity(Mathf.Max(1, dirtyFieldRegions.Length));
         if (useDependencyMask)
@@ -118,7 +105,12 @@ internal sealed class StaticLightingSolver
                     // Маска вже економить DDA через early-out, але треди
                     // слались на всю сітку. Тайт-rect ріже і треди: записи
                     // телеметрії full/partial нижче це покажуть.
-                    ProbeRect tight = TightProbeRect(cascade, dirtyFieldRegions, worldRect);
+                    ProbeRect tight = StaticLightingDirty.TightProbeRect(
+                        cascade,
+                        dirtyFieldRegions,
+                        worldRect,
+                        _resources.FieldWidth,
+                        _resources.FieldHeight);
                     if (tight.IsEmpty)
                     {
                         continue;
@@ -208,45 +200,6 @@ internal sealed class StaticLightingSolver
                 Mathf.CeilToInt(groups / (float)groupCountX),
                 1);
         }
-    }
-
-    private ProbeRect TightProbeRect(
-        CascadeLayout cascade,
-        DirtyRegionGpu[] dirtyFieldRegions,
-        Vector4 worldRect)
-    {
-        int minX = int.MaxValue;
-        int minY = int.MaxValue;
-        int maxX = int.MinValue;
-        int maxY = int.MinValue;
-        foreach (DirtyRegionGpu region in dirtyFieldRegions)
-        {
-            if (region.MinX < minX)
-                minX = region.MinX;
-            if (region.MinY < minY)
-                minY = region.MinY;
-            if (region.MaxX > maxX)
-                maxX = region.MaxX;
-            if (region.MaxY > maxY)
-                maxY = region.MaxY;
-        }
-
-        float cellSize = ProjectRuntimeContracts.World.CellSize;
-        float cellsX = Mathf.Max(1f, worldRect.z / cellSize);
-        float cellsY = Mathf.Max(1f, worldRect.w / cellSize);
-        float texelsPerCell = Mathf.Max(
-            _resources.FieldWidth / cellsX,
-            _resources.FieldHeight / cellsY);
-        float marginTexels = texelsPerCell + cascade.ProbeSpacing + 2f;
-        return CascadeProbeRects.ForCascade(
-            minX,
-            minY,
-            maxX,
-            maxY,
-            _resources.FieldWidth,
-            _resources.FieldHeight,
-            cascade,
-            marginTexels);
     }
 
     private void RecordCascadeStrips(
@@ -458,35 +411,6 @@ internal sealed class StaticLightingSolver
         long estimatedPartialCost = (long)(_resources.EstimatedCascadeRayWorkUnits * candidateFraction) +
             maskOverhead;
         return estimatedPartialCost < _resources.EstimatedCascadeRayWorkUnits;
-    }
-
-    private DirtyRegionGpu[] ConvertDirtyRegions(
-        IReadOnlyList<RectInt> dirtyRegions,
-        Vector4 worldRect)
-    {
-        float cellSize = ProjectRuntimeContracts.World.CellSize;
-        float worldOriginX = worldRect.x / cellSize;
-        float worldOriginY = worldRect.y / cellSize;
-        float cellsWidth = worldRect.z / cellSize;
-        float cellsHeight = worldRect.w / cellSize;
-        float pixelsPerCellX = _resources.FieldWidth / Mathf.Max(1f, cellsWidth);
-        float pixelsPerCellY = _resources.FieldHeight / Mathf.Max(1f, cellsHeight);
-        var result = new DirtyRegionGpu[dirtyRegions.Count];
-        for (int index = 0; index < dirtyRegions.Count; index++)
-        {
-            RectInt region = dirtyRegions[index];
-            int minX = Mathf.FloorToInt((region.xMin - worldOriginX) * pixelsPerCellX) - 2;
-            int minY = Mathf.FloorToInt((region.yMin - worldOriginY) * pixelsPerCellY) - 2;
-            int maxX = Mathf.CeilToInt((region.xMax - worldOriginX) * pixelsPerCellX) + 2;
-            int maxY = Mathf.CeilToInt((region.yMax - worldOriginY) * pixelsPerCellY) + 2;
-            result[index] = new DirtyRegionGpu(
-                Mathf.Clamp(minX, 0, _resources.FieldWidth),
-                Mathf.Clamp(minY, 0, _resources.FieldHeight),
-                Mathf.Clamp(maxX, 0, _resources.FieldWidth),
-                Mathf.Clamp(maxY, 0, _resources.FieldHeight));
-        }
-
-        return result;
     }
 
     private void BindFieldTextures(

@@ -21,14 +21,10 @@ namespace Kern.UI
 
         private const int MaxChunkCacheEntries = 4096;
 
-        private int _texWidth;
-        private int _texHeight;
-        private int _lastPanelWidth = -1;
-        private int _lastPanelHeight = -1;
         private UIDocument? _document;
         private VisualElement? _mapOverlay;
         private Image? _mapImage;
-        private Texture2D? _mapTexture;
+        private readonly MapTextureController _textureController = new();
         private IWorldLayer<CellType>? _cellLayer;
         private int _chunkSize = ProjectRuntimeContracts.World.ChunkSize;
         private readonly MapCellSampler _cellSampler = new();
@@ -197,10 +193,7 @@ namespace Kern.UI
 
         protected void OnDestroy()
         {
-            if (_mapTexture != null)
-            {
-                Destroy(_mapTexture);
-            }
+            _textureController.DestroyTexture();
 
             _manager.OnWorldInitialized -= OnWorldReady;
             _manager.OnWorldDataLoaded -= OnWorldReady;
@@ -318,24 +311,18 @@ namespace Kern.UI
                 return;
             }
 
-            if (_mapOverlay != null)
+            if (_mapOverlay != null && _textureController.CheckPanelResize(_mapOverlay))
             {
-                Rect panelRect = _mapOverlay.worldBound;
-                int curW = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 0;
-                int curH = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 0;
-                if (curW > 0 && curH > 0 && (curW != _lastPanelWidth || curH != _lastPanelHeight))
-                {
-                    InitTexture();
-                    _renderRequested = true;
-                }
+                InitTexture();
+                _renderRequested = true;
             }
 
             _interaction.HandleMouseScroll(
                 _mapOverlay,
                 _mapImage,
                 _document,
-                _texWidth,
-                _texHeight,
+                _textureController.TexWidth,
+                _textureController.TexHeight,
                 _maxCellsPerPixel,
                 ref _cellsPerPixel,
                 ref _viewCenterX,
@@ -411,34 +398,7 @@ namespace Kern.UI
         {
             VisualElement overlay = _mapOverlay ?? throw new InvalidOperationException(
                 "[WorldMapRenderer] UI must be bound before the map texture.");
-            Rect panelRect = overlay.worldBound;
-
-            MapViewportBounds.CalculateTextureDimensions(
-                panelRect.width,
-                panelRect.height,
-                out _texWidth,
-                out _texHeight);
-
-            _lastPanelWidth = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 1920;
-            _lastPanelHeight = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 1080;
-
-            if (_mapTexture != null)
-            {
-                Destroy(_mapTexture);
-            }
-
-            _mapTexture = RuntimeTextureFactory.CreateRGBA32NoMip(
-                _texWidth,
-                _texHeight,
-                "WorldMapTexture",
-                RuntimeTextureColorSpace.Srgb,
-                FilterMode.Point,
-                TextureWrapMode.Clamp);
-
-            if (_mapImage != null)
-            {
-                _mapImage.image = _mapTexture;
-            }
+            _textureController.InitTexture(overlay, _mapImage);
         }
 
         private void HandleQueuedRender()
@@ -485,11 +445,11 @@ namespace Kern.UI
             }
 
             _viewportRenderer.Render(
-                _mapTexture,
+                _textureController.MapTexture,
                 _manager,
                 _cellSampler,
-                _texWidth,
-                _texHeight,
+                _textureController.TexWidth,
+                _textureController.TexHeight,
                 _cellsPerPixel,
                 _viewCenterX,
                 _viewCenterY,
@@ -502,7 +462,7 @@ namespace Kern.UI
         }
 
         private float ComputeMaxZoomOut(int worldW, int worldH) =>
-            MapViewportBounds.ComputeMaxZoomOut(_texWidth, _texHeight, _chunkSize, MaxChunkCacheEntries);
+            MapViewportBounds.ComputeMaxZoomOut(_textureController.TexWidth, _textureController.TexHeight, _chunkSize, MaxChunkCacheEntries);
 
         private void ClampViewCenter()
         {
@@ -515,8 +475,8 @@ namespace Kern.UI
                 ref _viewCenterX,
                 ref _viewCenterY,
                 _cellsPerPixel,
-                _texWidth,
-                _texHeight,
+                _textureController.TexWidth,
+                _textureController.TexHeight,
                 _boundWorldWidth,
                 _boundWorldHeight);
         }
