@@ -347,7 +347,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
             case Tab.Spikes: FrameBreakdownRowBuilder.BuildSpikeRows(rows, _spikes); break;
             case Tab.Layout: FrameBreakdownRowBuilder.BuildLayoutRows(rows, _layout); break;
             case Tab.Stages: FrameBreakdownRowBuilder.BuildStageRows(rows, _cpu, _gpu, _gpuRecord, _discoverer.Discovered, _timings, _search); break;
-            case Tab.Tools: FrameBreakdownRowBuilder.BuildToolRows(rows, _toolWindows, _interface, _search); break;
+            case Tab.Tools: FrameBreakdownRowBuilder.BuildToolRows(rows, new List<ToolWindow>(ToolWindows.All), _interface, _search); break;
             case Tab.Memory: FrameBreakdownRowBuilder.BuildMemoryRows(rows, _memory, _render); break;
             case Tab.Search: FrameBreakdownRowBuilder.BuildSearchRows(rows, _search); break;
             case Tab.Scene: FrameBreakdownRowBuilder.BuildSceneRows(rows, _census); break;
@@ -363,7 +363,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         FrameBreakdownRowBuilder.BuildSpikeRows(_rows[Tab.Spikes], _spikes);
         FrameBreakdownRowBuilder.BuildLayoutRows(_rows[Tab.Layout], _layout);
         FrameBreakdownRowBuilder.BuildStageRows(_rows[Tab.Stages], _cpu, _gpu, _gpuRecord, _discoverer.Discovered, _timings, _search);
-        FrameBreakdownRowBuilder.BuildToolRows(_rows[Tab.Tools], _toolWindows, _interface, _search);
+        FrameBreakdownRowBuilder.BuildToolRows(_rows[Tab.Tools], new List<ToolWindow>(ToolWindows.All), _interface, _search);
         FrameBreakdownRowBuilder.BuildMemoryRows(_rows[Tab.Memory], _memory, _render);
         FrameBreakdownRowBuilder.BuildSearchRows(_rows[Tab.Search], _search);
         FrameBreakdownRowBuilder.BuildSceneRows(_rows[Tab.Scene], _census);

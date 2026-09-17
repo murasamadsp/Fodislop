@@ -198,7 +198,7 @@ internal sealed class GradingScopesWindow : ToolWindow
 
         // Режимы пишутся только при смене: сеттеры прохода не обязаны быть
         // дешёвыми, а отрисовка вызывается несколько раз за кадр.
-        int source = SegmentedRow("ИСТОЧНИК", GradingScopesOptions.SourceOptions, (int)ScopesRenderPass.SourceMode);
+        int source = SegmentedRow("ИСТОЧНИК", GradingScopesOptions.SourceModeOptions, (int)ScopesRenderPass.SourceMode);
         if (source != (int)ScopesRenderPass.SourceMode)
         {
             ScopesRenderPass.SourceMode = (ScopesSourceMode)source;

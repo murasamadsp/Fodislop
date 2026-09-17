@@ -1,6 +1,7 @@
 #nullable enable
 
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 
 namespace Kern.Rendering.PostProcessing
@@ -35,7 +36,7 @@ namespace Kern.Rendering.PostProcessing
             intermediateDesc.sizeMode = TextureSizeMode.Explicit;
             intermediateDesc.width = width;
             intermediateDesc.height = height;
-            intermediateDesc.depthBufferBits = DepthBits.None;
+            intermediateDesc.depthBufferBits = 0;
             intermediateDesc.msaaSamples = MSAASamples.None;
             intermediateDesc.bindTextureMS = false;
             intermediateDesc.enableRandomWrite = true;

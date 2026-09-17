@@ -8,8 +8,8 @@ using UnityEngine;
 namespace Kern.Rendering.PostProcessing;
 
 public sealed class ColorGradeState
-{
-    private const int LayerCount = 6;
+    {
+        public const int LayerCount = 6;
 
     public const float ExposureMin = -4f;
     public const float ExposureMax = 4f;
@@ -214,6 +214,28 @@ public sealed class ColorGradeState
 
     public void SetBypassed(ColorGradeLayer layer, bool bypassed) =>
         _bypass[(int)layer] = bypassed;
+
+    public int BypassedCount
+    {
+        get
+        {
+            int count = 0;
+            for (int index = 0; index < LayerCount; index++)
+            {
+                if (_bypass[index])
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
+
+    public void ToggleSolo(ColorGradeLayer layer)
+    {
+        Solo = Solo == layer ? null : layer;
+    }
 
     public int BypassMask
     {

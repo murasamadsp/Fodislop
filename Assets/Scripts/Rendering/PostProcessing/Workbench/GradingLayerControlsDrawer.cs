@@ -46,6 +46,9 @@ internal sealed class GradingLayerControlsDrawer
     private bool _soloChangeRequested;
     private ColorGradeLayer? _soloRequested;
     private bool _clearBypassesRequested;
+    private string? _invalidNumberId;
+    private string? _status;
+    private bool _statusIsError;
 
     public GradingLayerControlsDrawer(ColorGradeState state, ColorGradeZones zones)
     {
@@ -55,6 +58,13 @@ internal sealed class GradingLayerControlsDrawer
     }
 
     public string? Status => _actionsDrawer.Status;
+
+    public bool StatusIsError => _actionsDrawer.StatusIsError;
+
+    public void SetStatus(bool success, string successMessage, string failureMessage) =>
+        _actionsDrawer.SetStatus(success, successMessage, failureMessage);
+
+    public void ClearStatus() => _actionsDrawer.ClearStatus();
 
     public void RemoveNumberText(string key) => _numberText.Remove(key);
 
@@ -92,9 +102,6 @@ internal sealed class GradingLayerControlsDrawer
     {
         _clearBypassesRequested = true;
     }
-
-    public void SetStatus(bool success, string successMessage, string failureMessage) =>
-        _actionsDrawer.SetStatus(success, successMessage, failureMessage);
 
     public void DrawLayerControls(ColorGradeLayer layer)
     {
@@ -144,6 +151,19 @@ internal sealed class GradingLayerControlsDrawer
             GUILayout.Label(reason, ToolTheme.WarningLabel);
         }
     }
+
+    public string GetLayerName(ColorGradeLayer layer) => GetLayerTitle(layer);
+
+    public static string GetLayerTitle(ColorGradeLayer layer) => layer switch
+    {
+        ColorGradeLayer.Exposure => "Экспозиция",
+        ColorGradeLayer.WhiteBalance => "Баланс белого",
+        ColorGradeLayer.Cdl => "ASC CDL",
+        ColorGradeLayer.Saturation => "Насыщенность",
+        ColorGradeLayer.Contrast => "Контраст",
+        ColorGradeLayer.Curve => "Кривая",
+        _ => layer.ToString(),
+    };
 
     public void DrawActions(GUIStyle sectionStyle, GUIStyle wrappedLabelStyle) =>
         _actionsDrawer.DrawActions(sectionStyle, wrappedLabelStyle);
@@ -223,8 +243,7 @@ internal sealed class GradingLayerControlsDrawer
                 if (_invalidNumberId == id)
                 {
                     _invalidNumberId = null;
-                    _status = null;
-                    _statusIsError = false;
+                    _actionsDrawer.ClearStatus();
                 }
 
                 if (float.TryParse(
@@ -273,13 +292,12 @@ internal sealed class GradingLayerControlsDrawer
                         _numberText[id] = result.ToString("0.###", CultureInfo.InvariantCulture);
                     }
                 }
-                else
-                {
-                    _numberText[id] = value.ToString("0.###", CultureInfo.InvariantCulture);
-                    _invalidNumberId = id;
-                    _statusIsError = true;
-                    _status = $"Некорректное число «{label}»; оставлено предыдущее значение.";
-                }
+else
+                    {
+                        _numberText[id] = value.ToString("0.###", CultureInfo.InvariantCulture);
+                        _invalidNumberId = id;
+                        _actionsDrawer.SetStatus(false, string.Empty, $"Некорректное число «{label}»; оставлено предыдущее значение.");
+                    }
             }
 
             if (Event.current.type == EventType.MouseDown &&

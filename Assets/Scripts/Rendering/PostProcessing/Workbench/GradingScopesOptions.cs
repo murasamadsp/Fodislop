@@ -31,32 +31,25 @@ internal static class GradingScopesOptions
         new("верт. wipe", (int)CompareMode.VerticalWipe),
         new("гориз. wipe", (int)CompareMode.HorizontalWipe),
         new("сплит", (int)CompareMode.SideBySide),
-        new("мигание", (int)CompareMode.Blink),
-        new("разница", (int)CompareMode.Difference),
+        new("A/B", (int)CompareMode.AbToggle),
     ];
 
-    internal static readonly Option[] ScopeKindOptions =
+    internal static readonly Option[] SourceModeOptions =
     [
-        new("Waveform", (int)ScopeKind.Waveform),
-        new("Vectorscope", (int)ScopeKind.Vectorscope),
-        new("Histogram", (int)ScopeKind.Histogram),
+        new("После", (int)ScopesSourceMode.After),
+        new("До", (int)ScopesSourceMode.Before),
     ];
 
-    internal static readonly Option[] WaveformModeOptions =
+    internal static readonly Option[] WaveformOptions =
     [
-        new("RGB parade", (int)WaveformMode.RgbParade),
-        new("Overlay", (int)WaveformMode.Overlay),
-        new("Luma", (int)WaveformMode.Luma),
+        new("RGB parade", (int)ScopeWaveformMode.Parade),
+        new("Overlay", (int)ScopeWaveformMode.Overlay),
+        new("Luma", (int)ScopeWaveformMode.Luma),
     ];
 
-    internal static readonly Option[] HistogramModeOptions =
+    internal static readonly Option[] HistogramOptions =
     [
-        new("RGB", (int)HistogramMode.RgbOverlay),
-        new("Luma", (int)HistogramMode.Luma),
-    ];
-
-    internal static readonly Option[] VectorscopeModeOptions =
-    [
-        new("Hue / Sat", (int)VectorscopeMode.HueSaturation),
+        new("RGB", 0),
+        new("Luma", 1),
     ];
 }

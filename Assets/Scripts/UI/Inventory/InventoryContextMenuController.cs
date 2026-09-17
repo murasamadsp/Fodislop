@@ -1,8 +1,9 @@
 #nullable enable
 
 using System;
-using Darkar25.Fodina.Common.Localization;
 using Kern.Core.Localization;
+using Kern.Core.Models;
+using Kern.Game.Inventory;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;

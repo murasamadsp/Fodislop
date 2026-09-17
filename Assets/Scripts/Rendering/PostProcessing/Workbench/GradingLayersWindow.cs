@@ -274,7 +274,7 @@ internal sealed class GradingLayersWindow : ToolWindow
 
             GUILayout.FlexibleSpace();
             GUILayout.Label(
-                _banners.FocusedLabel(layer),
+                _banners.GetFocusedLabel(layer),
                 SectionLabelStyle);
             GUILayout.FlexibleSpace();
 

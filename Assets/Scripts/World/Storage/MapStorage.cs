@@ -125,6 +125,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         }
 
         string path = Path.Combine(_DataRoot, worldCodeName + MapExtension);
+        string backupPath = Path.Combine(_DataRoot, worldCodeName + BackupMapSuffix);
         try
         {
             _cellLayer = MapStorageDiskWriter.OpenWorldLayer(
@@ -133,7 +134,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 heightChunks,
                 _operations,
                 _openMapFile,
-                BackupMapFilePath);
+                backupPath);
             _mapFilePath = path;
             _isInitialized = true;
             IsDisposed = false;

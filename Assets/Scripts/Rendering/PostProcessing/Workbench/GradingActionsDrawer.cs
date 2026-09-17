@@ -25,6 +25,14 @@ internal sealed class GradingActionsDrawer
 
     public string? Status => _status;
 
+    public bool StatusIsError => _statusIsError;
+
+    public void ClearStatus()
+    {
+        _status = null;
+        _statusIsError = false;
+    }
+
     public void ResetState()
     {
         _status = null;

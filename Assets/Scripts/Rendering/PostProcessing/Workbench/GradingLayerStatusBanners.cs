@@ -35,13 +35,13 @@ internal sealed class GradingLayerStatusBanners
                 _soloLabel = $"[!] СОЛО: показывается только слой «{_drawer.GetLayerName(soloLayer)}»";
             }
 
-            ImGuiStyles.WarningBanner(_soloLabel);
-            if (GUILayout.Button("Сбросить соло", ImGuiStyles.Button, GUILayout.Height(18f)))
+            GuiStyles.WarningBanner(_soloLabel);
+            if (GUILayout.Button("Сбросить соло", GuiStyles.Button, GUILayout.Height(18f)))
             {
                 _state.ToggleSolo(soloLayer);
             }
 
-            ImGuiStyles.Spacing(4f);
+            GuiStyles.Spacing(4f);
         }
 
         int bypassedCount = _state.BypassedCount;
@@ -53,14 +53,25 @@ internal sealed class GradingLayerStatusBanners
                 _bypassLabel = $"[!] Отключено слоев: {bypassedCount} из {ColorGradeState.LayerCount}";
             }
 
-            ImGuiStyles.WarningBanner(_bypassLabel);
-            if (GUILayout.Button("Включить все слои", ImGuiStyles.Button, GUILayout.Height(18f)))
+            GuiStyles.WarningBanner(_bypassLabel);
+            if (GUILayout.Button("Включить все слои", GuiStyles.Button, GUILayout.Height(18f)))
             {
                 _drawer.RequestClearBypasses();
             }
 
-            ImGuiStyles.Spacing(4f);
+            GuiStyles.Spacing(4f);
         }
+    }
+
+    public string GetFocusedLabel(ColorGradeLayer layer)
+    {
+        if (_focusedLabelLayer != layer)
+        {
+            _focusedLabelLayer = layer;
+            _focusedLabel = $"Слой «{_drawer.GetLayerName(layer)}»";
+        }
+
+        return _focusedLabel;
     }
 
     public void DrawFocusedLayerStatusBanner(ColorGradeLayer layer)
@@ -73,8 +84,8 @@ internal sealed class GradingLayerStatusBanners
                 _focusedLabel = $"Слой «{_drawer.GetLayerName(layer)}» сейчас отключен — его правки не влияют на кадр.";
             }
 
-            ImGuiStyles.WarningBanner(_focusedLabel);
-            ImGuiStyles.Spacing(6f);
+            GuiStyles.WarningBanner(_focusedLabel);
+            GuiStyles.Spacing(6f);
         }
     }
 }

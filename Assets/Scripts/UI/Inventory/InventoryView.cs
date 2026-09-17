@@ -103,17 +103,9 @@ namespace Kern.UI.Inventory
                 return;
             }
 
-            var kb = Keyboard.current;
-            KeyControl[] digitKeys = [kb.digit1Key, kb.digit2Key, kb.digit3Key, kb.digit4Key, kb.digit5Key, kb.digit6Key, kb.digit7Key, kb.digit8Key, kb.digit9Key];
-            for (int i = 0; i < digitKeys.Length; i++)
-            {
-                if (digitKeys[i].wasPressedThisFrame)
-                {
-                    _model!.SelectSlot(i);
-                    break;
-                }
-            }
-            else if (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame)
+            bool digitPressed = TrySelectSlotFromDigitKey();
+
+            if (!digitPressed && (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
             {
                 // Enter применяет выбранный предмет и имеет приоритет над открытием
                 // чата: чат не должен перехватывать Enter и красть предмет у узла.
@@ -123,6 +115,20 @@ namespace Kern.UI.Inventory
                 // чтобы открытие чата не конфликтовало с применением предмета.
                 _model!.UseSelectedItem();
             }
+        }
+
+        private bool TrySelectSlotFromDigitKey()
+        {
+            if (Keyboard.current.digit1Key.wasPressedThisFrame) { _model!.SelectSlot(0); return true; }
+            if (Keyboard.current.digit2Key.wasPressedThisFrame) { _model!.SelectSlot(1); return true; }
+            if (Keyboard.current.digit3Key.wasPressedThisFrame) { _model!.SelectSlot(2); return true; }
+            if (Keyboard.current.digit4Key.wasPressedThisFrame) { _model!.SelectSlot(3); return true; }
+            if (Keyboard.current.digit5Key.wasPressedThisFrame) { _model!.SelectSlot(4); return true; }
+            if (Keyboard.current.digit6Key.wasPressedThisFrame) { _model!.SelectSlot(5); return true; }
+            if (Keyboard.current.digit7Key.wasPressedThisFrame) { _model!.SelectSlot(6); return true; }
+            if (Keyboard.current.digit8Key.wasPressedThisFrame) { _model!.SelectSlot(7); return true; }
+            if (Keyboard.current.digit9Key.wasPressedThisFrame) { _model!.SelectSlot(8); return true; }
+            return false;
         }
 
         private void TryInitialize()
