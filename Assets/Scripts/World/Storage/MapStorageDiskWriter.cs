@@ -3,8 +3,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Darkar25.Fodina.Common.Operations;
-using Darkar25.Fodina.World.Layer;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Persistence;
 using MinesServer.Data;
 
 namespace Kern.World;
@@ -39,7 +40,7 @@ internal static class MapStorageDiskWriter
         string path,
         int widthChunks,
         int heightChunks,
-        IOperations operations,
+        IAsyncOperationSupervisor operations,
         Func<string, Stream> openMapFile,
         string backupMapFilePath)
     {
