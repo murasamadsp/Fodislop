@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kern;
 using Kern.World.Streaming;
+using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using UnityEngine;
 
@@ -124,5 +126,29 @@ internal sealed class DummyWorldStreamingCoordinator
             playerY,
             sendPacket,
             cancellationToken);
+    }
+
+    public async UniTask<bool> EnsureCellAvailableAsync(
+        LayerLease lease,
+        ushort serverX,
+        ushort serverY,
+        Func<bool> isDisposed,
+        CancellationToken cancellationToken)
+    {
+        IWorldLayer<CellType> layer = lease.Layer;
+        int chunkIndex = (serverY / layer.ChunkSize) + ((serverX / layer.ChunkSize) * layer.HeightChunks);
+        ChunkReadResult<CellType> result = layer.ReadChunk(chunkIndex, touchLru: true);
+        while (result.Status == ChunkReadStatus.Loading)
+        {
+            if (isDisposed())
+            {
+                return false;
+            }
+
+            await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+            result = layer.ReadChunk(chunkIndex, touchLru: true);
+        }
+
+        return result.Status == ChunkReadStatus.Available && !isDisposed();
     }
 }
