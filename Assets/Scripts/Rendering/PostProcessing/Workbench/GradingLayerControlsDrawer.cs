@@ -143,6 +143,8 @@ internal sealed class GradingLayerControlsDrawer
                 : "Слой в обходе — значения не влияют на кадр";
             GUILayout.Label(reason, ToolTheme.WarningLabel);
         }
+    }
+
     public void DrawActions(GUIStyle sectionStyle, GUIStyle wrappedLabelStyle) =>
         _actionsDrawer.DrawActions(sectionStyle, wrappedLabelStyle);
 
