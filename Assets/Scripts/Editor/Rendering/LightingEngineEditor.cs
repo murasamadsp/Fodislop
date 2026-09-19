@@ -35,7 +35,6 @@ namespace Kern.Editor
             EditorGUILayout.ColorField(new GUIContent("_AmbientColor"), engine.ComputeAmbientColor, true, true, true);
             EditorGUILayout.ColorField(new GUIContent("_EmptyExtinctionRGB"), engine.ComputeEmptyExtinction, true, true, true);
             EditorGUILayout.ColorField(new GUIContent("_SolidExtinctionRGB"), engine.ComputeSolidExtinction, true, true, true);
-            EditorGUILayout.FloatField("_MinimumTransmission", engine.MinimumTransmission);
             EditorGUILayout.FloatField("_BounceStrength", engine.BounceStrength);
             EditorGUILayout.FloatField("_EmissionScale", engine.EmissionScale);
             EditorGUILayout.FloatField("_MaximumLightMultiplier", engine.MaximumLightMultiplier);

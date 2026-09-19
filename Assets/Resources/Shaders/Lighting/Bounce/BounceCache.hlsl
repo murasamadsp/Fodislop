@@ -6,7 +6,7 @@
 // READS: _MaterialField
 // WRITES: _BounceTaps, _BounceFilterWeights
 // MAY: вызывать DDA (TraceRadianceSegment)
-// MUST NOT: трогать каскады, лампы
+// MUST NOT: трогать каскады, источники
 
 // The gather geometry of SolveDiffuseBounce: where each of the 8 rotated rays
 // first strikes a surface and how much of that surface's reflection reaches

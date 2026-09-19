@@ -134,7 +134,7 @@ public static class ProjectRuntimeContracts
         public const string ScrollRadianceAtlas = "ScrollRadianceAtlas";
         public const string SolveDynamicLighting = "SolveDynamicLighting";
         public const string ComposeDynamicLighting = "ComposeDynamicLighting";
-        public const string TraceLampPolar = "TraceLampPolar";
+        public const string TraceDynamicPolar = "TraceDynamicPolar";
         public const string ClearDynamicDirect = "ClearDynamicDirect";
         public const string ResolveDirect = "ResolveDirect";
         public const string ResolveTransmissionDebug = "ResolveTransmissionDebug";

@@ -163,8 +163,6 @@ namespace Kern.World.Lighting
         // робочий HDR-запас.
         public const float MaximumLightMultiplier = 8.0f;
 
-        // Diagnostic threshold only; transport never stops at it.
-        public const float MinimumTransmission = 0.008f;
         public static bool DynamicLightEnabled => (EnabledFeatures & LightingFeatureFlags.DynamicLights) != 0;
         public const float DynamicLightIntensity = 1.0f;
         public static readonly Color DynamicLightColor = Color.white;

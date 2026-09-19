@@ -64,7 +64,7 @@ internal sealed class LightingResourceManager
     public int ScrollRadianceAtlasKernel { get; private set; }
     public int SolveDynamicLightingKernel { get; private set; }
     public int ComposeDynamicLightingKernel { get; private set; }
-    public int TraceLampPolarKernel { get; private set; }
+    public int TraceDynamicPolarKernel { get; private set; }
     public int ClearDynamicDirectKernel { get; private set; }
     public int ResolveDirectKernel { get; private set; }
     public int ResolveTransmissionDebugKernel { get; private set; }
@@ -100,7 +100,7 @@ internal sealed class LightingResourceManager
         ScrollRadianceAtlasKernel = loaded.ScrollRadianceAtlasKernel;
         SolveDynamicLightingKernel = loaded.SolveDynamicLightingKernel;
         ComposeDynamicLightingKernel = loaded.ComposeDynamicLightingKernel;
-        TraceLampPolarKernel = loaded.TraceLampPolarKernel;
+        TraceDynamicPolarKernel = loaded.TraceDynamicPolarKernel;
         ClearDynamicDirectKernel = loaded.ClearDynamicDirectKernel;
         ResolveDirectKernel = loaded.ResolveDirectKernel;
         ResolveTransmissionDebugKernel = loaded.ResolveTransmissionDebugKernel;
@@ -395,17 +395,10 @@ internal sealed class LightingResourceManager
 
         int requiredCapacity = Mathf.Max(1, AtlasEntryCount);
 
-        if (RadianceAtlas == null ||
-            RadianceScratchAtlas == null ||
-            AtlasCapacity < requiredCapacity)
+        if (RadianceAtlas == null || AtlasCapacity < requiredCapacity)
         {
             RadianceAtlas?.Release();
-            RadianceScratchAtlas?.Release();
             RadianceAtlas = new ComputeBuffer(
-                requiredCapacity,
-                sizeof(uint) * 3,
-                ComputeBufferType.Structured);
-            RadianceScratchAtlas = new ComputeBuffer(
                 requiredCapacity,
                 sizeof(uint) * 3,
                 ComputeBufferType.Structured);
@@ -463,8 +456,26 @@ internal sealed class LightingResourceManager
 
     public void SwapRadianceAtlases()
     {
+        EnsureScratchAtlas();
         (RadianceAtlas, RadianceScratchAtlas) =
             (RadianceScratchAtlas, RadianceAtlas);
         Registry.Cascade.Atlas = RadianceAtlas;
+    }
+
+    // The atlas scroll path is disabled (see LightingUpdateCoordinator), so
+    // its scratch duplicate is allocated lazily on first scroll use instead
+    // of pinning a full atlas in VRAM forever. Re-enabling scroll needs no
+    // other change: RecordScroll reaches this through SwapRadianceAtlases.
+    public void EnsureScratchAtlas()
+    {
+        if (RadianceScratchAtlas != null && RadianceScratchAtlas.count == AtlasCapacity && AtlasCapacity > 0)
+        {
+            return;
+        }
+
+        RadianceScratchAtlas?.Release();
+        RadianceScratchAtlas = AtlasCapacity > 0
+            ? new ComputeBuffer(AtlasCapacity, sizeof(uint) * 3, ComputeBufferType.Structured)
+            : null;
     }
 }

@@ -164,7 +164,7 @@ public sealed class TerrainViewportCalculator
             }
 
             // Keep processing the committed window, including dirty terrain
-            // and the lamp's exact position. A pending streaming request must
+            // and the dynamic light's exact position. A pending streaming request must
             // neither resize its resources nor reanchor lighting onto it.
             return new TerrainFramePlan(
                 requestedWindow,

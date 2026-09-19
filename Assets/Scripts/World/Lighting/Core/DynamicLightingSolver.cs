@@ -9,21 +9,24 @@ namespace Kern.World.Lighting;
 
 internal sealed class DynamicLightingSolver
 {
-    // Polar tracing is required for every moved lamp, but one texel-wide ray
+    // Polar tracing is required for every moved dynamic light, but one texel-wide ray
     // fan at the edge of a large field creates a quadratic-looking burst:
     // angles * emitter points * ray length. This is a frame-wide budget, not a
-    // per-lamp budget: otherwise N visible lamps multiply the supposed cap by
-    // N and walking past a busy area creates a burst.
+    // per-light budget: otherwise N visible dynamic lights multiply the supposed cap by
+    // N and walking past a busy area creates a burst. The budget is shared
+    // only by lights that need a trace this frame; static lights reuse their
+    // tiles and must not dilute it.
     private const long MaximumPolarRayWorkUnits = 2_000_000;
 
     private readonly LightingResourceManager _resources;
     private readonly DynamicLightManager _lightManager;
     private readonly DynamicLightTileCache _tileCache;
-    private RectInt[] _lampRects = new RectInt[1];
-    private DynamicLightTileCache.TileInfo[] _lampTileInfos = new DynamicLightTileCache.TileInfo[1];
-    private Vector2Int[] _lampRaySizes = new Vector2Int[1];
-    private int[] _lampRequestedRayFans = new int[1];
-    private int _previousLampCount;
+    private RectInt[] _lightRects = new RectInt[1];
+    private DynamicLightTileCache.TileInfo[] _lightTileInfos = new DynamicLightTileCache.TileInfo[1];
+    private Vector2Int[] _lightRaySizes = new Vector2Int[1];
+    private int[] _lightRequestedRayFans = new int[1];
+    private bool[] _lightNeedsTrace = new bool[1];
+    private int _previousLightCount;
 
     public DynamicLightingSolver(
         LightingResourceManager resources,
@@ -50,15 +53,18 @@ internal sealed class DynamicLightingSolver
         int lightCount,
         Vector4 worldRect,
         float cellSize,
-        bool invalidateLampTiles,
+        bool invalidateDynamicTiles,
         LightingEngine.DebugView debugView,
-        IFrameTelemetry telemetry)
+        IFrameTelemetry telemetry,
+        out RectInt dynamicDirtyUnion)
     {
         commandBuffer.BeginSample("Kern.Lighting.DynamicRadiance");
+        using var dynamicSample = new CommandBufferSampleScope(commandBuffer, "Kern.Lighting.DynamicRadiance");
+        long dynamicStart = System.Diagnostics.Stopwatch.GetTimestamp();
 
         bool hasPreviousRectUnion = TryGetRectUnion(
-            _lampRects,
-            _previousLampCount,
+            _lightRects,
+            _previousLightCount,
             out RectInt previousRectUnion);
 
         // The transmission debug view reads the static component only.
@@ -66,22 +72,26 @@ internal sealed class DynamicLightingSolver
         {
             ClearDynamicDirect(commandBuffer);
             _tileCache.InvalidateAll();
-            commandBuffer.EndSample("Kern.Lighting.DynamicRadiance");
+            telemetry.LightingDynamicLightingTimeMs = ElapsedMs(dynamicStart);
+            dynamicDirtyUnion = default;
+            // The full clear wiped every previous rect: the next frame must
+            // not re-clear a stale previous union.
+            _previousLightCount = 0;
             return;
         }
 
         System.ReadOnlySpan<DynamicLightGpuData> lights = _lightManager.UploadedLights;
         System.ReadOnlySpan<int> lightIDs = _lightManager.UploadedLightIDs;
         int count = Mathf.Min(lightCount, lights.Length);
-        if (_lampRects.Length < count)
+        if (_lightRects.Length < count)
         {
-            Array.Resize(ref _lampRects, count);
-            Array.Resize(ref _lampTileInfos, count);
-            Array.Resize(ref _lampRaySizes, count);
-            Array.Resize(ref _lampRequestedRayFans, count);
+            Array.Resize(ref _lightRects, count);
+            Array.Resize(ref _lightTileInfos, count);
+            Array.Resize(ref _lightRaySizes, count);
+            Array.Resize(ref _lightRequestedRayFans, count);
+            Array.Resize(ref _lightNeedsTrace, count);
         }
 
-        int longestRay = 1;
         long dynamicDispatchPixels = 0;
         long polarRayWorkUnits = 0;
 
@@ -112,7 +122,7 @@ internal sealed class DynamicLightingSolver
                 {
                     float reachCells = Mathf.Max(
                         0f,
-                        Mathf.Log(brightest * 1.5f / LightingComputeBinder.InvisibleLampRadiance) /
+                        Mathf.Log(brightest * 1.5f / LightingComputeBinder.InvisibleDynamicRadiance) /
                             minimumExtinction);
                     float halfExtent = (0.5f + reachCells) * cellSize;
                     // One texel of margin against rounding of the rectangle edge.
@@ -134,9 +144,9 @@ internal sealed class DynamicLightingSolver
                 }
             }
 
-            _lampRects[lightIndex] = rect;
+            _lightRects[lightIndex] = rect;
 
-            // Lamp-centred rays long enough to reach every corner of the
+            // Dynamic-centred rays long enough to reach every corner of the
             // rectangle. Angular density is bounded by the complete polar
             // work budget below; the receiver interpolates between rays.
             Vector2 rayCenter = new(
@@ -154,30 +164,32 @@ internal sealed class DynamicLightingSolver
                             Vector2.Distance(rayCenter, new Vector2(rect.xMax, rect.yMax)))));
             }
 
-            // Fans start at emitter points anywhere in the lamp cell.
+            // Fans start at emitter points anywhere in the dynamic light cell.
             int rayLength = Mathf.CeilToInt(farthest + (texelsPerWorldX + texelsPerWorldY) * cellSize) + 2;
             int requestedRayFan = Mathf.Max(
                 1,
                 Mathf.CeilToInt(2f * Mathf.PI * rayLength));
-            _lampRequestedRayFans[lightIndex] = requestedRayFan;
-            _lampRaySizes[lightIndex] = new Vector2Int(1, rayLength);
-            if (rect.width > 0)
-            {
-                longestRay = Mathf.Max(longestRay, rayLength);
-            }
+            _lightRequestedRayFans[lightIndex] = requestedRayFan;
+            _lightRaySizes[lightIndex] = new Vector2Int(1, rayLength);
         }
 
-        int widestRayFan = AllocatePolarRayFans(count);
-
         _tileCache.EnsureLayout(widestRect, tallestRect, count);
-        if (invalidateLampTiles)
+        if (invalidateDynamicTiles)
         {
             _tileCache.InvalidateAll();
         }
 
-        if (invalidateLampTiles)
+        _tileCache.AssignSlots(lightIDs.Slice(0, count));
+        MarkLightsNeedingTrace(count, lights, lightIDs);
+
+        int widestRayFan = AllocatePolarRayFans(count, out int longestRay);
+
+        if (invalidateDynamicTiles)
         {
             ClearDynamicDirect(commandBuffer);
+            // Full clear with a static re-solve following: the frame takes
+            // the full bounce/composite path, so no partial rect applies.
+            dynamicDirtyUnion = default;
         }
         else
         {
@@ -201,65 +213,68 @@ internal sealed class DynamicLightingSolver
             {
                 ClearDynamicDirect(commandBuffer, clearRect);
             }
+
+            // Bounce and composite must refresh both where the dynamic light was and
+            // where it is: the cleared old area changed just as much as the
+            // newly lit one. clearRect already is that union.
+            dynamicDirtyUnion = clearRect;
         }
 
-        _tileCache.AssignSlots(lightIDs.Slice(0, count));
-
-        _tileCache.EnsurePolar(widestRayFan, longestRay * LightingComputeBinder.LampEmitterPointCount);
+        _tileCache.EnsurePolar(widestRayFan, longestRay * LightingComputeBinder.DynamicEmitterPointCount);
 
         ComputeShader compute = _resources.LightingCompute!;
         RenderTexture tiles = _tileCache.Tiles!;
-        RenderTexture lampRays = _tileCache.Polar!;
+        RenderTexture polarRays = _tileCache.Polar!;
         int traceKernel = _resources.SolveDynamicLightingKernel;
         BindFieldTextures(commandBuffer, traceKernel, _resources.StaticEmissionField!);
         commandBuffer.SetComputeBufferParam(compute, traceKernel, LightingComputeBinder.DynamicLightsID, _resources.DynamicLightBuffer!);
-        commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.LampTilesID, tiles);
-        commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.LampPolarInputID, lampRays);
+        commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.DynamicTilesID, tiles);
+        commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.DynamicPolarInputID, polarRays);
         commandBuffer.SetComputeTextureParam(
             compute,
             traceKernel,
             LightingComputeBinder.DirectTextureID,
             _resources.DirectTexture!);
-        int rayKernel = _resources.TraceLampPolarKernel;
+        int rayKernel = _resources.TraceDynamicPolarKernel;
         BindFieldTextures(commandBuffer, rayKernel, _resources.StaticEmissionField!);
-        commandBuffer.SetComputeTextureParam(compute, rayKernel, LightingComputeBinder.LampPolarID, lampRays);
+        commandBuffer.SetComputeTextureParam(compute, rayKernel, LightingComputeBinder.DynamicPolarID, polarRays);
         commandBuffer.SetComputeBufferParam(compute, rayKernel, LightingComputeBinder.DynamicLightsID, _resources.DynamicLightBuffer!);
 
         bool singleLightDirectWritten = false;
         for (int lightIndex = 0; lightIndex < count; lightIndex++)
         {
             DynamicLightGpuData light = lights[lightIndex];
-            RectInt rect = _lampRects[lightIndex];
+            RectInt rect = _lightRects[lightIndex];
             int slot = _tileCache.SlotOf(lightIDs[lightIndex]);
             Vector2Int tileOffset = _tileCache.TileOffset(slot);
-            _lampTileInfos[lightIndex] = new DynamicLightTileCache.TileInfo(rect, tileOffset);
+            _lightTileInfos[lightIndex] = new DynamicLightTileCache.TileInfo(rect, tileOffset);
             if (rect.width <= 0 ||
                 !_tileCache.NeedsTrace(slot, light.PositionRadius, light.ColorIntensity, rect))
             {
                 continue;
             }
 
-            Vector2Int raySize = _lampRaySizes[lightIndex];
+            Vector2Int raySize = _lightRaySizes[lightIndex];
             dynamicDispatchPixels += (long)rect.width * rect.height;
             polarRayWorkUnits += (long)raySize.x *
-                LightingComputeBinder.LampEmitterPointCount * raySize.y;
+                LightingComputeBinder.DynamicEmitterPointCount * raySize.y;
             bool writeDynamicDirect = count == 1;
             commandBuffer.SetComputeIntParam(
                 compute,
                 LightingComputeBinder.WriteDynamicDirectID,
                 writeDynamicDirect ? 1 : 0);
             singleLightDirectWritten |= writeDynamicDirect;
-            commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.LampPolarSizeID, raySize.x, raySize.y);
+            commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.DynamicPolarSizeID, raySize.x, raySize.y);
             commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicLightIndexID, lightIndex);
-            for (int point = 0; point < LightingComputeBinder.LampEmitterPointCount; point++)
+            for (int point = 0; point < LightingComputeBinder.DynamicEmitterPointCount; point++)
             {
-                commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.LampPolarPointID, point);
+                commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicPolarPointID, point);
                 commandBuffer.DispatchCompute(compute, rayKernel, Mathf.CeilToInt(raySize.x / 64f), 1, 1);
             }
 
             commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.DynamicDispatchOriginID, rect.x, rect.y);
             commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.DynamicDispatchSizeID, rect.width, rect.height);
-            commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.LampTileOffsetID, tileOffset.x, tileOffset.y);
+            commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.DynamicTileOffsetID, tileOffset.x, tileOffset.y);
             commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicLightIndexID, lightIndex);
             commandBuffer.DispatchCompute(
                 compute,
@@ -268,18 +283,18 @@ internal sealed class DynamicLightingSolver
                 LightingComputeBinder.DispatchGroups(rect.height),
                 1);
             _tileCache.MarkTraced(slot, light.PositionRadius, light.ColorIntensity, rect);
-            telemetry.LightingLampTraceCount++;
+            telemetry.LightingDynamicTraceCount++;
         }
 
         if (!singleLightDirectWritten && composeMaxX > composeMinX && composeMaxY > composeMinY)
         {
             int composeKernel = _resources.ComposeDynamicLightingKernel;
             ComputeBuffer tileInfos = _tileCache.TileInfos!;
-            commandBuffer.SetBufferData(tileInfos, _lampTileInfos, 0, 0, count);
-            commandBuffer.SetComputeBufferParam(compute, composeKernel, LightingComputeBinder.LampTileInfosID, tileInfos);
-            commandBuffer.SetComputeTextureParam(compute, composeKernel, LightingComputeBinder.LampTilesInputID, tiles);
+            commandBuffer.SetBufferData(tileInfos, _lightTileInfos, 0, 0, count);
+            commandBuffer.SetComputeBufferParam(compute, composeKernel, LightingComputeBinder.DynamicTileInfosID, tileInfos);
+            commandBuffer.SetComputeTextureParam(compute, composeKernel, LightingComputeBinder.DynamicTilesInputID, tiles);
             commandBuffer.SetComputeTextureParam(compute, composeKernel, LightingComputeBinder.DirectTextureID, _resources.DirectTexture!);
-            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.LampTileCountID, count);
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicTileCountID, count);
             int composeWidth = composeMaxX - composeMinX;
             int composeHeight = composeMaxY - composeMinY;
             telemetry.LightingDynamicComposePixels += (long)composeWidth * composeHeight;
@@ -295,10 +310,15 @@ internal sealed class DynamicLightingSolver
 
         telemetry.LightingDynamicDispatchPixels += dynamicDispatchPixels;
         telemetry.LightingPolarRayWorkUnits += polarRayWorkUnits;
+        telemetry.LightingDynamicLightingTimeMs = ElapsedMs(dynamicStart);
 
-        _previousLampCount = count;
+        _previousLightCount = count;
+    }
 
-        commandBuffer.EndSample("Kern.Lighting.DynamicRadiance");
+    private static float ElapsedMs(long startTimestamp)
+    {
+        return (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) *
+            1000.0 / System.Diagnostics.Stopwatch.Frequency);
     }
 
     private void ClearDynamicDirect(CommandBuffer commandBuffer)
@@ -369,23 +389,61 @@ internal sealed class DynamicLightingSolver
         return new RectInt(minX, minY, maxX - minX, maxY - minY);
     }
 
-    private int AllocatePolarRayFans(int count)
+    // The polar work budget is shared only by lights that actually need a
+    // trace this frame. Static lights reuse their tiles: letting them dilute
+    // the budget would starve the one moving light of angular density.
+    private void MarkLightsNeedingTrace(
+        int count,
+        System.ReadOnlySpan<DynamicLightGpuData> lights,
+        System.ReadOnlySpan<int> lightIDs)
     {
+        for (int lightIndex = 0; lightIndex < count; lightIndex++)
+        {
+            int slot = _tileCache.SlotOf(lightIDs[lightIndex]);
+            _lightNeedsTrace[lightIndex] = _tileCache.NeedsTrace(
+                slot,
+                lights[lightIndex].PositionRadius,
+                lights[lightIndex].ColorIntensity,
+                _lightRects[lightIndex]);
+        }
+    }
+
+    private int AllocatePolarRayFans(int count, out int longestRay)
+    {
+        int maxTextureSize = SystemInfo.maxTextureSize;
+        int maxRayLength = Mathf.Max(1, maxTextureSize / LightingComputeBinder.DynamicEmitterPointCount);
+
         long requestedWork = 0;
         for (int lightIndex = 0; lightIndex < count; lightIndex++)
         {
-            Vector2Int raySize = _lampRaySizes[lightIndex];
-            requestedWork += (long)_lampRequestedRayFans[lightIndex] *
-                LightingComputeBinder.LampEmitterPointCount *
+            if (!_lightNeedsTrace[lightIndex])
+            {
+                continue;
+            }
+
+            Vector2Int raySize = _lightRaySizes[lightIndex];
+            requestedWork += (long)_lightRequestedRayFans[lightIndex] *
+                LightingComputeBinder.DynamicEmitterPointCount *
                 Mathf.Max(1, raySize.y);
         }
 
         long budget = MaximumPolarRayWorkUnits;
         int widestRayFan = 1;
+        longestRay = 1;
         for (int lightIndex = 0; lightIndex < count; lightIndex++)
         {
-            int requested = Mathf.Max(1, _lampRequestedRayFans[lightIndex]);
-            int rayLength = Mathf.Max(1, _lampRaySizes[lightIndex].y);
+            if (!_lightNeedsTrace[lightIndex])
+            {
+                _lightRaySizes[lightIndex] = new Vector2Int(1, 1);
+                continue;
+            }
+
+            int requested = Mathf.Max(1, _lightRequestedRayFans[lightIndex]);
+            // The fan sets angular density only; the stored length is capped
+            // to the polar texture limit. Receivers past the cap reuse the
+            // edge depth through the Clamp sampler: bounded degradation that
+            // cannot crash the frame, unlike an oversized allocation.
+            int rayLength = Mathf.Min(Mathf.Max(1, _lightRaySizes[lightIndex].y), maxRayLength);
             int rayFan = requested;
             if (requestedWork > budget)
             {
@@ -397,8 +455,10 @@ internal sealed class DynamicLightingSolver
                     requested);
             }
 
-            _lampRaySizes[lightIndex] = new Vector2Int(rayFan, rayLength);
+            rayFan = Mathf.Min(rayFan, maxTextureSize);
+            _lightRaySizes[lightIndex] = new Vector2Int(rayFan, rayLength);
             widestRayFan = Mathf.Max(widestRayFan, rayFan);
+            longestRay = Mathf.Max(longestRay, rayLength);
         }
 
         return widestRayFan;

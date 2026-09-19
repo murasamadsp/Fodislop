@@ -26,6 +26,7 @@ internal sealed class LightingFrameExecutor
     private readonly IFrameTelemetry _telemetry;
     private readonly LightingGeometryRegistry _geometryRegistry;
     private readonly List<string> _executedStages = new();
+    private RectInt? _lastDynamicUnion;
 
     public LightingFrameExecutor(
         LightingResourceManager resources,
@@ -51,6 +52,7 @@ internal sealed class LightingFrameExecutor
     {
         _dynamicSolver.Release();
         _dynamicLightManager.ResetUploadState();
+        _lastDynamicUnion = null;
     }
 
     public void EnsureDynamicLightCapacity(int capacity)
@@ -159,6 +161,7 @@ internal sealed class LightingFrameExecutor
             _executedStages.Add("CascadeMerge");
         }
 
+        RectInt dynamicDirtyUnion = default;
         if (dynamicRadianceNeeded &&
             LightingConfigHolder.EnabledFeatures.HasFlag(LightingFeatureFlags.DynamicLights))
         {
@@ -169,21 +172,66 @@ internal sealed class LightingFrameExecutor
                 request.CellSize,
                 staticRadianceChanged || request.RebuildFields,
                 request.DebugView,
-                _telemetry);
+                _telemetry,
+                out dynamicDirtyUnion);
             _executedStages.Add("DynamicLighting");
+        }
+
+        // Dynamic-only frames keep every input except the dynamic tiles: bounce
+        // and composite refresh the dynamic union plus gather margin instead of
+        // the whole field. Any static, geometry or debug-view change keeps
+        // the full path, so debug views stay bit-identical.
+        //
+        // CompositeDirty is intentionally NOT a full-path trigger: it is set
+        // on every dynamic light move by LightingEngine.SetDynamicLight, which is
+        // exactly the dynamic-only case this path exists for. BounceDirty is
+        // only set by config/debug/reset/geometry paths, which force the full
+        // path through the other conditions anyway.
+        //
+        // Removing the last source also goes partial: its previous union is
+        // retained below, and the cleared area is exactly that union. Any
+        // rebuild invalidates the retained union (stale texel space).
+        if (request.RebuildFields || staticRadianceChanged)
+        {
+            _lastDynamicUnion = null;
+        }
+
+        RectInt? partialRect = null;
+        if (!staticRadianceChanged &&
+            !request.RebuildFields &&
+            !request.BounceDirty &&
+            request.DebugView == LightingEngine.DebugView.FinalLighting)
+        {
+            if (dynamicRadianceNeeded &&
+                dynamicDirtyUnion.width > 0 &&
+                dynamicDirtyUnion.height > 0)
+            {
+                partialRect = dynamicDirtyUnion;
+                _lastDynamicUnion = dynamicDirtyUnion;
+            }
+            else if (request.ClearDynamicRadiance && _lastDynamicUnion.HasValue)
+            {
+                partialRect = _lastDynamicUnion;
+                _lastDynamicUnion = null;
+            }
         }
 
         bool bounceRequired = request.BounceDirty ||
             request.DynamicLightsChanged ||
             request.DynamicRadianceChanged ||
             staticRadianceChanged;
-        if (request.Quality != LightingQualityMode.PerBlock &&
+        if (request.Quality == LightingQualityMode.PerPixelBilinearFixBounce &&
             LightingConfigHolder.BounceEnabled &&
             LightingConfigHolder.BounceStrength > 0f &&
             LightingConfigHolder.EnabledFeatures.HasFlag(LightingFeatureFlags.DiffuseBounce) &&
             bounceRequired)
         {
-            _indirectSolver.RecordBounce(commandBuffer);
+            _indirectSolver.RecordBounce(
+                commandBuffer,
+                partialRect,
+                request.WorldRect,
+                request.CellSize,
+                _telemetry);
             _executedStages.Add("DiffuseBounce");
         }
 
@@ -192,7 +240,12 @@ internal sealed class LightingFrameExecutor
             staticRadianceChanged ||
             request.CompositeDirty)
         {
-            _indirectSolver.RecordComposite(commandBuffer);
+            _indirectSolver.RecordComposite(
+                commandBuffer,
+                partialRect,
+                request.WorldRect,
+                request.CellSize,
+                _telemetry);
             _executedStages.Add("Composite");
         }
 

@@ -6,7 +6,7 @@
 // READS: _MaterialField, _CellSolidMask, _EmissionField, _MaterialYFlip, _FieldSize, _WorldRect, _CellSize, _CellGridSize
 // WRITES: ничего (out-параметры)
 // MAY: маршировать геометрию
-// MUST NOT: знать о каскадах, лампах, bounce, dynamic lights
+// MUST NOT: знать о каскадах, источниках, bounce, dynamic lights
 
 // COST: 1 bilinear texture sample
 // Reference rule, evaluated once per cell by BuildCellSolidMask.
@@ -201,17 +201,17 @@ void TraceLightSegment(
 
         transmittance *= transmission;
         distance = end;
-        // A lamp ray also stops once everything it could still bring is below
+        // A dynamic light ray also stops once everything it could still bring is below
         // what any display can show. The rest of the path is bounded by
         // transmittance * source radiance * the largest single-cell emission
         // weight (a cell crossed diagonally, ~1.42 < 1.5). The bound is
         // absolute radiance, where 1.0 is exposure-0 white: 1e-6 sits two
         // orders below half an 8-bit sRGB step at black (1.5e-4), so even the
-        // tails of dozens of lamps meeting in one pixel stay below one level.
-        bool lampTailInvisible = collectEmission && isolateSource &&
-            Max3(transmittance * sourceRadiance) * 1.5 < InvisibleLampRadiance;
+        // tails of dozens of dynamic lights meeting in one pixel stay below one level.
+        bool tailInvisible = collectEmission && isolateSource &&
+            Max3(transmittance * sourceRadiance) * 1.5 < InvisibleDynamicRadiance;
         if (distance >= exitDistance || distance >= emissionExit || Max3(transmittance) == 0.0 ||
-            lampTailInvisible)
+            tailInvisible)
         {
             break;
         }

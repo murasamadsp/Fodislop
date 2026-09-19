@@ -56,26 +56,26 @@ void solveField(int count=3, bool dependencyMask=false, int4 dirty={0,0,0,0}) {
     _CascadeMaskEnabled=0;
     _DirtyRegionCount=0;
 }
-// Lamps as the engine dispatches them: each lamp traced into its own tile
+// Dynamic lights as the engine dispatches them: each dynamic light traced into its own tile
 // (here a whole-field tile stacked vertically), then the tiles composed.
-void solveLamps(bool writeDirect=false) {
+void solveDynamicLights(bool writeDirect=false) {
     int w=_FieldSize.x,h=_FieldSize.y,count=std::max(_DynamicLightCount,1);
-    _LampTiles.reset(w,h*count); _LampTileInfos.clear();
+    _DynamicTiles.reset(w,h*count); _DynamicTileInfos.clear();
     _DirectTexture.reset(w,h);
     _DynamicDispatchOrigin={0,0}; _DynamicDispatchSize=_FieldSize;
     _WriteDynamicDirect=(writeDirect && _DynamicLightCount==1) ? 1 : 0;
     for(_DynamicLightIndex=0;_DynamicLightIndex<_DynamicLightCount;_DynamicLightIndex++) {
         int radii=(int)std::ceil(std::sqrt((float)(w*w+h*h)))+8;
         int angles=std::max(64,(int)std::ceil(2*PI*radii));
-        _LampPolar.reset(angles,radii*LampEmitterPointsPerAxis*LampEmitterPointsPerAxis); _LampPolarSize={angles,radii};
-        for(_LampPolarPoint=0;_LampPolarPoint<LampEmitterPointsPerAxis*LampEmitterPointsPerAxis;_LampPolarPoint++)
-            for(int a=0;a<angles;a++)TraceLampPolar(uint3{(uint)a,0,0});
-        _LampPolarInput=_LampPolar;
-        _LampTileOffset={0,h*_DynamicLightIndex};
+        _DynamicPolar.reset(angles,radii*DynamicEmitterPointsPerAxis*DynamicEmitterPointsPerAxis); _DynamicPolarSize={angles,radii};
+        for(_DynamicPolarPoint=0;_DynamicPolarPoint<DynamicEmitterPointsPerAxis*DynamicEmitterPointsPerAxis;_DynamicPolarPoint++)
+            for(int a=0;a<angles;a++)TraceDynamicPolar(uint3{(uint)a,0,0});
+        _DynamicPolarInput=_DynamicPolar;
+        _DynamicTileOffset={0,h*_DynamicLightIndex};
         for(int y=0;y<h;y++)for(int x=0;x<w;x++)SolveDynamicLighting(uint3{(uint)x,(uint)y,0});
-        _LampTileInfos.push_back({{0,0},_FieldSize,_LampTileOffset});
+        _DynamicTileInfos.push_back({{0,0},_FieldSize,_DynamicTileOffset});
     }
-    _LampTilesInput=_LampTiles; _LampTileCount=_DynamicLightCount;
+    _DynamicTilesInput=_DynamicTiles; _DynamicTileCount=_DynamicLightCount;
     if(_WriteDynamicDirect==0) {
         _ComposeOrigin={0,0}; _ComposeSize=_FieldSize;
         for(int y=0;y<h;y++)for(int x=0;x<w;x++)ComposeDynamicLighting(uint3{(uint)x,(uint)y,0});
@@ -203,47 +203,47 @@ int main() {
             throw std::runtime_error("dependency mask differs from full cascade solve");
         ++checks;
         setup(16,16,4);_SolidExtinctionRGB={1600,1600,1600,0};
-        DynamicLight lamp={{12.5f,8.5f,0,0},{16,16,16,1}};
+        DynamicLight light={{12.5f,8.5f,0,0},{16,16,16,1}};
         for(int y=32;y<36;y++)for(int x=48;x<52;x++)_EmissionField.data[y*64+x]={16,16,16,0};
         textureReads=0;solveField(4);long cascadeReads=textureReads;
-        _DynamicLights={lamp};_DynamicLightCount=1;
+        _DynamicLights={light};_DynamicLightCount=1;
         textureReads=0;
-        solveLamps();
+        solveDynamicLights();
         long targetedReads=textureReads;
-        std::cout<<"Moving lamp: cascade reads="<<cascadeReads<<", targeted reads="<<targetedReads
+        std::cout<<"Moving light: cascade reads="<<cascadeReads<<", targeted reads="<<targetedReads
                  <<", reduction="<<(double)cascadeReads/targetedReads<<"x\n";
         if(targetedReads*5>=cascadeReads)throw std::runtime_error("targeted lighting did not remove cascade work");
         ++checks;
         for(float2 receiver: {float2{18.5f,34.5f},float2{18.5f,18.5f},float2{50.5f,18.5f}}) {
-            float fast=GatherDynamicSource(receiver,lamp,8).x;
-            float reference=GatherDynamicSource(receiver,lamp,1024).x;
+            float fast=GatherDynamicSource(receiver,light,8).x;
+            float reference=GatherDynamicSource(receiver,light,1024).x;
             near(fast,reference,reference*.06f,"targeted quadrature against dense angular integration");
         }
         for(int y=0;y<64;y++)for(int x=32;x<36;x++)_MaterialField.data[y*64+x].w=1;
         buildMask();
-        near(GatherDynamicSource(float2{18.5f,34.5f},lamp,8).x,0,1e-30f,"targeted lamp blocked by wall");
+        near(GatherDynamicSource(float2{18.5f,34.5f},light,8).x,0,1e-30f,"targeted light blocked by wall");
         for(auto& m:_MaterialField.data)m.w=0;
         buildMask();
-        _DynamicLights={lamp};_DynamicLightCount=1;
-        solveLamps();
-        float singleLamp=_DirectTexture.Load(int3{18,34,0}).x;
-        solveLamps(true);
-        near(_DirectTexture.Load(int3{18,34,0}).x,singleLamp,1e-6f,"single lamp direct fast path");
-        // Lamp-centred rays against the exact per-pixel gather, beyond LampNearCells.
+        _DynamicLights={light};_DynamicLightCount=1;
+        solveDynamicLights();
+        float singleLight=_DirectTexture.Load(int3{18,34,0}).x;
+        solveDynamicLights(true);
+        near(_DirectTexture.Load(int3{18,34,0}).x,singleLight,1e-6f,"single light direct fast path");
+        // Dynamic-centred rays against the exact per-pixel gather, beyond DynamicNearCells.
         for(int2 receiver: {int2{18,34},int2{18,18},int2{50,4},int2{8,60}}) {
-            float reference=GatherDynamicSource(float2{receiver.x+.5f,receiver.y+.5f},lamp,8).x;
-            near(_DirectTexture.Load(int3{receiver.x,receiver.y,0}).x,reference,reference*.03f+1e-7f,"lamp-centred rays agree with per-pixel gather");
+            float reference=GatherDynamicSource(float2{receiver.x+.5f,receiver.y+.5f},light,8).x;
+            near(_DirectTexture.Load(int3{receiver.x,receiver.y,0}).x,reference,reference*.03f+1e-7f,"emitter-centred rays agree with per-pixel gather");
         }
-        _DynamicLights={lamp,lamp};_DynamicLightCount=2;
-        solveLamps();
-        near(_DirectTexture.Load(int3{18,34,0}).x,2*singleLamp,1e-6f,"two lamps add without counting the other lamp along the ray");
+        _DynamicLights={light,light};_DynamicLightCount=2;
+        solveDynamicLights();
+        near(_DirectTexture.Load(int3{18,34,0}).x,2*singleLight,1e-6f,"two lights add without counting the other light along the ray");
         for(int y=0;y<64;y++)for(int x=32;x<36;x++)_MaterialField.data[y*64+x].w=1;
-        buildMask();_DynamicLights={lamp};_DynamicLightCount=1;solveLamps();
-        near(_DirectTexture.Load(int3{18,34,0}).x,0,1e-30f,"lamp-centred rays blocked by wall");
+        buildMask();_DynamicLights={light};_DynamicLightCount=1;solveDynamicLights();
+        near(_DirectTexture.Load(int3{18,34,0}).x,0,1e-30f,"emitter-centred rays blocked by wall");
         for(auto& m:_MaterialField.data)m.w=0;
-        buildMask();_DynamicLights={lamp,lamp};_DynamicLightCount=2;
+        buildMask();_DynamicLights={light,light};_DynamicLightCount=2;
         _DynamicLights.clear();_DynamicLightCount=0;
-        solveLamps();near(_DirectTexture.Load(int3{18,34,0}).x,0,0,"removed lamp clears output");
+        solveDynamicLights();near(_DirectTexture.Load(int3{18,34,0}).x,0,0,"removed light clears output");
         setup(2,2);_SolidExtinctionRGB={1600,1600,1600,0};
         _MaterialField.data[1].w=1;_MaterialField.data[2].w=1;
         _EmissionField.data[3]={16,16,16,0};

@@ -7,11 +7,11 @@ using UnityEngine;
 
 namespace Kern.World.Lighting;
 
-// Lamp light, kept per lamp until the lamp or what it lights changes.
+// Dynamic light, kept per dynamic light until the dynamic light or what it lights changes.
 //
-// A lamp's light depends only on its position, colour and the material field.
-// A lamp that has not changed since its tile was traced would trace to the
-// very same numbers, so its tile is reused as is. Lamps that moved, changed,
+// A dynamic light's light depends only on its position, colour and the material field.
+// A dynamic light that has not changed since its tile was traced would trace to the
+// very same numbers, so its tile is reused as is. Dynamic lights that moved, changed,
 // appeared, or lost their tiles to a geometry change are traced in the same
 // frame. There is no update rate: every change is traced when it happens.
 internal sealed class DynamicLightTileCache
@@ -39,7 +39,7 @@ internal sealed class DynamicLightTileCache
 
     public const int TileInfoStride = sizeof(int) * 6;
 
-    // Tile sizes round up to this many texels so a slightly brighter lamp
+    // Tile sizes round up to this many texels so a slightly brighter dynamic light
     // does not reallocate the atlas.
     private const int TileQuantum = 64;
 
@@ -60,8 +60,8 @@ internal sealed class DynamicLightTileCache
 
     public ComputeBuffer? TileInfos { get; private set; }
 
-    // Optical depth along lamp-centred rays of the lamp being traced:
-    // column = ray angle, row = distance in texels. Scratch for one lamp at a
+    // Optical depth along emitter-centred rays of the dynamic light being traced:
+    // column = ray angle, row = distance in texels. Scratch for one dynamic light at a
     // time; float, because depths through rock grow past half precision.
     public RenderTexture? Polar { get; private set; }
 
@@ -77,7 +77,7 @@ internal sealed class DynamicLightTileCache
         if (width > SystemInfo.maxTextureSize || height > SystemInfo.maxTextureSize)
         {
             throw new InvalidOperationException(
-                $"Lamp ray texture {width}x{height} exceeds the maximum texture size {SystemInfo.maxTextureSize}.");
+                $"Dynamic ray texture {width}x{height} exceeds the maximum texture size {SystemInfo.maxTextureSize}.");
         }
 
         ReleasePolar();
@@ -88,12 +88,12 @@ internal sealed class DynamicLightTileCache
             autoGenerateMips = false,
             filterMode = FilterMode.Point,
             wrapMode = TextureWrapMode.Clamp,
-            name = "_LampRayDepth",
+            name = "_DynamicRayDepth",
         };
         if (!polar.Create())
         {
             DestroyObject(polar);
-            throw new InvalidOperationException("Failed to create the lamp ray texture.");
+            throw new InvalidOperationException("Failed to create the dynamic light ray texture.");
         }
 
         Polar = polar;
@@ -111,13 +111,24 @@ internal sealed class DynamicLightTileCache
 
     public int Capacity { get; private set; }
 
-    // Grows the atlas when a lamp rectangle or the lamp count no longer fits.
+    // Grows the atlas when a dynamic rectangle or the dynamic light count no longer fits.
+    // Shrinks it back when the count drops to a quarter of capacity, so one
+    // huge or busy frame does not pin VRAM forever. Growth is eager, shrink
+    // is lazy (quarter threshold): hovering around the boundary must not
+    // flap between reallocating and re-tracing every frame.
     // A new atlas holds no traced light, so every tile is invalidated.
     public void EnsureLayout(int requiredTileWidth, int requiredTileHeight, int lightCount)
     {
-        int tileWidth = Math.Max(_tileWidth, RoundUpToQuantum(requiredTileWidth));
-        int tileHeight = Math.Max(_tileHeight, RoundUpToQuantum(requiredTileHeight));
-        int capacity = Math.Max(Capacity, Mathf.NextPowerOfTwo(Math.Max(1, lightCount)));
+        bool shrinkToFit = Capacity > 1 && lightCount <= Capacity / 4;
+        int tileWidth = shrinkToFit
+            ? RoundUpToQuantum(requiredTileWidth)
+            : Math.Max(_tileWidth, RoundUpToQuantum(requiredTileWidth));
+        int tileHeight = shrinkToFit
+            ? RoundUpToQuantum(requiredTileHeight)
+            : Math.Max(_tileHeight, RoundUpToQuantum(requiredTileHeight));
+        int capacity = shrinkToFit
+            ? Mathf.NextPowerOfTwo(Math.Max(1, lightCount))
+            : Math.Max(Capacity, Mathf.NextPowerOfTwo(Math.Max(1, lightCount)));
         if (Tiles != null &&
             tileWidth == _tileWidth &&
             tileHeight == _tileHeight &&
@@ -133,7 +144,7 @@ internal sealed class DynamicLightTileCache
         if (atlasWidth > SystemInfo.maxTextureSize || atlasHeight > SystemInfo.maxTextureSize)
         {
             throw new InvalidOperationException(
-                $"Lamp light atlas {atlasWidth}x{atlasHeight} for {capacity} lamps exceeds the " +
+                $"Dynamic light atlas {atlasWidth}x{atlasHeight} for {capacity} dynamic lights exceeds the " +
                 $"maximum texture size {SystemInfo.maxTextureSize}.");
         }
 
@@ -145,12 +156,12 @@ internal sealed class DynamicLightTileCache
             autoGenerateMips = false,
             filterMode = FilterMode.Point,
             wrapMode = TextureWrapMode.Clamp,
-            name = "_LampLightTiles",
+            name = "_DynamicLightTiles",
         };
         if (!tiles.Create())
         {
             DestroyObject(tiles);
-            throw new InvalidOperationException("Failed to create the lamp light atlas.");
+            throw new InvalidOperationException("Failed to create the dynamic light atlas.");
         }
 
         Tiles = tiles;
@@ -171,14 +182,14 @@ internal sealed class DynamicLightTileCache
     }
 
     // Every tile must be traced again: the material field, the field layout,
-    // or a debug view changed what a lamp's light is.
+    // or a debug view changed what a dynamic light's light is.
     public void InvalidateAll()
     {
         Array.Clear(_slotValid, 0, _slotValid.Length);
     }
 
-    // Keeps the slots of lamps still present, frees those of lamps gone, and
-    // gives new lamps free slots. Call once per solve, before SlotOf.
+    // Keeps the slots of dynamic lights still present, frees those of dynamic lights gone, and
+    // gives new dynamic lights free slots. Call once per solve, before SlotOf.
     public void AssignSlots(ReadOnlySpan<int> lightIDs)
     {
         _frame++;

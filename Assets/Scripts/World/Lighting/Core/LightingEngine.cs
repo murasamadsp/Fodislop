@@ -180,8 +180,6 @@ namespace Kern.World.Lighting
         public float TransmittanceDebugDistanceCells =>
             LightingComputeBinder.ResolveTransmittanceDebugDistance();
 
-        public float MinimumTransmission => LightingConfigHolder.MinimumTransmission;
-
         public float DynamicLightIntensity => LightingConfigHolder.DynamicLightIntensity;
 
         public Color DynamicLightColor => LightingConfigHolder.DynamicLightColor;

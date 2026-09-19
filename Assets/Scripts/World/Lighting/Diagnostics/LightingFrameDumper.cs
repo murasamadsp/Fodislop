@@ -68,9 +68,11 @@ public static class LightingFrameDumper
         public long ddaTexelVisits;
         public int cascadeMergeSamples;
         public int activeDynamicLights;
-        public int lampTraceCount;
+        public int dynamicTraceCount;
         public long dynamicDispatchPixels;
         public long dynamicComposePixels;
+        public long bounceDispatchPixels;
+        public long compositeDispatchPixels;
         public long polarRayWorkUnits;
         public long estimatedCascadeRayWorkUnits;
         public long estimatedCascadeDispatchThreads;
@@ -186,9 +188,11 @@ public static class LightingFrameDumper
             ddaTexelVisits = telemetry.LightingDdaTexelVisits,
             cascadeMergeSamples = telemetry.LightingCascadeMergeSamples,
             activeDynamicLights = telemetry.ActiveDynamicLights,
-            lampTraceCount = telemetry.LightingLampTraceCount,
+            dynamicTraceCount = telemetry.LightingDynamicTraceCount,
             dynamicDispatchPixels = telemetry.LightingDynamicDispatchPixels,
             dynamicComposePixels = telemetry.LightingDynamicComposePixels,
+            bounceDispatchPixels = telemetry.LightingBounceDispatchPixels,
+            compositeDispatchPixels = telemetry.LightingCompositeDispatchPixels,
             polarRayWorkUnits = telemetry.LightingPolarRayWorkUnits,
             estimatedCascadeRayWorkUnits = telemetry.LightingEstimatedCascadeRayWorkUnits > 0
                 ? telemetry.LightingEstimatedCascadeRayWorkUnits

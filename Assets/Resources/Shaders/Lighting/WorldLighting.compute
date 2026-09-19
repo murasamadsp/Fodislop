@@ -4,7 +4,7 @@
 #pragma kernel ResolveTransmissionDebug
 #pragma kernel SolveDynamicLighting
 #pragma kernel ComposeDynamicLighting
-#pragma kernel TraceLampPolar
+#pragma kernel TraceDynamicPolar
 #pragma kernel ClearDynamicDirect
 #pragma kernel SolveDiffuseBounce
 #pragma kernel CompositeLighting
@@ -61,9 +61,9 @@ Texture2D<float4> _DirectInput;
 // across frames.
 //
 // Light transport is linear in emission and the medium does not depend on it, so
-// solve(terrain + lamps) is exactly solve(terrain) + solve(lamps). Splitting the
+// solve(terrain + dynamic lights) is exactly solve(terrain) + solve(dynamic lights). Splitting the
 // two lets the terrain half survive until geometry actually changes, instead of
-// being recomputed every time a lamp moves a fraction of a cell - which is what
+// being recomputed every time a dynamic light moves a fraction of a cell - which is what
 // made walking cost a full cascade solve per frame.
 Texture2D<float4> _StaticDirectInput;
 
@@ -101,19 +101,19 @@ int2 _DynamicDispatchOrigin;
 int2 _DynamicDispatchSize;
 int _DynamicLightIndex;
 int _WriteDynamicDirect;
-int2 _LampTileOffset;
-RWTexture2D<float4> _LampTiles;
-Texture2D<float4> _LampTilesInput;
+int2 _DynamicTileOffset;
+RWTexture2D<float4> _DynamicTiles;
+Texture2D<float4> _DynamicTilesInput;
 
-StructuredBuffer<LampTileInfo> _LampTileInfos;
-int _LampTileCount;
+StructuredBuffer<DynamicTileInfo> _DynamicTileInfos;
+int _DynamicTileCount;
 int2 _ComposeOrigin;
 int2 _ComposeSize;
 
-int2 _LampPolarSize;
-int _LampPolarPoint;
-RWTexture2D<float4> _LampPolar;
-Texture2D<float4> _LampPolarInput;
+int2 _DynamicPolarSize;
+int _DynamicPolarPoint;
+RWTexture2D<float4> _DynamicPolar;
+Texture2D<float4> _DynamicPolarInput;
 
 // ============================================================================
 // Shared Parameters
@@ -121,6 +121,10 @@ Texture2D<float4> _LampPolarInput;
 
 int2 _FieldSize;
 int2 _BounceSize;
+int2 _BounceDispatchOrigin;
+int2 _BounceDispatchSize;
+int2 _CompositeDispatchOrigin;
+int2 _CompositeDispatchSize;
 int2 _CellGridSize;
 float4 _WorldRect;
 float4 _AmbientColor;
@@ -211,7 +215,7 @@ float _TerrainAmbientOcclusionStrength;
 // Dynamic Lights
 // ============================================================================
 
-#include "Assets/Resources/Shaders/Lighting/Dynamic/LampPolar.hlsl"
+#include "Assets/Resources/Shaders/Lighting/Dynamic/DynamicPolar.hlsl"
 #include "Assets/Resources/Shaders/Lighting/Dynamic/DynamicLightTrace.hlsl"
 
 // ============================================================================

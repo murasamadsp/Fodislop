@@ -29,6 +29,7 @@ public sealed class LightingQualityWiringTests
                      LightingQualityMode.PerBlock,
                      LightingQualityMode.PerPixel,
                      LightingQualityMode.PerPixelBilinearFix,
+                     LightingQualityMode.PerPixelBilinearFixBounce,
                  })
         {
             Assert.That(
@@ -82,6 +83,7 @@ public sealed class LightingQualityWiringTests
                          LightingQualityMode.PerBlock,
                          LightingQualityMode.PerPixel,
                          LightingQualityMode.PerPixelBilinearFix,
+                         LightingQualityMode.PerPixelBilinearFixBounce,
                      })
             {
                 Assert.That(

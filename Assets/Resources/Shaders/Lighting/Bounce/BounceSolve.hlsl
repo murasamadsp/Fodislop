@@ -5,7 +5,7 @@
 //
 // READS: _MaterialField, _BounceTaps, _DirectInput, _StaticDirectInput, _BounceInput, _BounceFilterWeights
 // WRITES: _BounceTexture
-// MUST NOT: вызывать DDA, трогать каскады, лампы
+// MUST NOT: вызывать DDA, трогать каскады, источники
 
 // Wall-aware bilinear read of the half-resolution bounce. The taps are the
 // same every frame; their transmission-weighted coefficients come from
@@ -34,12 +34,28 @@ float3 SampleBounceFiltered(int2 pixel, float2 uv)
 [numthreads(8, 8, 1)]
 void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
 {
-    if (any(dispatchId.xy >= (uint2)_BounceSize))
+    // Partial dispatch for dynamic-only frames: the host sets a bounce-space
+    // origin/size covering the dynamic rect union plus gather margin. A
+    // non-positive size keeps the legacy full-field behavior (native test
+    // harness and any path that did not set the uniforms).
+    int2 dispatchOrigin = _BounceDispatchOrigin;
+    int2 dispatchSize = _BounceDispatchSize;
+    if (dispatchSize.x <= 0 || dispatchSize.y <= 0)
+    {
+        dispatchOrigin = int2(0, 0);
+        dispatchSize = _BounceSize;
+    }
+
+    if (any(int2(dispatchId.xy) >= dispatchSize))
     {
         return;
     }
 
-    int2 pixel = int2(dispatchId.xy);
+    int2 pixel = dispatchOrigin + int2(dispatchId.xy);
+    if (any(pixel < 0) || any(pixel >= _BounceSize))
+    {
+        return;
+    }
     float bounceStrength = (_DebugView == 8) ? max(_BounceStrength, 1.0) : _BounceStrength;
     if (_EnableDiffuseBounce == 0 && _DebugView != 9)
     {

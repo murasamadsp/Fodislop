@@ -3,18 +3,18 @@
 
 // Общие типы, константы и packing/unpacking функции для всей lighting-системы.
 //
-// ЭТОТ ФАЙЛ НЕ ДОЛЖЕН ЗНАТЬ ни о каскадах, ни о лампах, ни о bounce.
+// ЭТОТ ФАЙЛ НЕ ДОЛЖЕН ЗНАТЬ ни о каскадах, ни об источниках, ни о bounce.
 // Он содержит только базовые типы и константы, которые используются всеми стадиями.
 
 #define PI 3.14159265359
 #define PI2 6.28318530718
 
-// Lamp light below this absolute radiance cannot move any display level
+// Dynamic light below this absolute radiance cannot move any display level
 // (see TraceLightSegment). Not a tuning value: derived from output precision.
-static const float InvisibleLampRadiance = 1e-6;
+static const float InvisibleDynamicRadiance = 1e-6;
 
-static const float LampNearCells = 6.0;
-static const int LampEmitterPointsPerAxis = 3;
+static const float DynamicNearCells = 6.0;
+static const int DynamicEmitterPointsPerAxis = 3;
 
 uint2 PackRadiance(float3 radiance)
 {
@@ -53,7 +53,7 @@ struct DynamicLight
     float4 colorIntensity;
 };
 
-struct LampTileInfo
+struct DynamicTileInfo
 {
     int2 fieldOrigin;
     int2 size;

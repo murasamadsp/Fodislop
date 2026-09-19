@@ -18,7 +18,7 @@
 - Terrain передаёт фактический размер окна существующему `DummyMapStreamer.SendMapWindowAsync`. Окно стриминга вокруг игрока (160×160) не гарантировало готовность terrain 192×160 плюс halo. Повторные запросы одной области дедуплицируются, смена мира отменяет запрос.
 - В `DummyMapStreamer` удалён принудительный yield после четырёх payload; все нужные дисковые чтения инициируются до первого ожидания. Пакет по-прежнему атомарный; при failed/cancelled чтении частичный пакет не отправляется.
 - Dirty-области применяются в старых координатах до scroll кольцевого terrain cache; изменения перекрытия больше не удаляются без обработки. При совмещении dirty и scroll выгружается также обновлённая сетка distortion nodes.
-- Пока целевое окно не resident, обрабатывается действующее окно: его dirty-изменения и точная позиция лампы. Resize ресурсов отложен до готовности целевого окна.
+- Пока целевое окно не resident, обрабатывается действующее окно: его dirty-изменения и точная позиция источника. Resize ресурсов отложен до готовности целевого окна.
 - Texture refresh использует origin действующего cache, а не ещё не построенного target. Неуспешный build/patch не очищает dirty и не публикует новый origin/lighting.
 - В отключённом atlas scroll исправлено преобразование world cells → field texels → probes; несовместимая фаза проб отклоняется. Reuse остаётся выключенным.
 - Локальные проверки теперь запускаются из `tools/lighting-tests/Kern.LightingTests.csproj`: layout/binding, 5 CPU golden-сцен, streaming governor, native HLSL transport (3117 проверок) и shader equivalence. Отдельный terrain-transition harness в этот перенос не включён; production terrain tests остаются в `tools/Kern.TerrainTests`.

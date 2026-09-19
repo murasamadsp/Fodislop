@@ -44,12 +44,19 @@ internal sealed class StaticLightingSolver
         Vector4 worldRect)
     {
         using var cascadeMarker = _CascadeMarker.Auto();
+        long traceStart = System.Diagnostics.Stopwatch.GetTimestamp();
         commandBuffer.BeginSample("Kern.Lighting.RadianceCascades");
+        using var radianceCascadesSample = new CommandBufferSampleScope(commandBuffer, "Kern.Lighting.RadianceCascades");
         ComputeShader compute = _resources.LightingCompute!;
         int solveKernel = _resources.SolveCascadeKernel;
         bool useDependencyMask = allowDependencyMask &&
             !reuseOverlap &&
             ShouldUseDependencyMask(dirtyRegions, worldRect);
+
+        // Scroll keeps every entry whose rays cannot touch uncovered strips.
+        // A misaligned probe lattice anywhere falls back to a full solve
+        // rather than smearing phases across the atlas.
+        Vector2Int[]? scrollDeltas = reuseOverlap ? TryResolveScrollDeltas(regionDelta) : null;
         if (useDependencyMask)
         {
             _telemetry.LightingStaticDependencyMaskSolveCount++;
@@ -58,7 +65,9 @@ internal sealed class StaticLightingSolver
         {
             _telemetry.LightingStaticDenseFallbackCount++;
         }
-        DirtyRegionGpu[] dirtyFieldRegions = useDependencyMask
+        bool needDirtyRegions = useDependencyMask ||
+            (scrollDeltas != null && dirtyRegions.Count > 0);
+        DirtyRegionGpu[] dirtyFieldRegions = needDirtyRegions
             ? StaticLightingDirty.ConvertDirtyRegions(
                 dirtyRegions,
                 worldRect,
@@ -71,7 +80,7 @@ internal sealed class StaticLightingSolver
             _resources.DirtyRegions!.SetData(dirtyFieldRegions);
         }
 
-        if (reuseOverlap)
+        if (scrollDeltas != null)
         {
             RecordScroll(commandBuffer, compute, regionDelta);
             _resources.SwapRadianceAtlases();
@@ -85,17 +94,31 @@ internal sealed class StaticLightingSolver
              cascadeIndex--)
         {
             CascadeLayout cascade = _resources.Cascades[cascadeIndex];
-            if (reuseOverlap)
+            if (scrollDeltas != null)
             {
-                RecordCascadeStrips(
+                RectInt dirtyProbeRect = default;
+                if (dirtyFieldRegions.Length > 0)
+                {
+                    ProbeRect tight = StaticLightingDirty.TightProbeRect(
+                        cascade,
+                        dirtyFieldRegions,
+                        worldRect,
+                        _resources.FieldWidth,
+                        _resources.FieldHeight);
+                    if (!tight.IsEmpty)
+                    {
+                        dirtyProbeRect = new RectInt(tight.X, tight.Y, tight.Width, tight.Height);
+                    }
+                }
+
+                RecordCascadeMoveTier(
                     commandBuffer,
                     compute,
                     solveKernel,
                     cascadeIndex,
                     emissionField,
-                    regionDelta,
-                    useDependencyMask,
-                    dirtyFieldRegions.Length);
+                    scrollDeltas[cascadeIndex],
+                    dirtyProbeRect);
             }
             else
             {
@@ -131,7 +154,9 @@ internal sealed class StaticLightingSolver
             }
         }
 
-        commandBuffer.EndSample("Kern.Lighting.RadianceCascades");
+        _telemetry.LightingCascadeTraceTimeMs =
+            (float)((System.Diagnostics.Stopwatch.GetTimestamp() - traceStart) *
+                1000.0 / System.Diagnostics.Stopwatch.Frequency);
     }
 
     private void RecordScroll(
@@ -139,6 +164,7 @@ internal sealed class StaticLightingSolver
         ComputeShader compute,
         Vector2Int regionDelta)
     {
+        _resources.EnsureScratchAtlas();
         _telemetry.LightingAtlasScrollCount++;
         ComputeBuffer input = _resources.RadianceAtlas!;
         ComputeBuffer output = _resources.RadianceScratchAtlas!;
@@ -202,55 +228,135 @@ internal sealed class StaticLightingSolver
         }
     }
 
-    private void RecordCascadeStrips(
+    // Scroll is valid only when every tier's probe lattice keeps its world
+    // phase: the cell delta must translate to whole probes at each tier's
+    // spacing. Governor moves come in whole quanta at an integer texel scale,
+    // so this holds for ordinary movement; anything else returns null and the
+    // caller falls back to a full solve.
+    private Vector2Int[]? TryResolveScrollDeltas(Vector2Int regionDelta)
+    {
+        var scrollDeltas = new Vector2Int[_resources.Cascades.Count];
+        try
+        {
+            for (int cascadeIndex = 0; cascadeIndex < _resources.Cascades.Count; cascadeIndex++)
+            {
+                CascadeLayout cascade = _resources.Cascades[cascadeIndex];
+                scrollDeltas[cascadeIndex] = new Vector2Int(
+                    LightingComputeBinder.ResolveCascadeScrollDelta(
+                        regionDelta.x, _resources.FieldWidth, _resources.CellGridWidth, cascade.ProbeSpacing),
+                    LightingComputeBinder.ResolveCascadeScrollDelta(
+                        regionDelta.y, _resources.FieldHeight, _resources.CellGridHeight, cascade.ProbeSpacing));
+            }
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+
+        return scrollDeltas;
+    }
+
+    private void RecordCascadeMoveTier(
         CommandBuffer commandBuffer,
         ComputeShader compute,
         int solveKernel,
         int cascadeIndex,
         RenderTexture emissionField,
-        Vector2Int regionDelta,
-        bool useDependencyMask,
-        int dirtyRegionCount)
+        Vector2Int scrollDelta,
+        RectInt dirtyProbeRect)
     {
         CascadeLayout cascade = _resources.Cascades[cascadeIndex];
-        int deltaX = LightingComputeBinder.ResolveCascadeScrollDelta(
-            regionDelta.x, _resources.FieldWidth, _resources.CellGridWidth, cascade.ProbeSpacing);
-        int deltaY = LightingComputeBinder.ResolveCascadeScrollDelta(
-            regionDelta.y, _resources.FieldHeight, _resources.CellGridHeight, cascade.ProbeSpacing);
-        if (deltaX == 0 && deltaY == 0)
+        int probeW = cascade.ProbeWidth;
+        int probeH = cascade.ProbeHeight;
+        if (probeW <= 0 || probeH <= 0)
         {
             return;
         }
 
-        if (deltaX != 0)
+        // Kept entries stay valid unless their rays (up to the tier interval)
+        // can touch uncovered strips: fresh bands on the leading edge, or the
+        // dropped bands' far side on the trailing edge. Solving the strips
+        // dilated by the interval refreshes exactly the suspect zone; the old
+        // exact-strip solve left a stale fringe of interval width at every
+        // border, which was the seam regression that disabled this path. Far
+        // tiers dilate to the whole grid and solve full, where they are
+        // cheapest anyway.
+        int marginProbes = Mathf.CeilToInt(
+            cascade.IntervalEnd / Mathf.Max(1, cascade.ProbeSpacing)) + 1;
+
+        if (scrollDelta.x != 0)
         {
-            int width = Mathf.Min(Mathf.Abs(deltaX), cascade.ProbeWidth);
-            int x = deltaX > 0 ? cascade.ProbeWidth - width : 0;
+            int leadW = Mathf.Min(Mathf.Abs(scrollDelta.x), probeW);
+            int leadX = scrollDelta.x > 0 ? probeW - leadW : 0;
+            int trailW = Mathf.Min(marginProbes, probeW);
+            int trailX = scrollDelta.x > 0 ? 0 : probeW - trailW;
             RecordCascade(
                 commandBuffer,
                 compute,
                 solveKernel,
                 cascadeIndex,
                 emissionField,
-                new RectInt(x, 0, width, cascade.ProbeHeight),
-                useDependencyMask,
-                dirtyRegionCount);
+                ClipProbeRect(
+                    Mathf.Min(leadX, trailX) - marginProbes,
+                    0,
+                    Mathf.Max(leadX + leadW, trailX + trailW) - Mathf.Min(leadX, trailX) + (marginProbes * 2),
+                    probeH,
+                    probeW,
+                    probeH),
+                false,
+                0);
         }
 
-        if (deltaY != 0)
+        if (scrollDelta.y != 0)
         {
-            int height = Mathf.Min(Mathf.Abs(deltaY), cascade.ProbeHeight);
-            int y = deltaY > 0 ? cascade.ProbeHeight - height : 0;
+            int leadH = Mathf.Min(Mathf.Abs(scrollDelta.y), probeH);
+            int leadY = scrollDelta.y > 0 ? probeH - leadH : 0;
+            int trailH = Mathf.Min(marginProbes, probeH);
+            int trailY = scrollDelta.y > 0 ? 0 : probeH - trailH;
             RecordCascade(
                 commandBuffer,
                 compute,
                 solveKernel,
                 cascadeIndex,
                 emissionField,
-                new RectInt(0, y, cascade.ProbeWidth, height),
-                useDependencyMask,
-                dirtyRegionCount);
+                ClipProbeRect(
+                    0,
+                    Mathf.Min(leadY, trailY) - marginProbes,
+                    probeW,
+                    Mathf.Max(leadY + leadH, trailY + trailH) - Mathf.Min(leadY, trailY) + (marginProbes * 2),
+                    probeW,
+                    probeH),
+                false,
+                0);
         }
+
+        if (dirtyProbeRect.width > 0 && dirtyProbeRect.height > 0)
+        {
+            RecordCascade(
+                commandBuffer,
+                compute,
+                solveKernel,
+                cascadeIndex,
+                emissionField,
+                ClipProbeRect(
+                    dirtyProbeRect.x,
+                    dirtyProbeRect.y,
+                    dirtyProbeRect.width,
+                    dirtyProbeRect.height,
+                    probeW,
+                    probeH),
+                false,
+                0);
+        }
+    }
+
+    private static RectInt ClipProbeRect(int x, int y, int width, int height, int probeW, int probeH)
+    {
+        int minX = Mathf.Max(0, x);
+        int minY = Mathf.Max(0, y);
+        int maxX = Mathf.Min(probeW, x + width);
+        int maxY = Mathf.Min(probeH, y + height);
+        return new RectInt(minX, minY, Mathf.Max(0, maxX - minX), Mathf.Max(0, maxY - minY));
     }
 
     public void RecordResolve(
@@ -260,6 +366,7 @@ internal sealed class StaticLightingSolver
         RenderTexture directTarget)
     {
         using var resolveMarker = _ResolveMarker.Auto();
+        long resolveStart = System.Diagnostics.Stopwatch.GetTimestamp();
         ComputeShader compute = _resources.LightingCompute!;
         bool transmissionDebug = debugView == LightingEngine.DebugView.Transmission;
         int resolveKernel = transmissionDebug
@@ -283,11 +390,6 @@ internal sealed class StaticLightingSolver
         if (transmissionDebug)
         {
             BindFieldTextures(commandBuffer, compute, resolveKernel, emissionField);
-            commandBuffer.SetComputeTextureParam(
-                compute,
-                resolveKernel,
-                LightingComputeBinder.CellSolidMaskID,
-                _resources.CellSolidMask!);
         }
 
         commandBuffer.DispatchCompute(
@@ -296,6 +398,9 @@ internal sealed class StaticLightingSolver
             LightingComputeBinder.DispatchGroups(_resources.FieldWidth),
             LightingComputeBinder.DispatchGroups(_resources.FieldHeight),
             1);
+        _telemetry.LightingCascadeMergeTimeMs =
+            (float)((System.Diagnostics.Stopwatch.GetTimestamp() - resolveStart) *
+                1000.0 / System.Diagnostics.Stopwatch.Frequency);
     }
 
     private void RecordCascade(

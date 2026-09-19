@@ -18,7 +18,7 @@ StaticEmission ──────┴──[SolveCascade]──► RadianceAtlas 
                                               ▼
                                     StaticDirect (F, ARGBHalf)
 
-DynamicLights ───────┴──[TraceLampPolar → SolveDynamicLighting]
+DynamicLights ───────┴──[TraceDynamicPolar → SolveDynamicLighting]
                                               │
                                               ▼
                                        [ComposeDynamicLighting]
@@ -78,7 +78,7 @@ _WorldLightTexture ──► lightColor ────────┤             
 | 3  | Геометрические кэши | Material                        | SolidMask/Taps  | F      | геометрия/регион|
 | 4  | Каскады (стат.)     | Material, StaticEmission        | RadianceAtlas   | N зап. | мир изменился   |
 | 5  | Resolve (стат.)     | RadianceAtlas                   | StaticDirect    | F      | мир изменился   |
-| 6  | Полярное динамич.   | Material, DynamicLights         | Direct          | F      | лампа изменилась|
+| 6  | Полярное динамич.   | Material, DynamicLights         | Direct          | F      | источник изменился|
 | 7  | Диффузный отскок    | Direct, StaticDirect, Material  | Bounce          | F/2    | свет изменился  |
 | 8  | Сведение            | Direct, StaticDirect, Bounce    | Lightmap        | F      | свет изменился  |
 | 9  | Выборка тайла       | BaseMap, атрибуты вершины       | texColor        | S      | каждый пиксель  |

@@ -13,6 +13,11 @@ public interface IFrameTelemetry
     float TerrainAtlasUploadTimeMs { get; set; }
     float LightingBuildCommandsTimeMs { get; set; }
     float LightingExecuteCommandsTimeMs { get; set; }
+
+    // CPU command-recording time per stage (Stopwatch around the Record
+    // calls, not GPU execution: per-pass GPU timers are unavailable on
+    // Metal, and these are the attributable numbers instead). Stage times
+    // are contained in LightingBuildCommandsTimeMs, never added to it.
     float LightingCascadeTraceTimeMs { get; set; }
     float LightingCascadeMergeTimeMs { get; set; }
     float LightingDynamicLightingTimeMs { get; set; }
@@ -37,9 +42,11 @@ public interface IFrameTelemetry
     int LightingStaticDependencyMaskSolveCount { get; set; }
     int LightingStaticDenseFallbackCount { get; set; }
     int LightingDynamicSolveCount { get; set; }
-    int LightingLampTraceCount { get; set; }
+    int LightingDynamicTraceCount { get; set; }
     long LightingDynamicDispatchPixels { get; set; }
     long LightingDynamicComposePixels { get; set; }
+    long LightingBounceDispatchPixels { get; set; }
+    long LightingCompositeDispatchPixels { get; set; }
     long LightingPolarRayWorkUnits { get; set; }
     long LightingEstimatedCascadeRayWorkUnits { get; set; }
     long LightingEstimatedCascadeDispatchThreads { get; set; }
@@ -59,7 +66,7 @@ public interface IFrameTelemetry
     int StreamingDeltaY { get; set; }
 
     // DDA segments marched this frame across all transport stages
-    // (cascade trace, lamp polar, bounce cache). A segment is one TraceLightSegment call.
+    // (cascade trace, dynamic light polar, bounce cache). A segment is one TraceLightSegment call.
     int LightingDdaSegments { get; set; }
 
     // Total texel visits inside DDA loops this frame. Each crossed texel counts as one.
@@ -126,10 +133,12 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
     public int LightingStaticDenseFallbackCount { get; set; }
     public int LightingDynamicSolveCount { get; set; }
 
-    // Lamps actually traced; the rest of each dynamic solve reused their tiles.
-    public int LightingLampTraceCount { get; set; }
+    // Dynamic lights actually traced; the rest of each dynamic solve reused their tiles.
+    public int LightingDynamicTraceCount { get; set; }
     public long LightingDynamicDispatchPixels { get; set; }
     public long LightingDynamicComposePixels { get; set; }
+    public long LightingBounceDispatchPixels { get; set; }
+    public long LightingCompositeDispatchPixels { get; set; }
     public long LightingPolarRayWorkUnits { get; set; }
     public long LightingEstimatedCascadeRayWorkUnits { get; set; }
     public long LightingEstimatedCascadeDispatchThreads { get; set; }
@@ -287,6 +296,8 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
         LightingCascadeMergeSamples = 0;
         LightingDynamicDispatchPixels = 0;
         LightingDynamicComposePixels = 0;
+        LightingBounceDispatchPixels = 0;
+        LightingCompositeDispatchPixels = 0;
         LightingPolarRayWorkUnits = 0;
         LightingRegionChangeCount = 0;
         LightingGeometryChangeCount = 0;

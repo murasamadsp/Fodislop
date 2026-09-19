@@ -6,7 +6,7 @@
 // READS: _MaterialField, _EmissionField, _RadianceAtlas[cascade+1]
 // WRITES: _RadianceAtlas[cascade]
 // MAY: вызывать DDA (TraceRadianceSegment)
-// MUST NOT: писать финальный свет, трогать dynamic light buffers
+// MUST NOT: писать финальный свет, трогать DynamicLight buffers
 
 bool DirtySegmentOverlap(float2 start, float2 end)
 {
@@ -46,6 +46,51 @@ bool CascadeEntryMayChange(int2 probe, uint directionIndex)
     if (_HasFarCascade == 0)
     {
         changed = DirtySegmentOverlap(intervalStart, intervalEnd);
+    }
+    else if (_EnableBilinearFix == 0)
+    {
+        if (DirtySegmentOverlap(intervalStart, intervalEnd))
+        {
+            changed = true;
+        }
+        else
+        {
+            uint directionBranchCount = clamp(
+                (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
+                1u,
+                4u);
+            uint farDirectionBase = directionIndex * directionBranchCount;
+            float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
+            int2 farProbeBase = int2(floor(farProbePosition));
+
+            [loop]
+            for (uint farDirectionBranch = 0u;
+                farDirectionBranch < directionBranchCount && !changed;
+                farDirectionBranch++)
+            {
+                uint farDirection = (farDirectionBase + farDirectionBranch) %
+                    (uint)_FarCascadeDirectionCount;
+                [unroll]
+                for (int farY = 0; farY < 2 && !changed; farY++)
+                {
+                    [unroll]
+                    for (int farX = 0; farX < 2 && !changed; farX++)
+                    {
+                        int2 farProbe = clamp(
+                            farProbeBase + int2(farX, farY),
+                            int2(0, 0),
+                            _FarCascadeProbeSize - 1);
+                        int farIndex = _FarCascadeOffset +
+                            (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
+                            _FarCascadeDirectionCount + (int)farDirection;
+                        if (_CascadeChangedMask[farIndex] != 0)
+                        {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
     }
     else
     {
@@ -148,8 +193,77 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
             radiance,
             transmittance);
     }
+    else if (_EnableBilinearFix == 0)
+    {
+        TraceRadianceSegment(
+            intervalStart,
+            intervalEnd,
+            true,
+            radiance,
+            transmittance);
 
-    if (_HasFarCascade != 0)
+        float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
+        int2 farProbeBase = int2(floor(farProbePosition));
+        float2 farProbeBlend = frac(farProbePosition);
+        uint directionBranchCount = clamp(
+            (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
+            1u,
+            4u);
+        uint farDirectionBase = directionIndex * directionBranchCount;
+        float3 farRadiance = 0.0;
+        float3 farTransmittance = 0.0;
+
+        [loop]
+        for (uint farDirectionBranch = 0u; farDirectionBranch < directionBranchCount;
+            farDirectionBranch++)
+        {
+            uint farDirection = (farDirectionBase + farDirectionBranch) %
+                (uint)_FarCascadeDirectionCount;
+
+            [unroll]
+            for (int farY = 0; farY < 2; farY++)
+            {
+                [unroll]
+                for (int farX = 0; farX < 2; farX++)
+                {
+                    int2 farProbe = clamp(
+                        farProbeBase + int2(farX, farY),
+                        int2(0, 0),
+                        _FarCascadeProbeSize - 1);
+                    int farIndex = _FarCascadeOffset +
+                        (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
+                        _FarCascadeDirectionCount + (int)farDirection;
+                    float probeWeight =
+                        (farX == 0 ? 1.0 - farProbeBlend.x : farProbeBlend.x) *
+                        (farY == 0 ? 1.0 - farProbeBlend.y : farProbeBlend.y) /
+                        float(directionBranchCount);
+
+                    if (probeWeight <= 0.0)
+                    {
+                        continue;
+                    }
+
+                    if (_LightingCountersEnabled != 0)
+                    {
+                        InterlockedAdd(_LightingCounters[2], 1u);
+                    }
+
+                    uint3 farPackedInterval = _RadianceAtlas[farIndex];
+                    float3 sampledFarRadiance =
+                        UnpackRadiance(farPackedInterval.xy);
+                    float3 sampledFarTransmittance =
+                        UnpackTransmittance(farPackedInterval);
+
+                    farRadiance += sampledFarRadiance * probeWeight;
+                    farTransmittance += sampledFarTransmittance * probeWeight;
+                }
+            }
+        }
+
+        radiance += transmittance * farRadiance;
+        transmittance *= farTransmittance;
+    }
+    else
     {
         // Every cascade stores the next contiguous radial interval from the
         // same receiver position. Interpolate the coarser probe field at this

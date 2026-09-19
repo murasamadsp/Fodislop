@@ -14,7 +14,6 @@ internal sealed class LightingRuntimeState
     public bool HasStaticRadianceState { get; set; }
     public bool HasDynamicRadianceState { get; set; }
     public bool WasLightingBypassed { get; set; }
-    public bool DynamicSolveInProgress { get; set; }
     public Vector4 LastVisibleRegion { get; set; } = new(float.NaN, float.NaN, float.NaN, float.NaN);
     public ulong LastTerrainContentRevision { get; set; }
     public ulong LastContributorGeometryRevision { get; set; }
@@ -112,6 +111,25 @@ internal sealed class LightingRuntimeState
     {
         _pendingRegionInvalidations.Clear();
         _activeRegionInvalidations.Clear();
+    }
+
+    // Region moves that reuse the atlas keep every overlapping entry, so
+    // pending edits inside the new field must NOT be dropped (the kept
+    // entries would stay stale indefinitely). They are NOT force-activated
+    // either: flushing a backlog in the move frame would spike exactly like
+    // the full solve being removed. They stay pending and drain through the
+    // regular budgeted activation over the next frames; the fringe heals
+    // itself via the mask path. Anything outside the new field is dropped,
+    // matching the previous policy and bounding the list.
+    public void RetainPendingRegionsForReuse(RectInt field)
+    {
+        for (int index = _pendingRegionInvalidations.Count - 1; index >= 0; index--)
+        {
+            if (!Intersects(_pendingRegionInvalidations[index], field))
+            {
+                _pendingRegionInvalidations.RemoveAt(index);
+            }
+        }
     }
 
     public void CompleteActiveRegionInvalidation()

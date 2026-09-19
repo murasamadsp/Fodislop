@@ -40,7 +40,7 @@ public sealed class DynamicLightManager
     public uint Generation => _dynamicLightGeneration;
     public int UploadedCount => _lastDynamicLightCount;
 
-    // Same lamps, in the same order, as the last GPU upload.
+    // Same dynamic lights, in the same order, as the last GPU upload.
     public System.ReadOnlySpan<DynamicLightGpuData> UploadedLights =>
         new(_dynamicLights, 0, _lastDynamicLightCount);
 
@@ -146,7 +146,7 @@ public sealed class DynamicLightManager
                 continue;
             }
 
-            if (!IntersectsWorldRect(source.Position, 16f, worldRect, cellSize))
+            if (!IntersectsReach(source, worldRect, cellSize))
             {
                 _lastDroppedDynamicLightIDs.Add(pair.Key);
                 continue;
@@ -194,6 +194,37 @@ public sealed class DynamicLightManager
     {
         return left.PositionRadius == right.PositionRadius &&
             left.ColorIntensity == right.ColorIntensity;
+    }
+
+    // A source is relevant while its Beer-Lambert reach touches the field,
+    // not while its center is near it: a bright source lights dozens of
+    // cells past its own position. Mirrors the rect math in
+    // DynamicLightingSolver so culling never drops a visible contribution.
+    private static bool IntersectsReach(
+        DynamicLightSource source,
+        Vector4 worldRect,
+        float cellSize)
+    {
+        float brightest = Mathf.Max(
+            0f,
+            Mathf.Max(source.Color.r, Mathf.Max(source.Color.g, source.Color.b)) * source.Intensity) *
+            LightingConfigHolder.EmissionScale;
+        if (brightest <= 0f)
+        {
+            return false;
+        }
+
+        float minimumExtinction = LightingComputeBinder.ResolveMinimumExtinction();
+        if (minimumExtinction <= 0f)
+        {
+            return true;
+        }
+
+        float reachCells = Mathf.Max(
+            0f,
+            Mathf.Log(brightest * 1.5f / LightingComputeBinder.InvisibleDynamicRadiance) /
+                minimumExtinction);
+        return IntersectsWorldRect(source.Position, 0.5f + reachCells, worldRect, cellSize);
     }
 
     private static bool IntersectsWorldRect(

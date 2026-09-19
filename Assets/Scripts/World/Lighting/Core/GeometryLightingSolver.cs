@@ -61,19 +61,12 @@ internal sealed class GeometryLightingSolver
             _resources.SolveCascadeKernel,
             LightingComputeBinder.CellSolidMaskID,
             cellSolidMask);
+        // NOTE: ResolveDirect and SolveDynamicLighting must NOT receive the
+        // solid mask: neither stage runs DDA (see the DDA ban rule), and a
+        // bound-but-never-sampled texture is pure per-dispatch CPU cost.
         commandBuffer.SetComputeTextureParam(
             compute,
-            _resources.ResolveDirectKernel,
-            LightingComputeBinder.CellSolidMaskID,
-            cellSolidMask);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            _resources.SolveDynamicLightingKernel,
-            LightingComputeBinder.CellSolidMaskID,
-            cellSolidMask);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            _resources.TraceLampPolarKernel,
+            _resources.TraceDynamicPolarKernel,
             LightingComputeBinder.CellSolidMaskID,
             cellSolidMask);
         commandBuffer.SetComputeTextureParam(

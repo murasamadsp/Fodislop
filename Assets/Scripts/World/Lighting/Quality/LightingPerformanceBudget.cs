@@ -63,13 +63,10 @@ public static class LightingPerformanceBudget
             telemetry.TerrainFloodFillTimeMs +
             telemetry.TerrainGpuUploadTimeMs +
             telemetry.TerrainAtlasUploadTimeMs;
+        // Stage record times are sub-phases of the build and must not be
+        // added on top of it: only top-level phases sum into the frame.
         float lightingMs = telemetry.LightingBuildCommandsTimeMs +
-            telemetry.LightingExecuteCommandsTimeMs +
-            telemetry.LightingCascadeTraceTimeMs +
-            telemetry.LightingCascadeMergeTimeMs +
-            telemetry.LightingDynamicLightingTimeMs +
-            telemetry.LightingBounceTimeMs +
-            telemetry.LightingCompositeTimeMs;
+            telemetry.LightingExecuteCommandsTimeMs;
         float totalMs = terrainMs + lightingMs;
         if (totalMs <= FrameBudgetMs)
         {

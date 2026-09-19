@@ -226,7 +226,6 @@ internal sealed class PauseMenuSettingsBuilder
                 $"Emission={_lightingEngine.EmissionScale:F3}\n" +
                 $"EmptyExtinction={_lightingEngine.EmptyExtinctionMultiplier:F3} " +
                 $"SolidExtinction={_lightingEngine.SolidExtinctionMultiplier:F3}\n" +
-                $"MinimumTransmission={_lightingEngine.MinimumTransmission:F4} " +
                 $"MaximumLight={_lightingEngine.MaximumLightMultiplier:F3}\n" +
                 $"SafeBorder={_lightingEngine.LightSafeBorder} " +
                 $"TransmissionDistance={_lightingEngine.TransmittanceDebugDistanceCells:F2}\n" +

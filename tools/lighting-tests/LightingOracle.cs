@@ -12,7 +12,7 @@ internal static class LightingOracle
         RunDiagonalOcclusion();
         RunMultipleEmitters();
         RunCorridor();
-        RunLampNearWall();
+        RunLightNearWall();
         Console.WriteLine("5 CPU golden lighting scenarios passed.");
         return 0;
     }
@@ -80,7 +80,7 @@ internal static class LightingOracle
         Check(radiance[5, 24] < .01f, "corridor shadow");
     }
 
-    private static void RunLampNearWall()
+    private static void RunLightNearWall()
     {
         float[,] material = new float[Size, Size];
         float[,] emission = new float[Size, Size];
@@ -102,7 +102,7 @@ internal static class LightingOracle
             }
         }
 
-        Check(radiance[16, 20] < .01f, "lamp shadow behind wall");
+        Check(radiance[16, 20] < .01f, "dynamic light shadow behind wall");
     }
 
     private static float[,] Trace(float[,] material, float[,] emission)

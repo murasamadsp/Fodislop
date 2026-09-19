@@ -130,17 +130,17 @@ DummyMapStreamer
 
 - run DDA;
 - rebuild geometry;
-- sample dynamic lamp transport.
+- sample dynamic light transport.
 
 ### DynamicLighting
 
 **Kernels**
 
-- `TraceLampPolar`;
+- `TraceDynamicPolar`;
 - `SolveDynamicLighting`;
 - `ComposeDynamicLighting`.
 
-Dynamic lamps are recomputed for every exact source position change. They are not tied to a cell transition and are not throttled by a timer.
+Dynamic lights are recomputed for every exact source position change. They are not tied to a cell transition and are not throttled by a timer.
 
 ### Bounce
 
@@ -167,8 +167,7 @@ Current policy is conservative:
 - initial state, resource resize, quality/config changes and geometry changes use full static solve;
 - region invalidation can use dependency mask when the region did not move and the cost estimate is favourable;
 - with the mask, each cascade dispatches a tight probe rect (`CascadeProbeRects`: dirty bounds expanded by interval reach + margin, 50% fallback to full) instead of the full grid; the per-entry early-out stays as a second net. Telemetry splits `cascadeFullEntries` vs `cascadePartialEntries`;
-- region movement currently uses full solve (the mask path only covers geometry edits without region move; region-move hitch is untouched by it);
-- atlas scroll/reuse code exists but is disabled after a visual correctness regression;
+- region movement reuses the overlapping atlas entries (scroll) and solves only the uncovered strips dilated by each tier's interval reach, unioned with the tight dirty rect when edits ride along. Kept entries stay valid unless their rays (up to the tier interval) can touch uncovered strips; far tiers dilate to the whole grid and solve full, where they are cheapest. Tiers whose probe lattice would change phase fall back to a full solve; resizing always goes full. Pending edits inside the new field are retained (not dropped, or kept entries would stay stale) and drain through the regular budgeted activation over the next frames instead of spiking the move frame;
 - dynamic light movement does not invalidate static cascades.
 
 The dependency-mask path dispatches a tight per-cascade probe rect and early-outs unchanged entries inside it. It reduces DDA work when the mask rejects candidates and dispatch threads when the dirty area is small (far cascades with huge intervals fall back to full grid, where they are cheapest).
@@ -193,7 +192,7 @@ Terrain requests its actual target plus halo through the optional `IWorldRegionR
 
 - DDA ownership stays in transport stages only.
 - Static lighting must not be limited by frequency or cell transitions.
-- Dynamic lamp tracing follows exact smooth lamp position.
+- Dynamic light tracing follows exact smooth dynamic light position.
 - Server Y-down and Unity Y-up conversion goes through `CoordinateUtils`.
 - A new terrain/lighting window is published only after its required resources are resident and coherent.
 - Dirty regions retain their identity until the consuming stage has used them.

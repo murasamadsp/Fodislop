@@ -15,7 +15,7 @@ internal static class LightingShaderValidator
         int ScrollRadianceAtlasKernel,
         int SolveDynamicLightingKernel,
         int ComposeDynamicLightingKernel,
-        int TraceLampPolarKernel,
+        int TraceDynamicPolarKernel,
         int ClearDynamicDirectKernel,
         int ResolveDirectKernel,
         int ResolveTransmissionDebugKernel,
@@ -41,7 +41,7 @@ internal static class LightingShaderValidator
         int scrollRadianceAtlasKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ScrollRadianceAtlas);
         int solveDynamicLightingKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.SolveDynamicLighting);
         int composeDynamicLightingKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ComposeDynamicLighting);
-        int traceLampPolarKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.TraceLampPolar);
+        int traceDynamicPolarKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.TraceDynamicPolar);
         int clearDynamicDirectKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ClearDynamicDirect);
         int resolveDirectKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ResolveDirect);
         int resolveTransmissionDebugKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ResolveTransmissionDebug);
@@ -57,7 +57,7 @@ internal static class LightingShaderValidator
             scrollRadianceAtlasKernel,
             solveDynamicLightingKernel,
             composeDynamicLightingKernel,
-            traceLampPolarKernel,
+            traceDynamicPolarKernel,
             clearDynamicDirectKernel,
             resolveDirectKernel,
             resolveTransmissionDebugKernel,

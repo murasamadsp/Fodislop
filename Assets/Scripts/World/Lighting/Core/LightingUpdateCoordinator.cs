@@ -162,14 +162,30 @@ internal sealed class LightingUpdateCoordinator
                 Mathf.RoundToInt(lightingRegion.y - previousLightingRegion.y))
             : Vector2Int.zero;
 
-        // Atlas scrolling / partial strips creates seams and radial ray discontinuities
-        // across cascade tiers when the window shifts. Rebuilding static radiance for
-        // the full region when it changes ensures crisp, seam-free lighting without phase drift.
+        // ROLLED BACK 2026-09-19: scroll reuse correlated with a heavy FPS
+        // drop in playmode, cause not yet isolated (prime suspects: full-atlas
+        // memmove cost on large fields, or a broken reuse path doing more work
+        // than the full solve it replaces). The scroll/strip machinery in
+        // StaticLightingSolver stays in place but dormant; re-enable by
+        // restoring the condition below once the cause is measured.
+        // Original: regionChanged && !resourcesResized.
         bool canReuseStaticAtlas = false;
 
         if (regionChanged)
         {
-            _state.ClearPendingRegionInvalidation();
+            if (canReuseStaticAtlas)
+            {
+                _state.RetainPendingRegionsForReuse(
+                    new RectInt(
+                        Mathf.RoundToInt(lightingRegion.x),
+                        Mathf.RoundToInt(lightingRegion.y),
+                        Mathf.RoundToInt(lightingRegion.z),
+                        Mathf.RoundToInt(lightingRegion.w)));
+            }
+            else
+            {
+                _state.ClearPendingRegionInvalidation();
+            }
         }
 
         bool dynamicLightsDirty = !_state.HasRenderedLightState || _dynamicLightManager.IsDirty;
@@ -187,12 +203,6 @@ internal sealed class LightingUpdateCoordinator
             !_state.CompositeDirty && !_state.BounceDirty)
         {
             return;
-        }
-
-        bool geometryUpdateRequired = _state.FieldDirty || regionChanged || geometryChanged;
-        if (geometryUpdateRequired || _state.BounceDirty || _state.CompositeDirty)
-        {
-            _state.DynamicSolveInProgress = false;
         }
 
         const float cellSize = ProjectRuntimeContracts.World.CellSize;
@@ -223,19 +233,11 @@ internal sealed class LightingUpdateCoordinator
             using (_BuildCommandsMarker.Auto())
             {
                 commandBuffer.BeginSample("Kern.RadianceCascades");
-                if (_state.DynamicSolveInProgress)
-                {
-                    dynamicLightCount = _dynamicLightManager.UploadedCount;
-                    dynamicLightsChanged = false;
-                }
-                else
-                {
-                    dynamicLightCount = _frameExecutor.UploadDynamicLights(
-                        commandBuffer,
-                        worldRect,
-                        cellSize,
-                        out dynamicLightsChanged);
-                }
+                dynamicLightCount = _frameExecutor.UploadDynamicLights(
+                    commandBuffer,
+                    worldRect,
+                    cellSize,
+                    out dynamicLightsChanged);
 
                 if (!rebuildFields && !dynamicLightsChanged &&
                     !_state.CompositeDirty && !_state.BounceDirty)
@@ -306,7 +308,7 @@ internal sealed class LightingUpdateCoordinator
                     _state.LastVisibleRegion,
                     cellSize);
                 string reason = rebuildFields
-                    ? "Geometry or region updated"
+                    ? (reuseStaticAtlas ? "Region moved (scroll)" : "Geometry or region updated")
                     : dynamicLightsChanged
                         ? "Dynamic lights updated"
                         : "Lightmap refreshed";
@@ -331,16 +333,6 @@ internal sealed class LightingUpdateCoordinator
             commandBuffer.Clear();
         }
     }
-
-    private static bool IsReusableRegionDelta(Vector2Int delta, int width, int height)
-    {
-        return delta != Vector2Int.zero &&
-            Mathf.Abs(delta.x) < width &&
-            Mathf.Abs(delta.y) < height &&
-            (delta.x % 8) == 0 &&
-            (delta.y % 8) == 0;
-    }
-
 
     private bool EnsureResources(
         int gridWidth,

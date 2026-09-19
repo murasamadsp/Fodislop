@@ -5,7 +5,7 @@
 //
 // READS: _DirectInput, _StaticDirectInput, _BounceInput, _MaterialField, _EmissionField, _BounceFilterWeights
 // WRITES: _Result
-// MUST NOT: вызывать DDA, трогать каскады, лампы
+// MUST NOT: вызывать DDA, трогать каскады, источники
 
 float3 SurfaceReflection(float2 position, float3 albedo)
 {
@@ -65,12 +65,28 @@ float3 SurfaceReflection(float2 position, float3 albedo)
 [numthreads(8, 8, 1)]
 void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
 {
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
+    // Partial dispatch for dynamic-only frames: the host sets a field-space
+    // origin/size covering the dynamic rect union plus neighbor margin. A
+    // non-positive size keeps the legacy full-field behavior (native test
+    // harness and any path that did not set the uniforms).
+    int2 dispatchOrigin = _CompositeDispatchOrigin;
+    int2 dispatchSize = _CompositeDispatchSize;
+    if (dispatchSize.x <= 0 || dispatchSize.y <= 0)
+    {
+        dispatchOrigin = int2(0, 0);
+        dispatchSize = _FieldSize;
+    }
+
+    if (any(int2(dispatchId.xy) >= dispatchSize))
     {
         return;
     }
 
-    int2 pixel = int2(dispatchId.xy);
+    int2 pixel = dispatchOrigin + int2(dispatchId.xy);
+    if (any(pixel < 0) || any(pixel >= _FieldSize))
+    {
+        return;
+    }
     float2 uv = (float2(pixel) + 0.5) / float2(_FieldSize);
     int2 materialPixel = pixel;
     if (_MaterialYFlip != 0)
@@ -121,7 +137,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     // и опасаться загрязнения статикой здесь не от чего. Зато динамическая
     // половина решается только когда в кадре есть хоть один динамический
     // источник, а иначе её текстуру просто обнуляют (ClearDynamicDirect). Вид
-    // выходил чёрным ровно там, где рядом нет ни одной лампы, — то есть почти
+    // выходил чёрным ровно там, где рядом нет ни одного источника, — то есть почти
     // всегда. Статическая половина пересчитывается при каждой смене
     // отладочного вида и потому заполнена всегда.
     if (_DebugView == 4) // Transmission

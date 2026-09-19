@@ -167,10 +167,10 @@ internal static class DebugOverlayTextFormatter
           .Append("Стоимость cascade: ").Append(telemetry.LightingEstimatedCascadeRayWorkUnits)
           .Append(" шагов  ·  dispatch: ").Append(telemetry.LightingEstimatedCascadeDispatchThreads)
           .Append(" потоков\n")
-          .Append("Лампы перетрассированы: ").Append(telemetry.LightingLampTraceCount)
+          .Append("Источников перетрассировано: ").Append(telemetry.LightingDynamicTraceCount)
           .Append("  ·  в среднем за решение: ")
           .Append(telemetry.LightingDynamicSolveCount > 0
-              ? (telemetry.LightingLampTraceCount / (float)telemetry.LightingDynamicSolveCount).ToString("F1")
+              ? (telemetry.LightingDynamicTraceCount / (float)telemetry.LightingDynamicSolveCount).ToString("F1")
               : "—")
           .Append("\n\n");
 

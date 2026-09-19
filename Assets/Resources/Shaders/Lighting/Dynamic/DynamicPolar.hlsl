@@ -1,17 +1,17 @@
-#ifndef KERN_LAMP_POLAR_HLSL
-#define KERN_LAMP_POLAR_HLSL
+#ifndef KERN_DYNAMIC_POLAR_HLSL
+#define KERN_DYNAMIC_POLAR_HLSL
 
-// Динамический свет ламп: полярные лучи, optical depth lookup, per-pixel radiance.
+// Динамический свет источников: полярные лучи, optical depth lookup, per-pixel radiance.
 //
-// READS: _MaterialField, _DynamicLights, _LampPolarInput
-// WRITES: _LampPolar
-// MAY: вызывать DDA (TraceLampPolar, GatherDynamicSource)
+// READS: _MaterialField, _DynamicLights, _DynamicPolarInput
+// WRITES: _DynamicPolar
+// MAY: вызывать DDA (TraceDynamicPolar, GatherDynamicSource)
 // MUST NOT: трогать каскады, bounce
 
-// Point `pointIndex` of the lamp's emission grid, over the texels whose centres
+// Point `pointIndex` of the dynamic light's emission grid, over the texels whose centres
 // lie inside its square and inside the field — the texels TraceLightSegment
 // lets emit. `emits` is false when no such texel exists.
-void LampEmitterPoint(
+void DynamicEmitterPoint(
     DynamicLight light,
     int pointIndex,
     out float2 position,
@@ -27,23 +27,23 @@ void LampEmitterPoint(
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     areaCells = emitterSize.x * cellsPerPixel.x * emitterSize.y * cellsPerPixel.y;
     uint index = uint(pointIndex);
-    uint pointsPerAxis = uint(LampEmitterPointsPerAxis);
+    uint pointsPerAxis = uint(DynamicEmitterPointsPerAxis);
     float2 grid = float2(index % pointsPerAxis, index / pointsPerAxis);
-    position = emitterMin + emitterSize * (grid + 0.5) / float(LampEmitterPointsPerAxis);
+    position = emitterMin + emitterSize * (grid + 0.5) / float(DynamicEmitterPointsPerAxis);
     emits = areaCells > 0.0;
 }
 
 [numthreads(64, 1, 1)]
-void TraceLampPolar(uint3 dispatchId : SV_DispatchThreadID)
+void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
 {
     int angleIndex = int(dispatchId.x);
-    if (angleIndex >= _LampPolarSize.x)
+    if (angleIndex >= _DynamicPolarSize.x)
     {
         return;
     }
 
-    int radii = _LampPolarSize.y;
-    float angle = (float(angleIndex) + 0.5) * PI2 / float(_LampPolarSize.x);
+    int radii = _DynamicPolarSize.y;
+    float angle = (float(angleIndex) + 0.5) * PI2 / float(_DynamicPolarSize.x);
     float raySine = 0.0;
     float rayCosine = 1.0;
     sincos(angle, raySine, rayCosine);
@@ -51,15 +51,15 @@ void TraceLampPolar(uint3 dispatchId : SV_DispatchThreadID)
     float2 segmentStart = 0.0;
     float emitterArea = 0.0;
     bool emits = false;
-    LampEmitterPoint(_DynamicLights[_DynamicLightIndex], _LampPolarPoint, segmentStart, emitterArea, emits);
-    int rowOffset = _LampPolarPoint * radii;
+    DynamicEmitterPoint(_DynamicLights[_DynamicLightIndex], _DynamicPolarPoint, segmentStart, emitterArea, emits);
+    int rowOffset = _DynamicPolarPoint * radii;
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     float cellsPerDistance = length(direction * cellsPerPixel);
     float intervalLength = float(radii - 1);
     float3 airExtinction = SegmentExtinction(0.0);
     float3 opticalDepth = 0.0;
     float distance = 0.0;
-    _LampPolar[int2(angleIndex, rowOffset)] = float4(0.0, 0.0, 0.0, 0.0);
+    _DynamicPolar[int2(angleIndex, rowOffset)] = float4(0.0, 0.0, 0.0, 0.0);
     int nextRadius = 1;
 
     float2 inverseDirection = float2(
@@ -77,7 +77,7 @@ void TraceLampPolar(uint3 dispatchId : SV_DispatchThreadID)
         [loop]
         while (nextRadius < radii && float(nextRadius) <= entry)
         {
-            _LampPolar[int2(angleIndex, rowOffset + nextRadius)] =
+            _DynamicPolar[int2(angleIndex, rowOffset + nextRadius)] =
                 float4(airExtinction * float(nextRadius) * cellsPerDistance, 0.0);
             nextRadius++;
         }
@@ -121,7 +121,7 @@ void TraceLampPolar(uint3 dispatchId : SV_DispatchThreadID)
                 [loop]
                 while (nextRadius < radii)
                 {
-                    _LampPolar[int2(angleIndex, rowOffset + nextRadius)] = float4(1e6, 1e6, 1e6, 0.0);
+                    _DynamicPolar[int2(angleIndex, rowOffset + nextRadius)] = float4(1e6, 1e6, 1e6, 0.0);
                     nextRadius++;
                 }
                 break;
@@ -132,7 +132,7 @@ void TraceLampPolar(uint3 dispatchId : SV_DispatchThreadID)
             [loop]
             while (nextRadius < radii && float(nextRadius) <= end)
             {
-                _LampPolar[int2(angleIndex, rowOffset + nextRadius)] = float4(
+                _DynamicPolar[int2(angleIndex, rowOffset + nextRadius)] = float4(
                     opticalDepth + extinction * (float(nextRadius) - distance) * cellsPerDistance,
                     0.0);
                 nextRadius++;
@@ -164,7 +164,7 @@ void TraceLampPolar(uint3 dispatchId : SV_DispatchThreadID)
     [loop]
     while (nextRadius < radii)
     {
-        _LampPolar[int2(angleIndex, rowOffset + nextRadius)] = float4(
+        _DynamicPolar[int2(angleIndex, rowOffset + nextRadius)] = float4(
             opticalDepth + airExtinction * (float(nextRadius) - distance) * cellsPerDistance,
             0.0);
         nextRadius++;
@@ -175,25 +175,25 @@ void TraceLampPolar(uint3 dispatchId : SV_DispatchThreadID)
 // ray at `angle`, interpolated between neighbouring rays and whole texels.
 float3 PolarOpticalDepth(int pointIndex, float angle, float radius)
 {
-    int rowOffset = pointIndex * _LampPolarSize.y;
-    uint angles = uint(_LampPolarSize.x);
+    int rowOffset = pointIndex * _DynamicPolarSize.y;
+    uint angles = uint(_DynamicPolarSize.x);
     // Shifted by a full turn so the index is never negative: unsigned modulus.
     float angleIndex = frac(angle / PI2) * float(angles) - 0.5 + float(angles);
     float angleFloor = floor(angleIndex);
     float angleBlend = angleIndex - angleFloor;
     uint angle0 = uint(angleFloor) % angles;
     uint angle1 = (angle0 + 1u) % angles;
-    float radiusIndex = min(max(radius, 0.0), float(_LampPolarSize.y - 1));
+    float radiusIndex = min(max(radius, 0.0), float(_DynamicPolarSize.y - 1));
     int radius0 = int(floor(radiusIndex));
-    int radius1 = min(radius0 + 1, _LampPolarSize.y - 1);
+    int radius1 = min(radius0 + 1, _DynamicPolarSize.y - 1);
     float radiusBlend = radiusIndex - float(radius0);
     float3 inner = lerp(
-        _LampPolarInput.Load(int3(angle0, rowOffset + radius0, 0)).rgb,
-        _LampPolarInput.Load(int3(angle1, rowOffset + radius0, 0)).rgb,
+        _DynamicPolarInput.Load(int3(angle0, rowOffset + radius0, 0)).rgb,
+        _DynamicPolarInput.Load(int3(angle1, rowOffset + radius0, 0)).rgb,
         angleBlend);
     float3 outer = lerp(
-        _LampPolarInput.Load(int3(angle0, rowOffset + radius1, 0)).rgb,
-        _LampPolarInput.Load(int3(angle1, rowOffset + radius1, 0)).rgb,
+        _DynamicPolarInput.Load(int3(angle0, rowOffset + radius1, 0)).rgb,
+        _DynamicPolarInput.Load(int3(angle1, rowOffset + radius1, 0)).rgb,
         angleBlend);
     return lerp(inner, outer, radiusBlend);
 }
@@ -267,8 +267,8 @@ float3 GatherDynamicSource(float2 origin, DynamicLight light, int sampleCount)
     return result;
 }
 
-// Lamp light at a receiver from the emitter points' fans (see TraceLampPolar).
-float3 LampRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
+// Dynamic light at a receiver from the emitter points' fans (see TraceDynamicPolar).
+float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
 {
     float2 worldCellMin = light.positionRadius.xy - 0.5 * _CellSize;
     float2 sourceMin = (worldCellMin - _WorldRect.xy) / _WorldRect.zw * float2(_FieldSize);
@@ -278,7 +278,7 @@ float3 LampRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
     float2 nearestOnSource = min(max(origin, sourceMin), sourceMax);
     float2 gapCells = abs(origin - nearestOnSource) * cellsPerPixel;
     float3 result = 0.0;
-    if (max(gapCells.x, gapCells.y) < LampNearCells)
+    if (max(gapCells.x, gapCells.y) < DynamicNearCells)
     {
         result = GatherDynamicSource(origin, light, sampleCount);
     }
@@ -286,7 +286,7 @@ float3 LampRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
     {
         // Same angular samples and emission integral as GatherDynamicSource.
         // Each sample's transmittance is read from the fan of the emitter point
-        // nearest to where the sample crosses the lamp: that ray ends exactly
+        // nearest to where the sample crosses the dynamic light: that ray ends exactly
         // at the receiver and starts within a sixth of a cell of the sample
         // ray, so walls shadow along the rays light actually takes.
         float2 toCenter = (sourceMin + sourceMax) * 0.5 - origin;
@@ -350,14 +350,14 @@ float3 LampRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
 
                     float2 crossing = origin + direction * (0.5 * (entryDistance + exitDistance));
                     int2 nearestPoint = clamp(
-                        int2(floor((crossing - emitterMin) / emitterSize * float(LampEmitterPointsPerAxis))),
+                        int2(floor((crossing - emitterMin) / emitterSize * float(DynamicEmitterPointsPerAxis))),
                         int2(0, 0),
-                        int2(LampEmitterPointsPerAxis - 1, LampEmitterPointsPerAxis - 1));
-                    int pointIndex = nearestPoint.y * LampEmitterPointsPerAxis + nearestPoint.x;
+                        int2(DynamicEmitterPointsPerAxis - 1, DynamicEmitterPointsPerAxis - 1));
+                    int pointIndex = nearestPoint.y * DynamicEmitterPointsPerAxis + nearestPoint.x;
                     float2 emitterPoint = 0.0;
                     float emitterArea = 0.0;
                     bool emits = false;
-                    LampEmitterPoint(light, pointIndex, emitterPoint, emitterArea, emits);
+                    DynamicEmitterPoint(light, pointIndex, emitterPoint, emitterArea, emits);
 
                     float2 toReceiver = origin - emitterPoint;
                     float receiverRadius = length(toReceiver);
@@ -380,4 +380,4 @@ float3 LampRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
     return result;
 }
 
-#endif // KERN_LAMP_POLAR_HLSL
+#endif // KERN_DYNAMIC_POLAR_HLSL

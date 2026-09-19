@@ -39,7 +39,7 @@ public sealed class ShaderContractTests
                 match.Success,
                 Is.False,
                 $"CRITICAL ARCHITECTURE VIOLATION: Forbidden DDA call '{match.Value}' found in '{Path.GetFileName(file)}'. " +
-                $"DDA traversal is strictly prohibited outside CascadeTrace, LampPolar, and BounceCache.");
+                $"DDA traversal is strictly prohibited outside CascadeTrace, DynamicPolar, and BounceCache.");
         }
     }
 
@@ -74,6 +74,10 @@ public sealed class ShaderContractTests
             "_Result",
             "_FieldSize",
             "_BounceSize",
+            "_BounceDispatchOrigin",
+            "_BounceDispatchSize",
+            "_CompositeDispatchOrigin",
+            "_CompositeDispatchSize",
             "_WorldRect",
             "_AmbientColor",
             "_EmptyExtinctionRGB",
@@ -86,6 +90,7 @@ public sealed class ShaderContractTests
             "_DirtyRegionCount",
             "_CascadeChangedMask",
             "_CascadeMaskEnabled",
+            "_EnableBilinearFix",
         };
 
         foreach (string id in expectedIdentifiers)

@@ -34,6 +34,10 @@ internal static class LightingComputeBinder
     public static readonly int ResultID = Shader.PropertyToID("_Result");
     public static readonly int FieldSizeID = Shader.PropertyToID("_FieldSize");
     public static readonly int BounceSizeID = Shader.PropertyToID("_BounceSize");
+    public static readonly int BounceDispatchOriginID = Shader.PropertyToID("_BounceDispatchOrigin");
+    public static readonly int BounceDispatchSizeID = Shader.PropertyToID("_BounceDispatchSize");
+    public static readonly int CompositeDispatchOriginID = Shader.PropertyToID("_CompositeDispatchOrigin");
+    public static readonly int CompositeDispatchSizeID = Shader.PropertyToID("_CompositeDispatchSize");
     public static readonly int WorldRectID = Shader.PropertyToID("_WorldRect");
     public static readonly int AmbientColorID = Shader.PropertyToID("_AmbientColor");
     public static readonly int EmptyExtinctionRGBID = Shader.PropertyToID("_EmptyExtinctionRGB");
@@ -50,6 +54,7 @@ internal static class LightingComputeBinder
     public static readonly int DebugViewID = Shader.PropertyToID("_DebugView");
     public static readonly int MaterialYFlipID = Shader.PropertyToID("_MaterialYFlip");
     public static readonly int EnableDiffuseBounceID = Shader.PropertyToID("_EnableDiffuseBounce");
+    public static readonly int EnableBilinearFixID = Shader.PropertyToID("_EnableBilinearFix");
     public static readonly int CascadeOffsetID = Shader.PropertyToID("_CascadeOffset");
     public static readonly int CascadeProbeSizeID = Shader.PropertyToID("_CascadeProbeSize");
     public static readonly int CascadeProbeSpacingID = Shader.PropertyToID("_CascadeProbeSpacing");
@@ -80,25 +85,25 @@ internal static class LightingComputeBinder
     public static readonly int DynamicDispatchSizeID = Shader.PropertyToID("_DynamicDispatchSize");
     public static readonly int DynamicLightIndexID = Shader.PropertyToID("_DynamicLightIndex");
     public static readonly int WriteDynamicDirectID = Shader.PropertyToID("_WriteDynamicDirect");
-    public static readonly int LampTileOffsetID = Shader.PropertyToID("_LampTileOffset");
-    public static readonly int LampTilesID = Shader.PropertyToID("_LampTiles");
-    public static readonly int LampTilesInputID = Shader.PropertyToID("_LampTilesInput");
-    public static readonly int LampTileInfosID = Shader.PropertyToID("_LampTileInfos");
-    public static readonly int LampTileCountID = Shader.PropertyToID("_LampTileCount");
+    public static readonly int DynamicTileOffsetID = Shader.PropertyToID("_DynamicTileOffset");
+    public static readonly int DynamicTilesID = Shader.PropertyToID("_DynamicTiles");
+    public static readonly int DynamicTilesInputID = Shader.PropertyToID("_DynamicTilesInput");
+    public static readonly int DynamicTileInfosID = Shader.PropertyToID("_DynamicTileInfos");
+    public static readonly int DynamicTileCountID = Shader.PropertyToID("_DynamicTileCount");
     public static readonly int ComposeOriginID = Shader.PropertyToID("_ComposeOrigin");
     public static readonly int ComposeSizeID = Shader.PropertyToID("_ComposeSize");
-    public static readonly int LampPolarID = Shader.PropertyToID("_LampPolar");
-    public static readonly int LampPolarInputID = Shader.PropertyToID("_LampPolarInput");
-    public static readonly int LampPolarSizeID = Shader.PropertyToID("_LampPolarSize");
-    public static readonly int LampPolarPointID = Shader.PropertyToID("_LampPolarPoint");
+    public static readonly int DynamicPolarID = Shader.PropertyToID("_DynamicPolar");
+    public static readonly int DynamicPolarInputID = Shader.PropertyToID("_DynamicPolarInput");
+    public static readonly int DynamicPolarSizeID = Shader.PropertyToID("_DynamicPolarSize");
+    public static readonly int DynamicPolarPointID = Shader.PropertyToID("_DynamicPolarPoint");
 
-    // LampEmitterPointsPerAxis squared in WorldLighting.compute: ray fans
-    // traced per lamp, one band of rows each in the lamp ray texture.
-    public const int LampEmitterPointCount = 9;
+    // DynamicEmitterPointsPerAxis squared in WorldLighting.compute: ray fans
+    // traced per dynamic light, one band of rows each in the dynamic light ray texture.
+    public const int DynamicEmitterPointCount = 9;
 
-    // Must match InvisibleLampRadiance in WorldLighting.compute: absolute
-    // radiance below which lamp light cannot move any display level.
-    public const float InvisibleLampRadiance = 1e-6f;
+    // Must match InvisibleDynamicRadiance in WorldLighting.compute: absolute
+    // radiance below which dynamic light cannot move any display level.
+    public const float InvisibleDynamicRadiance = 1e-6f;
     public static readonly int CellGridSizeID = Shader.PropertyToID("_CellGridSize");
     public static readonly int CellSolidMaskID = Shader.PropertyToID("_CellSolidMask");
     public static readonly int CellSolidMaskOutputID = Shader.PropertyToID("_CellSolidMaskOutput");
@@ -218,10 +223,12 @@ internal static class LightingComputeBinder
             compute,
             MaterialYFlipID,
             SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
+        bool bilinearFix = qualityMode is LightingQualityMode.PerPixelBilinearFix or LightingQualityMode.PerPixelBilinearFixBounce;
+        commandBuffer.SetComputeIntParam(compute, EnableBilinearFixID, bilinearFix ? 1 : 0);
         commandBuffer.SetComputeIntParam(
             compute,
             EnableDiffuseBounceID,
-            LightingConfigHolder.BounceEnabled ? 1 : 0);
+            (qualityMode == LightingQualityMode.PerPixelBilinearFixBounce && LightingConfigHolder.BounceEnabled) ? 1 : 0);
         commandBuffer.SetComputeIntParam(
             compute,
             BlockAveragedID,

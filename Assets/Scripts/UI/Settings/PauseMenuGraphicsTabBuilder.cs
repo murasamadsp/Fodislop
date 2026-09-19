@@ -138,6 +138,7 @@ internal sealed class PauseMenuGraphicsTabBuilder
                     LightingQualityMode.Off => LightingQualityMode.PerBlock,
                     LightingQualityMode.PerBlock => LightingQualityMode.PerPixel,
                     LightingQualityMode.PerPixel => LightingQualityMode.PerPixelBilinearFix,
+                    LightingQualityMode.PerPixelBilinearFix => LightingQualityMode.PerPixelBilinearFixBounce,
                     _ => LightingQualityMode.Off,
                 };
                 return settings;

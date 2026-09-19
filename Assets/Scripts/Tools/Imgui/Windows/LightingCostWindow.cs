@@ -120,7 +120,7 @@ public sealed class LightingCostWindow : ToolWindow
         {
             _summary = "Режим: По блокам (cascade cache + targeted dynamic light)";
             _solveMix = $"за секунду: {_telemetry.LightingStaticSolveCount} решений";
-            _rows.Add("Динамика: только изменившиеся lamp tiles");
+            _rows.Add("Динамика: только изменившиеся тайлы источников");
             _rows.Add("Разрешение: ровно 1 тексель на блок (Point sampling)");
             return;
         }

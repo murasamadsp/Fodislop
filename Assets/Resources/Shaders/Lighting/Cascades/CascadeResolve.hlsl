@@ -5,7 +5,7 @@
 //
 // READS: _RadianceAtlas
 // WRITES: _DirectTexture
-// MUST NOT: выполнять geometry traversal, трогать dynamic light buffers
+// MUST NOT: выполнять geometry traversal, трогать DynamicLight buffers
 
 [numthreads(8, 8, 1)]
 void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)

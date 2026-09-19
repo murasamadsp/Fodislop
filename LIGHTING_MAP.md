@@ -65,7 +65,7 @@ Camera
 - `TraceLightSegment` / `TraceRadianceSegment`: O(crossed texels), geometry traversal.
 - `SampleCascadeBilinear`: four atlas reads plus interpolation.
 - `SolveDynamicLighting`: polar cache lookup per field pixel.
-- `ComposeDynamicLighting`: sum of lamp tiles per pixel.
+- `ComposeDynamicLighting`: sum of dynamic tiles per pixel.
 - Full static cascade estimate is in dump `estimatedCascadeRayWorkUnits`.
 - Do not infer GPU cost from CPU line count alone. Track dispatches, threads, DDA visits, atlas reads/writes and upload bytes.
 

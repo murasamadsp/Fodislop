@@ -30,7 +30,7 @@ public sealed class ShaderWarmupContractTests
         "ScrollRadianceAtlas",
         "SolveDynamicLighting",
         "ComposeDynamicLighting",
-        "TraceLampPolar",
+        "TraceDynamicPolar",
         "ClearDynamicDirect",
         "ResolveDirect",
         "ResolveTransmissionDebug",
