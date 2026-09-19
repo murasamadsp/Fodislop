@@ -30,7 +30,11 @@ float PhysicalContour(
     return contour;
 }
 
-float EvaluateRoundableBlockAlpha(float2 uv, float packedContour, float packedLightingFlags)
+float EvaluateRoundableBlockAlpha(
+    float2 uv,
+    float packedContour,
+    float packedLightingFlags,
+    float antialiasScale)
 {
     if (!KernTerrainIsRoundable(packedContour))
     {
@@ -47,7 +51,7 @@ float EvaluateRoundableBlockAlpha(float2 uv, float packedContour, float packedLi
     float rBL = (hasSame.z || hasSame.y) ? 0.0 : 0.5;
     float rBR = (hasSame.z || hasSame.w) ? 0.0 : 0.5;
     float dist = length(p);
-    float aa = min(fwidth(dist), 1.0 / 16.0);
+    float aa = min(fwidth(dist) * antialiasScale, 1.0 / 16.0);
     float alpha = 1.0 - smoothstep(0.51 - aa, 0.51 + aa, dist);
     if (rTL < 0.25)
     {

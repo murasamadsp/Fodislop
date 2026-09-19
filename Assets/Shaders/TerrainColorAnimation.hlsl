@@ -33,6 +33,7 @@ float3 TerrainHSVToRGB(float3 c)
 }
 
 static const int KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL = 1;
+static const int KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE = 2;
 
 struct TerrainShimmerSignal
 {
@@ -71,7 +72,48 @@ TerrainShimmerSignal EvaluateTerrainShimmer(
 bool TerrainAnimationUsesFlowMap(int animationType, int animationProfile)
 {
     return animationType == 2 ||
-        animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL;
+        animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL ||
+        animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE;
+}
+
+float2 TerrainFlowSamplePosition(
+    float2 worldPosition,
+    int animationProfile,
+    float animationSpeed)
+{
+    if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
+    {
+        return worldPosition;
+    }
+
+    // Move the vector field more slowly than the lava sheet. The two axes use
+    // different rates so the deformation does not repeat as a diagonal pan.
+    return worldPosition + _Time.y * animationSpeed * float2(0.018, -0.011);
+}
+
+float2 AnimateTerrainSampleUV(
+    float2 atlasUV,
+    float4 subAtlasRect,
+    float2 tileSizeUV,
+    int animationProfile,
+    float3 flowSample)
+{
+    if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
+    {
+        return atlasUV;
+    }
+
+    float2 flowDirection = flowSample.rg * 2.0 - 1.0;
+    float2 distortion = flowDirection * tileSizeUV * 0.14;
+    float2 localUV = atlasUV - subAtlasRect.xy + distortion;
+    return subAtlasRect.xy + frac(localUV / subAtlasRect.zw) * subAtlasRect.zw;
+}
+
+float TerrainContourAntialiasScale(int animationProfile)
+{
+    return animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE
+        ? 2.5
+        : 1.0;
 }
 
 float3 TerrainUnpackRgb24(float packedColor)

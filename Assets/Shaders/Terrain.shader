@@ -268,8 +268,31 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, input.color.a * worldLight.r);
                 }
 
-                float2 finalUV = PixelArtSampleUV(tileUV.finalUV, atlasTexelSize.zw);
-                finalUV = ClampTerrainTileUV(finalUV, tileUV);
+                int animType = (int)(input.animData.x + 0.5);
+                int animationProfile = (int)(input.animData.w + 0.5);
+                float3 flowSample = 0.0;
+                if (TerrainAnimationUsesFlowMap(animType, animationProfile))
+                {
+                    // Geometric quad coordinates stay continuous when atlas
+                    // UVs are rotated or mirrored by terrain autotiling.
+                    float2 flowPosition = TerrainFlowSamplePosition(
+                        input.worldPos.xy + input.packedData.yz,
+                        animationProfile,
+                        input.animData.y);
+                    flowSample = SampleFlowMap(flowPosition);
+                }
+
+                float2 finalUV = AnimateTerrainSampleUV(
+                    tileUV.finalUV,
+                    input.subAtlasRect,
+                    input.tileSizeUV.xy,
+                    animationProfile,
+                    flowSample);
+                finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
+                if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
+                {
+                    finalUV = ClampTerrainTileUV(finalUV, tileUV);
+                }
 
                 half4 texColor = SampleAtlasColor(atlasSlot, finalUV);
                 if (texColor.a < 0.05)
@@ -278,17 +301,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 }
 
                 float3 finalRGB = texColor.rgb;
-                int animType = (int)(input.animData.x + 0.5);
-                int animationProfile = (int)(input.animData.w + 0.5);
-                float3 flowSample = 0.0;
-                if (TerrainAnimationUsesFlowMap(animType, animationProfile))
-                {
-                    // Geometric quad coordinates stay continuous when atlas
-                    // UVs are rotated or mirrored by terrain autotiling.
-                    flowSample = SampleFlowMap(
-                        input.worldPos.xy + input.packedData.yz);
-                }
-
                 finalRGB = AnimateTerrainColor(
                     finalRGB,
                     texColor.rgb,
@@ -305,7 +317,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float finalAlpha = EvaluateRoundableBlockAlpha(
                     input.uv,
                     input.glowData.z,
-                    input.glowData.y);
+                    input.glowData.y,
+                    TerrainContourAntialiasScale(animationProfile));
 
                 float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRGB = finalRGB * worldLight.rgb;
@@ -478,7 +491,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 animData,
                 float4 packedData,
                 int atlasSlot,
-                float4 atlasTexelSize)
+                float4 atlasTexelSize,
+                int animationProfile,
+                float3 flowSample)
             {
                 TerrainTileUvResult tileUV = ResolveTerrainTileUV(
                     cornerUV,
@@ -495,7 +510,16 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                float2 finalUV = ClampTerrainTileUV(tileUV.finalUV, tileUV);
+                float2 finalUV = AnimateTerrainSampleUV(
+                    tileUV.finalUV,
+                    subAtlasRect,
+                    tileSize.xy,
+                    animationProfile,
+                    flowSample);
+                if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
+                {
+                    finalUV = ClampTerrainTileUV(finalUV, tileUV);
+                }
 
             #if defined(KERN_TERRAIN_CELLS)
                 return TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
@@ -510,6 +534,23 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float isForeground = input.isForeground;
                 int albedoAtlasSlot = (int)round(input.atlasIndex);
                 float4 atlasTexelSize = GetFieldAtlasTexelSize(albedoAtlasSlot);
+                int albedoAnimationType = (int)(input.animData.x + 0.5);
+                int albedoAnimationProfile = (int)(input.animData.w + 0.5);
+                float3 flowSample = 0.0;
+                if (TerrainAnimationUsesFlowMap(
+                    albedoAnimationType,
+                    albedoAnimationProfile))
+                {
+                    float2 flowPosition = TerrainFlowSamplePosition(
+                        input.worldPos.xy + input.packedData.yz,
+                        albedoAnimationProfile,
+                        input.animData.y);
+                    flowSample = SAMPLE_TEXTURE2D(
+                        _FlowMap,
+                        sampler_FlowMap,
+                        flowPosition / _FlowScale.xy).rgb;
+                }
+
                 half4 albedoTexel = SampleFieldAlbedoTexel(
                     input.uv,
                     input.subAtlasRect,
@@ -518,7 +559,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.animData,
                     input.packedData,
                     albedoAtlasSlot,
-                    atlasTexelSize);
+                    atlasTexelSize,
+                    albedoAnimationProfile,
+                    flowSample);
 
                 // Без фолбеков: нет текселя — нет альбедо. Плоский цвет
                 // миникарты сюда больше не попадает ни в каком виде.
@@ -549,20 +592,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // в альбедо, новой выборки нет. Без этого решётка или тайл
                 // с прозрачными местами давили AO тенью как сплошной квадрат.
                 occupancy *= albedoTexel.a >= 0.05 ? 1.0 : 0.0;
-
-                int albedoAnimationType = (int)(input.animData.x + 0.5);
-                int albedoAnimationProfile = (int)(input.animData.w + 0.5);
-                float3 flowSample = 0.0;
-                if (TerrainAnimationUsesFlowMap(
-                    albedoAnimationType,
-                    albedoAnimationProfile))
-                {
-                    flowSample = SAMPLE_TEXTURE2D(
-                        _FlowMap,
-                        sampler_FlowMap,
-                        (input.worldPos.xy + input.packedData.yz) /
-                            _FlowScale.xy).rgb;
-                }
 
                 surfaceAlbedo = AnimateTerrainColor(
                     surfaceAlbedo,

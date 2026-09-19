@@ -8,6 +8,7 @@ internal enum TerrainAnimationProfile : byte
 {
     Default = 0,
     PrismaticCrystal = 1,
+    MoltenSurface = 2,
 }
 
 internal readonly record struct TerrainAnimationSettings(
@@ -22,17 +23,27 @@ internal static class TerrainAnimationProfileCatalog
 
     public static TerrainAnimationSettings Get(CellType cellType, float configuredSpeed)
     {
-        return cellType is
+        if (cellType is
             CellType.XGreen or
             CellType.XBlue or
             CellType.XRed or
             CellType.XCyan or
-            CellType.XViolet
-            ? new TerrainAnimationSettings(
+            CellType.XViolet)
+        {
+            return new TerrainAnimationSettings(
                 TerrainAnimationProfile.PrismaticCrystal,
-                PrismaticCrystalSpeed)
-            : new TerrainAnimationSettings(
-                TerrainAnimationProfile.Default,
+                PrismaticCrystalSpeed);
+        }
+
+        if (cellType == CellType.Lava)
+        {
+            return new TerrainAnimationSettings(
+                TerrainAnimationProfile.MoltenSurface,
                 configuredSpeed);
+        }
+
+        return new TerrainAnimationSettings(
+            TerrainAnimationProfile.Default,
+            configuredSpeed);
     }
 }

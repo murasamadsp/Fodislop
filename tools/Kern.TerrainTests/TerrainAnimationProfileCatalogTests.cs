@@ -29,7 +29,6 @@ public sealed class TerrainAnimationProfileCatalogTests
     [TestCase(CellType.Violet)]
     [TestCase(CellType.White)]
     [TestCase(CellType.Cyan)]
-    [TestCase(CellType.Lava)]
     [TestCase(CellType.PurpleAcid)]
     public void Get_OtherCell_PreservesConfiguredAnimation(CellType cellType)
     {
@@ -37,6 +36,16 @@ public sealed class TerrainAnimationProfileCatalogTests
             TerrainAnimationProfileCatalog.Get(cellType, 7f);
 
         Assert.That(settings.Profile, Is.EqualTo(TerrainAnimationProfile.Default));
+        Assert.That(settings.Speed, Is.EqualTo(7f));
+    }
+
+    [Test]
+    public void Get_Lava_UsesMoltenProfileAndPreservesConfiguredSpeed()
+    {
+        TerrainAnimationSettings settings =
+            TerrainAnimationProfileCatalog.Get(CellType.Lava, 7f);
+
+        Assert.That(settings.Profile, Is.EqualTo(TerrainAnimationProfile.MoltenSurface));
         Assert.That(settings.Speed, Is.EqualTo(7f));
     }
 }
