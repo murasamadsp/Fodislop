@@ -101,7 +101,7 @@ struct DynamicLight { float4 positionRadius,colorIntensity; };
 std::vector<DynamicLight> _DynamicLights;
 int _DynamicLightCount=0;
 float4 _AmbientColor={.25f,.25f,.25f,0};
-int _DebugView=0,_EnableDiffuseBounce=1;
+int _DebugView=0,_EnableDiffuseBounce=1,_EnableBilinearFix=1;
 float _BounceStrength=1;
 int sampler_LinearClamp=0, _MaterialYFlip=0;
 int2 _FieldSize;

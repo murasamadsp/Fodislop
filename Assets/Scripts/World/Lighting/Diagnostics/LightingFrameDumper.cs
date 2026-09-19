@@ -14,7 +14,7 @@ namespace Kern.World.Lighting.Diagnostics;
 
 public static class LightingFrameDumper
 {
-    private const int MaximumRetainedDumps = 12;
+    private const int MaximumRetainedDumps = 3;
     private const string DumpDirectoryPattern = "yyyy-MM-dd_HH-mm-ss";
 
     [Serializable]

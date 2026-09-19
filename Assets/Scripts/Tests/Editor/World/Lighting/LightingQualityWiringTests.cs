@@ -22,20 +22,19 @@ namespace Kern.Tests.World.Lighting;
 public sealed class LightingQualityWiringTests
 {
     [Test]
-    public void ResolverLocksUltraToPerPixelWhenLightingIsOn()
+    public void ResolverUpgradesUltraToBounceWhenLightingIsOn()
     {
         foreach (LightingQualityMode requested in new[]
                  {
                      LightingQualityMode.PerBlock,
                      LightingQualityMode.PerPixel,
-                     LightingQualityMode.PerPixelBilinearFix,
                      LightingQualityMode.PerPixelBilinearFixBounce,
                  })
         {
             Assert.That(
                 LightingQualityResolver.Resolve(GraphicsPreset.Ultra, requested),
-                Is.EqualTo(LightingQualityMode.PerPixel),
-                $"Ultra must resolve to PerPixel even when {requested} was requested.");
+                Is.EqualTo(LightingQualityMode.PerPixelBilinearFixBounce),
+                $"Ultra must resolve to PerPixelBilinearFixBounce even when {requested} was requested.");
         }
     }
 

@@ -56,7 +56,7 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
     {
         return;
     }
-    float bounceStrength = (_DebugView == 8) ? max(_BounceStrength, 1.0) : _BounceStrength;
+    float bounceStrength = (_DebugView == 7) ? max(_BounceStrength, 1.0) : _BounceStrength;
     if (_EnableDiffuseBounce == 0 && _DebugView != 7)
     {
         _BounceTexture[pixel] = 0.0;
