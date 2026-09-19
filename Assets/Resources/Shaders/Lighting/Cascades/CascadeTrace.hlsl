@@ -304,6 +304,7 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
         radiance = fixedRadiance;
         transmittance = fixedTransmittance;
     }
+}
 
     uint3 packedInterval = PackInterval(
         radiance,
