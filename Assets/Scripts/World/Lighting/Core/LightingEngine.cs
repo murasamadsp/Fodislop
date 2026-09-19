@@ -509,6 +509,7 @@ namespace Kern.World.Lighting
             _runtimeState.HasStaticRadianceState = false;
             _runtimeState.HasDynamicRadianceState = false;
             _runtimeState.CompositeDirty = true;
+            _runtimeState.BounceDirty = true;
             Debug.Log($"[LightingEngine] SetDebugView: {debugView}");
         }
 
@@ -610,6 +611,8 @@ namespace Kern.World.Lighting
 
             _runtimeState.LastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
             _runtimeState.FieldDirty = true;
+            _runtimeState.CompositeDirty = true;
+            _runtimeState.BounceDirty = true;
             _runtimeState.HasRenderedLightState = false;
             _runtimeState.HasStaticRadianceState = false;
             _runtimeState.HasDynamicRadianceState = false;

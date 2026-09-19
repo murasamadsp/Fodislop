@@ -235,10 +235,20 @@ internal sealed class DynamicLightingSolver
             traceKernel,
             LightingComputeBinder.DirectTextureID,
             _resources.DirectTexture!);
+        commandBuffer.SetComputeTextureParam(
+            compute,
+            traceKernel,
+            LightingComputeBinder.CellSolidMaskID,
+            _resources.CellSolidMask!);
         int rayKernel = _resources.TraceDynamicPolarKernel;
         BindFieldTextures(commandBuffer, rayKernel, _resources.StaticEmissionField!);
         commandBuffer.SetComputeTextureParam(compute, rayKernel, LightingComputeBinder.DynamicPolarID, polarRays);
         commandBuffer.SetComputeBufferParam(compute, rayKernel, LightingComputeBinder.DynamicLightsID, _resources.DynamicLightBuffer!);
+        commandBuffer.SetComputeTextureParam(
+            compute,
+            rayKernel,
+            LightingComputeBinder.CellSolidMaskID,
+            _resources.CellSolidMask!);
 
         bool singleLightDirectWritten = false;
         for (int lightIndex = 0; lightIndex < count; lightIndex++)

@@ -107,7 +107,9 @@ internal sealed class LightingFrameExecutor
             _resources.SolveCascadeKernel,
             _resources.ResolveDirectKernel,
             _resources.SolveDiffuseBounceKernel,
-            _resources.CompositeLightingKernel);
+            _resources.CompositeLightingKernel,
+            _resources.CellGridWidth,
+            _resources.CellGridHeight);
     }
 
     public LightingFrameResult Record(
@@ -220,7 +222,9 @@ internal sealed class LightingFrameExecutor
             request.DynamicLightsChanged ||
             request.DynamicRadianceChanged ||
             staticRadianceChanged;
-        if (request.Quality == LightingQualityMode.PerPixelBilinearFixBounce &&
+        bool bounceRequested = request.Quality == LightingQualityMode.PerPixelBilinearFixBounce ||
+            request.DebugView == LightingEngine.DebugView.DiffuseBounce;
+        if (bounceRequested &&
             LightingConfigHolder.BounceEnabled &&
             LightingConfigHolder.BounceStrength > 0f &&
             LightingConfigHolder.EnabledFeatures.HasFlag(LightingFeatureFlags.DiffuseBounce) &&

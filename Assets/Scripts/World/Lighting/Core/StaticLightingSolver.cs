@@ -88,6 +88,8 @@ internal sealed class StaticLightingSolver
 
         commandBuffer.SetComputeBufferParam(compute, solveKernel,
             LightingComputeBinder.RadianceAtlasID, _resources.RadianceAtlas!);
+        commandBuffer.SetComputeTextureParam(compute, solveKernel,
+            LightingComputeBinder.CellSolidMaskID, _resources.CellSolidMask!);
 
         for (int cascadeIndex = _resources.Cascades.Count - 1;
              cascadeIndex >= 0;
@@ -390,6 +392,11 @@ internal sealed class StaticLightingSolver
         if (transmissionDebug)
         {
             BindFieldTextures(commandBuffer, compute, resolveKernel, emissionField);
+            commandBuffer.SetComputeTextureParam(
+                compute,
+                resolveKernel,
+                LightingComputeBinder.CellSolidMaskID,
+                _resources.CellSolidMask!);
         }
 
         commandBuffer.DispatchCompute(

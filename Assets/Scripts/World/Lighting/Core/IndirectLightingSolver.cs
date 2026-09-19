@@ -55,6 +55,11 @@ internal sealed class IndirectLightingSolver
             kernel,
             LightingComputeBinder.BounceTextureID,
             _resources.BounceTexture!);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            kernel,
+            LightingComputeBinder.BounceTapsID,
+            _resources.BounceTaps!);
         int bounceWidth = _resources.BounceWidth;
         int bounceHeight = _resources.BounceHeight;
         if (TryGetBounceRect(fieldDirtyRect, worldRect, cellSize, out RectInt bounceRect))
@@ -132,6 +137,11 @@ internal sealed class IndirectLightingSolver
             kernel,
             LightingComputeBinder.ResultID,
             _resources.LightmapTexture!);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            kernel,
+            LightingComputeBinder.BounceFilterWeightsID,
+            _resources.BounceFilterWeights!);
         int fieldWidth = _resources.FieldWidth;
         int fieldHeight = _resources.FieldHeight;
         if (TryGetFieldRect(fieldDirtyRect, worldRect, cellSize, out RectInt compositeRect))

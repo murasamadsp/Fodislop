@@ -139,6 +139,7 @@ namespace Kern.World.Lighting
         public static LightingFeatureFlags EnabledFeatures { get; set; } =
             LightingFeatureFlags.StaticRC |
             LightingFeatureFlags.DynamicLights |
+            LightingFeatureFlags.DiffuseBounce |
             LightingFeatureFlags.VisibilityAwareMerge |
             LightingFeatureFlags.WallAwareUpsample;
 

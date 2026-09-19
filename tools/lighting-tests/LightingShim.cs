@@ -98,8 +98,11 @@ namespace Kern.World.Lighting.Quality
 {
     public enum LightingQualityMode
     {
-        PerBlock,
-        PerPixel,
+        PerBlock = 0,
+        Off = 1,
+        PerPixel = 2,
+        PerPixelBilinearFix = 3,
+        PerPixelBilinearFixBounce = 4,
     }
 }
 

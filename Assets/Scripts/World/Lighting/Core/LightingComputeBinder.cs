@@ -191,10 +191,16 @@ internal static class LightingComputeBinder
         int solveCascadeKernel,
         int resolveDirectKernel,
         int solveDiffuseBounceKernel,
-        int compositeLightingKernel)
+        int compositeLightingKernel,
+        int cellGridWidth = 0,
+        int cellGridHeight = 0)
     {
         commandBuffer.SetComputeIntParams(compute, FieldSizeID, fieldWidth, fieldHeight);
         commandBuffer.SetComputeIntParams(compute, BounceSizeID, bounceWidth, bounceHeight);
+        if (cellGridWidth > 0 && cellGridHeight > 0)
+        {
+            commandBuffer.SetComputeIntParams(compute, CellGridSizeID, cellGridWidth, cellGridHeight);
+        }
         commandBuffer.SetComputeVectorParam(compute, WorldRectID, worldRect);
         commandBuffer.SetComputeVectorParam(
             compute,
