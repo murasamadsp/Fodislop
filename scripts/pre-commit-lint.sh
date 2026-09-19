@@ -34,6 +34,14 @@ else
     echo "Notice: dotnet not found; C# architecture linter skipped."
 fi
 
+echo "--- Step 0.2: Validating lighting HLSL transport ---"
+if command -v dotnet >/dev/null 2>&1; then
+    DOTNET_NOLOGO=1 dotnet run \
+        --project "$(dirname "$0")/../tools/lighting-tests/Kern.LightingTests.csproj" \
+        --no-restore \
+        -- transport
+fi
+
 if [ "$CI" != "true" ]; then
     echo "Notice: local hooks run fast static checks only."
     echo "Unity compile, EditMode, PlayMode, and IL2CPP validation are mandatory CI jobs."

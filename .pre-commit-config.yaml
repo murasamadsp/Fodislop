@@ -30,3 +30,9 @@ repos:
             language: system
             always_run: true
             pass_filenames: false
+          - id: lighting-shader-transport
+            name: Validate lighting shader HLSL transport and math
+            entry: dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- transport
+            language: system
+            always_run: true
+            pass_filenames: false
