@@ -54,14 +54,9 @@ Shader "Kern/World Surface"
             };
 
             TEXTURE2D(_BaseMap);
-            SAMPLER(sampler_BaseMap);
-            Texture2D<float4> _WorldLightTexture;
-            SamplerState sampler_WorldLightTexture;
-            float4 _WorldLightRect;
-            float4 _WorldLightTextureSize;
+            #include "WorldLightSampling.hlsl"
+
             float _WorldEmissionScale;
-            int _WorldLightDebugView;
-            int _WorldLightPerBlock;
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _EmissionColor;
@@ -70,22 +65,6 @@ Shader "Kern/World Surface"
                 float4 _BaseMapTileCount;
                 float4 _WorldSize;
             CBUFFER_END
-
-            float3 SampleWorldLight(float2 worldPosition)
-            {
-                float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
-                float2 lightUV = (worldPosition - _WorldLightRect.xy) / rectSize;
-                if (_WorldLightPerBlock != 0 || (_WorldLightDebugView >= 1 && _WorldLightDebugView <= 3))
-                {
-                    int2 debugPixel = clamp(
-                        int2(lightUV * _WorldLightTextureSize.xy),
-                        int2(0, 0),
-                        int2(_WorldLightTextureSize.xy) - 1);
-                    return _WorldLightTexture.Load(int3(debugPixel, 0)).rgb;
-                }
-
-                return _WorldLightTexture.Sample(sampler_WorldLightTexture, lightUV).rgb;
-            }
 
             Varyings VisibleVert(Attributes input)
             {
@@ -112,7 +91,7 @@ Shader "Kern/World Surface"
                     sampler_BaseMap,
                     baseMapUV,
                     0);
-                float3 worldLight = SampleWorldLight(input.worldPosition);
+                float3 worldLight = GetWorldLightColor(input.worldPosition).rgb;
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(worldLight, surface.a);

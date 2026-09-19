@@ -76,6 +76,12 @@ DummyMapStreamer
 - `_AmbientOcclusionField` (quality-independent occupancy pyramid for terrain AO);
 - bounce geometry caches.
 
+Terrain mesh lighting metadata has one encoder,
+`TerrainLightingData.cs`, and one shader decoder,
+`TerrainLightingData.hlsl`. `TerrainAmbientOcclusion.hlsl` owns both AO sampling
+and the receiver rule: every non-physical terrain surface receives AO, while
+physical foreground mass does not darken itself.
+
 **May**
 
 - sample geometry;

@@ -260,17 +260,8 @@ internal static class TerrainQuadBuilder
             (minimapColor.g << 8) |
             (minimapColor.b << 16);
 
-        float glowFlags = 0f;
-
-        if (isGlowing)
-        {
-            glowFlags += 1f;
-        }
-
-        if (!isBackground && MapManager.IsRoundableLoose(cellFgType))
-        {
-            glowFlags += 2f;
-        }
+        bool hasRoundedPhysicalContour =
+            !isBackground && MapManager.IsRoundableLoose(cellFgType);
 
         // Маска соседства кладётся и фоновым квадам тоже.
         //
@@ -286,22 +277,19 @@ internal static class TerrainQuadBuilder
         // тем же флагом. Так что до этой правки у фона стоял ноль не по
         // смыслу, а потому что читать его было некому.
         byte solidConnectivityMask = precalc.CellSolidBoundaryMasks[x, y];
-        float solidBoundaryMask = solidConnectivityMask & 15;
-        float solidDiagonalMask = solidConnectivityMask >> 4;
-        bool hasRoundedPhysicalContour =
-            !isBackground && MapManager.IsRoundableLoose(cellFgType);
         float emissionPower = isGlowing
             ? Mathf.Max(1f / byte.MaxValue, minimapColor.a / 255f)
             : 0f;
-        float packedLightingFlags = solidBoundaryMask +
-            (isGlowing ? 16f : 0f) +
-            (hasRoundedPhysicalContour ? 32f : 0f) +
-            (isPhysicalMass ? 64f : 0f) +
-            (emissionPower * 0.25f);
+        TerrainLightingData lightingData = TerrainLightingData.Pack(
+            solidConnectivityMask,
+            isGlowing,
+            hasRoundedPhysicalContour,
+            isPhysicalMass,
+            emissionPower);
         Vector4 glowVec = new Vector4(
             packedLightingColor,
-            packedLightingFlags,
-            glowFlags + (solidDiagonalMask * 4f),
+            lightingData.PackedFlags,
+            lightingData.PackedContour,
             0f);
 
         ReadOnlySpan<Vector2> anchors = [anchor0, anchor1, anchor2, anchor3];

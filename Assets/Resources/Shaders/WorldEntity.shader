@@ -61,36 +61,7 @@ Shader "Kern/World Entity"
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
 
-            // Тумблер режима выборки. Ноль — ближайшая без сглаживания,
-            // единица — со сглаженной границей текселя. Раздаётся глобально
-            // из DisplayManager: террейн и сущности рисуются разными
-            // материалами, часть из них создаётся в рантайме.
-            float _PixelArtFiltering;
-
-            // Сглаженная ближайшая выборка — та же, что у террейна.
-            //
-            // Тексель спрайта занимает на экране дробное число пикселей,
-            // и ближайшая выборка вынуждена одни строки текселей
-            // дублировать, а другие терять. Функция оставляет выборку
-            // ближайшей внутри текселя и размывает только его границу,
-            // ровно на ширину экранного пикселя из fwidth.
-            //
-            // Выйти за край спрайта эта полоса может лишь на полтекселя и
-            // попадает в отступ атласа, который заполнен прозрачным: край
-            // смягчается, соседняя запись атласа не подтекает.
-            float2 PixelArtSampleUV(float2 uv, float2 textureSize)
-            {
-                if (_PixelArtFiltering < 0.5)
-                {
-                    return uv;
-                }
-
-                float2 uvTexels = uv * textureSize;
-                float2 seam = floor(uvTexels + 0.5);
-                float2 pixelWidth = max(fwidth(uvTexels), 1e-5);
-                uvTexels = seam + clamp((uvTexels - seam) / pixelWidth, -0.5, 0.5);
-                return uvTexels / textureSize;
-            }
+            #include "Assets/Shaders/PixelArtFiltering.hlsl"
 
             // Свойства материала держатся вместе: одно, объявленное снаружи,
             // выключает SRP Batcher на всём шейдере. `_MainTex_TexelSize` Unity
@@ -100,34 +71,7 @@ Shader "Kern/World Entity"
                 float4 _MainTex_TexelSize;
             CBUFFER_END
 
-            Texture2D<float4> _WorldLightTexture;
-            SamplerState sampler_WorldLightTexture;
-            float4 _WorldLightRect;
-            float4 _WorldLightTextureSize;
-            int _WorldLightDebugView;
-            int _WorldLightPerBlock;
-
-            float3 GetWorldLightColor(float2 worldPos)
-            {
-                #if !defined(KERN_WORLD_LIGHTING)
-                    return 1.0;
-                #else
-                float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
-                float2 lightUV = saturate((worldPos - _WorldLightRect.xy) / rectSize);
-                if (_WorldLightPerBlock != 0 || (_WorldLightDebugView >= 1 && _WorldLightDebugView <= 3))
-                {
-                    int2 debugPixel = clamp(
-                        int2(lightUV * _WorldLightTextureSize.xy),
-                        int2(0, 0),
-                        int2(_WorldLightTextureSize.xy) - 1);
-                    return _WorldLightTexture.Load(int3(debugPixel.x, debugPixel.y, 0)).rgb;
-                }
-
-                return _WorldLightTexture.Sample(
-                    sampler_WorldLightTexture,
-                    lightUV).rgb;
-                #endif
-            }
+            #include "Assets/Shaders/WorldLightSampling.hlsl"
 
             Varyings vert(Attributes input)
             {
