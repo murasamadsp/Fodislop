@@ -116,8 +116,8 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
         gatheredBounce += incident * bounceAlbedo.rgb * transmission;
     }
 
-    // Equal angular weights. Absorption is never divided out by normalization.
-    float3 scatteredInAir = gatheredBounce / 8.0;
+    // Angular integration over 8 directions (delta theta = 2*pi / 8).
+    float3 scatteredInAir = gatheredBounce * (PI2 / 8.0);
     _BounceTexture[pixel] = float4(scatteredInAir * (1.0 - centerSolid) * bounceStrength, 1.0);
 }
 

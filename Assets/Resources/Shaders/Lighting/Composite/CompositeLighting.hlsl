@@ -10,8 +10,9 @@
 float3 SurfaceReflection(float2 position, float3 albedo)
 {
     float2 uv = OutputUv(position);
-    float3 incident = _DirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb +
-        _StaticDirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
+    float3 incident = (_DebugView == 7) ? 0.0 :
+        (_DirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb +
+         _StaticDirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb);
     float2 pixelsPerCell = float2(_FieldSize) * _CellSize / _WorldRect.zw;
     int2 pixel = int2(floor(position));
     static const int2 offsets[4] =
@@ -49,8 +50,13 @@ float3 SurfaceReflection(float2 position, float3 albedo)
                 continue;
             }
 
-            float3 light = _DirectInput.Load(int3(neighbor, 0)).rgb +
-                _StaticDirectInput.Load(int3(neighbor, 0)).rgb;
+            float2 neighborUv = OutputUv(float2(neighbor) + 0.5);
+            float3 directLight = (_DebugView == 7) ? 0.0 :
+                (_DirectInput.Load(int3(neighbor, 0)).rgb +
+                 _StaticDirectInput.Load(int3(neighbor, 0)).rgb);
+            float3 bounceLight = _BounceInput.SampleLevel(sampler_LinearClamp, neighborUv, 0).rgb;
+            float3 light = directLight + bounceLight;
+
             // Incident light reaches the exposed face through half an air cell.
             // Surface reflection is presentation only; it is never transmitted
             // through the wall or used as light on its opposite face.

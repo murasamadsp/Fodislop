@@ -86,6 +86,7 @@ struct Texture {
         return data[p.y*width+p.x];
     }
     float4 SampleLevel(int,float2 uv,float) const {
+        if(width<=0 || height<=0) return float4{};
         float2 p=uv*float2{(float)width,(float)height}-.5f;
         int2 b=make_int2(floor(p)); float2 f=p-floor(p);
         auto at=[&](int x,int y){return Load({clamp(x,0,width-1),clamp(y,0,height-1),0});};
