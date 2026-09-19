@@ -23,6 +23,7 @@ public interface ITextureService
         int globalX,
         int globalY);
     Texture2D? FlowMapTexture { get; }
+    Texture2D? TerrainDecalAtlasTexture { get; }
     IReadOnlyList<IAtlasDescriptor> GetAllAtlases();
     string GetCacheStats();
     void FlushDirtyAtlases();

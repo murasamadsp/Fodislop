@@ -388,6 +388,13 @@ namespace Kern.World.Terrain
                     _pendingTextureCellTypes.Add((CellType)cellTypeID);
                 }
             }
+            else if (string.Equals(
+                filename,
+                "terrain-decals.png",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                _needsRefresh = true;
+            }
         }
 
         private void OnWorldDataLoaded()

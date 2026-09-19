@@ -38,10 +38,14 @@ namespace Kern.World
         [Inject]
         private IAssetLoader _assetLoader = null!;
         [Inject]
+        private ITextureStorageService _textureStorage = null!;
+        [Inject]
         private IAsyncOperationSupervisor _operations = null!;
         private CellTextureCache _textureCache = null!;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
+        private readonly TerrainDecalAtlasLoader _decalLoader = new();
+        public Texture2D? TerrainDecalAtlasTexture => _decalLoader.AtlasTexture;
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
         private readonly CellTextureRetryTracker _retryTracker = new();
 
@@ -69,6 +73,8 @@ namespace Kern.World
 
                 _flowMapTexture = null;
             }
+
+            _decalLoader.Dispose();
         }
 
         private void Initialize()
@@ -85,10 +91,10 @@ namespace Kern.World
                 _cellTextureSize,
                 _texturePadding,
                 GetCachedTexture);
-
             _pendingRequests = new ConcurrentDictionary<CellType, TextureRequest>();
 
             GenerateFlowMap();
+            _decalLoader.StartLoad(_textureStorage, _operations, (name, tex) => OnTextureLoaded?.Invoke(name, tex));
         }
 
         private void EnsureInitialized()

@@ -7,6 +7,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         // an implicit white/gray world.
         [MainTexture] _BaseMap ("Texture Atlas", 2D) = "black" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
+        _TerrainDecalAtlas ("Terrain Decal Atlas", 2D) = "black" {}
         _ShimmerColor ("Shimmer Color", Color) = (0,0,0,0)
         _FlowScale ("Flow Scale", Vector) = (0,0,0,0)
         _ShimmerSpeedScale ("Shimmer Speed Scale", Float) = 0
@@ -59,6 +60,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/TerrainAtlasSampling.hlsl"
             #include "Assets/Shaders/TerrainSampling.hlsl"
             #include "Assets/Shaders/TerrainContour.hlsl"
+            #include "Assets/Shaders/TerrainDecals.hlsl"
 
             #define EPS 0.0001
 
@@ -112,6 +114,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _DebugColor;
                 float _DebugMode;
                 float4 _BaseMap_TexelSize;
+                float4 _FlowMap_TexelSize;
+                float4 _TerrainDecalAtlas_TexelSize;
                 float _TerrainAtlasIndex;
                 float4 _TerrainAtlas0_TexelSize;
                 float4 _TerrainAtlas1_TexelSize;
@@ -289,10 +293,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     animationProfile,
                     flowSample);
                 finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
-                if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
-                {
-                    finalUV = ClampTerrainTileUV(finalUV, tileUV);
-                }
+                finalUV = ClampTerrainTileUV(finalUV, tileUV);
 
                 half4 texColor = SampleAtlasColor(atlasSlot, finalUV);
                 if (texColor.a < 0.05)
@@ -304,6 +305,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 finalRGB = AnimateTerrainColor(
                     finalRGB,
                     texColor.rgb,
+                    input.uv,
                     animType,
                     animationProfile,
                     input.animData.y,
@@ -313,6 +315,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     _ShimmerColor.rgb,
                     _ShimmerSpeedScale,
                     _PulseSpeedScale);
+                finalRGB = ApplyTerrainDecal(
+                    finalRGB,
+                    input.uv,
+                    input.glowData.w);
 
                 float finalAlpha = EvaluateRoundableBlockAlpha(
                     input.uv,
@@ -363,6 +369,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/TerrainAtlasSampling.hlsl"
             #include "Assets/Shaders/TerrainSampling.hlsl"
             #include "Assets/Shaders/TerrainContour.hlsl"
+            #include "Assets/Shaders/TerrainDecals.hlsl"
 
             TEXTURE2D(_FlowMap);
             SAMPLER(sampler_FlowMap);
@@ -383,6 +390,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _DebugColor;
                 float _DebugMode;
                 float4 _BaseMap_TexelSize;
+                float4 _FlowMap_TexelSize;
+                float4 _TerrainDecalAtlas_TexelSize;
                 float _TerrainAtlasIndex;
                 float4 _TerrainAtlas0_TexelSize;
                 float4 _TerrainAtlas1_TexelSize;
@@ -516,10 +525,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     tileSize.xy,
                     animationProfile,
                     flowSample);
-                if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
-                {
-                    finalUV = ClampTerrainTileUV(finalUV, tileUV);
-                }
+                finalUV = ClampTerrainTileUV(finalUV, tileUV);
 
             #if defined(KERN_TERRAIN_CELLS)
                 return TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
@@ -596,6 +602,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 surfaceAlbedo = AnimateTerrainColor(
                     surfaceAlbedo,
                     surfaceAlbedo,
+                    input.uv,
                     albedoAnimationType,
                     albedoAnimationProfile,
                     input.animData.y,
@@ -605,6 +612,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     _ShimmerColor.rgb,
                     _ShimmerSpeedScale,
                     _PulseSpeedScale);
+                surfaceAlbedo = ApplyTerrainDecal(
+                    surfaceAlbedo,
+                    input.uv,
+                    input.glowData.w);
 
                 float surface = step(0.05, input.color.a) * isForeground;
                 output.material = half4(surfaceAlbedo * surface, occupancy);

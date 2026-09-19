@@ -34,6 +34,7 @@ float3 TerrainHSVToRGB(float3 c)
 
 static const int KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL = 1;
 static const int KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE = 2;
+static const int KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL = 3;
 
 struct TerrainShimmerSignal
 {
@@ -65,7 +66,7 @@ TerrainShimmerSignal EvaluateTerrainShimmer(
     TerrainShimmerSignal signal;
     signal.wave = wave;
     signal.body = wave * wave * wave;
-    signal.surfaceMask = luminanceMask * chroma;
+    signal.surfaceMask = luminanceMask * lerp(0.65, 1.0, chroma);
     return signal;
 }
 
@@ -106,7 +107,9 @@ float2 AnimateTerrainSampleUV(
     float2 flowDirection = flowSample.rg * 2.0 - 1.0;
     float2 distortion = flowDirection * tileSizeUV * 0.14;
     float2 localUV = atlasUV - subAtlasRect.xy + distortion;
-    return subAtlasRect.xy + frac(localUV / subAtlasRect.zw) * subAtlasRect.zw;
+    localUV.y = fmod(fmod(localUV.y, subAtlasRect.w) + subAtlasRect.w, subAtlasRect.w);
+    localUV.x = clamp(localUV.x, 0.0, subAtlasRect.z);
+    return subAtlasRect.xy + localUV;
 }
 
 float TerrainContourAntialiasScale(int animationProfile)
@@ -132,6 +135,7 @@ float3 TerrainUnpackRgb24(float packedColor)
 float3 AnimateTerrainColor(
     float3 baseColor,
     float3 luminanceSource,
+    float2 localUV,
     int animationType,
     int animationProfile,
     float animationSpeed,
@@ -155,12 +159,34 @@ float3 AnimateTerrainColor(
         // brighter crest turns it into a local facet glint without washing
         // out the atlas texture between highlights.
         float bodyStrength = signal.body * signal.surfaceMask * 0.68;
-        float glintRamp = saturate((signal.wave - 0.76) * 4.16666667);
+        float glintRamp = saturate((signal.wave - 0.70) * 3.33333333);
         float glintStrength =
-            glintRamp * glintRamp * signal.surfaceMask * 0.34;
+            glintRamp * glintRamp * signal.surfaceMask * 0.50;
         float3 coloredFacet = lerp(baseColor, cellColor, bodyStrength);
         float3 glintColor = lerp(cellColor, 1.0.xxx, 0.68);
         return coloredFacet + glintColor * glintStrength;
+    }
+
+    if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)
+    {
+        // Each cell receives a deterministic phase from TerrainQuadBuilder.
+        // A diagonal sweep brings out facet glints without long dead pauses.
+        float phase = frac(_Time.y * animationSpeed + animationOffset);
+        float eventEnvelope =
+            smoothstep(0.0, 0.04, phase) *
+            (1.0 - smoothstep(0.28, 0.40, phase));
+        float sweepProgress = saturate(phase / 0.40);
+        float sweepCoordinate = dot(localUV, float2(0.62, 0.38));
+        float sweepCenter = lerp(-0.12, 1.12, sweepProgress);
+        float bandDistance = abs(sweepCoordinate - sweepCenter);
+        float band = 1.0 - smoothstep(0.035, 0.13, bandDistance);
+
+        float luminance = dot(luminanceSource, float3(0.299, 0.587, 0.114));
+        float facetMask = smoothstep(0.20, 0.75, luminance);
+        float strength = eventEnvelope * band * facetMask * 0.45;
+        float3 cellColor = TerrainUnpackRgb24(packedCellColor);
+        float3 glintColor = lerp(cellColor, 1.0.xxx, 0.72);
+        return baseColor + glintColor * strength;
     }
 
     if (animationType == 1) // Blinking

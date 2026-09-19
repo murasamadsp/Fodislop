@@ -2,6 +2,7 @@
 
 using System;
 using Kern.Core.Localization;
+using Kern.Core.Models;
 using MinesServer.Data;
 using UnityEngine.UIElements;
 

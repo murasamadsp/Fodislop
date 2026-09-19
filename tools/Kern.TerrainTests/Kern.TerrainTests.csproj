@@ -48,6 +48,7 @@
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainCellMaskCalculator.cs" Link="Game/TerrainCellMaskCalculator.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainVertexDistortionCalculator.cs" Link="Game/TerrainVertexDistortionCalculator.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainAnimationProfile.cs" Link="Game/TerrainAnimationProfile.cs" />
+    <Compile Include="$(Game)/World/Terrain/Mesh/TerrainDecalCatalog.cs" Link="Game/TerrainDecalCatalog.cs" />
     <Compile Include="$(Game)/World/Terrain/Gpu/TerrainCellDataPacker.cs" Link="Game/TerrainCellDataPacker.cs" />
     <Compile Include="$(Game)/World/Terrain/Gpu/TerrainDirtyRegion.cs" Link="Game/TerrainDirtyRegion.cs" />
     <Compile Include="$(Game)/World/Terrain/Cache/DirtyRectSet.cs" Link="Game/DirtyRectSet.cs" />
@@ -59,7 +60,7 @@
     <Compile Include="$(Game)/World/Terrain/Background/BackgroundFloodFill.cs" Link="Game/BackgroundFloodFill.cs" />
     <Compile Include="$(Game)/World/Lighting/Core/LightingRegionCalculator.cs" Link="Game/LightingRegionCalculator.cs" />
     <Compile Include="$(Game)/World/Lighting/Core/LightingRuntimeState.cs" Link="Game/LightingRuntimeState.cs" />
-    <Compile Include="$(Game)/UI/Map/MinimapRefreshPolicy.cs" Link="Game/MinimapRefreshPolicy.cs" />
+    <Compile Include="$(Game)/UI/Map/Minimap/MinimapRefreshPolicy.cs" Link="Game/MinimapRefreshPolicy.cs" />
 
     <!-- Тесты из Assets: те же, что гоняет Unity. -->
     <Compile Include="$(Game)/Tests/Editor/World/BackgroundFloodFill*.cs" LinkBase="Tests" />

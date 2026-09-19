@@ -23,12 +23,6 @@ public sealed class TerrainAnimationProfileCatalogTests
         Assert.That(settings.Speed, Is.EqualTo(50f));
     }
 
-    [TestCase(CellType.Green)]
-    [TestCase(CellType.Red)]
-    [TestCase(CellType.Blue)]
-    [TestCase(CellType.Violet)]
-    [TestCase(CellType.White)]
-    [TestCase(CellType.Cyan)]
     [TestCase(CellType.PurpleAcid)]
     public void Get_OtherCell_PreservesConfiguredAnimation(CellType cellType)
     {
@@ -37,6 +31,21 @@ public sealed class TerrainAnimationProfileCatalogTests
 
         Assert.That(settings.Profile, Is.EqualTo(TerrainAnimationProfile.Default));
         Assert.That(settings.Speed, Is.EqualTo(7f));
+    }
+
+    [TestCase(CellType.Green)]
+    [TestCase(CellType.Red)]
+    [TestCase(CellType.Blue)]
+    [TestCase(CellType.Violet)]
+    [TestCase(CellType.White)]
+    [TestCase(CellType.Cyan)]
+    public void Get_ColoredCrystal_UsesFacetedProfile(CellType cellType)
+    {
+        TerrainAnimationSettings settings =
+            TerrainAnimationProfileCatalog.Get(cellType, 7f);
+
+        Assert.That(settings.Profile, Is.EqualTo(TerrainAnimationProfile.FacetedCrystal));
+        Assert.That(settings.Speed, Is.EqualTo(0.06f));
     }
 
     [Test]

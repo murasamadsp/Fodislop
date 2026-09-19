@@ -13,6 +13,7 @@ public sealed class TerrainMaterialManager
 {
     private static readonly int _BaseMapPropertyID = Shader.PropertyToID("_BaseMap");
     private static readonly int _FlowMapPropertyID = Shader.PropertyToID("_FlowMap");
+    private static readonly int _TerrainDecalAtlasPropertyID = Shader.PropertyToID("_TerrainDecalAtlas");
     private static readonly int _FlowScalePropertyID = Shader.PropertyToID("_FlowScale");
     private static readonly int _ShimmerSpeedScalePropertyID = Shader.PropertyToID("_ShimmerSpeedScale");
     private static readonly int _PulseSpeedScalePropertyID = Shader.PropertyToID("_PulseSpeedScale");
@@ -233,8 +234,16 @@ public sealed class TerrainMaterialManager
     {
         for (int i = 0; i < atlases.Count && i < _materials.Length; i++)
         {
-            BindAtlas(_materials[i], atlases[i].Texture, textureService.FlowMapTexture);
-            BindAtlas(_overlayMaterials[i], atlases[i].Texture, textureService.FlowMapTexture);
+            BindAtlas(
+                _materials[i],
+                atlases[i].Texture,
+                textureService.FlowMapTexture,
+                textureService.TerrainDecalAtlasTexture);
+            BindAtlas(
+                _overlayMaterials[i],
+                atlases[i].Texture,
+                textureService.FlowMapTexture,
+                textureService.TerrainDecalAtlasTexture);
             if (_cellMaterials.Length > 0 && i < _TerrainAtlasPropertyIDs.Length &&
                 _cellMaterials[0].GetTexture(_TerrainAtlasPropertyIDs[i]) != atlases[i].Texture)
             {
@@ -244,13 +253,21 @@ public sealed class TerrainMaterialManager
 
         if (_cellMaterials.Length > 0)
         {
-            BindAtlas(_cellMaterials[0], atlases[0].Texture, textureService.FlowMapTexture);
+            BindAtlas(
+                _cellMaterials[0],
+                atlases[0].Texture,
+                textureService.FlowMapTexture,
+                textureService.TerrainDecalAtlasTexture);
         }
     }
 
     // Атлас или карта потока могут быть ещё не загружены: пустой слот
     // материала — штатное состояние до загрузки, SetTexture принимает null.
-    private static void BindAtlas(Material material, Texture? atlas, Texture? flowMap)
+    private static void BindAtlas(
+        Material material,
+        Texture? atlas,
+        Texture? flowMap,
+        Texture? terrainDecalAtlas)
     {
         if (material.GetTexture(_BaseMapPropertyID) != atlas)
         {
@@ -260,6 +277,11 @@ public sealed class TerrainMaterialManager
         if (material.GetTexture(_FlowMapPropertyID) != flowMap)
         {
             material.SetTexture(_FlowMapPropertyID, flowMap);
+        }
+
+        if (material.GetTexture(_TerrainDecalAtlasPropertyID) != terrainDecalAtlas)
+        {
+            material.SetTexture(_TerrainDecalAtlasPropertyID, terrainDecalAtlas);
         }
     }
 
@@ -351,6 +373,7 @@ public sealed class TerrainMaterialManager
         [
             "_BaseMap",
             "_FlowMap",
+            "_TerrainDecalAtlas",
             "_FlowScale",
             "_ShimmerSpeedScale",
             "_PulseSpeedScale",

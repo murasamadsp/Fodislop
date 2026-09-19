@@ -225,6 +225,8 @@ internal static class TerrainQuadBuilder
             color.a = 1f;
         }
 
+        TerrainAnimationSettings animationSettings =
+            TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
         float animOffset = 0f;
 
         if (!useFallback && animType == CellAnimationType.Blinking)
@@ -234,9 +236,14 @@ internal static class TerrainQuadBuilder
             seed = seed ^ (seed >> 16);
             animOffset = (seed % 6283) / 1000f;
         }
-
-        TerrainAnimationSettings animationSettings =
-            TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
+        else if (!useFallback &&
+            animationSettings.Profile == TerrainAnimationProfile.FacetedCrystal)
+        {
+            uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
+            seed = (seed ^ (seed >> 13)) * 1274126177;
+            seed ^= seed >> 16;
+            animOffset = (seed & 0xFFFF) / 65536f;
+        }
 
         // Любой непустой блок переднего плана — физическая масса: свет обязан
         // поглощаться всеми блоками одинаково, без зависимости от уникальных
@@ -293,7 +300,7 @@ internal static class TerrainQuadBuilder
             packedLightingColor,
             lightingData.PackedFlags,
             lightingData.PackedContour,
-            0f);
+            TerrainDecalCatalog.GetPackedPlacement(cellType, gridX, serverY));
 
         ReadOnlySpan<Vector2> anchors = [anchor0, anchor1, anchor2, anchor3];
 
