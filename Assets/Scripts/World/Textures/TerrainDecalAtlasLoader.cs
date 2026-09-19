@@ -3,8 +3,9 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kern;
 using Kern.Core;
-using Kern.Core.Rendering;
+using Kern.Core.Interfaces;
 using UnityEngine;
 
 namespace Kern.World.Textures;
