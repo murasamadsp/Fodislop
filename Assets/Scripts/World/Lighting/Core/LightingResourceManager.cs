@@ -33,6 +33,8 @@ internal sealed class LightingResourceManager
     private RenderTexture? _bounceTexture;
     private RenderTexture? _lightmapTexture;
     private RenderTexture? _cellSolidMask;
+    private RenderTexture? _distanceSeedA;
+    private RenderTexture? _distanceSeedB;
 
     public LightingResources Registry { get; } = new();
     public ComputeShader? LightingCompute { get; private set; }
@@ -54,6 +56,8 @@ internal sealed class LightingResourceManager
     // it (see WorldLighting.compute). Recreated together with the field
     // textures, which invalidates them.
     public RenderTexture? CellSolidMask => _cellSolidMask;
+    public RenderTexture? DistanceSeedA => _distanceSeedA;
+    public RenderTexture? DistanceSeedB => _distanceSeedB;
     public ComputeBuffer? BounceTaps { get; private set; }
     public ComputeBuffer? BounceFilterWeights { get; private set; }
     public bool GeometryCachesValid { get; set; }
@@ -73,6 +77,8 @@ internal sealed class LightingResourceManager
     public int BuildCellSolidMaskKernel { get; private set; }
     public int BuildBounceTapsKernel { get; private set; }
     public int BuildBounceFilterKernel { get; private set; }
+    public int SeedDistanceFieldKernel { get; private set; }
+    public int JumpFloodStepKernel { get; private set; }
 
     public int FieldWidth { get; private set; }
     public int FieldHeight { get; private set; }
@@ -109,6 +115,8 @@ internal sealed class LightingResourceManager
         BuildCellSolidMaskKernel = loaded.BuildCellSolidMaskKernel;
         BuildBounceTapsKernel = loaded.BuildBounceTapsKernel;
         BuildBounceFilterKernel = loaded.BuildBounceFilterKernel;
+        SeedDistanceFieldKernel = loaded.SeedDistanceFieldKernel;
+        JumpFloodStepKernel = loaded.JumpFloodStepKernel;
 
         LightingShaderValidator.ValidateGpuRequirements();
         LightingShaderValidator.ValidateMaterialFieldPass(LightingTexturePool.DestroyLightingObject);
@@ -190,9 +198,10 @@ internal sealed class LightingResourceManager
         int bounceWidth = Mathf.Max(1, Mathf.CeilToInt(fieldWidth * 0.5f));
         int bounceHeight = Mathf.Max(1, Mathf.CeilToInt(fieldHeight * 0.5f));
 
-        FilterMode lightmapFilterMode = qualityMode == LightingQualityMode.PerBlock
-            ? FilterMode.Point
-            : FilterMode.Bilinear;
+        // Лайтмапа всегда билинейна: PerBlock берёт свет поинтом в шейдере
+        // (Load), а запечённое AO обязано быть гладким на всех тирах —
+        // иначе ореол квантуется в квадраты клеток и вид зависит от пресета.
+        FilterMode lightmapFilterMode = FilterMode.Bilinear;
 
         if (FieldWidth == fieldWidth && FieldHeight == fieldHeight &&
             CellGridWidth == gridWidth && CellGridHeight == gridHeight &&
@@ -213,6 +222,8 @@ internal sealed class LightingResourceManager
         BounceWidth = bounceWidth;
         BounceHeight = bounceHeight;
 
+        // Мип-цепь полю больше не нужна: SDF читает mip0 через Load,
+        // остальные читатели мипов (террейн-AO) переехали на запечённое AO.
         _materialField = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
@@ -220,7 +231,7 @@ internal sealed class LightingResourceManager
             randomWrite: false,
             FilterMode.Bilinear,
             "_LightingMaterialField",
-            useMipMap: true);
+            useMipMap: false);
         _staticEmissionField = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
@@ -266,6 +277,22 @@ internal sealed class LightingResourceManager
             randomWrite: true,
             FilterMode.Point,
             "_LightingCellSolidMask");
+        // SDF ping-pong: сиды ближайшего твёрдого текселя для геометрически
+        // честного AO. Мипы не нужны — композит читает Load с mip0.
+        _distanceSeedA = LightingTexturePool.CreateTexture(
+            fieldWidth,
+            fieldHeight,
+            RenderTextureFormat.ARGBHalf,
+            randomWrite: true,
+            FilterMode.Point,
+            "_DistanceSeedA");
+        _distanceSeedB = LightingTexturePool.CreateTexture(
+            fieldWidth,
+            fieldHeight,
+            RenderTextureFormat.ARGBHalf,
+            randomWrite: true,
+            FilterMode.Point,
+            "_DistanceSeedB");
         BounceTaps = new ComputeBuffer(
             bounceWidth * bounceHeight * 16,
             sizeof(float) * 4,
@@ -363,6 +390,8 @@ internal sealed class LightingResourceManager
         LightingTexturePool.ReleaseTexture(ref _bounceTexture);
         LightingTexturePool.ReleaseTexture(ref _lightmapTexture);
         LightingTexturePool.ReleaseTexture(ref _cellSolidMask);
+        LightingTexturePool.ReleaseTexture(ref _distanceSeedA);
+        LightingTexturePool.ReleaseTexture(ref _distanceSeedB);
         BounceTaps?.Release();
         BounceTaps = null;
         BounceFilterWeights?.Release();

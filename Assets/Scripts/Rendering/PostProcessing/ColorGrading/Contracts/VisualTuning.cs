@@ -143,7 +143,7 @@ namespace Kern.World.Lighting
             LightingFeatureFlags.VisibilityAwareMerge |
             LightingFeatureFlags.WallAwareUpsample;
 
-        public const float AmbientIntensity = 0.0f;
+        public const float AmbientIntensity = 0.25f;
         public const float EmissionScale = 6.0f;
         public static readonly Color AmbientColor = Color.white;
         // Per RGB channel: sigma = ExtinctionRGB * ExtinctionMultiplier.
@@ -152,7 +152,7 @@ namespace Kern.World.Lighting
         // Solid affects transmission through the wall, not illumination of its front surface.
         public static readonly Color EmptyExtinctionRGB = Color.white;
         public static readonly Color SolidExtinctionRGB = Color.white;
-        public const float EmptyExtinctionMultiplier = 0.25f;
+        public const float EmptyExtinctionMultiplier = 0.20f;
         public const float SolidExtinctionMultiplier = 1.0f;
         // false выключает отскок целиком: проход не считается, в свет не входит.
         public static bool BounceEnabled => (EnabledFeatures & LightingFeatureFlags.DiffuseBounce) != 0;
@@ -174,20 +174,23 @@ namespace Kern.World.Terrain
 {
     public static class TerrainLook
     {
-        public const float AmbientOcclusionMip = 1.5f;
-
         public const float AmbientOcclusionStrength = 1f;
 
-        private static readonly int _AmbientOcclusionMipID =
-            Shader.PropertyToID("_TerrainAmbientOcclusionMip");
+        // Радиус SDF-AO в клетках: спад идёт от истинной дистанции,
+        // одинаков на всех тирах. 1.0 — середина старого вида High/Ultra
+        // (мип-ореол давал ~1.4/~0.7 клетки); больше — шире и темнее.
+        public const float AORadiusCells = 1.0f;
+
         private static readonly int _AmbientOcclusionStrengthID =
             Shader.PropertyToID("_TerrainAmbientOcclusionStrength");
+        private static readonly int _AORadiusCellsID =
+            Shader.PropertyToID("_AORadiusCells");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void ApplyShaderGlobals()
         {
-            Shader.SetGlobalFloat(_AmbientOcclusionMipID, AmbientOcclusionMip);
             Shader.SetGlobalFloat(_AmbientOcclusionStrengthID, AmbientOcclusionStrength);
+            Shader.SetGlobalFloat(_AORadiusCellsID, AORadiusCells);
         }
     }
 }

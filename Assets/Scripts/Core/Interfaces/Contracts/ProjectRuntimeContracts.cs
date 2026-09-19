@@ -143,6 +143,8 @@ public static class ProjectRuntimeContracts
         public const string BuildCellSolidMask = "BuildCellSolidMask";
         public const string BuildBounceTaps = "BuildBounceTaps";
         public const string BuildBounceFilter = "BuildBounceFilter";
+        public const string SeedDistanceField = "SeedDistanceField";
+        public const string JumpFloodStep = "JumpFloodStep";
     }
 
     public static class RequiredLayers

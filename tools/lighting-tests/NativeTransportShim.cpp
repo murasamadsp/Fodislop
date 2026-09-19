@@ -109,6 +109,8 @@ int2 _FieldSize;
 float4 _WorldRect, _EmptyExtinctionRGB, _SolidExtinctionRGB;
 float _CellSize=1, _EmissionScale=1;
 static const float InvisibleDynamicRadiance = 1e-6f;
+static const float SolidOccupancyThreshold = 0.5f;
+static const float TransportSolidThreshold = 0.4f;
 int2 _DynamicDispatchOrigin,_DynamicDispatchSize;
 int _DynamicLightIndex=0;
 int _WriteDynamicDirect=0;

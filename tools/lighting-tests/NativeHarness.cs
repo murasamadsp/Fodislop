@@ -10,6 +10,7 @@ internal static class NativeHarness
     private static readonly string[] FunctionNames =
     [
         "SegmentExtinction", "SegmentTransmission", "Max3", "OutputUv", "MaterialUv",
+        "MaterialPixel", "IsSolidOccupancy",
         "SampleOccupancy", "PathLengthInCells", "SampleCellSolid", "CheckCellSolid",
         "BuildCellSolidMask", "CheckDiagonalStepOccluded", "DirtySegmentOverlap",
         "CascadeEntryMayChange", "AbsorbedFraction", "CellEmissionWeight", "TraceLightSegment",
@@ -133,7 +134,7 @@ internal static class NativeHarness
         {
             Match match = Regex.Match(
                 shader,
-                $"^(?:bool|float[234]?|uint[23]|void) {Regex.Escape(name)}\\(",
+                $"^(?:bool|float[234]?|uint[23]|int[234]?|void) {Regex.Escape(name)}\\(",
                 RegexOptions.Multiline | RegexOptions.CultureInvariant);
             if (!match.Success)
             {

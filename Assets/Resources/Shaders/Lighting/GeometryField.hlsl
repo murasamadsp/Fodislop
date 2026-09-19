@@ -61,6 +61,30 @@ float SampleOccupancy(float2 pixelPosition, float mipLevel)
     return material.a;
 }
 
+// Пороги solidity в одном месте. TransportSolidThreshold ниже, чем
+// SolidOccupancyThreshold: транспорт считает частично покрытый тексель
+// блокирующим раньше, чтобы свет не тёк сквозь полупрозрачные кромки.
+// Значения не унифицировать без перепроверки транспорта.
+static const float SolidOccupancyThreshold = 0.5;
+static const float TransportSolidThreshold = 0.4;
+
+bool IsSolidOccupancy(float occupancy)
+{
+    return occupancy >= SolidOccupancyThreshold;
+}
+
+// Compute-пиксель в тексель текстуры материала (Y-флип).
+int2 MaterialPixel(int2 pixel)
+{
+    int2 materialPixel = pixel;
+    if (_MaterialYFlip != 0)
+    {
+        materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
+    }
+
+    return materialPixel;
+}
+
 float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
 {
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);

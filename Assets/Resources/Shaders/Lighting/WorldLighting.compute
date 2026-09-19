@@ -11,6 +11,8 @@
 #pragma kernel BuildCellSolidMask
 #pragma kernel BuildBounceTaps
 #pragma kernel BuildBounceFilter
+#pragma kernel SeedDistanceField
+#pragma kernel JumpFloodStep
 
 #pragma target 5.0
 
@@ -82,6 +84,13 @@ RWTexture2D<float4> _Result;
 
 Texture2D<float4> _CellSolidMask;
 RWTexture2D<float4> _CellSolidMaskOutput;
+
+// Distance-field ping-pong: сиды ближайшего твёрдого текселя.
+// C# чередует чтение/запись между двумя текстурами каждый проход;
+// чётное число проходов гарантирует финал всегда в одной и той же,
+// которую композит читает через _DistanceSeedInput.
+RWTexture2D<float4> _DistanceSeed;
+Texture2D<float4> _DistanceSeedInput;
 RWStructuredBuffer<float4> _BounceTaps;
 RWStructuredBuffer<float4> _BounceFilterWeights;
 RWStructuredBuffer<uint> _LightingCounters;
@@ -187,8 +196,13 @@ SamplerState sampler_LinearClamp;
 // Дублировать их здесь нельзя: отладочный вид разошёлся бы с картинкой молча,
 // и врал бы ровно тогда, когда им проверяют подобранное значение.
 
-float _TerrainAmbientOcclusionMip;
 float _TerrainAmbientOcclusionStrength;
+
+// Радиус AO в клетках (SDF): спад идёт от истинной дистанции до геометрии,
+// поэтому одинаков на всех тирах — в отличие от старого мип-радиуса.
+float _AORadiusCells;
+
+int _JumpStep;
 
 // ============================================================================
 // Primitives & Coordinate Math
@@ -204,6 +218,7 @@ float _TerrainAmbientOcclusionStrength;
 // ============================================================================
 
 #include "Assets/Resources/Shaders/Lighting/GeometryCache/GeometryCache.hlsl"
+#include "Assets/Resources/Shaders/Lighting/GeometryCache/DistanceField.hlsl"
 
 // ============================================================================
 // Radiance Cascades

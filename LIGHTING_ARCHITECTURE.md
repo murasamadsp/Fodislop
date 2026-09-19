@@ -73,6 +73,7 @@ DummyMapStreamer
 - `_MaterialField`;
 - `_StaticEmissionField`;
 - `_CellSolidMask`;
+- `_DistanceSeedA` / `_DistanceSeedB` (jump-flooded nearest-solid seeds for geometry-true AO);
 - bounce geometry caches.
 
 **May**

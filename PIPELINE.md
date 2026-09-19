@@ -6,10 +6,12 @@
 ## Освещение
 
 ```
-меш террейна ──[раст. MRT, орто]──┬──► MaterialField  (F, RGBA32, +mips)
-                                  └──► StaticEmission (F, ARGBHalf)
+меш террейна ──[раст. MRT, орто]──┬──► MaterialField  (F, RGBA32, без мипов)
+                                   └──► StaticEmission (F, ARGBHalf)
 
-                     ┌── MaterialField
+MaterialField ──[Seed + JumpFlood × N]──► DistanceSeed (F, ARGBHalf ×2 пинг-понг)
+
+                      ┌── MaterialField
 StaticEmission ──────┴──[SolveCascade]──► RadianceAtlas (uint3 × N)
                                               │
                                               ▼
@@ -31,10 +33,10 @@ StaticDirect ───┼──[SolveDiffuseBounce]──► Bounce (F/2, ARGBHa
 MaterialField ──┘
 
 Direct ─────────┐
-StaticDirect ───┼──[CompositeLighting]──► Lightmap (F, ARGBHalf)
+StaticDirect ───┼──[CompositeLighting]──► Lightmap (F, ARGBHalf, α = 1-AO из SDF)
 Bounce ─────────┘                              │
-                                               ▼
-                                    global _WorldLightTexture
+DistanceSeed ───┘                              ▼
+                                     global _WorldLightTexture
 ```
 
 ## Террейн (фрагмент, пасс Universal2D)
@@ -48,15 +50,14 @@ tileSizeUV ───────┤
 animData ─────────┘
                        │
                        ▼
-                  [анимация цвета]──► finalRGB ─────────────┐
-                                                            │
+                   [анимация цвета]──► finalRGB ─────────────┐
+                                                             │
 маска соседства ──[силуэт: круг + углы]──► finalAlpha       │
-                                                            │
-MaterialField.mips ──[AO вокруг блоков, только фон]──► AO    │
-                                          │                 │
-_WorldLightTexture ──► lightColor ────────┤                 │
-                                          ▼                 ▼
-                    finalRGB × lightColor × (1-AO) ÷ finalAlpha
+                                                             │
+_WorldLightTexture ──► lightColor + запечённое AO (α) ───────┤
+                                           │                 │
+                                           ▼                 ▼
+                     finalRGB × lightColor × AO ÷ finalAlpha (AO только фону)
                                           │
                                           ▼
                                      цвет пикселя
@@ -67,24 +68,25 @@ _WorldLightTexture ──► lightColor ────────┤             
 ```
 кадр ──[CompositeFinal: блум + запечённый грейд]──[тонмапп URP]──[DisplayFinal: LUT/кривые, виньетка, зерно, смаз]──► экран
 ```
+
 Тонмаппинг — за URP (Neutral SDR / Neutral BT2390 HDR через `HDROutputReconciler`); своей сигмоиды и хроматической аберрации в коде нет.
 
 ## Таблица стадий
 
 | #  | Стадия              | Читает                          | Пишет           | Размер | Когда           |
 |----|---------------------|---------------------------------|-----------------|--------|-----------------|
-| 1  | Поле материалов     | меш террейна + анимация цвета   | Material + Emis | F      | геометрия/регион|
-| 2  | Мипы поля           | Material                        | Material.mips   | F      | геометрия/регион|
+| 1  | Поле материалов     | меш террейна + атлас + анимация цвета   | Material + Emis | F      | геометрия/регион/текстуры|
+| 2  | SDF сиды (флуд)     | Material.a                      | DistanceSeed    | F      | геометрия/регион/текстуры|
 | 3  | Геометрические кэши | Material                        | SolidMask/Taps  | F      | геометрия/регион|
 | 4  | Каскады (стат.)     | Material, StaticEmission        | RadianceAtlas   | N зап. | мир изменился   |
 | 5  | Resolve (стат.)     | RadianceAtlas                   | StaticDirect    | F      | мир изменился   |
 | 6  | Полярное динамич.   | Material, DynamicLights         | Direct          | F      | источник изменился|
 | 7  | Диффузный отскок    | Direct, StaticDirect, Material  | Bounce          | F/2    | свет изменился  |
-| 8  | Сведение            | Direct, StaticDirect, Bounce    | Lightmap        | F      | свет изменился  |
+| 8  | Сведение            | Direct, StaticDirect, Bounce, DistanceSeed | Lightmap (α=1-AO) | F  | свет изменился  |
 | 9  | Выборка тайла       | BaseMap, атрибуты вершины       | texColor        | S      | каждый пиксель  |
 | 10 | Анимация цвета      | texColor, animData              | finalRGB        | S      | каждый пиксель  |
 | 11 | Силуэт              | маска соседства                 | finalAlpha      | S      | каждый пиксель  |
-| 12 | AO вокруг блоков    | MaterialField.mips (только фон) | occlusion       | S      | каждый пиксель  |
+| 12 | AO вокруг блоков    | Lightmap.α (только фон)         | множитель       | S      | каждый пиксель  |
 | 13 | Освещение           | Lightmap, finalRGB, occlusion   | цвет пикселя    | S      | каждый пиксель  |
 | 14 | Постобработка       | кадр                            | экран           | S      | каждый кадр     |
 \* Нет динамических источников → динамический direct очищается, остальные стадии используют кэш статического света.

@@ -129,7 +129,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 return saturate((worldPos - _WorldLightRect.xy) / rectSize);
             }
 
-            float3 GetWorldLightColor(float2 worldPos)
+            float4 GetWorldLightColor(float2 worldPos)
             {
                 #if !defined(KERN_WORLD_LIGHTING)
                     return 1.0;
@@ -141,50 +141,19 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         int2(lightUV * _WorldLightTextureSize.xy),
                         int2(0, 0),
                         int2(_WorldLightTextureSize.xy) - 1);
-                    return _WorldLightTexture.Load(int3(debugPixel.x, debugPixel.y, 0)).rgb;
+                    return _WorldLightTexture.Load(int3(debugPixel.x, debugPixel.y, 0));
                 }
 
+                // В альфе — запечённое (1 - AO): считается в CompositeLighting
+                // раз на тексель поля, отдельной выборки occupancy тут больше нет.
                 return _WorldLightTexture.Sample(
                     sampler_WorldLightTexture,
-                    lightUV).rgb;
+                    lightUV);
                 #endif
             }
 
-            // AO вокруг блоков по полю занятости.
-            //
-            // Радиус задаётся мипом: цепь у поля уже построена стадией
-            // освещения, и мип 2 усредняет занятость по четырём текселям —
-            // это и есть спад на несколько клеток от свободной стороны.
-            // Тень под самим блоком не рисуется: её всё равно не видно.
-            Texture2D<float4> _WorldOccupancyTexture;
-            SamplerState sampler_WorldOccupancyTexture;
-            int _WorldOccupancyYFlip;
-
-            // Числа живут в TerrainLook (Assets/Scripts/Core/Rendering/VisualTuning.cs)
-            // и приезжают сюда глобалями один раз при старте.
-            float _TerrainAmbientOcclusionMip;
-            float _TerrainAmbientOcclusionStrength;
-
-            float GetAmbientOcclusion(float2 worldPos)
-            {
-                float2 uv = (worldPos - _WorldLightRect.xy) /
-                    max(_WorldLightRect.zw, float2(0.0001, 0.0001));
-                if (_WorldOccupancyYFlip != 0)
-                {
-                    uv.y = 1.0 - uv.y;
-                }
-
-                float nearby = _WorldOccupancyTexture.SampleLevel(
-                    sampler_WorldOccupancyTexture,
-                    saturate(uv),
-                    _TerrainAmbientOcclusionMip).a;
-                // Корень выравнивает углы. Мип усредняет по квадрату: у плоской
-                // стороны в окрестности занята половина, у выпуклого угла —
-                // четверть, и без правки выходит крест вместо кольца. Корень
-                // поднимает четверть до половины, а половину только до 0.7, то
-                // есть тянет вверх слабое сильнее, чем сильное.
-                return saturate(sqrt(nearby) * _TerrainAmbientOcclusionStrength);
-            }
+            // Запечённое AO приезжает в альфе лайтмапы из CompositeLighting —
+            // террейн его только применяет, не считает.
 
             float MissingTextureHash(float2 position)
             {
@@ -334,7 +303,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(
-                        GetWorldLightColor(input.worldPosition.xy),
+                        GetWorldLightColor(input.worldPosition.xy).rgb,
                         1.0);
                 }
 
@@ -348,9 +317,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         return half4(0.0, 0.0, 0.0, 0.0);
                     }
 
-                    float3 worldLight = GetWorldLightColor(input.worldPosition.xy);
+                    float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                     float3 diagnosticTexture = SampleMissingTexture(input.worldPos.xy);
-                    return half4(diagnosticTexture * worldLight, input.color.a);
+                    return half4(diagnosticTexture * worldLight.rgb, input.color.a);
                 }
                 if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
@@ -361,7 +330,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (subAtlasSizeUV.x <= 0 || tileSizeUV.x <= 0)
                 {
                     if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
-                    float3 worldLight = GetWorldLightColor(input.worldPosition.xy);
+                    float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                     return half4(0.0, 0.0, 0.0, input.color.a * worldLight.r);
                 }
 
@@ -458,6 +427,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (!isScrollAnimated)
                 {
+                    // Кадровая анимация уже сдвинула finalUV.y на animOffsetUV:
+                    // окно зажима едет вместе с кадром. Без сдвига кламп
+                    // прибивал любой кадр, кроме нулевого, к кромке первого,
+                    // и мульти-кадровые текстуры выглядели статичными.
+                    minTileUV.y += animOffsetUV;
+                    maxTileUV.y += animOffsetUV;
                     finalUV = clamp(finalUV, minTileUV, maxTileUV);
                 }
                 else
@@ -569,19 +544,32 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     finalAlpha *= alpha;
                 }
 
-                float3 lightColor = GetWorldLightColor(input.worldPosition.xy);
-                float3 litRGB = finalRGB * lightColor;
+                float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
+                float3 litRGB = finalRGB * worldLight.rgb;
 
                 // Тень получает только фон. Блоки все одной высоты и друг на
                 // друга не падают, а бит 64 — как раз физическая масса
                 // переднего плана. Заливка под блоком AO не получает: её видно
                 // сквозь полупрозрачные текстуры, и затемнение превращало её в
-                // чёрный.
+                // чёрный. Само AO запечено в альфе лайтмапы (CompositeLighting),
+                // здесь оно только применяется — без отдельной выборки.
+                // На PerBlock свет берётся поинтом (Load выше), а AO всегда
+                // билинейно: иначе ореол квантовался бы в квадраты клеток
+                // и зависел от пресета. На билинейных тирах альфа уже гладкая
+                // из того же семпла — второй выборки нет.
                 #ifdef KERN_WORLD_LIGHTING
                 uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
-                if ((shadowFlags & 64u) == 0u && input.isForeground > 0.5 && _WorldLightPerBlock == 0)
+                if ((shadowFlags & 64u) == 0u && input.isForeground > 0.5)
                 {
-                    litRGB *= 1.0 - GetAmbientOcclusion(input.worldPosition.xy);
+                    float ao = worldLight.a;
+                    if (_WorldLightPerBlock != 0)
+                    {
+                        ao = _WorldLightTexture.Sample(
+                            sampler_WorldLightTexture,
+                            GetWorldLightUv(input.worldPosition.xy)).a;
+                    }
+
+                    litRGB *= ao;
                 }
                 #endif
                 if (finalAlpha < 0.99 && finalAlpha > 0.01)
@@ -613,6 +601,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/TerrainColorAnimation.hlsl"
             #include "Assets/Shaders/TerrainCellData.hlsl"
+            #include "TerrainTileAddressing.hlsl"
 
             TEXTURE2D(_FlowMap);
             SAMPLER(sampler_FlowMap);
@@ -644,11 +633,59 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _TerrainAtlas7_TexelSize;
             CBUFFER_END
 
+            // Альбедо поля — из атласа тем же UV-конвейером, что видимый пасс.
+            // Текстуры объявлены здесь, а не в инклуде: инклуд лежит выше cbuffer,
+            // а хелперы читают размеры текселей из него.
+            TEXTURE2D(_BaseMap);
+
+            #if defined(KERN_TERRAIN_CELLS)
+            TEXTURE2D(_TerrainAtlas0);
+            TEXTURE2D(_TerrainAtlas1);
+            TEXTURE2D(_TerrainAtlas2);
+            TEXTURE2D(_TerrainAtlas3);
+            TEXTURE2D(_TerrainAtlas4);
+            TEXTURE2D(_TerrainAtlas5);
+            TEXTURE2D(_TerrainAtlas6);
+            TEXTURE2D(_TerrainAtlas7);
+
+            float4 FieldAtlasTexelSize(int slot)
+            {
+                switch (slot)
+                {
+                    case 1: return _TerrainAtlas1_TexelSize;
+                    case 2: return _TerrainAtlas2_TexelSize;
+                    case 3: return _TerrainAtlas3_TexelSize;
+                    case 4: return _TerrainAtlas4_TexelSize;
+                    case 5: return _TerrainAtlas5_TexelSize;
+                    case 6: return _TerrainAtlas6_TexelSize;
+                    case 7: return _TerrainAtlas7_TexelSize;
+                    default: return _TerrainAtlas0_TexelSize;
+                }
+            }
+
+            half4 FieldSampleAtlas(int slot, SamplerState atlasSampler, float2 uv)
+            {
+                switch (slot)
+                {
+                    case 1: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas1, atlasSampler, uv, 0);
+                    case 2: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas2, atlasSampler, uv, 0);
+                    case 3: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas3, atlasSampler, uv, 0);
+                    case 4: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas4, atlasSampler, uv, 0);
+                    case 5: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas5, atlasSampler, uv, 0);
+                    case 6: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas6, atlasSampler, uv, 0);
+                    case 7: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas7, atlasSampler, uv, 0);
+                    default: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas0, atlasSampler, uv, 0);
+                }
+            }
+            #endif
+
             struct MaterialFieldAttributes
             {
                 float4 positionOS   : POSITION;
                 float2 uv           : TEXCOORD0;
                 float4 color        : COLOR;
+                float4 subAtlasRect : TEXCOORD1;
+                float4 tileSizeUV   : TEXCOORD2;
                 float4 worldPosAttr : TEXCOORD3;
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
@@ -665,6 +702,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 packedData   : TEXCOORD3;
                 float4 glowData     : TEXCOORD4;
                 nointerpolation float isForeground : TEXCOORD5;
+                float4 subAtlasRect : TEXCOORD6;
+                float4 tileSizeUV   : TEXCOORD7;
+                nointerpolation float atlasIndex : TEXCOORD8;
             };
 
             struct MaterialFieldOutput
@@ -677,8 +717,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             {
                 MaterialFieldVaryings output;
             #if defined(KERN_TERRAIN_CELLS)
-                // Поле рисуется одним материалом по всем квадам: атлас здесь
-                // не читается, отбрасываются только незаполненные квады.
+                // Поле рисуется одним материалом по всем квадам: адрес квада
+                // восстанавливается из текстур данных, альбедо семплится
+                // из атласа во фрагменте. Отбрасываются только незаполненные квады.
                 TerrainCellVertex cell = LoadTerrainCellVertex(input.positionOS.xyz, input.uv);
                 output.positionCS = cell.atlasIndex >= 0.0
                     ? TransformObjectToHClip(cell.positionOS)
@@ -690,6 +731,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.packedData = cell.packedData;
                 output.glowData = cell.glowData;
                 output.isForeground = cell.layer > 0.5 ? 1.0 : 0.0;
+                output.subAtlasRect = cell.subAtlasRect;
+                output.tileSizeUV = cell.tileSizeUV;
+                output.atlasIndex = cell.atlasIndex;
                 return output;
             #endif
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
@@ -700,6 +744,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.packedData = input.packedData;
                 output.glowData = input.glowAttr;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
+                output.subAtlasRect = input.subAtlasRect;
+                output.tileSizeUV = input.tileSizeUV;
+                output.atlasIndex = 0.0;
                 return output;
             }
 
@@ -730,15 +777,157 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 return contour;
             }
 
+            // Тексель альбедо поля материалов — тот же UV-конвейер, что у
+            // видимого пасса: тайлинг бесшовных текстур, компенсация якорей
+            // дисторшна, кадры, скрол. Зеркалит frag видимого пасса дословно;
+            // при правке адресации тайлов править оба места.
+            //
+            // Отличия от видимого пасса осознанные:
+            // - нет PixelArtSampleUV: поле — данные освещения, экранных
+            //   пикселей там нет, а зажим в центры крайних текселей и так
+            //   не даёт соседней клетке атласа подтекать линейной выборкой;
+            // - выборка всегда линейная: поле перестраивается только при
+            //   смене геометрии/региона, не каждый кадр;
+            // - нет текселя (пустой rect или дырка с alpha < 0.05) — чёрный:
+            //   фолбека на плоский цвет нет, альбедо только из текстур.
+            half4 SampleFieldAlbedoTexel(
+                float2 cornerUV,
+                float4 subAtlasRect,
+                float4 tileSize,
+                float4 worldPos,
+                float4 animData,
+                float4 packedData,
+                int atlasSlot,
+                float4 atlasTexelSize)
+            {
+                float2 baseUV = subAtlasRect.xy;
+                float2 subAtlasSizeUV = subAtlasRect.zw;
+                float2 tileSizeUV = tileSize.xy;
+                if (subAtlasSizeUV.x <= 0.0 || tileSizeUV.x <= 0.0)
+                {
+                    return half4(0.0, 0.0, 0.0, 0.0);
+                }
+
+                float frameCount = tileSize.z;
+                float frameHeightTiles = tileSize.w;
+                float animOffsetUV = 0.0;
+                if (frameCount > 1.5)
+                {
+                    float animSpeed = animData.y;
+                    float frameIndex = floor(fmod(_Time.y * animSpeed, frameCount));
+                    animOffsetUV = frameIndex * frameHeightTiles * tileSizeUV.y;
+                }
+
+                float2 tilesCount = ceil(subAtlasSizeUV / tileSizeUV - 0.0001);
+                tilesCount = max(tilesCount, 1.0);
+
+                bool isTiling = fmod(worldPos.w, 2.0) > 0.5;
+                float2 wrapped = KernResolveTerrainTileIndex(
+                    worldPos.xy,
+                    tilesCount,
+                    worldPos.z,
+                    isTiling ? 1.0 : 0.0);
+                float2 tileOffsetUV = wrapped * tileSizeUV;
+                float2 availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
+                float2 quadUV = cornerUV;
+                int animTypeEarly = (int)(animData.x + 0.5);
+                bool isScrollAnimated = animTypeEarly == 4;
+
+                if (packedData.x > 0.5)
+                {
+                    float2 anchoredUV = packedData.yz;
+                    float2 stepUV = float2(0.0, 0.0);
+                    stepUV.x = anchoredUV.x > 1.0 ? 1.0 : (anchoredUV.x < 0.0 ? -1.0 : 0.0);
+                    stepUV.y = anchoredUV.y > 1.0 ? -1.0 : (anchoredUV.y < 0.0 ? 1.0 : 0.0);
+                    bool outsideX = stepUV.x != 0.0;
+                    bool outsideY = stepUV.y != 0.0;
+                    if (isScrollAnimated)
+                    {
+                        quadUV.x = outsideX ? frac(anchoredUV.x) : anchoredUV.x;
+                        quadUV.y = anchoredUV.y;
+                    }
+                    else
+                    {
+                        quadUV = (outsideX || outsideY) ? frac(anchoredUV) : anchoredUV;
+                    }
+
+                    if (outsideX || outsideY)
+                    {
+                        float2 stepPos = worldPos.xy + stepUV;
+                        float2 wrappedStep = KernResolveTerrainTileIndex(
+                            stepPos,
+                            tilesCount,
+                            worldPos.z,
+                            isTiling ? 1.0 : 0.0);
+                        if (isScrollAnimated)
+                        {
+                            wrappedStep.y = wrapped.y;
+                        }
+
+                        tileOffsetUV = wrappedStep * tileSizeUV;
+                        availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
+                    }
+                }
+
+                quadUV.x = clamp(quadUV.x, KernTileAddressEpsilon, 1.0 - KernTileAddressEpsilon);
+                if (!isScrollAnimated || packedData.x <= 0.5)
+                {
+                    quadUV.y = clamp(quadUV.y, KernTileAddressEpsilon, 1.0 - KernTileAddressEpsilon);
+                }
+
+                float2 finalUV = baseUV + tileOffsetUV + quadUV * availableTileSize;
+                finalUV.y += animOffsetUV;
+
+                if (isScrollAnimated)
+                {
+                    float animSpeed = animData.y;
+                    float scrollUV = fmod(_Time.y * animSpeed * tileSizeUV.y * 0.05, subAtlasSizeUV.y);
+                    finalUV.y = baseUV.y + fmod(finalUV.y - baseUV.y + scrollUV + subAtlasSizeUV.y, subAtlasSizeUV.y);
+                }
+
+                float2 minTileUV = baseUV + tileOffsetUV + atlasTexelSize.xy * 0.5;
+                float2 maxTileUV = baseUV + tileOffsetUV + availableTileSize - atlasTexelSize.xy * 0.5;
+                if (!isScrollAnimated)
+                {
+                    // Окно зажима едет вместе с кадром, иначе кламп прибивал бы
+                    // любой кадр, кроме нулевого, к кромке первого.
+                    minTileUV.y += animOffsetUV;
+                    maxTileUV.y += animOffsetUV;
+                    finalUV = clamp(finalUV, minTileUV, maxTileUV);
+                }
+                else
+                {
+                    finalUV.x = clamp(finalUV.x, minTileUV.x, maxTileUV.x);
+                }
+
+            #if defined(KERN_TERRAIN_CELLS)
+                return FieldSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
+            #else
+                return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, finalUV, 0);
+            #endif
+            }
+
             MaterialFieldOutput MaterialFieldFrag(MaterialFieldVaryings input)
             {
                 MaterialFieldOutput output;
                 float isForeground = input.isForeground;
-                uint packedColor = (uint)round(input.glowData.x);
-                float3 surfaceAlbedo = float3(
-                    packedColor & 255u,
-                    (packedColor >> 8) & 255u,
-                    (packedColor >> 16) & 255u) / 255.0;
+                int albedoAtlasSlot = (int)round(input.atlasIndex);
+                half4 albedoTexel = SampleFieldAlbedoTexel(
+                    input.uv,
+                    input.subAtlasRect,
+                    input.tileSizeUV,
+                    input.worldPos,
+                    input.animData,
+                    input.packedData,
+                    albedoAtlasSlot,
+                #if defined(KERN_TERRAIN_CELLS)
+                    FieldAtlasTexelSize(albedoAtlasSlot));
+                #else
+                    _BaseMap_TexelSize);
+                #endif
+                // Без фолбеков: нет текселя — нет альбедо. Плоский цвет
+                // миникарты сюда больше не попадает ни в каком виде.
+                float3 surfaceAlbedo = albedoTexel.a >= 0.05 ? albedoTexel.rgb : 0.0;
                 uint lightingFlags = (uint)floor(input.glowData.y + 0.0001);
                 int solidBoundaryMask = int(lightingFlags & 15u);
                 int solidDiagonalMask = (int(round(input.glowData.z)) >> 2) & 15;
@@ -759,14 +948,19 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         solidBoundaryMask,
                         solidDiagonalMask)
                     : 1.0;
+                // Силуэт блока: occupancy повторяет видимую форму — скругление
+                // выше, дырки по альфе текселя здесь. Тот же семпл, что пошёл
+                // в альбедо, новой выборки нет. Без этого решётка или тайл
+                // с прозрачными местами давили AO тенью как сплошной квадрат.
+                occupancy *= albedoTexel.a >= 0.05 ? 1.0 : 0.0;
                 // Альбедо анимируется ровно так же, как видимый цвет.
                 //
                 // Без этого поле материалов отдавало решателю постоянный цвет
                 // при мигающей и переливающейся картинке: мигающая лава светила
                 // ровно, радужный блок красил отскок одним оттенком. Маска
-                // яркости для мерцания берётся от самого альбедо — текстуры в
-                // этом пассе нет, и средний цвет клетки тут лучшее, что есть.
-                // Как и в видимом пассе: поток читается только мерцанием.
+                // яркости для мерцания берётся от семплированного текселя —
+                // того же, что видит камера. Как и в видимом пассе: поток
+                // читается только мерцанием.
                 int albedoAnimationType = (int)(input.animData.x + 0.5);
                 float3 flowSample = 0.0;
                 if (albedoAnimationType == 2)

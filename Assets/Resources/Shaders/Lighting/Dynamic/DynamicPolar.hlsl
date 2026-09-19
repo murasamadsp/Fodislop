@@ -106,11 +106,7 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
 
             float end = min(exitDistance, min(next.x, next.y));
             float distanceCells = max(0.0, end - distance) * cellsPerDistance;
-            int2 materialPixel = texel;
-            if (_MaterialYFlip != 0)
-            {
-                materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
-            }
+            int2 materialPixel = MaterialPixel(texel);
 
             float solid = saturate(_MaterialField.Load(int3(materialPixel, 0)).a);
             int2 cell = int2(floor((float2(texel) + 0.5) * cellsPerPixel));
@@ -310,12 +306,9 @@ float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCou
         float angularWidth = maxAngle - minAngle;
         float3 sourceRadiance = max(light.colorIntensity.rgb * light.colorIntensity.a, 0.0) * _EmissionScale;
         int2 centerPixel = clamp(int2(floor((sourceMin + sourceMax) * 0.5)), int2(0, 0), _FieldSize - 1);
-        if (_MaterialYFlip != 0)
-        {
-            centerPixel.y = _FieldSize.y - 1 - centerPixel.y;
-        }
+        int2 materialPixel = MaterialPixel(centerPixel);
 
-        float3 sourceExtinction = SegmentExtinction(saturate(_MaterialField.Load(int3(centerPixel, 0)).a));
+        float3 sourceExtinction = SegmentExtinction(saturate(_MaterialField.Load(int3(materialPixel, 0)).a));
         // The texels TraceLightSegment lets emit: centres inside the square,
         // inside the field.
         float2 emitterMin = max(ceil(sourceMin - 0.5), float2(0.0, 0.0));

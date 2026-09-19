@@ -43,10 +43,12 @@ internal static class LightingComputeBinder
     public static readonly int EmptyExtinctionRGBID = Shader.PropertyToID("_EmptyExtinctionRGB");
     public static readonly int SolidExtinctionRGBID = Shader.PropertyToID("_SolidExtinctionRGB");
     public static readonly int BounceStrengthID = Shader.PropertyToID("_BounceStrength");
-    public static readonly int TerrainAmbientOcclusionMipID =
-        Shader.PropertyToID("_TerrainAmbientOcclusionMip");
     public static readonly int TerrainAmbientOcclusionStrengthID =
         Shader.PropertyToID("_TerrainAmbientOcclusionStrength");
+    public static readonly int AORadiusCellsID = Shader.PropertyToID("_AORadiusCells");
+    public static readonly int JumpStepID = Shader.PropertyToID("_JumpStep");
+    public static readonly int DistanceSeedID = Shader.PropertyToID("_DistanceSeed");
+    public static readonly int DistanceSeedInputID = Shader.PropertyToID("_DistanceSeedInput");
     public static readonly int EmissionScaleID = Shader.PropertyToID("_EmissionScale");
     public static readonly int MaximumLightMultiplierID = Shader.PropertyToID("_MaximumLightMultiplier");
     public static readonly int CellSizeID = Shader.PropertyToID("_CellSize");
@@ -210,12 +212,12 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeFloatParam(compute, BounceStrengthID, LightingConfigHolder.BounceStrength);
         commandBuffer.SetComputeFloatParam(
             compute,
-            TerrainAmbientOcclusionMipID,
-            Kern.World.Terrain.TerrainLook.AmbientOcclusionMip);
-        commandBuffer.SetComputeFloatParam(
-            compute,
             TerrainAmbientOcclusionStrengthID,
             Kern.World.Terrain.TerrainLook.AmbientOcclusionStrength);
+        commandBuffer.SetComputeFloatParam(
+            compute,
+            AORadiusCellsID,
+            Kern.World.Terrain.TerrainLook.AORadiusCells);
         commandBuffer.SetComputeFloatParam(compute, EmissionScaleID, LightingConfigHolder.EmissionScale);
         commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierID, LightingConfigHolder.MaximumLightMultiplier);
         commandBuffer.SetComputeIntParam(compute, LightingCountersEnabledID, 0);

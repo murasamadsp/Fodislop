@@ -16,7 +16,7 @@ void SampleCellSolid(int2 cellCoord, float2 cellsPerPixel, out bool isSolid)
     float2 centerPixel = (float2(cellCoord) + 0.5) / cellsPerPixel;
     if (all(centerPixel >= 0.0) && all(centerPixel < float2(_FieldSize)))
     {
-        isSolid = (SampleOccupancy(centerPixel, 0.0) >= 0.4);
+        isSolid = (SampleOccupancy(centerPixel, 0.0) >= TransportSolidThreshold);
     }
 }
 
@@ -27,7 +27,7 @@ void CheckCellSolid(int2 cellCoord, out bool isSolid)
     isSolid = false;
     if (all(cellCoord >= 0) && all(cellCoord < _CellGridSize))
     {
-        isSolid = _CellSolidMask.Load(int3(cellCoord, 0)).r >= 0.5;
+        isSolid = IsSolidOccupancy(_CellSolidMask.Load(int3(cellCoord, 0)).r);
     }
 }
 
@@ -153,11 +153,7 @@ void TraceLightSegment(
 
         float end = min(exitDistance, min(next.x, next.y));
         float distanceCells = max(0.0, end - distance) * cellsPerDistance;
-        int2 materialPixel = texel;
-        if (_MaterialYFlip != 0)
-        {
-            materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
-        }
+        int2 materialPixel = MaterialPixel(texel);
 
         float solid = saturate(_MaterialField.Load(int3(materialPixel, 0)).a);
         int2 cell = int2(floor((float2(texel) + 0.5) * cellsPerPixel));

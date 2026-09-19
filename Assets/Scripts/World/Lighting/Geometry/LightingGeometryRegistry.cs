@@ -118,8 +118,6 @@ public sealed class LightingGeometryRegistry
         {
             contributor.RenderLightingFields(commandBuffer, context);
         }
-
-        commandBuffer.GenerateMips(materialField);
     }
 
     private static ulong RotateLeft(ulong value, int offset)

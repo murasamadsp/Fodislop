@@ -25,9 +25,9 @@ void BuildBounceTaps(uint3 dispatchId : SV_DispatchThreadID)
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     float pixelsPerCell = 1.0 / max(cellsPerPixel.x, 0.0001);
 
-    // Rotate the eight directions per receiver; reconstruction checks visibility.
-    float jitter = InterleavedGradientNoise(float2(pixel));
-    float baseAngle = jitter * (PI2 / 8.0);
+    // Fixed 8 regular directions offset by pi/8 (22.5 deg).
+    // Coherent angle sampling eliminates high-frequency noise and dither.
+    float baseAngle = PI2 / 16.0;
     uint baseIndex = ((uint)pixel.y * (uint)_BounceSize.x + (uint)pixel.x) * 16u;
 
     // The hit branch traces a variable-length DDA path. Keep both loops

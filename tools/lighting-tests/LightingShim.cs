@@ -91,6 +91,7 @@ namespace Kern.World.Terrain
     {
         public const float AmbientOcclusionMip = 1.5f;
         public const float AmbientOcclusionStrength = 1f;
+        public const float AORadiusCells = 1.0f;
     }
 }
 

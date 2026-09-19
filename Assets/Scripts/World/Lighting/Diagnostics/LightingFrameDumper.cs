@@ -73,6 +73,7 @@ public static class LightingFrameDumper
         public long dynamicComposePixels;
         public long bounceDispatchPixels;
         public long compositeDispatchPixels;
+        public long sdfDispatchPixels;
         public long polarRayWorkUnits;
         public long estimatedCascadeRayWorkUnits;
         public long estimatedCascadeDispatchThreads;
@@ -193,6 +194,7 @@ public static class LightingFrameDumper
             dynamicComposePixels = telemetry.LightingDynamicComposePixels,
             bounceDispatchPixels = telemetry.LightingBounceDispatchPixels,
             compositeDispatchPixels = telemetry.LightingCompositeDispatchPixels,
+            sdfDispatchPixels = telemetry.LightingSdfDispatchPixels,
             polarRayWorkUnits = telemetry.LightingPolarRayWorkUnits,
             estimatedCascadeRayWorkUnits = telemetry.LightingEstimatedCascadeRayWorkUnits > 0
                 ? telemetry.LightingEstimatedCascadeRayWorkUnits

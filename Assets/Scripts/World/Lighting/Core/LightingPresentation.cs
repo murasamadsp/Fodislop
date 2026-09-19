@@ -19,8 +19,6 @@ internal sealed class LightingPresentation
     private static readonly int _worldLightTextureSizeID = Shader.PropertyToID("_WorldLightTextureSize");
     private static readonly int _worldEmissionScaleID = Shader.PropertyToID("_WorldEmissionScale");
     private static readonly int _worldLightPerBlockID = Shader.PropertyToID("_WorldLightPerBlock");
-    private static readonly int _worldOccupancyTextureID = Shader.PropertyToID("_WorldOccupancyTexture");
-    private static readonly int _worldOccupancyYFlipID = Shader.PropertyToID("_WorldOccupancyYFlip");
 
     private readonly LightingResourceManager _resources;
     private bool _disabledStatePublished;
@@ -72,13 +70,6 @@ internal sealed class LightingPresentation
         Shader.EnableKeyword(WorldLightingKeyword);
         _disabledStatePublished = false;
         Shader.SetGlobalTexture(_worldLightTextureID, lightmap);
-        if (_resources.MaterialField != null)
-        {
-            Shader.SetGlobalTexture(_worldOccupancyTextureID, _resources.MaterialField);
-            Shader.SetGlobalInteger(
-                _worldOccupancyYFlipID,
-                SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
-        }
 
         Shader.SetGlobalInteger(_worldLightDebugViewID, (int)debugView);
         Shader.SetGlobalInteger(_worldLightPerBlockID, qualityMode == LightingQualityMode.PerBlock ? 1 : 0);

@@ -39,13 +39,9 @@ float3 SurfaceReflection(float2 position, float3 albedo)
                 break;
             }
 
-            int2 materialNeighbor = neighbor;
-            if (_MaterialYFlip != 0)
-            {
-                materialNeighbor.y = _FieldSize.y - 1 - materialNeighbor.y;
-            }
+            int2 materialNeighbor = MaterialPixel(neighbor);
 
-            if (_MaterialField.Load(int3(materialNeighbor, 0)).a >= 0.5)
+            if (IsSolidOccupancy(_MaterialField.Load(int3(materialNeighbor, 0)).a))
             {
                 continue;
             }
@@ -54,7 +50,8 @@ float3 SurfaceReflection(float2 position, float3 albedo)
             float3 directLight = (_DebugView == 7) ? 0.0 :
                 (_DirectInput.Load(int3(neighbor, 0)).rgb +
                  _StaticDirectInput.Load(int3(neighbor, 0)).rgb);
-            float3 bounceLight = _BounceInput.SampleLevel(sampler_LinearClamp, neighborUv, 0).rgb;
+            float3 bounceLight = (_EnableDiffuseBounce != 0 || _DebugView == 7) ?
+                _BounceInput.SampleLevel(sampler_LinearClamp, neighborUv, 0).rgb : 0.0;
             float3 light = directLight + bounceLight;
 
             // Incident light reaches the exposed face through half an air cell.
@@ -65,7 +62,25 @@ float3 SurfaceReflection(float2 position, float3 albedo)
         }
     }
 
-    return incident * saturate(albedo) * _BounceStrength;
+    return incident * saturate(albedo);
+}
+
+// AO вокруг блоков запекается в альфу лайтмапы: дистанция до геометрии
+// из jump-flooded SDF вместо мип-блюра occupancy. Круги остаются кругами,
+// дырки пробиваются, радиус в клетках одинаков на всех тирах. Террейн берёт
+// значение из уже выбранного семпла света, отдельной выборки в видимом
+// пассе нет. Временная квантованность та же: occupancy меняется только при
+// перестройке поля, так что покадровый пересчёт в террейне всё равно видел
+// лишь последнее перестроение.
+float BakedAmbientOcclusion(int2 pixel)
+{
+    float2 seed = _DistanceSeedInput.Load(int3(pixel, 0)).rg;
+    float distTexels = length(seed - (float2(pixel) + 0.5));
+    float safeCellSize = max(_CellSize, 0.0001);
+    float regionCellsX = max(_WorldRect.z / safeCellSize, 0.0001);
+    float texelsPerCell = max(float(_FieldSize.x) / regionCellsX, 0.0001);
+    float distCells = distTexels / texelsPerCell;
+    return 1.0 - saturate((1.0 - smoothstep(0.0, _AORadiusCells, distCells)) * _TerrainAmbientOcclusionStrength);
 }
 
 [numthreads(8, 8, 1)]
@@ -94,11 +109,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
     float2 uv = (float2(pixel) + 0.5) / float2(_FieldSize);
-    int2 materialPixel = pixel;
-    if (_MaterialYFlip != 0)
-    {
-        materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
-    }
+    int2 materialPixel = MaterialPixel(pixel);
 
     float4 material = _MaterialField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
     float4 emission = _EmissionField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
@@ -108,15 +119,12 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    // Тот же мип занятости, из которого террейн строит AO вокруг блоков.
-    // Радиус держится здесь и в Terrain.shader порознь: там он в пикселях
-    // экрана, тут в текселях поля, и сводить их в одну константу нечем.
-    // Вид показывает источник, а не готовую тень.
+    // Вид показывает готовое запечённое AO (величину затемнения), то же,
+    // что террейн берёт из альфы лайтмапы.
     if (_DebugView == 9) // AmbientOcclusion
     {
-        float nearby = SampleOccupancy(float2(pixel) + 0.5, _TerrainAmbientOcclusionMip);
-        float occlusion = saturate(sqrt(nearby) * _TerrainAmbientOcclusionStrength);
-        _Result[pixel] = float4(occlusion, occlusion, occlusion, 1.0);
+        float baked = BakedAmbientOcclusion(pixel);
+        _Result[pixel] = float4(1.0 - baked, 1.0 - baked, 1.0 - baked, 1.0);
         return;
     }
 
@@ -177,7 +185,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
 
     if (_BlockAveraged != 0 && _DebugView == 0)
     {
-        _Result[pixel] = float4(max(combinedDirect.rgb, 0.0), 1.0);
+        _Result[pixel] = float4(max(combinedDirect.rgb, 0.0), BakedAmbientOcclusion(pixel));
         return;
     }
 
@@ -188,21 +196,23 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     if (_EnableDiffuseBounce != 0 || _DebugView == 7)
     {
         bounce = (1.0 - solid) * SampleBounceFiltered(pixel, uv);
-        if (solid > 0.0)
-        {
-            bounce += solid * SurfaceReflection(float2(pixel) + 0.5, material.rgb);
-        }
+    }
+
+    float3 surfaceRefl = 0.0;
+    if (solid > 0.0)
+    {
+        surfaceRefl = solid * SurfaceReflection(float2(pixel) + 0.5, material.rgb);
     }
 
     if (_DebugView == 7) // DiffuseBounce
     {
-        _Result[pixel] = float4(bounce, 1.0);
+        _Result[pixel] = float4(bounce + surfaceRefl, 1.0);
         return;
     }
 
     float3 bounceTerm = _EnableDiffuseBounce != 0 ? bounce : 0.0;
 
-    float3 directAndBounce = bounceTerm + combinedDirect.rgb;
+    float3 directAndBounce = bounceTerm + combinedDirect.rgb + surfaceRefl;
     float3 ambient = _AmbientColor.rgb;
 
     if (_DebugView == 8) // Exposure (false-color zebras)
@@ -246,7 +256,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     }
 
     float3 output = max(directAndBounce, 0.0);
-    _Result[pixel] = float4(ambient + output, 1.0);
+    _Result[pixel] = float4(ambient + output, BakedAmbientOcclusion(pixel));
 }
 
 #endif // KERN_COMPOSITE_LIGHTING_HLSL

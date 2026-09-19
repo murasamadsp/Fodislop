@@ -16,6 +16,7 @@ float3 SampleBounceFiltered(int2 pixel, float2 uv)
     int2 basePixel = int2(floor(position));
     uint baseIndex = ((uint)pixel.y * (uint)_FieldSize.x + (uint)pixel.x) * 4u;
     float3 result = 0.0;
+    float3 totalWeight = 0.0;
     [unroll]
     for (int y = 0; y < 2; y++)
     {
@@ -24,11 +25,15 @@ float3 SampleBounceFiltered(int2 pixel, float2 uv)
         {
             int2 tap = clamp(basePixel + int2(x, y), int2(0, 0), _BounceSize - 1);
             float4 tapFilter = _BounceFilterWeights[baseIndex + (uint)(y * 2 + x)];
-            result += _BounceInput.Load(int3(tap, 0)).rgb * tapFilter.rgb * tapFilter.a;
+            float3 w = tapFilter.rgb * tapFilter.a;
+            result += _BounceInput.Load(int3(tap, 0)).rgb * w;
+            totalWeight += w;
         }
     }
 
-    return result;
+    return (totalWeight.x > 0.0001 || totalWeight.y > 0.0001 || totalWeight.z > 0.0001)
+        ? (result / max(totalWeight, 0.0001))
+        : 0.0;
 }
 
 [numthreads(8, 8, 1)]
@@ -56,7 +61,7 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
     {
         return;
     }
-    float bounceStrength = (_DebugView == 7) ? max(_BounceStrength, 1.0) : _BounceStrength;
+    float bounceStrength = _BounceStrength;
     if (_EnableDiffuseBounce == 0 && _DebugView != 7)
     {
         _BounceTexture[pixel] = 0.0;
@@ -76,8 +81,8 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
 
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     float pixelsPerCell = 1.0 / max(cellsPerPixel.x, 0.0001);
-    float jitter = InterleavedGradientNoise(float2(pixel));
-    float baseAngle = jitter * (PI2 / 8.0);
+    // Regular 8 directions matching BuildBounceTaps for coherent, noise-free sampling
+    float baseAngle = PI2 / 16.0;
     uint baseIndex = ((uint)pixel.y * (uint)_BounceSize.x + (uint)pixel.x) * 16u;
 
     float3 gatheredBounce = 0.0;
@@ -113,12 +118,19 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
             _DirectInput.SampleLevel(sampler_LinearClamp, uvPrev, 0).rgb +
             _StaticDirectInput.SampleLevel(sampler_LinearClamp, uvPrev, 0).rgb;
         float3 transmission = _BounceTaps[baseIndex + (uint)d * 2u + 1u].rgb;
-        gatheredBounce += incident * bounceAlbedo.rgb * transmission;
+
+        // Smooth physical 2D distance attenuation and quadratic fade out to 4 cells
+        float hitDistCells = float(hitStep) * 0.25;
+        float distAttenuation = 1.0 / (1.0 + hitDistCells * 0.5);
+        float fade = saturate(1.0 - hitDistCells / 4.0);
+        float distanceWeight = distAttenuation * (fade * fade);
+
+        gatheredBounce += incident * bounceAlbedo.rgb * transmission * distanceWeight;
     }
 
-    // Angular integration over 8 directions (delta theta = 2*pi / 8).
-    float3 scatteredInAir = gatheredBounce * (PI2 / 8.0);
-    _BounceTexture[pixel] = float4(scatteredInAir * (1.0 - centerSolid) * bounceStrength, 1.0);
+    // Isotropic 2D angular integration over 8 directions: (1 / 2pi) * integral L dTheta = (1 / 8) * sum L_i.
+    float3 scatteredInAir = (gatheredBounce / 8.0) * bounceStrength;
+    _BounceTexture[pixel] = float4(scatteredInAir * (1.0 - centerSolid), 1.0);
 }
 
 #endif // KERN_BOUNCE_SOLVE_HLSL

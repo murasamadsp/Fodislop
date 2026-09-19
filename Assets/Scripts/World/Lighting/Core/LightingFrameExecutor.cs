@@ -110,6 +110,17 @@ internal sealed class LightingFrameExecutor
             _resources.CompositeLightingKernel,
             _resources.CellGridWidth,
             _resources.CellGridHeight);
+        // SDF-сид для запечённого AO биндится каждый записываемый кадр:
+        // command buffer чистится, привязки между кадрами не живут.
+        // Финал флуда детерминированно в SeedA (чётное число проходов).
+        if (_resources.DistanceSeedA != null)
+        {
+            commandBuffer.SetComputeTextureParam(
+                _resources.LightingCompute!,
+                _resources.CompositeLightingKernel,
+                LightingComputeBinder.DistanceSeedInputID,
+                _resources.DistanceSeedA);
+        }
     }
 
     public LightingFrameResult Record(
@@ -132,6 +143,8 @@ internal sealed class LightingFrameExecutor
             _executedStages.Add("MaterialField");
             _geometrySolver.PrepareCaches(commandBuffer, materialFieldRebuilt: true);
             _executedStages.Add("GeometryCache");
+            _geometrySolver.RecordDistanceField(commandBuffer, _telemetry);
+            _executedStages.Add("DistanceField");
         }
 
         bool staticRadianceChanged = request.StaticRadianceChanged;

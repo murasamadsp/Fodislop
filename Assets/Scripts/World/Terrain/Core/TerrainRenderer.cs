@@ -1233,6 +1233,11 @@ namespace Kern.World.Terrain
                 atlases);
             TerrainCellSources sources = CreateCellSources(atlases, _textureService);
             _cellBuilder.BuildTextureCells(_pendingTextureCellTypes, sources, minX, minY);
+            // Поле материалов семплит альбедо и эмиссию из атласа: новые rect'ы
+            // меняют его содержимое без смены геометрии. Без бампа ревизии поле
+            // осталось бы с чёрным/старым альбедо (и без свечения) до первой
+            // копки или сдвига региона — светящиеся кристаллы гасли навсегда.
+            _terrainContentRevision++;
             _materialManager.BindAtlasTextures(atlases, _textureService);
             if (_cellBuilder.DoorsTouched)
             {
