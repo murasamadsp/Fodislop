@@ -34,7 +34,7 @@ public class TerrainAmbientOcclusionContractTests
     }
 
     [Test]
-    public void TerrainShader_AppliesAmbientOcclusionToBackgroundLayerOnly()
+    public void TerrainShader_AppliesAmbientOcclusionToEveryNonPhysicalSurface()
     {
         string root = FindRepositoryRoot();
         string shaderPath = Path.Combine(root, "Assets/Shaders/Terrain.shader");
@@ -42,30 +42,20 @@ public class TerrainAmbientOcclusionContractTests
 
         string content = File.ReadAllText(shaderPath);
 
-        // Find the lighting block where GetAmbientOcclusion is applied
         Match aoCallMatch = Regex.Match(
             content,
-            @"if\s*\(([^)]*isForeground[^)]*)\)\s*\{[^}]*GetAmbientOcclusion",
+            @"uint\s+shadowFlags[^;]*;\s*if\s*\(\(shadowFlags\s*&\s*64u\)\s*==\s*0u\)\s*\{[^}]*GetAmbientOcclusion",
             RegexOptions.Singleline);
 
         Assert.That(
             aoCallMatch.Success,
             Is.True,
-            "Terrain.shader must have a layer guard condition containing 'isForeground' before calling GetAmbientOcclusion.");
-
-        string condition = aoCallMatch.Groups[1].Value;
-
-        // Background is layer 0 (isForeground == 0.0, i.e. < 0.5).
-        // It must NEVER be guarded with > 0.5, which would erroneously target the foreground layer!
-        Assert.That(
-            condition.Contains("<"),
-            Is.True,
-            $"Ambient occlusion must be applied to the background layer (isForeground < 0.5). Actual condition: '{condition}'");
+            "Terrain.shader must apply AO to every surface without the physical-mass bit and exclude solid blocks.");
 
         Assert.That(
-            condition.Contains(">"),
+            aoCallMatch.Value.Contains("isForeground"),
             Is.False,
-            $"Ambient occlusion layer guard must NOT use '>' (which targets foreground). Actual condition: '{condition}'");
+            "AO must not use the render layer as its guard because that clips the shadow at cell boundaries.");
     }
 
     [Test]

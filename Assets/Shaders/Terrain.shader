@@ -576,19 +576,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRGB = finalRGB * worldLight.rgb;
 
-                // Тень получает только фон. Блоки все одной высоты и друг на
-                // друга не падают, а бит 64 — как раз физическая масса
-                // переднего плана. Заливка под блоком AO не получает: её видно
-                // сквозь полупрозрачные текстуры, и затемнение превращало её в
-                // чёрный. AO reads its own geometry field, whose resolution
-                // is independent from the lighting tier; PerBlock therefore
-                // cannot collapse a rounded block to a square.
+                // AO receives every visible surface that is not physical
+                // foreground mass. This includes the authored background
+                // layer and empty/road foreground cells around a block; using
+                // the render layer as the guard clips the shadow to one cell.
+                // Physical blocks keep their own texture and direct lighting.
                 #ifdef KERN_WORLD_LIGHTING
-                // Контактная тень (Ambient Occlusion): блоки переднего плана отбрасывают
-                // контактную тень на фоновую стену (layer 0, isForeground < 0.5).
-                // Блоки переднего плана (isForeground >= 0.5) тень не получают, сохраняя
-                // чистоту текстуры и прямого освещения.
-                if (input.isForeground < 0.5)
+                uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
+                if ((shadowFlags & 64u) == 0u)
                 {
                     litRGB *= 1.0 - GetAmbientOcclusion(input.worldPosition.xy);
                 }

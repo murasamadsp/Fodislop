@@ -47,10 +47,7 @@ namespace Kern.UI.Inventory
         private Label? _capacityLabel;
 
         private int _lastSelectedSlot = -1;
-        private VisualElement _tooltipWrapper = null!;
-        private VisualElement _tooltipBg = null!;
-        private Label _tooltipName = null!;
-        private Label _tooltipDesc = null!;
+        private InventoryTooltipController? _tooltipController;
         private InventoryContextMenuController? _contextMenuController;
         private bool _initialized;
 
@@ -163,7 +160,7 @@ namespace Kern.UI.Inventory
             _model.OnSlotChanged += RefreshSlot;
             _model.OnSlotSelected += OnModelSlotSelected;
 
-            CreateTooltip(_doc.rootVisualElement);
+            _tooltipController = new InventoryTooltipController(_doc.rootVisualElement, _loc);
             _contextMenuController = new InventoryContextMenuController(_doc, _model, _loc);
             BuildUI();
             _initialized = true;
@@ -208,35 +205,12 @@ namespace Kern.UI.Inventory
                 var item = _model!.GetSlot(slotIndex);
                 if (item != null)
                 {
-                    _tooltipName.text = item.Name;
-                    _tooltipDesc.text = item.Description ?? string.Empty;
-                    _tooltipWrapper.style.display = DisplayStyle.Flex;
+                    _tooltipController?.ShowSlotTooltip(item);
                     return;
                 }
             }
 
-            _tooltipWrapper.style.display = DisplayStyle.None;
-        }
-
-        private void CreateTooltip(VisualElement root)
-        {
-            _tooltipWrapper = new VisualElement();
-            _tooltipWrapper.AddToClassList("inv-tooltip-wrapper");
-            _tooltipWrapper.style.display = DisplayStyle.None;
-
-            _tooltipBg = new VisualElement();
-            _tooltipBg.AddToClassList("inv-tooltip-bg");
-
-            _tooltipName = new Label();
-            _tooltipName.AddToClassList("inv-tooltip-name");
-            _tooltipBg.Add(_tooltipName);
-
-            _tooltipDesc = new Label();
-            _tooltipDesc.AddToClassList("inv-tooltip-desc");
-            _tooltipBg.Add(_tooltipDesc);
-
-            _tooltipWrapper.Add(_tooltipBg);
-            root.Add(_tooltipWrapper);
+            _tooltipController?.HideTooltip();
         }
 
         private void BuildUI()
@@ -495,9 +469,7 @@ namespace Kern.UI.Inventory
 
         private void ShowItemInfo(ItemData item)
         {
-            _tooltipName.text = _loc!.Get("inventory.tooltip_item", item.Name ?? item.ItemType.ToString(), item.ItemType, item.Quantity);
-            _tooltipDesc.text = _loc!.Get("inventory.tooltip_type", item.ItemType) + "\n" + (item.Description ?? _loc.Get("inventory.no_description"));
-            _tooltipWrapper.style.display = DisplayStyle.Flex;
+            _tooltipController?.ShowItemInfo(item);
         }
     }
 }

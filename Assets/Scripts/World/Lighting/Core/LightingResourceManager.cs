@@ -23,9 +23,7 @@ internal sealed class LightingResourceManager
     private const long MaximumStaticCascadeRayWork =
         LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits;
 
-    private static readonly uint[] EmptyLightingCounters = new uint[3];
-    private readonly ComputeBuffer?[] _lightingCounterBuffers = new ComputeBuffer?[2];
-    private int _activeLightingCounterBuffer;
+    private readonly CascadeBufferManager _buffers = new();
     private RenderTexture? _materialField;
     private RenderTexture? _staticEmissionField;
     private RenderTexture? _directTexture;
@@ -45,12 +43,12 @@ internal sealed class LightingResourceManager
     public RenderTexture? StaticDirectTexture => _staticDirectTexture;
     public RenderTexture? BounceTexture => _bounceTexture;
     public RenderTexture? LightmapTexture => _lightmapTexture;
-    public ComputeBuffer? RadianceAtlas { get; private set; }
-    public ComputeBuffer? RadianceScratchAtlas { get; private set; }
-    public ComputeBuffer? DirtyRegions { get; private set; }
-    public ComputeBuffer? CascadeChangedMask { get; private set; }
-    public ComputeBuffer? DynamicLightBuffer { get; private set; }
-    public ComputeBuffer? LightingCounters => _lightingCounterBuffers[_activeLightingCounterBuffer];
+    public ComputeBuffer? RadianceAtlas => _buffers.RadianceAtlas;
+    public ComputeBuffer? RadianceScratchAtlas => _buffers.RadianceScratchAtlas;
+    public ComputeBuffer? DirtyRegions => _buffers.DirtyRegions;
+    public ComputeBuffer? CascadeChangedMask => _buffers.CascadeChangedMask;
+    public ComputeBuffer? DynamicLightBuffer => _buffers.DynamicLightBuffer;
+    public ComputeBuffer? LightingCounters => _buffers.LightingCounters;
 
     // Geometry caches: depend only on the material field and are rebuilt with
     // it (see WorldLighting.compute). Recreated together with the field
@@ -83,7 +81,7 @@ internal sealed class LightingResourceManager
     public int AmbientOcclusionHeight { get; private set; }
     public int BounceWidth { get; private set; }
     public int BounceHeight { get; private set; }
-    public int AtlasCapacity { get; private set; }
+    public int AtlasCapacity => _buffers.AtlasCapacity;
     public int AtlasEntryCount { get; private set; }
     public long EstimatedCascadeRayWorkUnits { get; private set; }
     public long EstimatedCascadeDispatchThreads { get; private set; }
@@ -334,23 +332,7 @@ internal sealed class LightingResourceManager
 
     public void ReleaseResources()
     {
-        DynamicLightBuffer?.Release();
-        DynamicLightBuffer = null;
-        for (int index = 0; index < _lightingCounterBuffers.Length; index++)
-        {
-            _lightingCounterBuffers[index]?.Release();
-            _lightingCounterBuffers[index] = null;
-        }
-        _activeLightingCounterBuffer = 0;
-        RadianceAtlas?.Release();
-        RadianceAtlas = null;
-        RadianceScratchAtlas?.Release();
-        RadianceScratchAtlas = null;
-        DirtyRegions?.Release();
-        DirtyRegions = null;
-        CascadeChangedMask?.Release();
-        CascadeChangedMask = null;
-        AtlasCapacity = 0;
+        _buffers.ReleaseBuffers();
         AtlasEntryCount = 0;
         EstimatedCascadeRayWorkUnits = 0;
         EstimatedCascadeDispatchThreads = 0;
@@ -421,105 +403,17 @@ internal sealed class LightingResourceManager
         Cascades.Clear();
     }
 
-    public void EnsurePersistentBuffers(long atlasDimension, int maximumLightCount)
-    {
-        long maximumCapacity = atlasDimension * atlasDimension * 4;
+    public void EnsurePersistentBuffers(long atlasDimension, int maximumLightCount) =>
+        _buffers.EnsurePersistentBuffers(AtlasEntryCount, atlasDimension, maximumLightCount);
 
-        if (maximumCapacity <= 0 || maximumCapacity > int.MaxValue)
-        {
-            throw new InvalidOperationException(
-                "Radiance cascade atlas capacity exceeds the supported structured-buffer size.");
-        }
-
-        if (AtlasEntryCount > maximumCapacity)
-        {
-            throw new InvalidOperationException(
-                "Radiance cascade layout exceeds the configured atlas capacity.");
-        }
-
-        int requiredCapacity = Mathf.Max(1, AtlasEntryCount);
-
-        if (RadianceAtlas == null || AtlasCapacity < requiredCapacity)
-        {
-            RadianceAtlas?.Release();
-            RadianceAtlas = new ComputeBuffer(
-                requiredCapacity,
-                sizeof(uint) * 3,
-                ComputeBufferType.Structured);
-            AtlasCapacity = requiredCapacity;
-        }
-
-        if (CascadeChangedMask == null || CascadeChangedMask.count < requiredCapacity)
-        {
-            CascadeChangedMask?.Release();
-            CascadeChangedMask = new ComputeBuffer(
-                requiredCapacity,
-                sizeof(uint),
-                ComputeBufferType.Structured);
-        }
-
-        int clampedLightCount = Mathf.Max(1, maximumLightCount);
-
-        if (DynamicLightBuffer == null || DynamicLightBuffer.count != clampedLightCount)
-        {
-            DynamicLightBuffer?.Release();
-            DynamicLightBuffer = new ComputeBuffer(
-                clampedLightCount,
-                sizeof(float) * 8,
-                ComputeBufferType.Structured);
-        }
-
-        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != 3 ||
-            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != 3)
-        {
-            for (int index = 0; index < _lightingCounterBuffers.Length; index++)
-            {
-                _lightingCounterBuffers[index]?.Release();
-                _lightingCounterBuffers[index] = new ComputeBuffer(
-                    3,
-                    sizeof(uint),
-                    ComputeBufferType.Structured);
-            }
-        }
-    }
-
-    public void EnsureDirtyRegionCapacity(int capacity)
-    {
-        int requiredCapacity = Mathf.Max(1, capacity);
-        if (DirtyRegions != null && DirtyRegions.count >= requiredCapacity)
-        {
-            return;
-        }
-
-        DirtyRegions?.Release();
-        DirtyRegions = new ComputeBuffer(
-            requiredCapacity,
-            sizeof(int) * 4,
-            ComputeBufferType.Structured);
-    }
+    public void EnsureDirtyRegionCapacity(int capacity) =>
+        _buffers.EnsureDirtyRegionCapacity(capacity);
 
     public void SwapRadianceAtlases()
     {
-        EnsureScratchAtlas();
-        (RadianceAtlas, RadianceScratchAtlas) =
-            (RadianceScratchAtlas, RadianceAtlas);
+        _buffers.SwapRadianceAtlases();
         Registry.Cascade.Atlas = RadianceAtlas;
     }
 
-    // The atlas scroll path is disabled (see LightingUpdateCoordinator), so
-    // its scratch duplicate is allocated lazily on first scroll use instead
-    // of pinning a full atlas in VRAM forever. Re-enabling scroll needs no
-    // other change: RecordScroll reaches this through SwapRadianceAtlases.
-    public void EnsureScratchAtlas()
-    {
-        if (RadianceScratchAtlas != null && RadianceScratchAtlas.count == AtlasCapacity && AtlasCapacity > 0)
-        {
-            return;
-        }
-
-        RadianceScratchAtlas?.Release();
-        RadianceScratchAtlas = AtlasCapacity > 0
-            ? new ComputeBuffer(AtlasCapacity, sizeof(uint) * 3, ComputeBufferType.Structured)
-            : null;
-    }
+    public void EnsureScratchAtlas() => _buffers.EnsureScratchAtlas();
 }
