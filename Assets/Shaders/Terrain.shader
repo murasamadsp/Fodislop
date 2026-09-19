@@ -279,19 +279,25 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 float3 finalRGB = texColor.rgb;
                 int animType = (int)(input.animData.x + 0.5);
+                int animationProfile = (int)(input.animData.w + 0.5);
                 float3 flowSample = 0.0;
-                if (animType == 2)
+                if (TerrainAnimationUsesFlowMap(animType, animationProfile))
                 {
-                    flowSample = SampleFlowMap(input.worldPos.xy + input.uv);
+                    // Geometric quad coordinates stay continuous when atlas
+                    // UVs are rotated or mirrored by terrain autotiling.
+                    flowSample = SampleFlowMap(
+                        input.worldPos.xy + input.packedData.yz);
                 }
 
                 finalRGB = AnimateTerrainColor(
                     finalRGB,
                     texColor.rgb,
                     animType,
+                    animationProfile,
                     input.animData.y,
                     input.animData.z,
                     flowSample,
+                    input.glowData.x,
                     _ShimmerColor.rgb,
                     _ShimmerSpeedScale,
                     _PulseSpeedScale);
@@ -545,22 +551,28 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 occupancy *= albedoTexel.a >= 0.05 ? 1.0 : 0.0;
 
                 int albedoAnimationType = (int)(input.animData.x + 0.5);
+                int albedoAnimationProfile = (int)(input.animData.w + 0.5);
                 float3 flowSample = 0.0;
-                if (albedoAnimationType == 2)
+                if (TerrainAnimationUsesFlowMap(
+                    albedoAnimationType,
+                    albedoAnimationProfile))
                 {
                     flowSample = SAMPLE_TEXTURE2D(
                         _FlowMap,
                         sampler_FlowMap,
-                        (input.worldPos.xy + input.uv) / _FlowScale.xy).rgb;
+                        (input.worldPos.xy + input.packedData.yz) /
+                            _FlowScale.xy).rgb;
                 }
 
                 surfaceAlbedo = AnimateTerrainColor(
                     surfaceAlbedo,
                     surfaceAlbedo,
                     albedoAnimationType,
+                    albedoAnimationProfile,
                     input.animData.y,
                     input.animData.z,
                     flowSample,
+                    input.glowData.x,
                     _ShimmerColor.rgb,
                     _ShimmerSpeedScale,
                     _PulseSpeedScale);

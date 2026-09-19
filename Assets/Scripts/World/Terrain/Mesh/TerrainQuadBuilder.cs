@@ -235,6 +235,9 @@ internal static class TerrainQuadBuilder
             animOffset = (seed % 6283) / 1000f;
         }
 
+        TerrainAnimationSettings animationSettings =
+            TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
+
         // Любой непустой блок переднего плана — физическая масса: свет обязан
         // поглощаться всеми блоками одинаково, без зависимости от уникальных
         // свойств DropsShadow/Passable (иначе у блоков без DropsShadow
@@ -247,9 +250,9 @@ internal static class TerrainQuadBuilder
             !MapCellConfigCatalog.IsRoad(cellFgType);
         Vector4 animDataVec = new(
             (float)animType,
-            animSpeed,
+            animationSettings.Speed,
             animOffset,
-            0f);
+            (float)animationSettings.Profile);
         Vector4 tileSizeVec = new Vector4(uvTileSize, uvTileSize, (float)animFrames, frameHeight);
         Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 
