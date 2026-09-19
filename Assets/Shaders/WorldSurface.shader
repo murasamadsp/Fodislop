@@ -75,7 +75,7 @@ Shader "Kern/World Surface"
             {
                 float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
                 float2 lightUV = (worldPosition - _WorldLightRect.xy) / rectSize;
-                if (_WorldLightDebugView != 0 || _WorldLightPerBlock != 0)
+                if (_WorldLightPerBlock != 0 || (_WorldLightDebugView >= 1 && _WorldLightDebugView <= 3))
                 {
                     int2 debugPixel = clamp(
                         int2(lightUV * _WorldLightTextureSize.xy),

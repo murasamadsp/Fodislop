@@ -135,7 +135,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return 1.0;
                 #else
                 float2 lightUV = GetWorldLightUv(worldPos);
-                if (_WorldLightDebugView != 0 || _WorldLightPerBlock != 0)
+                if (_WorldLightPerBlock != 0 || (_WorldLightDebugView >= 1 && _WorldLightDebugView <= 3))
                 {
                     int2 debugPixel = clamp(
                         int2(lightUV * _WorldLightTextureSize.xy),
