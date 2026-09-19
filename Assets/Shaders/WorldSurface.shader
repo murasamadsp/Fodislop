@@ -54,6 +54,7 @@ Shader "Kern/World Surface"
             };
 
             TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
             #include "WorldLightSampling.hlsl"
 
             float _WorldEmissionScale;
@@ -91,7 +92,7 @@ Shader "Kern/World Surface"
                     sampler_BaseMap,
                     baseMapUV,
                     0);
-                float3 worldLight = GetWorldLightColor(input.worldPosition).rgb;
+                float3 worldLight = SampleWorldLightColorUnclamped(input.worldPosition).rgb;
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(worldLight, surface.a);

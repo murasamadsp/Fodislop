@@ -8,18 +8,19 @@ float4 _WorldLightTextureSize;
 int _WorldLightDebugView;
 int _WorldLightPerBlock;
 
-float2 GetWorldLightUv(float2 worldPos)
+float2 GetWorldLightUvUnclamped(float2 worldPos)
 {
     float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
-    return saturate((worldPos - _WorldLightRect.xy) / rectSize);
+    return (worldPos - _WorldLightRect.xy) / rectSize;
 }
 
-float4 GetWorldLightColor(float2 worldPos)
+float2 GetWorldLightUv(float2 worldPos)
 {
-#if !defined(KERN_WORLD_LIGHTING)
-    return 1.0;
-#else
-    float2 lightUV = GetWorldLightUv(worldPos);
+    return saturate(GetWorldLightUvUnclamped(worldPos));
+}
+
+float4 SampleWorldLightColorAtUv(float2 lightUV)
+{
     if (_WorldLightPerBlock != 0 || (_WorldLightDebugView >= 1 && _WorldLightDebugView <= 3))
     {
         int2 debugPixel = clamp(
@@ -32,6 +33,24 @@ float4 GetWorldLightColor(float2 worldPos)
     return _WorldLightTexture.Sample(
         sampler_WorldLightTexture,
         lightUV);
+}
+
+float4 SampleWorldLightColor(float2 worldPos)
+{
+    return SampleWorldLightColorAtUv(GetWorldLightUv(worldPos));
+}
+
+float4 SampleWorldLightColorUnclamped(float2 worldPos)
+{
+    return SampleWorldLightColorAtUv(GetWorldLightUvUnclamped(worldPos));
+}
+
+float4 GetWorldLightColor(float2 worldPos)
+{
+#if !defined(KERN_WORLD_LIGHTING)
+    return 1.0;
+#else
+    return SampleWorldLightColor(worldPos);
 #endif
 }
 
