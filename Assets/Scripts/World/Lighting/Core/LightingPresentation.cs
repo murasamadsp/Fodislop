@@ -88,7 +88,7 @@ internal sealed class LightingPresentation
             SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
         Shader.SetGlobalFloat(
             _worldAmbientOcclusionTexelsPerCellID,
-            ambientOcclusion.width / visibleRegion.z);
+            ambientOcclusion.width / (visibleRegion.z / Mathf.Max(cellSize, 0.0001f)));
         Kern.World.Terrain.TerrainLook.ApplyShaderGlobals();
 
         Shader.SetGlobalInteger(_worldLightDebugViewID, (int)debugView);

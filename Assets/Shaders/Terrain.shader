@@ -584,8 +584,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // is independent from the lighting tier; PerBlock therefore
                 // cannot collapse a rounded block to a square.
                 #ifdef KERN_WORLD_LIGHTING
-                uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
-                if ((shadowFlags & 64u) == 0u && input.isForeground > 0.5)
+                // Контактная тень (Ambient Occlusion): блоки переднего плана отбрасывают
+                // контактную тень на фоновую стену (layer 0, isForeground < 0.5).
+                // Блоки переднего плана (isForeground >= 0.5) тень не получают, сохраняя
+                // чистоту текстуры и прямого освещения.
+                if (input.isForeground < 0.5)
                 {
                     litRGB *= 1.0 - GetAmbientOcclusion(input.worldPosition.xy);
                 }
