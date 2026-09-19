@@ -43,56 +43,12 @@ bool CascadeEntryMayChange(int2 probe, uint directionIndex)
 
     // Single exit: Metal treats early returns as possibly-uninitialized.
     bool changed = false;
-    if (_HasFarCascade == 0)
+    if (_HasFarCascade == 0 || _EnableBilinearFix == 0)
     {
         changed = DirtySegmentOverlap(intervalStart, intervalEnd);
     }
-    else if (_EnableBilinearFix == 0)
-    {
-        if (DirtySegmentOverlap(intervalStart, intervalEnd))
-        {
-            changed = true;
-        }
-        else
-        {
-            uint directionBranchCount = clamp(
-                (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
-                1u,
-                4u);
-            uint farDirectionBase = directionIndex * directionBranchCount;
-            float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
-            int2 farProbeBase = int2(floor(farProbePosition));
 
-            [loop]
-            for (uint farDirectionBranch = 0u;
-                farDirectionBranch < directionBranchCount && !changed;
-                farDirectionBranch++)
-            {
-                uint farDirection = (farDirectionBase + farDirectionBranch) %
-                    (uint)_FarCascadeDirectionCount;
-                [unroll]
-                for (int farY = 0; farY < 2 && !changed; farY++)
-                {
-                    [unroll]
-                    for (int farX = 0; farX < 2 && !changed; farX++)
-                    {
-                        int2 farProbe = clamp(
-                            farProbeBase + int2(farX, farY),
-                            int2(0, 0),
-                            _FarCascadeProbeSize - 1);
-                        int farIndex = _FarCascadeOffset +
-                            (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
-                            _FarCascadeDirectionCount + (int)farDirection;
-                        if (_CascadeChangedMask[farIndex] != 0)
-                        {
-                            changed = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    else
+    if (!changed && _HasFarCascade != 0)
     {
         uint directionBranchCount = clamp(
             (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
@@ -122,17 +78,23 @@ bool CascadeEntryMayChange(int2 probe, uint directionIndex)
                     int farIndex = _FarCascadeOffset +
                         (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
                         _FarCascadeDirectionCount + (int)farDirection;
-                    float farAngle = (float(farDirection) + 0.5) * PI2 /
-                        float(_FarCascadeDirectionCount);
-                    float farSine;
-                    float farCosine;
-                    sincos(farAngle, farSine, farCosine);
-                    float2 farOrigin =
-                        (float2(farProbe) + 0.5) * _FarCascadeProbeSpacing;
-                    float2 childIntervalStart = farOrigin +
-                        float2(farCosine, farSine) * _FarCascadeInterval.x;
-                    if (_CascadeChangedMask[farIndex] != 0 ||
-                        DirtySegmentOverlap(intervalStart, childIntervalStart))
+
+                    bool overlap = false;
+                    if (_EnableBilinearFix != 0)
+                    {
+                        float farAngle = (float(farDirection) + 0.5) * PI2 /
+                            float(_FarCascadeDirectionCount);
+                        float farSine;
+                        float farCosine;
+                        sincos(farAngle, farSine, farCosine);
+                        float2 farOrigin =
+                            (float2(farProbe) + 0.5) * _FarCascadeProbeSpacing;
+                        float2 childIntervalStart = farOrigin +
+                            float2(farCosine, farSine) * _FarCascadeInterval.x;
+                        overlap = DirtySegmentOverlap(intervalStart, childIntervalStart);
+                    }
+
+                    if (_CascadeChangedMask[farIndex] != 0 || overlap)
                     {
                         changed = true;
                     }
@@ -184,7 +146,7 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
 
     // Each interpolated far interval needs its own continuous near path.
     // Otherwise a far probe across a wall contributes without crossing it.
-    if (_HasFarCascade == 0)
+    if (_HasFarCascade == 0 || _EnableBilinearFix == 0)
     {
         TraceRadianceSegment(
             intervalStart,
@@ -193,15 +155,13 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
             radiance,
             transmittance);
     }
-    else if (_EnableBilinearFix == 0)
-    {
-        TraceRadianceSegment(
-            intervalStart,
-            intervalEnd,
-            true,
-            radiance,
-            transmittance);
 
+    if (_HasFarCascade != 0)
+    {
+        // Every cascade stores the next contiguous radial interval from the
+        // same receiver position. Interpolate the coarser probe field at this
+        // probe's position; offsetting the lookup to the near interval end
+        // would apply the far cascade's interval start twice and leave gaps.
         float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
         int2 farProbeBase = int2(floor(farProbePosition));
         float2 farProbeBlend = frac(farProbePosition);
@@ -210,8 +170,11 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
             1u,
             4u);
         uint farDirectionBase = directionIndex * directionBranchCount;
-        float3 farRadiance = 0.0;
-        float3 farTransmittance = 0.0;
+
+        if (_EnableBilinearFix == 0)
+        {
+            float3 farRadiance = 0.0;
+            float3 farTransmittance = 0.0;
 
         [loop]
         for (uint farDirectionBranch = 0u; farDirectionBranch < directionBranchCount;
@@ -265,18 +228,6 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
     }
     else
     {
-        // Every cascade stores the next contiguous radial interval from the
-        // same receiver position. Interpolate the coarser probe field at this
-        // probe's position; offsetting the lookup to the near interval end
-        // would apply the far cascade's interval start twice and leave gaps.
-        float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
-        int2 farProbeBase = int2(floor(farProbePosition));
-        float2 farProbeBlend = frac(farProbePosition);
-        uint directionBranchCount = clamp(
-            (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
-            1u,
-            4u);
-        uint farDirectionBase = directionIndex * directionBranchCount;
         float3 fixedRadiance = 0.0;
         float3 fixedTransmittance = 0.0;
 

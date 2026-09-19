@@ -138,6 +138,7 @@ float _TransmittanceDebugDistanceCells;
 int _DebugView;
 int _MaterialYFlip;
 int _EnableDiffuseBounce;
+int _EnableBilinearFix;
 
 // PerBlock quality tier: when nonzero, ResolveDirect samples the radiance atlas
 // at the field pixel nearest each world cell's center instead of the dispatch
