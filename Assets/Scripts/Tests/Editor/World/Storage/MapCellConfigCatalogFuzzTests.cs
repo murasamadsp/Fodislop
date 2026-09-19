@@ -167,6 +167,18 @@ public class MapCellConfigCatalogFuzzTests
         Assert.That(MapCellConfigCatalog.IsRoundableLoose(type), Is.EqualTo(expected));
     }
 
+    [TestCase(CellType.Road, true)]
+    [TestCase(CellType.GoldenRoad, true)]
+    [TestCase(CellType.BuildingRoad, true)]
+    [TestCase(CellType.PolymerRoad, true)]
+    [TestCase(CellType.Empty, false)]
+    [TestCase(CellType.Rock, false)]
+    public void IsRoad_DocumentedTypes(CellType type, bool expected)
+    {
+        Assert.That(MapCellConfigCatalog.IsRoad(type), Is.EqualTo(expected));
+    }
+
+
     private static CellConfigurationPacket MakeConfig(CellType type, CellAnimationType anim, byte animSpeed)
     {
         return new CellConfigurationPacket(

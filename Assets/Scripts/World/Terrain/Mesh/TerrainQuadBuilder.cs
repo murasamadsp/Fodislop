@@ -239,9 +239,12 @@ internal static class TerrainQuadBuilder
         // поглощаться всеми блоками одинаково, без зависимости от уникальных
         // свойств DropsShadow/Passable (иначе у блоков без DropsShadow
         // occupancy = 0 и свет проходит насквозь).
+        // Дороги (Road, GoldenRoad, BuildingRoad, PolymerRoad) не являются
+        // физической массой для света — они пропускают его.
         bool isPhysicalMass =
             !isBackground &&
-            cellFgType != CellType.Empty;
+            cellFgType != CellType.Empty &&
+            !MapCellConfigCatalog.IsRoad(cellFgType);
         Vector4 animDataVec = new(
             (float)animType,
             animSpeed,

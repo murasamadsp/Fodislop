@@ -181,7 +181,7 @@ public sealed class TerrainViewportCalculator
             committedWindow,
             requestedWindow,
             cameraViewport,
-            cameraViewport,
+            new RectInt(requestedWindow.Origin, requestedWindow.Size),
             DimensionsChanged: requestedDimensionsChanged,
             ShouldProcess: true);
     }

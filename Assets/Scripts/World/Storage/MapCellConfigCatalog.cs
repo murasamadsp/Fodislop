@@ -31,6 +31,9 @@ public sealed class MapCellConfigCatalog
 
     public static bool IsRoundableLoose(CellType type) => _RoundableLooseTypes.Contains(type);
 
+    public static bool IsRoad(CellType type) =>
+        type is CellType.Road or CellType.GoldenRoad or CellType.BuildingRoad or CellType.PolymerRoad;
+
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {
         ValidateCellConfigurations(configurations);

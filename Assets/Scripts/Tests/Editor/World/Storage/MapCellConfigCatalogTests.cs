@@ -211,4 +211,15 @@ public class MapCellConfigCatalogTests
         Assert.IsFalse(MapCellConfigCatalog.IsRoundableLoose(CellType.Empty));
         Assert.IsFalse(MapCellConfigCatalog.IsRoundableLoose(CellType.Rock));
     }
+
+    [Test]
+    public void IsRoad_CorrectlyIdentifiesCellTypes()
+    {
+        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.Road));
+        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.GoldenRoad));
+        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.BuildingRoad));
+        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.PolymerRoad));
+        Assert.IsFalse(MapCellConfigCatalog.IsRoad(CellType.Empty));
+        Assert.IsFalse(MapCellConfigCatalog.IsRoad(CellType.Rock));
+    }
 }
