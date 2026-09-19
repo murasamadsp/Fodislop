@@ -176,21 +176,13 @@ namespace Kern.World.Terrain
     {
         public const float AmbientOcclusionStrength = 1f;
 
-        // Радиус SDF-AO в клетках: спад идёт от истинной дистанции,
-        // одинаков на всех тирах. 1.0 — середина старого вида High/Ultra
-        // (мип-ореол давал ~1.4/~0.7 клетки); больше — шире и темнее.
-        public const float AORadiusCells = 1.0f;
-
         private static readonly int _AmbientOcclusionStrengthID =
             Shader.PropertyToID("_TerrainAmbientOcclusionStrength");
-        private static readonly int _AORadiusCellsID =
-            Shader.PropertyToID("_AORadiusCells");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void ApplyShaderGlobals()
         {
             Shader.SetGlobalFloat(_AmbientOcclusionStrengthID, AmbientOcclusionStrength);
-            Shader.SetGlobalFloat(_AORadiusCellsID, AORadiusCells);
         }
     }
 }

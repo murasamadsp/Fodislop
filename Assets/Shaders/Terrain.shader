@@ -144,16 +144,39 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return _WorldLightTexture.Load(int3(debugPixel.x, debugPixel.y, 0));
                 }
 
-                // В альфе — запечённое (1 - AO): считается в CompositeLighting
-                // раз на тексель поля, отдельной выборки occupancy тут больше нет.
                 return _WorldLightTexture.Sample(
                     sampler_WorldLightTexture,
                     lightUV);
                 #endif
             }
 
-            // Запечённое AO приезжает в альфе лайтмапы из CompositeLighting —
-            // террейн его только применяет, не считает.
+            Texture2D<float4> _WorldAmbientOcclusionTexture;
+            SamplerState sampler_WorldAmbientOcclusionTexture;
+            int _WorldAmbientOcclusionYFlip;
+            float _WorldAmbientOcclusionTexelsPerCell;
+            float _TerrainAmbientOcclusionStrength;
+
+            float GetAmbientOcclusion(float2 worldPos)
+            {
+                float2 uv = (worldPos - _WorldLightRect.xy) /
+                    max(_WorldLightRect.zw, float2(0.0001, 0.0001));
+                if (_WorldAmbientOcclusionYFlip != 0)
+                {
+                    uv.y = 1.0 - uv.y;
+                }
+
+                float texelsPerCell = max(_WorldAmbientOcclusionTexelsPerCell, 1.0);
+                // The old AO used mip 1.5 at one texel per cell. Offset the
+                // mip by log2(density) so its world-space radius and sqrt
+                // response stay unchanged while the base level preserves the
+                // actual rounded/alpha-cutout silhouette.
+                float mip = 1.5 + log2(texelsPerCell);
+                float nearby = _WorldAmbientOcclusionTexture.SampleLevel(
+                    sampler_WorldAmbientOcclusionTexture,
+                    saturate(uv),
+                    mip).a;
+                return saturate(sqrt(nearby) * _TerrainAmbientOcclusionStrength);
+            }
 
             float MissingTextureHash(float2 position)
             {
@@ -300,6 +323,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 frag (Varyings input) : SV_Target
             {
+                if (_WorldLightDebugView == 9)
+                {
+                    float occlusion = GetAmbientOcclusion(input.worldPosition.xy);
+                    return half4(occlusion, occlusion, occlusion, 1.0);
+                }
+
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(
@@ -551,25 +580,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // друга не падают, а бит 64 — как раз физическая масса
                 // переднего плана. Заливка под блоком AO не получает: её видно
                 // сквозь полупрозрачные текстуры, и затемнение превращало её в
-                // чёрный. Само AO запечено в альфе лайтмапы (CompositeLighting),
-                // здесь оно только применяется — без отдельной выборки.
-                // На PerBlock свет берётся поинтом (Load выше), а AO всегда
-                // билинейно: иначе ореол квантовался бы в квадраты клеток
-                // и зависел от пресета. На билинейных тирах альфа уже гладкая
-                // из того же семпла — второй выборки нет.
+                // чёрный. AO reads its own geometry field, whose resolution
+                // is independent from the lighting tier; PerBlock therefore
+                // cannot collapse a rounded block to a square.
                 #ifdef KERN_WORLD_LIGHTING
                 uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
                 if ((shadowFlags & 64u) == 0u && input.isForeground > 0.5)
                 {
-                    float ao = worldLight.a;
-                    if (_WorldLightPerBlock != 0)
-                    {
-                        ao = _WorldLightTexture.Sample(
-                            sampler_WorldLightTexture,
-                            GetWorldLightUv(input.worldPosition.xy)).a;
-                    }
-
-                    litRGB *= ao;
+                    litRGB *= 1.0 - GetAmbientOcclusion(input.worldPosition.xy);
                 }
                 #endif
                 if (finalAlpha < 0.99 && finalAlpha > 0.01)

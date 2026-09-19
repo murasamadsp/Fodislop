@@ -33,8 +33,8 @@ internal sealed class LightingResourceManager
     private RenderTexture? _bounceTexture;
     private RenderTexture? _lightmapTexture;
     private RenderTexture? _cellSolidMask;
-    private RenderTexture? _distanceSeedA;
-    private RenderTexture? _distanceSeedB;
+    private RenderTexture? _ambientOcclusionField;
+    private RenderTexture? _ambientOcclusionScratch;
 
     public LightingResources Registry { get; } = new();
     public ComputeShader? LightingCompute { get; private set; }
@@ -56,8 +56,8 @@ internal sealed class LightingResourceManager
     // it (see WorldLighting.compute). Recreated together with the field
     // textures, which invalidates them.
     public RenderTexture? CellSolidMask => _cellSolidMask;
-    public RenderTexture? DistanceSeedA => _distanceSeedA;
-    public RenderTexture? DistanceSeedB => _distanceSeedB;
+    public RenderTexture? AmbientOcclusionField => _ambientOcclusionField;
+    public RenderTexture? AmbientOcclusionScratch => _ambientOcclusionScratch;
     public ComputeBuffer? BounceTaps { get; private set; }
     public ComputeBuffer? BounceFilterWeights { get; private set; }
     public bool GeometryCachesValid { get; set; }
@@ -77,11 +77,10 @@ internal sealed class LightingResourceManager
     public int BuildCellSolidMaskKernel { get; private set; }
     public int BuildBounceTapsKernel { get; private set; }
     public int BuildBounceFilterKernel { get; private set; }
-    public int SeedDistanceFieldKernel { get; private set; }
-    public int JumpFloodStepKernel { get; private set; }
-
     public int FieldWidth { get; private set; }
     public int FieldHeight { get; private set; }
+    public int AmbientOcclusionWidth { get; private set; }
+    public int AmbientOcclusionHeight { get; private set; }
     public int BounceWidth { get; private set; }
     public int BounceHeight { get; private set; }
     public int AtlasCapacity { get; private set; }
@@ -115,9 +114,6 @@ internal sealed class LightingResourceManager
         BuildCellSolidMaskKernel = loaded.BuildCellSolidMaskKernel;
         BuildBounceTapsKernel = loaded.BuildBounceTapsKernel;
         BuildBounceFilterKernel = loaded.BuildBounceFilterKernel;
-        SeedDistanceFieldKernel = loaded.SeedDistanceFieldKernel;
-        JumpFloodStepKernel = loaded.JumpFloodStepKernel;
-
         LightingShaderValidator.ValidateGpuRequirements();
         LightingShaderValidator.ValidateMaterialFieldPass(LightingTexturePool.DestroyLightingObject);
         LightingCommandBuffer = new CommandBuffer
@@ -189,6 +185,13 @@ internal sealed class LightingResourceManager
 
         int fieldWidth = gridWidth * scale;
         int fieldHeight = gridHeight * scale;
+        int ambientOcclusionScale = Mathf.Max(
+            1,
+            Mathf.Min(
+                qualitySettings.LightingMaximumTextureDimension / gridWidth,
+                qualitySettings.LightingMaximumTextureDimension / gridHeight));
+        int ambientOcclusionWidth = gridWidth * ambientOcclusionScale;
+        int ambientOcclusionHeight = gridHeight * ambientOcclusionScale;
         int maximumCascadeDirections = CascadeLayoutBuilder.SelectMaximumCascadeDirections(
             fieldWidth,
             fieldHeight,
@@ -198,14 +201,16 @@ internal sealed class LightingResourceManager
         int bounceWidth = Mathf.Max(1, Mathf.CeilToInt(fieldWidth * 0.5f));
         int bounceHeight = Mathf.Max(1, Mathf.CeilToInt(fieldHeight * 0.5f));
 
-        // Лайтмапа всегда билинейна: PerBlock берёт свет поинтом в шейдере
-        // (Load), а запечённое AO обязано быть гладким на всех тирах —
-        // иначе ореол квантуется в квадраты клеток и вид зависит от пресета.
-        FilterMode lightmapFilterMode = FilterMode.Bilinear;
+        FilterMode lightmapFilterMode = qualityMode == LightingQualityMode.PerBlock
+            ? FilterMode.Point
+            : FilterMode.Bilinear;
 
         if (FieldWidth == fieldWidth && FieldHeight == fieldHeight &&
+            AmbientOcclusionWidth == ambientOcclusionWidth &&
+            AmbientOcclusionHeight == ambientOcclusionHeight &&
             CellGridWidth == gridWidth && CellGridHeight == gridHeight &&
             _materialField != null &&
+            _ambientOcclusionField != null &&
             RadianceAtlas != null)
         {
             if (_lightmapTexture != null && _lightmapTexture.filterMode != lightmapFilterMode)
@@ -219,11 +224,13 @@ internal sealed class LightingResourceManager
         ReleaseFieldTextures();
         FieldWidth = fieldWidth;
         FieldHeight = fieldHeight;
+        AmbientOcclusionWidth = ambientOcclusionWidth;
+        AmbientOcclusionHeight = ambientOcclusionHeight;
         BounceWidth = bounceWidth;
         BounceHeight = bounceHeight;
 
-        // Мип-цепь полю больше не нужна: SDF читает mip0 через Load,
-        // остальные читатели мипов (террейн-AO) переехали на запечённое AO.
+        // Transport reads mip0 only. Terrain AO owns a separate geometry
+        // pyramid below, so lighting quality cannot change its silhouette.
         _materialField = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
@@ -277,22 +284,25 @@ internal sealed class LightingResourceManager
             randomWrite: true,
             FilterMode.Point,
             "_LightingCellSolidMask");
-        // SDF ping-pong: сиды ближайшего твёрдого текселя для геометрически
-        // честного AO. Мипы не нужны — композит читает Load с mip0.
-        _distanceSeedA = LightingTexturePool.CreateTexture(
-            fieldWidth,
-            fieldHeight,
-            RenderTextureFormat.ARGBHalf,
-            randomWrite: true,
-            FilterMode.Point,
-            "_DistanceSeedA");
-        _distanceSeedB = LightingTexturePool.CreateTexture(
-            fieldWidth,
-            fieldHeight,
-            RenderTextureFormat.ARGBHalf,
-            randomWrite: true,
-            FilterMode.Point,
-            "_DistanceSeedB");
+        // AO has its own geometry field. PerBlock lighting is one texel per
+        // cell and cannot represent rounded silhouettes or texture holes;
+        // this field uses all spatial resolution allowed by the selected
+        // texture budget without increasing radiance-transport work.
+        _ambientOcclusionField = LightingTexturePool.CreateTexture(
+            ambientOcclusionWidth,
+            ambientOcclusionHeight,
+            RenderTextureFormat.ARGB32,
+            randomWrite: false,
+            FilterMode.Bilinear,
+            "_LightingAmbientOcclusionField",
+            useMipMap: true);
+        _ambientOcclusionScratch = LightingTexturePool.CreateTexture(
+            ambientOcclusionWidth,
+            ambientOcclusionHeight,
+            RenderTextureFormat.ARGB32,
+            randomWrite: false,
+            FilterMode.Bilinear,
+            "_LightingAmbientOcclusionScratch");
         BounceTaps = new ComputeBuffer(
             bounceWidth * bounceHeight * 16,
             sizeof(float) * 4,
@@ -358,6 +368,9 @@ internal sealed class LightingResourceManager
         Registry.Geometry.Material = _materialField;
         Registry.Geometry.StaticEmission = _staticEmissionField;
         Registry.Geometry.CellSolidMask = _cellSolidMask;
+        Registry.Geometry.AmbientOcclusion = _ambientOcclusionField;
+        Registry.Geometry.AmbientOcclusionWidth = AmbientOcclusionWidth;
+        Registry.Geometry.AmbientOcclusionHeight = AmbientOcclusionHeight;
         Registry.Geometry.CellGridWidth = CellGridWidth;
         Registry.Geometry.CellGridHeight = CellGridHeight;
         Registry.Geometry.CachesValid = GeometryCachesValid;
@@ -390,8 +403,8 @@ internal sealed class LightingResourceManager
         LightingTexturePool.ReleaseTexture(ref _bounceTexture);
         LightingTexturePool.ReleaseTexture(ref _lightmapTexture);
         LightingTexturePool.ReleaseTexture(ref _cellSolidMask);
-        LightingTexturePool.ReleaseTexture(ref _distanceSeedA);
-        LightingTexturePool.ReleaseTexture(ref _distanceSeedB);
+        LightingTexturePool.ReleaseTexture(ref _ambientOcclusionField);
+        LightingTexturePool.ReleaseTexture(ref _ambientOcclusionScratch);
         BounceTaps?.Release();
         BounceTaps = null;
         BounceFilterWeights?.Release();
@@ -401,6 +414,8 @@ internal sealed class LightingResourceManager
         CellGridHeight = 0;
         FieldWidth = 0;
         FieldHeight = 0;
+        AmbientOcclusionWidth = 0;
+        AmbientOcclusionHeight = 0;
         BounceWidth = 0;
         BounceHeight = 0;
         Cascades.Clear();

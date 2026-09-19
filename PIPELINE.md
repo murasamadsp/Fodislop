@@ -1,6 +1,7 @@
 # PIPELINE
 
 `F` — размер поля освещения = клетки региона × scale (scale: 1 в PerBlock, 2 в High, 4 в Ultra).
+`A` — поле геометрии AO = клетки региона × максимальный scale, разрешённый лимитом текстуры.
 Регион ≈ 128×96 клеток. `S` — разрешение экрана.
 
 ## Освещение
@@ -9,7 +10,7 @@
 меш террейна ──[раст. MRT, орто]──┬──► MaterialField  (F, RGBA32, без мипов)
                                    └──► StaticEmission (F, ARGBHalf)
 
-MaterialField ──[Seed + JumpFlood × N]──► DistanceSeed (F, ARGBHalf ×2 пинг-понг)
+меш террейна ──[раст. MRT, орто + mip chain]──► AmbientOcclusionField (A, RGBA32)
 
                       ┌── MaterialField
 StaticEmission ──────┴──[SolveCascade]──► RadianceAtlas (uint3 × N)
@@ -33,10 +34,10 @@ StaticDirect ───┼──[SolveDiffuseBounce]──► Bounce (F/2, ARGBHa
 MaterialField ──┘
 
 Direct ─────────┐
-StaticDirect ───┼──[CompositeLighting]──► Lightmap (F, ARGBHalf, α = 1-AO из SDF)
+StaticDirect ───┼──[CompositeLighting]──► Lightmap (F, ARGBHalf)
 Bounce ─────────┘                              │
-DistanceSeed ───┘                              ▼
-                                     global _WorldLightTexture
+                                               ▼
+                                      global _WorldLightTexture
 ```
 
 ## Террейн (фрагмент, пасс Universal2D)
@@ -54,7 +55,8 @@ animData ─────────┘
                                                              │
 маска соседства ──[силуэт: круг + углы]──► finalAlpha       │
                                                              │
-_WorldLightTexture ──► lightColor + запечённое AO (α) ───────┤
+_WorldLightTexture ──► lightColor ────────────────────────────┤
+AmbientOcclusionField ──[mip + sqrt]──► AO ──────────────────┤
                                            │                 │
                                            ▼                 ▼
                      finalRGB × lightColor × AO ÷ finalAlpha (AO только фону)
@@ -76,17 +78,17 @@ _WorldLightTexture ──► lightColor + запечённое AO (α) ───
 | #  | Стадия              | Читает                          | Пишет           | Размер | Когда           |
 |----|---------------------|---------------------------------|-----------------|--------|-----------------|
 | 1  | Поле материалов     | меш террейна + атлас + анимация цвета   | Material + Emis | F      | геометрия/регион/текстуры|
-| 2  | SDF сиды (флуд)     | Material.a                      | DistanceSeed    | F      | геометрия/регион/текстуры|
+| 2  | Поле AO + мипы      | меш террейна + атлас            | AO occupancy    | A      | геометрия/регион/текстуры|
 | 3  | Геометрические кэши | Material                        | SolidMask/Taps  | F      | геометрия/регион|
 | 4  | Каскады (стат.)     | Material, StaticEmission        | RadianceAtlas   | N зап. | мир изменился   |
 | 5  | Resolve (стат.)     | RadianceAtlas                   | StaticDirect    | F      | мир изменился   |
 | 6  | Полярное динамич.   | Material, DynamicLights         | Direct          | F      | источник изменился|
 | 7  | Диффузный отскок    | Direct, StaticDirect, Material  | Bounce          | F/2    | свет изменился  |
-| 8  | Сведение            | Direct, StaticDirect, Bounce, DistanceSeed | Lightmap (α=1-AO) | F  | свет изменился  |
+| 8  | Сведение            | Direct, StaticDirect, Bounce    | Lightmap        | F      | свет изменился  |
 | 9  | Выборка тайла       | BaseMap, атрибуты вершины       | texColor        | S      | каждый пиксель  |
 | 10 | Анимация цвета      | texColor, animData              | finalRGB        | S      | каждый пиксель  |
 | 11 | Силуэт              | маска соседства                 | finalAlpha      | S      | каждый пиксель  |
-| 12 | AO вокруг блоков    | Lightmap.α (только фон)         | множитель       | S      | каждый пиксель  |
+| 12 | AO вокруг блоков    | AO occupancy (только фон)       | множитель       | S      | каждый пиксель  |
 | 13 | Освещение           | Lightmap, finalRGB, occlusion   | цвет пикселя    | S      | каждый пиксель  |
 | 14 | Постобработка       | кадр                            | экран           | S      | каждый кадр     |
 \* Нет динамических источников → динамический direct очищается, остальные стадии используют кэш статического света.

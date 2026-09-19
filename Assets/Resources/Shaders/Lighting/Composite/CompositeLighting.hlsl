@@ -65,24 +65,6 @@ float3 SurfaceReflection(float2 position, float3 albedo)
     return incident * saturate(albedo);
 }
 
-// AO вокруг блоков запекается в альфу лайтмапы: дистанция до геометрии
-// из jump-flooded SDF вместо мип-блюра occupancy. Круги остаются кругами,
-// дырки пробиваются, радиус в клетках одинаков на всех тирах. Террейн берёт
-// значение из уже выбранного семпла света, отдельной выборки в видимом
-// пассе нет. Временная квантованность та же: occupancy меняется только при
-// перестройке поля, так что покадровый пересчёт в террейне всё равно видел
-// лишь последнее перестроение.
-float BakedAmbientOcclusion(int2 pixel)
-{
-    float2 seed = _DistanceSeedInput.Load(int3(pixel, 0)).rg;
-    float distTexels = length(seed - (float2(pixel) + 0.5));
-    float safeCellSize = max(_CellSize, 0.0001);
-    float regionCellsX = max(_WorldRect.z / safeCellSize, 0.0001);
-    float texelsPerCell = max(float(_FieldSize.x) / regionCellsX, 0.0001);
-    float distCells = distTexels / texelsPerCell;
-    return 1.0 - saturate((1.0 - smoothstep(0.0, _AORadiusCells, distCells)) * _TerrainAmbientOcclusionStrength);
-}
-
 [numthreads(8, 8, 1)]
 void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
 {
@@ -116,15 +98,6 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     if (_DebugView == 1) // Occupancy
     {
         _Result[pixel] = float4(material.aaa, 1.0);
-        return;
-    }
-
-    // Вид показывает готовое запечённое AO (величину затемнения), то же,
-    // что террейн берёт из альфы лайтмапы.
-    if (_DebugView == 9) // AmbientOcclusion
-    {
-        float baked = BakedAmbientOcclusion(pixel);
-        _Result[pixel] = float4(1.0 - baked, 1.0 - baked, 1.0 - baked, 1.0);
         return;
     }
 
@@ -185,7 +158,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
 
     if (_BlockAveraged != 0 && _DebugView == 0)
     {
-        _Result[pixel] = float4(max(combinedDirect.rgb, 0.0), BakedAmbientOcclusion(pixel));
+        _Result[pixel] = float4(max(combinedDirect.rgb, 0.0), 1.0);
         return;
     }
 
@@ -256,7 +229,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     }
 
     float3 output = max(directAndBounce, 0.0);
-    _Result[pixel] = float4(ambient + output, BakedAmbientOcclusion(pixel));
+    _Result[pixel] = float4(ambient + output, 1.0);
 }
 
 #endif // KERN_COMPOSITE_LIGHTING_HLSL

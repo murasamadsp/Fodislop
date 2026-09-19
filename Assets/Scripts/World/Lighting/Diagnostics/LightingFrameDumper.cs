@@ -26,6 +26,8 @@ public static class LightingFrameDumper
         public long maximumStaticCascadeRayWorkUnits;
         public int fieldWidth;
         public int fieldHeight;
+        public int ambientOcclusionWidth;
+        public int ambientOcclusionHeight;
         public int cellGridWidth;
         public int cellGridHeight;
         public Vector4 worldRect;
@@ -73,7 +75,6 @@ public static class LightingFrameDumper
         public long dynamicComposePixels;
         public long bounceDispatchPixels;
         public long compositeDispatchPixels;
-        public long sdfDispatchPixels;
         public long polarRayWorkUnits;
         public long estimatedCascadeRayWorkUnits;
         public long estimatedCascadeDispatchThreads;
@@ -160,6 +161,8 @@ public static class LightingFrameDumper
             maximumStaticCascadeRayWorkUnits = LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits,
             fieldWidth = resources.FieldWidth,
             fieldHeight = resources.FieldHeight,
+            ambientOcclusionWidth = resources.Geometry.AmbientOcclusionWidth,
+            ambientOcclusionHeight = resources.Geometry.AmbientOcclusionHeight,
             cellGridWidth = resources.Geometry.CellGridWidth,
             cellGridHeight = resources.Geometry.CellGridHeight,
             worldRect = worldRect,
@@ -194,7 +197,6 @@ public static class LightingFrameDumper
             dynamicComposePixels = telemetry.LightingDynamicComposePixels,
             bounceDispatchPixels = telemetry.LightingBounceDispatchPixels,
             compositeDispatchPixels = telemetry.LightingCompositeDispatchPixels,
-            sdfDispatchPixels = telemetry.LightingSdfDispatchPixels,
             polarRayWorkUnits = telemetry.LightingPolarRayWorkUnits,
             estimatedCascadeRayWorkUnits = telemetry.LightingEstimatedCascadeRayWorkUnits > 0
                 ? telemetry.LightingEstimatedCascadeRayWorkUnits
@@ -251,6 +253,7 @@ public static class LightingFrameDumper
         SaveRenderTexture(resources.Geometry.Material, Path.Combine(dir, "MaterialField.png"));
         SaveRenderTexture(resources.Geometry.StaticEmission, Path.Combine(dir, "StaticEmissionField.png"));
         SaveRenderTexture(resources.Geometry.CellSolidMask, Path.Combine(dir, "CellSolidMask.png"));
+        SaveRenderTexture(resources.Geometry.AmbientOcclusion, Path.Combine(dir, "AmbientOcclusionField.png"));
         SaveRenderTexture(resources.Direct.Static, Path.Combine(dir, "StaticDirect.png"));
         SaveRenderTexture(resources.Direct.Dynamic, Path.Combine(dir, "DynamicDirect.png"));
         SaveRenderTexture(resources.Bounce.Texture, Path.Combine(dir, "Bounce.png"));

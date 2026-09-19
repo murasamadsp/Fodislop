@@ -47,9 +47,6 @@ public interface IFrameTelemetry
     long LightingDynamicComposePixels { get; set; }
     long LightingBounceDispatchPixels { get; set; }
     long LightingCompositeDispatchPixels { get; set; }
-    // SDF jump-flood texel visits this frame (seed + step passes, field-sized).
-    // Rebuild-only path; the visible terrain pass reads the baked result for free.
-    long LightingSdfDispatchPixels { get; set; }
     long LightingPolarRayWorkUnits { get; set; }
     long LightingEstimatedCascadeRayWorkUnits { get; set; }
     long LightingEstimatedCascadeDispatchThreads { get; set; }
@@ -142,7 +139,6 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
     public long LightingDynamicComposePixels { get; set; }
     public long LightingBounceDispatchPixels { get; set; }
     public long LightingCompositeDispatchPixels { get; set; }
-    public long LightingSdfDispatchPixels { get; set; }
     public long LightingPolarRayWorkUnits { get; set; }
     public long LightingEstimatedCascadeRayWorkUnits { get; set; }
     public long LightingEstimatedCascadeDispatchThreads { get; set; }
@@ -302,7 +298,6 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
         LightingDynamicComposePixels = 0;
         LightingBounceDispatchPixels = 0;
         LightingCompositeDispatchPixels = 0;
-        LightingSdfDispatchPixels = 0;
         LightingPolarRayWorkUnits = 0;
         LightingRegionChangeCount = 0;
         LightingGeometryChangeCount = 0;

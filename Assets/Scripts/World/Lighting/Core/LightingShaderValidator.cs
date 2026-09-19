@@ -23,9 +23,7 @@ internal static class LightingShaderValidator
         int CompositeLightingKernel,
         int BuildCellSolidMaskKernel,
         int BuildBounceTapsKernel,
-        int BuildBounceFilterKernel,
-        int SeedDistanceFieldKernel,
-        int JumpFloodStepKernel);
+        int BuildBounceFilterKernel);
 
     public static LoadedLightingCompute LoadComputeShader()
     {
@@ -52,8 +50,6 @@ internal static class LightingShaderValidator
         int buildCellSolidMaskKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.BuildCellSolidMask);
         int buildBounceTapsKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.BuildBounceTaps);
         int buildBounceFilterKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.BuildBounceFilter);
-        int seedDistanceFieldKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.SeedDistanceField);
-        int jumpFloodStepKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.JumpFloodStep);
 
         return new LoadedLightingCompute(
             compute,
@@ -69,9 +65,7 @@ internal static class LightingShaderValidator
             compositeLightingKernel,
             buildCellSolidMaskKernel,
             buildBounceTapsKernel,
-            buildBounceFilterKernel,
-            seedDistanceFieldKernel,
-            jumpFloodStepKernel);
+            buildBounceFilterKernel);
     }
 
     private static int FindAndValidateKernel(ComputeShader compute, string kernelName)
