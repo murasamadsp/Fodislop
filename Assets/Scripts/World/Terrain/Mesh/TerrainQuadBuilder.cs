@@ -134,12 +134,12 @@ internal static class TerrainQuadBuilder
         Vector3 off01 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x, y + 1].ToVector3();
         Vector3 off11 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x + 1, y + 1].ToVector3();
 
-        bool isAnchored = off00 != Vector3.zero || off10 != Vector3.zero || off01 != Vector3.zero || off11 != Vector3.zero;
-        float anchorFlag = isAnchored ? 1f : 0f;
-        Vector2 anchor0 = isAnchored ? new Vector2(off00.x, off00.y) : new Vector2(0f, 0f);
-        Vector2 anchor1 = isAnchored ? new Vector2(1f + off10.x, off10.y) : new Vector2(1f, 0f);
-        Vector2 anchor2 = isAnchored ? new Vector2(1f + off11.x, 1f + off11.y) : new Vector2(1f, 1f);
-        Vector2 anchor3 = isAnchored ? new Vector2(off01.x, 1f + off01.y) : new Vector2(0f, 1f);
+        TerrainCellGeometry geometry = TerrainCellGeometry.FromOffsets(
+            off00,
+            off10,
+            off11,
+            off01);
+        float anchorFlag = geometry.IsAnchored ? 1f : 0f;
 
         vertexBuffer[vIdx + 0].Position = new Vector3(lx, ly, zOffset) + off00;
         vertexBuffer[vIdx + 1].Position = new Vector3(lx + cellSize, ly, zOffset) + off10;
@@ -307,12 +307,6 @@ internal static class TerrainQuadBuilder
                 ? TerrainDecalCatalog.GetGroundPlacement(gridX, serverY)
                 : 0f);
 
-        ReadOnlySpan<Vector2> anchors = [anchor0, anchor1, anchor2, anchor3];
-        Vector4 packedGeometryCorners = new(
-            TerrainVertex.PackGeometryPair(anchor0.x, anchor0.y),
-            TerrainVertex.PackGeometryPair(anchor1.x, anchor1.y),
-            TerrainVertex.PackGeometryPair(anchor2.x, anchor2.y),
-            TerrainVertex.PackGeometryPair(anchor3.x, anchor3.y));
         for (int i = 0; i < 4; i++)
         {
             ref TerrainVertex vertex = ref vertexBuffer[vIdx + i];
@@ -321,9 +315,9 @@ internal static class TerrainQuadBuilder
             vertex.UV2 = tileSizeVec;
             vertex.UV3 = worldPosVec;
             vertex.UV4 = animDataVec;
-            vertex.UV5 = new Vector4(anchorFlag, anchors[i].x, anchors[i].y, 0f);
+            Vector2 anchor = geometry.GetCorner(i);
+            vertex.UV5 = new Vector4(anchorFlag, anchor.x, anchor.y, 0f);
             vertex.UV6 = glowVec;
-            vertex.UV7 = packedGeometryCorners;
         }
 
         return atlasIndex;

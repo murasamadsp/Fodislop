@@ -8,17 +8,16 @@ using UnityEngine.Rendering;
 namespace Kern.World.Terrain;
 
 // Текстуры данных клетки террейна: по текселю на квад, по две строки на
-// клетку (фон, передний план), плюс сетка смещений искажения на узлах.
+// клетку (фон, передний план), включая канонические четыре угла геометрии.
 //
 // Адрес кольцевой: тексель клетки — её мировая координата по модулю размера
-// сетки, узел — по модулю размера сетки узлов. Окно камеры покрывает ровно
-// один полный круг, поэтому записанная клетка остаётся на месте, пока видна.
+// сетки. Окно камеры покрывает ровно один полный круг, поэтому записанная
+// клетка остаётся на месте, пока видна.
 //
 // Сборка идёт в управляемые массивы (их можно заполнять из Parallel.For).
 // На GPU уходит только изменённый прямоугольник: он копируется в маленькую
-// текстуру-заплатку и переносится Graphics.CopyTexture. Заплатка при копании
-// почти каждый кадр, и выгрузка всей текстуры на каждой была дороже, чем
-// прежняя частичная заливка вершин.
+// текстуру-заплатку и переносится Graphics.CopyTexture. Геометрия входит в
+// тот же прямоугольник, поэтому cell-data и форма клетки не расходятся.
 public sealed class TerrainCellDataTextures : IDisposable
 {
     // UploadRect() always applies at least a 16x16 patch. Treat that fixed
@@ -33,7 +32,8 @@ public sealed class TerrainCellDataTextures : IDisposable
     public static readonly int AnimationID = Shader.PropertyToID("_TerrainCellAnimation");
     public static readonly int WorldID = Shader.PropertyToID("_TerrainCellWorld");
     public static readonly int GlowID = Shader.PropertyToID("_TerrainCellGlow");
-    public static readonly int GridOffsetsID = Shader.PropertyToID("_TerrainGridOffsets");
+    public static readonly int GeometryXID = Shader.PropertyToID("_TerrainCellGeometryX");
+    public static readonly int GeometryYID = Shader.PropertyToID("_TerrainCellGeometryY");
     public static readonly int GridSizeID = Shader.PropertyToID("_TerrainCellGridSize");
     public static readonly int OriginID = Shader.PropertyToID("_TerrainCellOrigin");
     public static readonly int ViewOffsetID = Shader.PropertyToID("_TerrainCellViewOffset");
@@ -96,11 +96,10 @@ public sealed class TerrainCellDataTextures : IDisposable
     private readonly Channel<TerrainHalfTexel> _animation = new(TextureFormat.RGBAHalf, "TerrainCellAnimation");
     private readonly Channel<Vector4> _world = new(TextureFormat.RGBAFloat, "TerrainCellWorld");
     private readonly Channel<Vector4> _glow = new(TextureFormat.RGBAFloat, "TerrainCellGlow");
-    private readonly Channel<Vector4> _gridOffsets = new(TextureFormat.RGBAFloat, "TerrainGridOffsets");
+    private readonly Channel<TerrainHalfTexel> _geometryX = new(TextureFormat.RGBAHalf, "TerrainCellGeometryX");
+    private readonly Channel<TerrainHalfTexel> _geometryY = new(TextureFormat.RGBAHalf, "TerrainCellGeometryY");
 
     private readonly TerrainDirtyRegion _dirty = new();
-    private readonly TerrainDirtyRegion _gridOffsetsDirty = new();
-    private bool _offsetsDirty;
 
     public int MeshWidth { get; private set; }
 
@@ -132,10 +131,9 @@ public sealed class TerrainCellDataTextures : IDisposable
         _animation.Allocate(meshWidth, height);
         _world.Allocate(meshWidth, height);
         _glow.Allocate(meshWidth, height);
-        _gridOffsets.Allocate(meshWidth + 1, meshHeight + 1);
-        _offsetsDirty = true;
+        _geometryX.Allocate(meshWidth, height);
+        _geometryY.Allocate(meshWidth, height);
         _dirty.Reset(meshWidth, meshHeight);
-        _gridOffsetsDirty.Reset(meshWidth + 1, meshHeight + 1);
     }
 
     // Полная сборка пишет клетки из нескольких потоков: прямоугольник по
@@ -158,92 +156,8 @@ public sealed class TerrainCellDataTextures : IDisposable
         _animation.Data[index] = texels.Animation;
         _world.Data[index] = texels.World;
         _glow.Data[index] = texels.Glow;
-    }
-
-    // offsets — локальные узлы окна [0, W] × [0, H], minX/minY — мировой узел (0, 0).
-    public void WriteGridOffsets(TerrainRingGrid<TerrainVertexOffset> offsets, int minX, int minY)
-    {
-        if (!IsAllocated)
-        {
-            return;
-        }
-
-        int nodesWide = MeshWidth + 1;
-        int nodesHigh = MeshHeight + 1;
-        int width = Math.Min(offsets.Width, nodesWide);
-        int height = Math.Min(offsets.Height, nodesHigh);
-        for (int x = 0; x < width; x++)
-        {
-            int ringX = Ring(minX + x, nodesWide);
-            for (int y = 0; y < height; y++)
-            {
-                Vector3 offset = offsets[x, y].ToVector3();
-                _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
-                    new Vector4(offset.x, offset.y, offset.z, 0f);
-            }
-        }
-
-        _offsetsDirty = true;
-        _gridOffsetsDirty.MarkAll();
-    }
-
-    public void WriteGridOffsetsIncremental(TerrainRingGrid<TerrainVertexOffset> offsets, int minX, int minY, int dx, int dy)
-    {
-        if (!IsAllocated)
-        {
-            return;
-        }
-
-        int nodesWide = MeshWidth + 1;
-        int nodesHigh = MeshHeight + 1;
-        int xStart = 0;
-        int xLength = 0;
-        int yStart = 0;
-        int yLength = 0;
-
-        if (dx > 0)
-        {
-            xStart = Mathf.Max(0, nodesWide - dx - 1);
-            xLength = nodesWide - xStart;
-        }
-        else if (dx < 0)
-        {
-            xLength = Mathf.Min(nodesWide, -dx + 1);
-        }
-
-        if (dy > 0)
-        {
-            yStart = Mathf.Max(0, nodesHigh - dy - 1);
-            yLength = nodesHigh - yStart;
-        }
-        else if (dy < 0)
-        {
-            yLength = Mathf.Min(nodesHigh, -dy + 1);
-        }
-
-        if (xLength > 0)
-        {
-            WriteGridOffsetRect(offsets, minX, minY, xStart, 0, xLength, nodesHigh);
-            _gridOffsetsDirty.MarkRect(
-                Ring(minX + xStart, nodesWide),
-                Ring(minY, nodesHigh),
-                xLength,
-                nodesHigh);
-        }
-
-        if (yLength > 0 && xLength < nodesWide)
-        {
-            int remainingStart = dx > 0 ? 0 : xLength;
-            int remainingWidth = nodesWide - xLength;
-            WriteGridOffsetRect(offsets, minX, minY, remainingStart, yStart, remainingWidth, yLength);
-            _gridOffsetsDirty.MarkRect(
-                Ring(minX + remainingStart, nodesWide),
-                Ring(minY + yStart, nodesHigh),
-                remainingWidth,
-                yLength);
-        }
-
-        _offsetsDirty = true;
+        _geometryX.Data[index] = texels.GeometryX;
+        _geometryY.Data[index] = texels.GeometryY;
     }
 
     public void Apply()
@@ -251,31 +165,6 @@ public sealed class TerrainCellDataTextures : IDisposable
         if (!IsAllocated)
         {
             return;
-        }
-
-        if (_offsetsDirty)
-        {
-            _offsetsDirty = false;
-            long gridOffsetArea = (long)(MeshWidth + 1) * (MeshHeight + 1);
-            long gridOffsetPatchWork = _gridOffsetsDirty.Area +
-                (_gridOffsetsDirty.Count * PatchSetupEquivalentTexels);
-            bool fullGridOffsetUpload = _gridOffsetsDirty.IsAll ||
-                SystemInfo.copyTextureSupport == CopyTextureSupport.None ||
-                gridOffsetPatchWork >= gridOffsetArea;
-            if (fullGridOffsetUpload)
-            {
-                _gridOffsets.UploadAll();
-            }
-            else
-            {
-                for (int i = 0; i < _gridOffsetsDirty.Count; i++)
-                {
-                    RectInt rect = _gridOffsetsDirty[i];
-                    _gridOffsets.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                }
-            }
-
-            _gridOffsetsDirty.Clear();
         }
 
         if (_dirty.IsEmpty)
@@ -300,6 +189,8 @@ public sealed class TerrainCellDataTextures : IDisposable
             _animation.UploadAll();
             _world.UploadAll();
             _glow.UploadAll();
+            _geometryX.UploadAll();
+            _geometryY.UploadAll();
         }
         else
         {
@@ -313,6 +204,8 @@ public sealed class TerrainCellDataTextures : IDisposable
                 _animation.UploadRect(rect.x, rect.y, rect.width, rect.height);
                 _world.UploadRect(rect.x, rect.y, rect.width, rect.height);
                 _glow.UploadRect(rect.x, rect.y, rect.width, rect.height);
+                _geometryX.UploadRect(rect.x, rect.y, rect.width, rect.height);
+                _geometryY.UploadRect(rect.x, rect.y, rect.width, rect.height);
             }
         }
 
@@ -321,7 +214,7 @@ public sealed class TerrainCellDataTextures : IDisposable
 
     // Глобально, а не в материал: свойства вне UnityPerMaterial выключили бы
     // SRP Batcher на всём шейдере террейна.
-    public void BindGlobals(float cellSize, int originX, int originY, bool distortion)
+    public void BindGlobals(float cellSize, int originX, int originY)
     {
         if (!IsAllocated)
         {
@@ -335,8 +228,9 @@ public sealed class TerrainCellDataTextures : IDisposable
         Shader.SetGlobalTexture(AnimationID, _animation.Target);
         Shader.SetGlobalTexture(WorldID, _world.Target);
         Shader.SetGlobalTexture(GlowID, _glow.Target);
-        Shader.SetGlobalTexture(GridOffsetsID, _gridOffsets.Target);
-        Shader.SetGlobalVector(GridSizeID, new Vector4(MeshWidth, MeshHeight, cellSize, distortion ? 1f : 0f));
+        Shader.SetGlobalTexture(GeometryXID, _geometryX.Target);
+        Shader.SetGlobalTexture(GeometryYID, _geometryY.Target);
+        Shader.SetGlobalVector(GridSizeID, new Vector4(MeshWidth, MeshHeight, cellSize, 0f));
         Shader.SetGlobalVector(OriginID, new Vector4(originX, originY, 0f, 0f));
     }
 
@@ -349,33 +243,10 @@ public sealed class TerrainCellDataTextures : IDisposable
         _animation.Destroy();
         _world.Destroy();
         _glow.Destroy();
-        _gridOffsets.Destroy();
-        _gridOffsetsDirty.Clear();
+        _geometryX.Destroy();
+        _geometryY.Destroy();
         MeshWidth = 0;
         MeshHeight = 0;
-    }
-
-    private void WriteGridOffsetRect(
-        TerrainRingGrid<TerrainVertexOffset> offsets,
-        int minX,
-        int minY,
-        int startX,
-        int startY,
-        int width,
-        int height)
-    {
-        int nodesWide = MeshWidth + 1;
-        int nodesHigh = MeshHeight + 1;
-        for (int x = startX; x < startX + width; x++)
-        {
-            int ringX = Ring(minX + x, nodesWide);
-            for (int y = startY; y < startY + height; y++)
-            {
-                Vector3 offset = offsets[x, y].ToVector3();
-                _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
-                    new Vector4(offset.x, offset.y, offset.z, 0f);
-            }
-        }
     }
 
     private static Texture2D Create(int width, int height, TextureFormat format, string name) =>

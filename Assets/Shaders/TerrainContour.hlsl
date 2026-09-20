@@ -5,30 +5,6 @@
 
 static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 
-static const float KERN_TERRAIN_GEOMETRY_COORD_BIAS = 2048.0;
-static const float KERN_TERRAIN_GEOMETRY_COORD_RANGE = 4096.0;
-
-float2 UnpackTerrainGeometryPair(float packedPair)
-{
-    float high = floor(packedPair / KERN_TERRAIN_GEOMETRY_COORD_RANGE);
-    float low = packedPair - (high * KERN_TERRAIN_GEOMETRY_COORD_RANGE);
-    return (float2(high, low) - KERN_TERRAIN_GEOMETRY_COORD_BIAS) /
-        KERN_TERRAIN_FACE_GRID_SIZE;
-}
-
-void UnpackTerrainGeometryCorners(
-    float4 packedCorners,
-    out float4 cornersX,
-    out float4 cornersY)
-{
-    float2 corner0 = UnpackTerrainGeometryPair(packedCorners.x);
-    float2 corner1 = UnpackTerrainGeometryPair(packedCorners.y);
-    float2 corner2 = UnpackTerrainGeometryPair(packedCorners.z);
-    float2 corner3 = UnpackTerrainGeometryPair(packedCorners.w);
-    cornersX = float4(corner0.x, corner1.x, corner2.x, corner3.x);
-    cornersY = float4(corner0.y, corner1.y, corner2.y, corner3.y);
-}
-
 float2 QuantizeTerrainGeometryPoint(float2 samplePosition)
 {
     return (floor(samplePosition * KERN_TERRAIN_FACE_GRID_SIZE) + 0.5) /
@@ -86,32 +62,6 @@ float2 QuantizeTerrainFaceUV(float2 uv)
     return (pixel + 0.5) / KERN_TERRAIN_FACE_GRID_SIZE;
 }
 
-float PhysicalContour(
-    float2 uv,
-    int solidBoundaryMask,
-    int solidDiagonalMask)
-{
-    bool top = (solidBoundaryMask & 1) != 0;
-    bool left = (solidBoundaryMask & 2) != 0;
-    bool bottom = (solidBoundaryMask & 4) != 0;
-    bool right = (solidBoundaryMask & 8) != 0;
-    float2 p = QuantizeTerrainFaceUV(uv) - 0.5;
-    float contour = step(length(p), 0.5);
-    contour = (top || left) && p.x <= 0.0 && p.y >= 0.0 ? 1.0 : contour;
-    contour = (top || right) && p.x >= 0.0 && p.y >= 0.0 ? 1.0 : contour;
-    contour = (bottom || left) && p.x <= 0.0 && p.y <= 0.0 ? 1.0 : contour;
-    contour = (bottom || right) && p.x >= 0.0 && p.y <= 0.0 ? 1.0 : contour;
-    bool diagTL = (solidDiagonalMask & 1) != 0;
-    bool diagTR = (solidDiagonalMask & 2) != 0;
-    bool diagBL = (solidDiagonalMask & 4) != 0;
-    bool diagBR = (solidDiagonalMask & 8) != 0;
-    contour = diagTL && p.x <= 0.0 && p.y >= 0.0 ? 1.0 : contour;
-    contour = diagTR && p.x >= 0.0 && p.y >= 0.0 ? 1.0 : contour;
-    contour = diagBL && p.x <= 0.0 && p.y <= 0.0 ? 1.0 : contour;
-    contour = diagBR && p.x >= 0.0 && p.y <= 0.0 ? 1.0 : contour;
-    return contour;
-}
-
 float EvaluateRoundableBlockAlpha(
     float2 uv,
     float packedContour,
@@ -157,6 +107,42 @@ float EvaluateRoundableBlockAlpha(
     float cornerDist = abs(abs(p.x) - abs(p.y));
     float cornerExclude = step(0.4, cornerDist);
     return lerp(alpha, 1.0, cornerExclude);
+}
+
+// The visible terrain and the material field must use the same cell shape.
+// Geometry is evaluated only for the GPU cell path; CPU overlays already carry
+// the displaced polygon in POSITION and therefore do not need a second mask.
+float EvaluateTerrainCellCoverage(
+    float2 geometrySample,
+    float2 contourSample,
+    float4 geometryCornersX,
+    float4 geometryCornersY,
+    float anchored,
+    float packedContour,
+    float packedLightingFlags,
+    float antialiasScale,
+    float applyGeometry)
+{
+    float geometryCoverage = applyGeometry > 0.5
+        ? TerrainGeometryCoverage(
+            geometrySample,
+            geometryCornersX,
+            geometryCornersY,
+            anchored)
+        : 1.0;
+    float contourCoverage = KernTerrainIsRoundable(packedContour)
+        ? EvaluateRoundableBlockAlpha(
+            contourSample,
+            packedContour,
+            packedLightingFlags,
+            antialiasScale)
+        : 1.0;
+    return geometryCoverage * contourCoverage;
+}
+
+float TerrainCellOccupancy(float coverage)
+{
+    return step(0.5, coverage);
 }
 
 #endif

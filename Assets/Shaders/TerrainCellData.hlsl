@@ -15,10 +15,10 @@ Texture2D<float4> _TerrainCellTileSize;
 Texture2D<float4> _TerrainCellAnimation;
 Texture2D<float4> _TerrainCellWorld;
 Texture2D<float4> _TerrainCellGlow;
-Texture2D<float4> _TerrainGridOffsets;
+Texture2D<float4> _TerrainCellGeometryX;
+Texture2D<float4> _TerrainCellGeometryY;
 
-// x, y — размер сетки в клетках; z — размер клетки в мире; w — искажение
-// включено (1) или нет (0): без него смещения узлов не читаются вовсе.
+// x, y — размер сетки в клетках; z — размер клетки в мире.
 float4 _TerrainCellGridSize;
 
 // Мировая клетка локального (0, 0) окна. Тексели лежат по кольцевому
@@ -51,18 +51,6 @@ struct TerrainCellVertex
     float atlasIndex;
     float layer;
 };
-
-// node — локальный узел окна.
-float3 TerrainGridOffset(int2 node)
-{
-    int2 origin = (int2)round(_TerrainCellOrigin.xy);
-    int nodesWide = (int)round(_TerrainCellGridSize.x) + 1;
-    int nodesHigh = (int)round(_TerrainCellGridSize.y) + 1;
-    int2 ring = int2(
-        TerrainRing(origin.x + node.x, nodesWide),
-        TerrainRing(origin.y + node.y, nodesHigh));
-    return _TerrainGridOffsets.Load(int3(ring, 0)).xyz;
-}
 
 TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
 {
@@ -106,42 +94,28 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
     v.animData = _TerrainCellAnimation.Load(texel);
     v.glowData = _TerrainCellGlow.Load(texel);
 
-    // Якорь: флаг ставится, если сдвинут хоть один из четырёх узлов квада,
-    // а сам якорь угла — это угол плюс смещение его узла.
-    bool anchored = false;
-    float3 offset = 0.0;
-    float3 offset00 = 0.0;
-    float3 offset10 = 0.0;
-    float3 offset11 = 0.0;
-    float3 offset01 = 0.0;
-    if (_TerrainCellGridSize.w > 0.5 && layer > 0)
-    {
-        offset00 = TerrainGridOffset(int2(x, y));
-        offset10 = TerrainGridOffset(int2(x + 1, y));
-        offset11 = TerrainGridOffset(int2(x + 1, y + 1));
-        offset01 = TerrainGridOffset(int2(x, y + 1));
-        anchored = any(offset00 != 0.0) || any(offset10 != 0.0) ||
-            any(offset11 != 0.0) || any(offset01 != 0.0);
-        offset = cornerStep.y == 0
-            ? (cornerStep.x == 0 ? offset00 : offset10)
-            : (cornerStep.x == 1 ? offset11 : offset01);
-    }
-    v.packedData = float4(anchored ? 1.0 : 0.0, cornerBase + offset.xy, 0.0);
-    v.geometryCornersX = float4(
-        offset00.x,
-        1.0 + offset10.x,
-        1.0 + offset11.x,
-        offset01.x);
-    v.geometryCornersY = float4(
-        offset00.y,
-        offset10.y,
-        1.0 + offset11.y,
-        1.0 + offset01.y);
+    float4 geometryX = _TerrainCellGeometryX.Load(texel);
+    float4 geometryY = _TerrainCellGeometryY.Load(texel);
+    bool anchored = meta.a > 0.5;
+    float2 cornerGeometry = cornerStep.y == 0
+        ? (cornerStep.x == 0
+            ? float2(geometryX.x, geometryY.x)
+            : float2(geometryX.y, geometryY.y))
+        : (cornerStep.x == 1
+            ? float2(geometryX.z, geometryY.z)
+            : float2(geometryX.w, geometryY.w));
+    float2 cornerOffset = cornerGeometry - cornerBase;
+    v.packedData = float4(anchored ? 1.0 : 0.0, cornerGeometry, 0.0);
+    v.geometryCornersX = geometryX;
+    v.geometryCornersY = geometryY;
     float cellSize = _TerrainCellGridSize.z;
     v.positionOS = float3(
         (x + cornerBase.x) * cellSize,
         (y + cornerBase.y) * cellSize,
-        layer == 0 ? 0.1 : 0.0) + offset;
+        layer == 0 ? 0.1 : 0.0);
+    // Offsets are stored in world units (one 1/32 step is one pixel), while
+    // cornerGeometry remains in cell-local units for contour quantization.
+    v.positionOS.xy += cornerOffset;
     return v;
 }
 

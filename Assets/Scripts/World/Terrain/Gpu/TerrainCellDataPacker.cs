@@ -32,20 +32,21 @@ public readonly record struct TerrainCellTexels(
     TerrainHalfTexel TileSize,
     TerrainHalfTexel Animation,
     Vector4 World,
-    Vector4 Glow);
+    Vector4 Glow,
+    TerrainHalfTexel GeometryX,
+    TerrainHalfTexel GeometryY);
 
 // Упаковка квада террейна в тексели данных клетки.
 //
-// Шесть из девяти атрибутов вершины (цвет, прямоугольник атласа, размер
-// тайла, мировая клетка, анимация, свечение) одинаковы у всех четырёх вершин
-// квада: TerrainQuadBuilder пишет их одним циклом. Им место в текстуре, по
-// одному текселю на квад, а не в вершинах вчетверо. По-вершинно различаются
-// только позиция со смещением искажения (оно общее для соседних квадов и
-// лежит отдельной сеткой), угол UV (поворот и отражение варианта, 8 бит) и
-// якорь, который выводится из тех же смещений.
+// Общие данные клетки (цвет, прямоугольник атласа, размер тайла, мировая
+// клетка, анимация, свечение и четыре угла геометрии) хранятся одним текселем
+// на слой клетки. По-вершинно различается только угол UV (поворот и отражение
+// варианта, 8 бит). Так геометрия и материалы обновляются одной dirty-операцией.
 //
 // Поля half копируются сырыми байтами: шейдер читает ровно то, что читал
-// из вершины, без второго округления.
+// из вершины, без второго округления. GeometryX/GeometryY — канонические
+// локальные координаты четырёх углов квада; они идут вместе с cell-data в
+// одном dirty/snapshot contract.
 public static class TerrainCellDataPacker
 {
     public const int LayersPerCell = 2;
@@ -64,14 +65,17 @@ public static class TerrainCellDataPacker
 
         ref readonly TerrainVertex v = ref quad[0];
         byte drawn = atlasIndex < 0 ? (byte)0 : (byte)Math.Min(atlasIndex + 1, byte.MaxValue);
+        byte anchored = v.UV5x != 0 ? byte.MaxValue : (byte)0;
         return new TerrainCellTexels(
             v.Color,
-            new Color32(drawn, PackCornerUvs(quad), 0, 0),
+            new Color32(drawn, PackCornerUvs(quad), 0, anchored),
             new TerrainHalfTexel(v.UV1x, v.UV1y, v.UV1z, v.UV1w),
             new TerrainHalfTexel(v.UV2x, v.UV2y, v.UV2z, v.UV2w),
             new TerrainHalfTexel(v.UV4x, v.UV4y, v.UV4z, v.UV4w),
             v.UV3,
-            v.UV6);
+            v.UV6,
+            new TerrainHalfTexel(quad[0].UV5y, quad[1].UV5y, quad[2].UV5y, quad[3].UV5y),
+            new TerrainHalfTexel(quad[0].UV5z, quad[1].UV5z, quad[2].UV5z, quad[3].UV5z));
     }
 
     // Биты угла i: (2i) — u, (2i+1) — v. Углы UV квада всегда 0 или 1.

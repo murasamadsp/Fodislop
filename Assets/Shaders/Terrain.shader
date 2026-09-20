@@ -75,7 +75,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
                 float4 glowAttr     : TEXCOORD6;
-                float4 packedGeometryCorners : TEXCOORD7;
             };
 
             struct Varyings
@@ -220,10 +219,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.animData = input.animData;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.packedData = input.packedData;
-                UnpackTerrainGeometryCorners(
-                    input.packedGeometryCorners,
-                    output.geometryCornersX,
-                    output.geometryCornersY);
+                output.geometryCornersX = 0.0;
+                output.geometryCornersY = 0.0;
                 output.atlasIndex = 0.0;
 
                 return output;
@@ -249,11 +246,24 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // TBDR: no discard anywhere in this shader — transparent output instead.
                 // discard kills Hidden Surface Removal on Apple GPUs; alpha-0 blending is visually identical.
                 if (input.worldPos.w > 1.5) return half4(0.0, 0.0, 0.0, 0.0);
-                float geometryCoverage = TerrainGeometryCoverage(
+                int animationProfile = (int)(input.animData.w + 0.5);
+                float applyGeometry = 0.0;
+            #if defined(KERN_TERRAIN_CELLS)
+                applyGeometry = 1.0;
+            #endif
+                float2 contourUV = input.packedData.x > 0.5
+                    ? input.packedData.yz
+                    : input.uv;
+                float cellCoverage = EvaluateTerrainCellCoverage(
                     input.packedData.yz,
+                    contourUV,
                     input.geometryCornersX,
                     input.geometryCornersY,
-                    input.packedData.x);
+                    input.packedData.x,
+                    input.glowData.z,
+                    input.glowData.y,
+                    TerrainContourAntialiasScale(animationProfile),
+                    applyGeometry);
                 if (input.subAtlasRect.z < 0.0001)
                 {
                     if (input.color.a < 0.05)
@@ -265,7 +275,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     float3 diagnosticTexture = SampleMissingTexture(input.worldPos.xy);
                     return half4(
                         diagnosticTexture * worldLight.rgb,
-                        input.color.a * geometryCoverage);
+                        input.color.a * cellCoverage);
                 }
                 if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
@@ -285,11 +295,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (!tileUV.isValid)
                 {
                     float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
-                    return half4(0.0, 0.0, 0.0, input.color.a * worldLight.r);
+                    return half4(0.0, 0.0, 0.0, input.color.a * cellCoverage * worldLight.r);
                 }
 
                 int animType = (int)(input.animData.x + 0.5);
-                int animationProfile = (int)(input.animData.w + 0.5);
                 float3 flowSample = 0.0;
                 if (TerrainAnimationUsesFlowMap(animType, animationProfile))
                 {
@@ -336,15 +345,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.uv,
                     input.glowData.w);
 
-                float2 contourUV = input.packedData.x > 0.5
-                    ? input.packedData.yz
-                    : input.uv;
-                float finalAlpha = EvaluateRoundableBlockAlpha(
-                    contourUV,
-                    input.glowData.z,
-                    input.glowData.y,
-                    TerrainContourAntialiasScale(animationProfile));
-                finalAlpha *= geometryCoverage;
+                float finalAlpha = cellCoverage;
 
                 float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRGB = finalRGB * worldLight.rgb;
@@ -455,7 +456,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
                 float4 glowAttr     : TEXCOORD6;
-                float4 packedGeometryCorners : TEXCOORD7;
             };
 
             struct MaterialFieldVaryings
@@ -509,10 +509,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.worldPos = input.worldPosAttr;
                 output.animData = input.animData;
                 output.packedData = input.packedData;
-                UnpackTerrainGeometryCorners(
-                    input.packedGeometryCorners,
-                    output.geometryCornersX,
-                    output.geometryCornersY);
+                output.geometryCornersX = 0.0;
+                output.geometryCornersY = 0.0;
                 output.glowData = input.glowAttr;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.subAtlasRect = input.subAtlasRect;
@@ -602,33 +600,35 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // миникарты сюда больше не попадает ни в каком виде.
                 float3 surfaceAlbedo = albedoTexel.a >= 0.05 ? albedoTexel.rgb : 0.0;
                 uint lightingFlags = KernTerrainLightingFlags(input.glowData.y);
-                int solidBoundaryMask = KernTerrainSolidBoundary(lightingFlags);
-                int solidDiagonalMask = KernTerrainSolidDiagonal(input.glowData.z);
                 float emissionStrength = KernTerrainEmissionStrength(
                     input.glowData.y,
                     lightingFlags);
-                bool hasRoundedPhysicalContour =
-                    KernTerrainHasRoundedPhysicalContour(lightingFlags);
                 bool isPhysicalMass = KernTerrainIsPhysicalMass(lightingFlags);
                 // Occupancy — физическая масса переднего плана. isPhysicalMass уже
                 // гарантирует !isBackground (фон не получает PhysicalMass),
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
-                float occupancy = isPhysicalMass ? 1.0 : 0.0;
-                occupancy *= TerrainGeometryCoverage(
-                    input.packedData.yz,
-                    input.geometryCornersX,
-                    input.geometryCornersY,
-                    input.packedData.x);
+                float applyGeometry = 0.0;
+            #if defined(KERN_TERRAIN_CELLS)
+                applyGeometry = 1.0;
+            #endif
+                int animationProfile = (int)(input.animData.w + 0.5);
                 float2 contourUV = input.packedData.x > 0.5
                     ? input.packedData.yz
                     : input.uv;
-                occupancy *= hasRoundedPhysicalContour
-                    ? PhysicalContour(
-                        contourUV,
-                        solidBoundaryMask,
-                        solidDiagonalMask)
-                    : 1.0;
+                float cellCoverage = EvaluateTerrainCellCoverage(
+                    input.packedData.yz,
+                    contourUV,
+                    input.geometryCornersX,
+                    input.geometryCornersY,
+                    input.packedData.x,
+                    input.glowData.z,
+                    input.glowData.y,
+                    TerrainContourAntialiasScale(animationProfile),
+                    applyGeometry);
+                float occupancy = isPhysicalMass
+                    ? TerrainCellOccupancy(cellCoverage)
+                    : 0.0;
                 // Силуэт блока: occupancy повторяет видимую форму — скругление
                 // выше, дырки по альфе текселя здесь. Тот же семпл, что пошёл
                 // в альбедо, новой выборки нет. Без этого решётка или тайл
@@ -656,8 +656,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float surface = step(0.05, input.color.a) * isForeground;
                 output.material = half4(surfaceAlbedo * surface, occupancy);
                 output.emission = half4(
-                    surfaceAlbedo * emissionStrength * surface,
-                    emissionStrength * surface);
+                    surfaceAlbedo * emissionStrength * surface * cellCoverage,
+                    emissionStrength * surface * cellCoverage);
                 return output;
             }
             ENDHLSL

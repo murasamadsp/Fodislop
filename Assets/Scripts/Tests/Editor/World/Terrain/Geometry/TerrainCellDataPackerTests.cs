@@ -61,6 +61,17 @@ public class TerrainCellDataPackerTests
     }
 
     [Test]
+    public void GeometryCornersArePackedWithCellData()
+    {
+        TerrainCellTexels texels = TerrainCellDataPacker.PackQuad(Quad(_Identity), 0);
+
+        Assert.That(texels.Meta.a, Is.EqualTo(byte.MaxValue));
+        Assert.That(Mathf.HalfToFloat(texels.GeometryX.R), Is.EqualTo(0.0f));
+        Assert.That(Mathf.HalfToFloat(texels.GeometryX.G), Is.EqualTo(0.1f).Within(0.001f));
+        Assert.That(Mathf.HalfToFloat(texels.GeometryY.B), Is.EqualTo(0.4f).Within(0.001f));
+    }
+
+    [Test]
     public void UndrawnQuadPacksAsZeroAtlas()
     {
         TerrainCellTexels texels = TerrainCellDataPacker.PackQuad(Quad(_Identity), -1);
@@ -120,33 +131,24 @@ public class TerrainCellDataPackerTests
     }
 
     [Test]
-    public void VertexStrideIncludesGeometryCornerChannels()
+    public void VertexStrideMatchesMeshLayout()
     {
-        Assert.That(Marshal.SizeOf<TerrainVertex>(), Is.EqualTo(100));
+        Assert.That(Marshal.SizeOf<TerrainVertex>(), Is.EqualTo(84));
     }
 
     [Test]
-    public void GeometryCornerChannelsPreserveQuantizedCoordinates()
+    public void CellGeometryUsesOneCanonicalCornerOrder()
     {
-        TerrainVertex vertex = default;
-        vertex.UV7 = new Vector4(
-            TerrainVertex.PackGeometryPair(-0.125f, 1.03125f),
-            TerrainVertex.PackGeometryPair(0.96875f, 0f),
-            TerrainVertex.PackGeometryPair(0f, -0.03125f),
-            TerrainVertex.PackGeometryPair(1.0625f, 0.96875f));
+        TerrainCellGeometry geometry = TerrainCellGeometry.FromOffsets(
+            new Vector3(-2f / 32f, 1f / 32f, 0f),
+            new Vector3(3f / 32f, -1f / 32f, 0f),
+            new Vector3(0f, 2f / 32f, 0f),
+            new Vector3(-1f / 32f, 0f, 0f));
 
-        Assert.That(UnpackGeometryPair(vertex.UV7.x), Is.EqualTo(new Vector2(-0.125f, 1.03125f)));
-        Assert.That(UnpackGeometryPair(vertex.UV7.y), Is.EqualTo(new Vector2(0.96875f, 0f)));
-        Assert.That(UnpackGeometryPair(vertex.UV7.z), Is.EqualTo(new Vector2(0f, -0.03125f)));
-        Assert.That(UnpackGeometryPair(vertex.UV7.w), Is.EqualTo(new Vector2(1.0625f, 0.96875f)));
-    }
-
-    private static Vector2 UnpackGeometryPair(float packed)
-    {
-        const int bias = 2048;
-        const int range = 4096;
-        int high = Mathf.FloorToInt(packed / range);
-        int low = (int)packed - (high * range);
-        return new((high - bias) / 32f, (low - bias) / 32f);
+        Assert.That(geometry.Corner00, Is.EqualTo(new Vector2(-2f / 32f, 1f / 32f)));
+        Assert.That(geometry.Corner10, Is.EqualTo(new Vector2(1f + 3f / 32f, -1f / 32f)));
+        Assert.That(geometry.Corner11, Is.EqualTo(new Vector2(1f, 1f + 2f / 32f)));
+        Assert.That(geometry.Corner01, Is.EqualTo(new Vector2(-1f / 32f, 1f)));
+        Assert.That(geometry.IsAnchored, Is.True);
     }
 }

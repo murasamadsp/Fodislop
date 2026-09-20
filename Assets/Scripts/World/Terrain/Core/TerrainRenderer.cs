@@ -91,9 +91,6 @@ namespace Kern.World.Terrain
         private int _visibleGridHeight;
         private readonly List<TerrainVertex> _doorOverlayVertices = [];
         private bool _cellTexturesDirty = true;
-        private bool _incrementalGridOffsetsPending;
-        private int _gridOffsetDeltaX;
-        private int _gridOffsetDeltaY;
         private bool _cellsCommitted;
         private RectInt _lightingViewport;
         private List<int>[] _doorOverlaySubMeshIndices = Array.Empty<List<int>>();
@@ -826,12 +823,6 @@ namespace Kern.World.Terrain
 
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
                 _lastGridPos = currentGridPos;
-                if (patchedBeforeScroll)
-                {
-                    // The incoming node band alone does not contain the patched
-                    // overlap. Commit its updated distortion nodes as well.
-                    _incrementalGridOffsetsPending = false;
-                }
                 _cellTexturesDirty = true;
                 _dirtyRects.Clear();
 
@@ -963,18 +954,8 @@ namespace Kern.World.Terrain
             long swUpload = System.Diagnostics.Stopwatch.GetTimestamp();
             using (_MeshUploadMarker.Auto())
             {
-                _cellBuilder.Commit(
-                    _precalc,
-                    _lastGridPos.x,
-                    _lastGridPos.y,
-                    incrementalGridOffsets: _incrementalGridOffsetsPending,
-                    dx: _gridOffsetDeltaX,
-                    dy: _gridOffsetDeltaY);
+                _cellBuilder.Commit(_lastGridPos.x, _lastGridPos.y);
             }
-
-            _incrementalGridOffsetsPending = false;
-            _gridOffsetDeltaX = 0;
-            _gridOffsetDeltaY = 0;
 
             _telemetry.TerrainGpuUploadTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swUpload) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
             _cellsCommitted = true;
@@ -1046,9 +1027,6 @@ namespace Kern.World.Terrain
                     _cellCache.CacheMinX != int.MinValue &&
                     Mathf.Abs(cacheDeltaX) < _cellCache.CacheWidth &&
                     Mathf.Abs(cacheDeltaY) < _cellCache.CacheHeight;
-                _incrementalGridOffsetsPending = canScrollCache;
-                _gridOffsetDeltaX = canScrollCache ? cacheDeltaX : 0;
-                _gridOffsetDeltaY = canScrollCache ? cacheDeltaY : 0;
                 _telemetry.TerrainRebuildCount++;
                 long swCache = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (_CacheMarker.Auto())

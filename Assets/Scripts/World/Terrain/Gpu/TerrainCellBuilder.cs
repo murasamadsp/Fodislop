@@ -273,30 +273,13 @@ public sealed class TerrainCellBuilder : IDisposable
         }
     }
 
-    // Выгрузка на GPU и адрес окна для шейдера. При scroll переписываются
-    // только новые узлы; полный upload остаётся для первого build и resize.
-    public void Commit(
-        TerrainPrecalculator precalc,
-        int minX,
-        int minY,
-        bool incrementalGridOffsets = false,
-        int dx = 0,
-        int dy = 0)
+    // Выгрузка cell-data на GPU и адрес окна для шейдера. При scroll
+    // переписываются только новые клетки; полный upload остаётся для первого
+    // build и resize.
+    public void Commit(int originX, int originY)
     {
-        if (precalc.EnableDistortion)
-        {
-            if (incrementalGridOffsets)
-            {
-                _textures.WriteGridOffsetsIncremental(precalc.GridVertexOffsets, minX, minY, dx, dy);
-            }
-            else
-            {
-                _textures.WriteGridOffsets(precalc.GridVertexOffsets, minX, minY);
-            }
-        }
-
         _textures.Apply();
-        _textures.BindGlobals(_cellSize, minX, minY, precalc.EnableDistortion);
+        _textures.BindGlobals(_cellSize, originX, originY);
     }
 
     public void Dispose()
@@ -406,7 +389,10 @@ public sealed class TerrainCellBuilder : IDisposable
             // полностью непрозрачного пикселя не оставляет от фона ни цвета,
             // ни света, ни тени. Квад фона отбрасывается в вершинном шейдере.
             Color32 meta = backgroundTexels.Meta;
-            backgroundTexels = backgroundTexels with { Meta = new Color32(meta.r, meta.g, 1, meta.a) };
+            backgroundTexels = backgroundTexels with
+            {
+                Meta = new Color32(meta.r, meta.g, byte.MaxValue, meta.a),
+            };
         }
 
         _textures.SetCell(ringX, ringY, TerrainCellDataPacker.BackgroundLayer, backgroundTexels);
