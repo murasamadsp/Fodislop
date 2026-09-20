@@ -2,7 +2,7 @@
 
 namespace Kern.Tests.World;
 
-using Kern.Core.Interfaces;
+using Kern.Core;
 using NUnit.Framework;
 
 // Порядок слоёв мира. Слои рисуются с альфа-блендингом, поэтому номер решает,
