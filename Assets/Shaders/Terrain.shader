@@ -320,8 +320,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.uv,
                     input.glowData.w);
 
+                float2 contourUV = input.packedData.x > 0.5
+                    ? input.packedData.yz
+                    : input.uv;
                 float finalAlpha = EvaluateRoundableBlockAlpha(
-                    input.uv,
+                    contourUV,
                     input.glowData.z,
                     input.glowData.y,
                     TerrainContourAntialiasScale(animationProfile));
@@ -586,9 +589,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
                 float occupancy = isPhysicalMass ? 1.0 : 0.0;
+                float2 contourUV = input.packedData.x > 0.5
+                    ? input.packedData.yz
+                    : input.uv;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
-                        input.uv,
+                        contourUV,
                         solidBoundaryMask,
                         solidDiagonalMask)
                     : 1.0;

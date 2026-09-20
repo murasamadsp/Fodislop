@@ -7,11 +7,10 @@ static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 
 float2 QuantizeTerrainFaceUV(float2 uv)
 {
-    // Contours are evaluated in the canonical 0..1 face space. Vertex
-    // distortion is already quantized in TerrainVertexDistortionCalculator;
-    // feeding displaced interpolants here would quantize the same movement a
-    // second time and produce oversized steps at the lava boundary.
-    float2 pixel = floor(saturate(uv) * KERN_TERRAIN_FACE_GRID_SIZE);
+    // The input can be the displaced corner coordinate. Keep it outside the
+    // canonical range: clamping it would collapse a moved corner onto the
+    // edge and turn a one-pixel displacement into a large flat step.
+    float2 pixel = floor(uv * KERN_TERRAIN_FACE_GRID_SIZE);
     return (pixel + 0.5) / KERN_TERRAIN_FACE_GRID_SIZE;
 }
 
