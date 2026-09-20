@@ -14,6 +14,8 @@ public sealed class TerrainDecalCatalogTests
     [TestCase(CellType.WhiteSand, 2)]
     [TestCase(CellType.DarkBlueSand, 2)]
     [TestCase(CellType.Road, 3)]
+    [TestCase(CellType.Empty, 4)]
+    [TestCase(CellType.BackgroundWithHeavyTraces, 4)]
     [TestCase(CellType.Lava, 0)]
     [TestCase(CellType.XGreen, 0)]
     [TestCase(CellType.Green, 0)]

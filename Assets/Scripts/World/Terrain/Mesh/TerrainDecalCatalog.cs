@@ -10,6 +10,7 @@ public enum TerrainDecalFamily : byte
     Stone = 1,
     Sand = 2,
     Road = 3,
+    Ground = 4,
 }
 
 public static class TerrainDecalCatalog
@@ -35,6 +36,7 @@ public static class TerrainDecalCatalog
             TerrainDecalFamily.Stone => (int)(hash % 4u) * 2,
             TerrainDecalFamily.Sand => (int)(hash % 4u) * 2 + 1,
             TerrainDecalFamily.Road => (int)(hash % 8u),
+            TerrainDecalFamily.Ground => (int)(hash % 8u),
             _ => 0,
         };
         int rotation = (int)((hash >> 8) & 3u);
@@ -48,6 +50,14 @@ public static class TerrainDecalCatalog
 
     public static TerrainDecalFamily GetFamily(CellType cellType)
     {
+        if (cellType is
+            CellType.Empty or
+            CellType.BackgroundWithLightTraces or
+            CellType.BackgroundWithHeavyTraces)
+        {
+            return TerrainDecalFamily.Ground;
+        }
+
         if (cellType is
             CellType.BlackBoulder1 or
             CellType.BlackBoulder2 or
