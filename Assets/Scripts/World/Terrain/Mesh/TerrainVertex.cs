@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
-[StructLayout(LayoutKind.Explicit, Size = 84)]
+[StructLayout(LayoutKind.Explicit, Size = 100)]
 public struct TerrainVertex
 {
     // ── Float32 ────────────────────────────────────── offset  bytes
@@ -46,8 +46,19 @@ public struct TerrainVertex
 
     // ── Float32 (packed RGB color reaches 16 777 215) ──
     [FieldOffset(68)] public Vector4 UV6;          // 68    16
+    // ── Float16 raw storage — quantized geometry corners X ─────────────
+    [FieldOffset(84)] public ushort UV7x;          // 84     2
+    [FieldOffset(86)] public ushort UV7y;          // 86     2
+    [FieldOffset(88)] public ushort UV7z;          // 88     2
+    [FieldOffset(90)] public ushort UV7w;          // 90     2
+
+    // ── Float16 raw storage — quantized geometry corners Y ─────────────
+    [FieldOffset(92)] public ushort UV8x;          // 92     2
+    [FieldOffset(94)] public ushort UV8y;          // 94     2
+    [FieldOffset(96)] public ushort UV8z;          // 96     2
+    [FieldOffset(98)] public ushort UV8w;          // 98     2
     //                                             ───────────
-    //                                             total   84
+    //                                             total  100
 
     // ── Write-only properties: float → half ───────────────
 
@@ -101,6 +112,28 @@ public struct TerrainVertex
             UV5y = H(value.y);
             UV5z = H(value.z);
             UV5w = H(value.w);
+        }
+    }
+
+    public Vector4 UV7
+    {
+        set
+        {
+            UV7x = H(value.x);
+            UV7y = H(value.y);
+            UV7z = H(value.z);
+            UV7w = H(value.w);
+        }
+    }
+
+    public Vector4 UV8
+    {
+        set
+        {
+            UV8x = H(value.x);
+            UV8y = H(value.y);
+            UV8z = H(value.z);
+            UV8w = H(value.w);
         }
     }
 

@@ -46,6 +46,8 @@ struct TerrainCellVertex
     float4 animData;
     float4 packedData;
     float4 glowData;
+    float4 geometryCornersX;
+    float4 geometryCornersY;
     float atlasIndex;
     float layer;
 };
@@ -108,17 +110,33 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
     // а сам якорь угла — это угол плюс смещение его узла.
     bool anchored = false;
     float3 offset = 0.0;
+    float3 offset00 = 0.0;
+    float3 offset10 = 0.0;
+    float3 offset11 = 0.0;
+    float3 offset01 = 0.0;
     if (_TerrainCellGridSize.w > 0.5)
     {
-        float3 offset00 = TerrainGridOffset(int2(x, y));
-        float3 offset10 = TerrainGridOffset(int2(x + 1, y));
-        float3 offset11 = TerrainGridOffset(int2(x + 1, y + 1));
-        float3 offset01 = TerrainGridOffset(int2(x, y + 1));
+        offset00 = TerrainGridOffset(int2(x, y));
+        offset10 = TerrainGridOffset(int2(x + 1, y));
+        offset11 = TerrainGridOffset(int2(x + 1, y + 1));
+        offset01 = TerrainGridOffset(int2(x, y + 1));
         anchored = any(offset00 != 0.0) || any(offset10 != 0.0) ||
             any(offset11 != 0.0) || any(offset01 != 0.0);
-        offset = TerrainGridOffset(int2(x, y) + cornerStep);
+        offset = cornerStep.y == 0
+            ? (cornerStep.x == 0 ? offset00 : offset10)
+            : (cornerStep.x == 1 ? offset11 : offset01);
     }
     v.packedData = float4(anchored ? 1.0 : 0.0, cornerBase + offset.xy, 0.0);
+    v.geometryCornersX = float4(
+        offset00.x,
+        1.0 + offset10.x,
+        1.0 + offset11.x,
+        offset01.x);
+    v.geometryCornersY = float4(
+        offset00.y,
+        offset10.y,
+        1.0 + offset11.y,
+        1.0 + offset01.y);
 
     float cellSize = _TerrainCellGridSize.z;
     v.positionOS = float3(

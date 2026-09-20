@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Runtime.InteropServices;
 using Kern.World.Terrain;
 using NUnit.Framework;
 using UnityEngine;
@@ -116,5 +117,26 @@ public class TerrainCellDataPackerTests
     public void ShortQuadIsRejected()
     {
         Assert.Throws<ArgumentException>(() => TerrainCellDataPacker.PackQuad(new TerrainVertex[3], 0));
+    }
+
+    [Test]
+    public void VertexStrideIncludesGeometryCornerChannels()
+    {
+        Assert.That(Marshal.SizeOf<TerrainVertex>(), Is.EqualTo(100));
+    }
+
+    [Test]
+    public void GeometryCornerChannelsPreserveQuantizedCoordinates()
+    {
+        TerrainVertex vertex = default;
+        vertex.UV7 = new Vector4(-0.125f, 1.03125f, 0.96875f, 0f);
+        vertex.UV8 = new Vector4(0f, -0.03125f, 1.0625f, 0.96875f);
+
+        Assert.That(Mathf.HalfToFloat(vertex.UV7x), Is.EqualTo(-0.125f));
+        Assert.That(Mathf.HalfToFloat(vertex.UV7y), Is.EqualTo(1.03125f));
+        Assert.That(Mathf.HalfToFloat(vertex.UV7z), Is.EqualTo(0.96875f));
+        Assert.That(Mathf.HalfToFloat(vertex.UV8y), Is.EqualTo(-0.03125f));
+        Assert.That(Mathf.HalfToFloat(vertex.UV8z), Is.EqualTo(1.0625f));
+        Assert.That(Mathf.HalfToFloat(vertex.UV8w), Is.EqualTo(0.96875f));
     }
 }

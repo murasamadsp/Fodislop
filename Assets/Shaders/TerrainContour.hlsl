@@ -5,6 +5,45 @@
 
 static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 
+float2 QuantizeTerrainGeometryPoint(float2 point)
+{
+    return (floor(point * KERN_TERRAIN_FACE_GRID_SIZE) + 0.5) /
+        KERN_TERRAIN_FACE_GRID_SIZE;
+}
+
+float TerrainGeometryEdgeCross(float2 edgeStart, float2 edgeEnd, float2 point)
+{
+    float2 edge = edgeEnd - edgeStart;
+    float2 toPoint = point - edgeStart;
+    return (edge.x * toPoint.y) - (edge.y * toPoint.x);
+}
+
+float TerrainGeometryCoverage(
+    float2 point,
+    float4 cornersX,
+    float4 cornersY,
+    float anchored)
+{
+    if (anchored < 0.5)
+    {
+        return 1.0;
+    }
+
+    float2 quantizedPoint = QuantizeTerrainGeometryPoint(point);
+    float2 corner0 = float2(cornersX.x, cornersY.x);
+    float2 corner1 = float2(cornersX.y, cornersY.y);
+    float2 corner2 = float2(cornersX.z, cornersY.z);
+    float2 corner3 = float2(cornersX.w, cornersY.w);
+    float4 edgeCrosses = float4(
+        TerrainGeometryEdgeCross(corner0, corner1, quantizedPoint),
+        TerrainGeometryEdgeCross(corner1, corner2, quantizedPoint),
+        TerrainGeometryEdgeCross(corner2, corner3, quantizedPoint),
+        TerrainGeometryEdgeCross(corner3, corner0, quantizedPoint));
+    bool insideCounterClockwise = all(edgeCrosses >= -0.00001);
+    bool insideClockwise = all(edgeCrosses <= 0.00001);
+    return (insideCounterClockwise || insideClockwise) ? 1.0 : 0.0;
+}
+
 float2 QuantizeTerrainFaceUV(float2 uv)
 {
     // The input can be the displaced corner coordinate. Keep it outside the
