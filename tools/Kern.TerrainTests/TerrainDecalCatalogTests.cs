@@ -71,7 +71,7 @@ public sealed class TerrainDecalCatalogTests
     [Test]
     public void GetPackedPlacement_GroundUsesAllVariantsAndOffsets()
     {
-        bool[] variants = new bool[8];
+        bool[] variants = new bool[TerrainDecalCatalog.VariantCount];
         bool[] offsetsX = new bool[4];
         bool[] offsetsY = new bool[4];
 
@@ -84,9 +84,9 @@ public sealed class TerrainDecalCatalogTests
             }
 
             int code = packed - 1;
-            variants[code & 7] = true;
-            offsetsX[(code >> 6) & 3] = true;
-            offsetsY[(code >> 8) & 3] = true;
+            variants[code & (TerrainDecalCatalog.VariantCount - 1)] = true;
+            offsetsX[(code >> 7) & 3] = true;
+            offsetsY[(code >> 9) & 3] = true;
         }
 
         Assert.That(variants.All(value => value), Is.True);

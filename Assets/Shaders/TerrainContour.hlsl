@@ -7,7 +7,10 @@ static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 
 float2 QuantizeTerrainFaceUV(float2 uv)
 {
-    float2 pixel = floor(saturate(uv) * KERN_TERRAIN_FACE_GRID_SIZE);
+    // Keep displaced contour coordinates outside [0, 1]. Saturating here
+    // collapses an offset vertex onto the edge and creates oversized lava
+    // steps whenever a rounded quad is distorted.
+    float2 pixel = floor(uv * KERN_TERRAIN_FACE_GRID_SIZE);
     return (pixel + 0.5) / KERN_TERRAIN_FACE_GRID_SIZE;
 }
 
