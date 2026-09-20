@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using MinesServer.Data;
+using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
@@ -61,9 +62,15 @@ public sealed class TerrainCellMetadataCache
         int frameCount = wtm.GetAnimationFrameCount(type);
         int frameSize = wtm.GetFrameSize(type);
 
+        CellConfigProperties properties = config.Properties;
+        if (MapCellConfigCatalog.IsBuildingOrArtificialBlock(type))
+        {
+            properties &= ~CellConfigProperties.Glowing;
+        }
+
         var meta = new CellMetadata
         {
-            Properties = config.Properties,
+            Properties = properties,
             ReliefGroup = config.ReliefGroup,
             Distortion = config.Distortion,
             HasTileGroup = mm.TryGetTileGroup(type, out int gid),

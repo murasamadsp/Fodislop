@@ -47,6 +47,24 @@ public sealed class MapCellConfigCatalog
             CellType.BuildingWall or CellType.BuildingDoor or CellType.BuildingCorner or
             CellType.BuildingRoad or CellType.Gate or CellType.TeleportBlock or CellType.Box;
 
+    // Building and artificial blocks must never emit light/glow.
+    public static bool IsBuildingOrArtificialBlock(CellType type) =>
+        type is CellType.QuadBlock or
+            CellType.Support or
+            CellType.MilitaryBlockFrame or
+            CellType.MilitaryBlock or
+            CellType.GreenBlock or
+            CellType.YellowBlock or
+            CellType.FedBlock or
+            CellType.RedBlock or
+            CellType.BuildingWall or
+            CellType.BuildingDoor or
+            CellType.BuildingCorner or
+            CellType.BuildingRoad or
+            CellType.Gate or
+            CellType.TeleportBlock or
+            CellType.Box;
+
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {
         ValidateCellConfigurations(configurations);

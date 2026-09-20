@@ -96,4 +96,18 @@ public class TerrainLightingDataTests
 
         Assert.That(data.EmissionStrength, Is.Zero);
     }
+
+    [TestCase(MinesServer.Data.CellType.QuadBlock)]
+    [TestCase(MinesServer.Data.CellType.Support)]
+    [TestCase(MinesServer.Data.CellType.MilitaryBlock)]
+    [TestCase(MinesServer.Data.CellType.BuildingWall)]
+    [TestCase(MinesServer.Data.CellType.BuildingDoor)]
+    [TestCase(MinesServer.Data.CellType.BuildingCorner)]
+    [TestCase(MinesServer.Data.CellType.Gate)]
+    [TestCase(MinesServer.Data.CellType.TeleportBlock)]
+    [TestCase(MinesServer.Data.CellType.Box)]
+    public void BuildingAndArtificialBlocksAreIdentifiedAsNonEmissive(MinesServer.Data.CellType cellType)
+    {
+        Assert.That(Kern.World.MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellType), Is.True);
+    }
 }

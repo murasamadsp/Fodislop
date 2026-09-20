@@ -262,7 +262,9 @@ internal static class TerrainQuadBuilder
         Vector4 tileSizeVec = new Vector4(uvTileSize, uvTileSize, (float)animFrames, frameHeight);
         Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 
-        bool isGlowing = (props & CellConfigProperties.Glowing) != 0;
+        bool isGlowing = (props & CellConfigProperties.Glowing) != 0 &&
+            !MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellType) &&
+            !MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellFgType);
 
         // Read RGB directly from Color32 bytes — no intermediate Color allocation
         int packedLightingColor = minimapColor.r |
