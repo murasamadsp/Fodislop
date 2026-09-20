@@ -11,12 +11,10 @@ triangle rasterizer interpolates the shader outputs. Expectations come from a
 convex polygon half-plane oracle sampled at logical pixel centers.
 
 Coverage includes full subpixel coverage outside the original polygon, adjacent
-cell seams, background geometry isolation, contact AO shape sensitivity at
-8/16/32/64 texels per cell, and the relief rim: it must stay off inside one
-relief family, darken only towards a foreign side and only down to the
-original 0.125, and darken both sides of a seam equally. AO sampling uses a generated occupancy mip pyramid.
-The runner also mutates the carrier, the mip choice and the relief side test in
-temporary generated code: each old defect must make its test fail. Repository files are never mutated.
+cell seams, background geometry isolation, and contact AO shape sensitivity at
+8/16/32/64 texels per cell. AO sampling uses a generated occupancy mip pyramid.
+The runner also mutates the carrier and mip choice in temporary generated code:
+each old defect must make its test fail. Repository files are never mutated.
 
 This is an algorithm regression, not a Unity render test. It cannot validate
 Metal compilation, runtime texture bindings, mesh submission order, or the final

@@ -292,7 +292,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 #endif
                     return half4(
                         KernTerrainDebugColor(
-                            contourUV,
                             input.packedData.yz,
                             input.glowData.z,
                             input.glowData.y,
@@ -369,14 +368,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                // Кайма умножает сырой тексель, до цветовой анимации и до
-                // декалей, — так в оригинале. Порядок тут не косметика:
-                // анимация кристалла не чистое умножение, она подмешивает
-                // блик. Затемнив после неё, мы гасим и блик, и грань
-                // читается мёртвой чёрной полосой поперёк камня. Затемнив
-                // до неё, блик пробегает по грани, и она читается сколом.
-                float3 finalRGB = texColor.rgb *
-                    TerrainReliefRim(contourUV, input.glowData.z);
+                float3 finalRGB = texColor.rgb;
                 finalRGB = AnimateTerrainColor(
                     finalRGB,
                     texColor.rgb,
@@ -653,17 +645,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 // Без фолбеков: нет текселя — нет альбедо. Плоский цвет
                 // миникарты сюда больше не попадает ни в каком виде.
-                //
-                // Кайма — на том же месте в цепочке, что и в экранном проходе:
-                // на сыром текселе, до анимации. Поле материалов обязано нести
-                // ровно то альбедо, которое видно, иначе свет отскакивает от
-                // цвета, которого в кадре нет.
                 float2 contourUV = input.packedData.x > 0.5
                     ? input.packedData.yz
                     : input.uv;
-                float3 surfaceAlbedo = albedoTexel.a >= 0.05
-                    ? albedoTexel.rgb * TerrainReliefRim(contourUV, input.glowData.z)
-                    : 0.0;
+                float3 surfaceAlbedo = albedoTexel.a >= 0.05 ? albedoTexel.rgb : 0.0;
                 uint lightingFlags = KernTerrainLightingFlags(input.glowData.y);
                 float emissionStrength = KernTerrainEmissionStrength(
                     input.glowData.y,

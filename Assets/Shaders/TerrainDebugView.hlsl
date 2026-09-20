@@ -12,7 +12,6 @@
 int _TerrainDebugView;
 
 static const int KERN_TERRAIN_DEBUG_OFF = 0;
-static const int KERN_TERRAIN_DEBUG_RELIEF_RIM = 1;
 static const int KERN_TERRAIN_DEBUG_FOREIGN_SIDES = 2;
 static const int KERN_TERRAIN_DEBUG_COVERAGE = 3;
 static const int KERN_TERRAIN_DEBUG_LAYER = 4;
@@ -49,7 +48,6 @@ float3 KernTerrainForeignSideColor(float packedContour)
 }
 
 float3 KernTerrainDebugColor(
-    float2 contourSample,
     float2 cellLocal,
     float packedContour,
     float packedLightingFlags,
@@ -59,14 +57,6 @@ float3 KernTerrainDebugColor(
     float packedColumn,
     float ambientOcclusion)
 {
-    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_RELIEF_RIM)
-    {
-        float rim = TerrainReliefRim(contourSample, packedContour);
-        // Единица — кайма не трогает пиксель. Отклонение от единицы красится
-        // в красный, чтобы слабая кайма была видна так же ясно, как сильная.
-        return float3(1.0 - rim, rim, rim);
-    }
-
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_FOREIGN_SIDES)
     {
         return KernTerrainForeignSideColor(packedContour);

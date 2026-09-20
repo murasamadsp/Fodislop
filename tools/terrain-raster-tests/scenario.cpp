@@ -33,93 +33,6 @@ bool rendered(float2 p, const TerrainCellVertex* vertices, float4 xs, float4 ys)
     }
     return false;
 }
-// Кайма рельефа. Проверяется ровно то, ради чего маска считается: шов идёт
-// по границе между семьями, внутри семьи его нет, и обе стороны шва темнеют
-// одинаково — иначе граница выглядит сдвинутой на полклетки.
-static float packContour(int reliefCode)
-{
-    return float(reliefCode * 64);
-}
-
-static void checkReliefRim()
-{
-    const float2 centre{0.5f, 0.5f};
-    const float2 nearTop{0.5f, 0.99f};
-    const float2 nearBottom{0.5f, 0.01f};
-    const float2 nearLeft{0.01f, 0.5f};
-    const float2 nearRight{0.99f, 0.5f};
-
-    // Клетка без рельефа не трогается нигде.
-    for(float2 p : {centre, nearTop, nearBottom, nearLeft, nearRight})
-        if(TerrainReliefRim(p, packContour(0)) != 1.0f)
-            throw std::runtime_error("Relief rim darkened a cell without a relief group");
-
-    // Вся семья вокруг: код 16 — маска 15 со сдвигом на единицу.
-    for(float2 p : {centre, nearTop, nearBottom, nearLeft, nearRight})
-        if(TerrainReliefRim(p, packContour(16)) != 1.0f)
-            throw std::runtime_error("Relief rim darkened the interior of a solid mass");
-
-    // Чужой только сверху: маска 0b1110 = 14, код 15.
-    float topForeign = packContour(15);
-    float darkest = TerrainReliefRim(nearTop, topForeign);
-    if(darkest >= 0.25f)
-        throw std::runtime_error("Relief rim missing on the foreign side");
-    // Нижняя граница так же обязательна, как верхняя: кайма, севшая в
-    // чёрный, режет массив на отдельные плитки. Оригинальный масштаб по
-    // половине диагонали не даёт ей упасть ниже 0.125.
-    if(darkest <= 0.1f)
-        throw std::runtime_error("Relief rim is darker than the original scale allows");
-    if(TerrainReliefRim(nearBottom, topForeign) != 1.0f ||
-       TerrainReliefRim(nearLeft, topForeign) != 1.0f ||
-       TerrainReliefRim(nearRight, topForeign) != 1.0f)
-        throw std::runtime_error("Relief rim leaked onto a side of the same family");
-    if(TerrainReliefRim(centre, topForeign) < 0.99f)
-        throw std::runtime_error("Relief rim reached the centre of the cell");
-
-    // Шов симметричен: у соседа снизу чужой ровно низ (маска 0b1011 = 11,
-    // код 12), и обе клетки темнеют у общего ребра одинаково.
-    float bottomForeign = packContour(12);
-    float above = TerrainReliefRim(nearTop, topForeign);
-    float below = TerrainReliefRim(nearBottom, bottomForeign);
-    if(std::fabs(above - below) > 1e-6f)
-        throw std::runtime_error("Relief seam is darker on one side than the other");
-
-    // Координата несущего прямоугольника. У якорной клетки она выходит за
-    // пределы клетки на величину смещения углов, и кайма обязана остаться
-    // той же самой: без зажима она садилась в ноль и рисовала чёрную полосу
-    // по краю каждой искажённой клетки. Проверять только 0..1 значило
-    // проверять ровно тот случай, который и так работал.
-    for(int side=0; side<4; ++side)
-    {
-        float foreign = packContour(((~(1 << side)) & 0x0F) + 1);
-        for(float over : {-0.1875f, -0.09f, 1.09f, 1.1875f})
-        {
-            for(float along : {-0.1875f, 0.25f, 0.5f, 0.75f, 1.1875f})
-            {
-                float v = TerrainReliefRim(float2{along, over}, foreign);
-                if(v < 0.1f || v > 1.0f)
-                    throw std::runtime_error(
-                        "Relief rim leaves its range on an anchored carrier sample");
-                v = TerrainReliefRim(float2{over, along}, foreign);
-                if(v < 0.1f || v > 1.0f)
-                    throw std::runtime_error(
-                        "Relief rim leaves its range on an anchored carrier sample");
-            }
-        }
-    }
-
-    // Падение монотонно от центра к краю: иначе кайма читается полосой,
-    // а не гранью.
-    float previous = 2.0f;
-    for(int step=0; step<=16; ++step)
-    {
-        float v = TerrainReliefRim(float2{0.5f, 0.5f + step * (0.5f/16.f)}, topForeign);
-        if(v > previous + 1e-6f)
-            throw std::runtime_error("Relief rim is not monotonic towards the edge");
-        previous = v;
-    }
-}
-
 void checkAo()
 {
     _WorldAmbientOcclusionYFlip=0;
@@ -246,7 +159,6 @@ int runChecks()
         }
     }
     checkAo();
-    checkReliefRim();
     if(outward==0) throw std::runtime_error("No outward staircase samples exercised");
     std::cout << "Production HLSL carrier/mask passed: " << checked
         << " subpixels, including " << outward << " outside the original triangles; 512 background corners and 524288 adjacent-edge samples.\n";
