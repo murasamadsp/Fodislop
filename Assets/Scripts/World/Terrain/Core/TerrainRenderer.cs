@@ -393,6 +393,13 @@ namespace Kern.World.Terrain
                 "terrain-decals.png",
                 StringComparison.OrdinalIgnoreCase))
             {
+                if (_textureService != null)
+                {
+                    _materialManager.BindAtlasTextures(
+                        _textureService.GetAllAtlases(),
+                        _textureService);
+                }
+
                 _needsRefresh = true;
             }
         }
