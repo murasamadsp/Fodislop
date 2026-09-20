@@ -34,7 +34,7 @@ lighting = (root / 'Assets/Shaders/TerrainLightingData.hlsl').read_text()
 with tempfile.TemporaryDirectory(prefix='kern-terrain-raster-') as directory:
     cpp = Path(directory) / 'test.cpp'
     executable = Path(directory) / 'test'
-    for mutation in (None, "polygon-carrier", "ao-wide-mip"):
+    for mutation in (None, "polygon-carrier", "ao-wide-mip", "ao-to-black"):
         candidate = loader
         candidate_ao = ao
         if mutation == "polygon-carrier":
@@ -50,6 +50,14 @@ with tempfile.TemporaryDirectory(prefix='kern-terrain-raster-') as directory:
                 '1.5 + log2(texelsPerCell)')
             if candidate_ao == ao:
                 raise RuntimeError('AO mutation no longer matches the production source')
+        if mutation == "ao-to-black":
+            # Reproduce the band along every mass: contact occlusion taking the
+            # floor all the way to black instead of stopping at its floor.
+            candidate_ao = candidate_ao.replace(
+                '1.0 - (occlusion * (1.0 - _TerrainAmbientOcclusionFloor))',
+                '1.0 - occlusion')
+            if candidate_ao == ao:
+                raise RuntimeError('AO floor mutation no longer matches the production source')
         candidate_ao = candidate_ao.replace('Texture2D<float4>', 'AoTexture').replace('SamplerState', 'int')
         cpp.write_text(shim + extra + ao_shim + translate(candidate + contour + lighting + candidate_ao) + scenario)
         subprocess.run(['clang++', '-std=c++20', '-O2', '-ffp-contract=off', str(cpp), '-o', str(executable)], check=True)

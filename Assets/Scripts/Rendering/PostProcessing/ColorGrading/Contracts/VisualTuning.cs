@@ -223,13 +223,29 @@ namespace Kern.World.Terrain
     {
         public const float AmbientOcclusionStrength = 1f;
 
+        // Пол, ниже которого контактное затенение не опускает поверхность.
+        //
+        // Без него множитель уходил в ноль: у клетки пола вплотную к массиву
+        // занятость в выборке близка к единице, и пол становился чёрным, а
+        // не затенённым. След выборки в полклетки размазывал это в тёмную
+        // полосу вдоль каждой границы массива, и полоса ездила вместе с
+        // искажением — поле занятости пишется из смещённого силуэта.
+        //
+        // 0.51 — не подбор на глаз. В оригинале тень на полу это 1 - z² при
+        // z = 0.7, то есть ровно 0.51, и глубже пол там не темнеет никогда.
+        public const float AmbientOcclusionFloor = 0.51f;
+
         private static readonly int _AmbientOcclusionStrengthID =
             Shader.PropertyToID("_TerrainAmbientOcclusionStrength");
+
+        private static readonly int _AmbientOcclusionFloorID =
+            Shader.PropertyToID("_TerrainAmbientOcclusionFloor");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void ApplyShaderGlobals()
         {
             Shader.SetGlobalFloat(_AmbientOcclusionStrengthID, AmbientOcclusionStrength);
+            Shader.SetGlobalFloat(_AmbientOcclusionFloorID, AmbientOcclusionFloor);
         }
     }
 }

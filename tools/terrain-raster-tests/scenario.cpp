@@ -33,10 +33,44 @@ bool rendered(float2 p, const TerrainCellVertex* vertices, float4 xs, float4 ys)
     }
     return false;
 }
+
+// Затенение не имеет права гасить поверхность в ноль: полная занятость
+// вокруг обязана оставить ровно пол, иначе тень читается дырой. Число
+// совпадает с оригиналом (1 - z² при z = 0.7).
+static void checkAmbientOcclusionFloor()
+{
+    _WorldAmbientOcclusionYFlip=0;
+    _TerrainAmbientOcclusionStrength=1;
+    _TerrainAmbientOcclusionFloor=0.51f;
+    Texture solid;
+    solid.reset(64,64);
+    for(int i=0;i<64*64;++i) solid.data[i].a=1;
+    _WorldAmbientOcclusionTexture.generate(std::move(solid));
+    _WorldAmbientOcclusionTexelsPerCell=8;
+    float darkest=KernTerrainAmbientOcclusionMultiplier(
+        0, float2{4.0f,4.0f}, float4{0,0,8,8});
+    if(std::fabs(darkest-0.51f)>1e-3f)
+        throw std::runtime_error(
+            "Contact occlusion does not stop at the floor: " + std::to_string(darkest));
+
+    Texture empty;
+    empty.reset(64,64);
+    for(int i=0;i<64*64;++i) empty.data[i].a=0;
+    _WorldAmbientOcclusionTexture.generate(std::move(empty));
+    _WorldAmbientOcclusionTexelsPerCell=8;
+    float brightest=KernTerrainAmbientOcclusionMultiplier(
+        0, float2{4.0f,4.0f}, float4{0,0,8,8});
+    if(std::fabs(brightest-1.0f)>1e-3f)
+        throw std::runtime_error(
+            "Contact occlusion darkens an empty neighbourhood");
+}
+
 void checkAo()
 {
     _WorldAmbientOcclusionYFlip=0;
     _TerrainAmbientOcclusionStrength=1;
+    // Тот же пол, что в TerrainLook: множитель обязан останавливаться на нём.
+    _TerrainAmbientOcclusionFloor=0.51f;
     float2 corners[]={{0,0},{1,0},{1,1},{0,1}};
     float previousDifference=-1;
     for(int density : {8,16,32,64})
@@ -159,6 +193,7 @@ int runChecks()
         }
     }
     checkAo();
+    checkAmbientOcclusionFloor();
     if(outward==0) throw std::runtime_error("No outward staircase samples exercised");
     std::cout << "Production HLSL carrier/mask passed: " << checked
         << " subpixels, including " << outward << " outside the original triangles; 512 background corners and 524288 adjacent-edge samples.\n";

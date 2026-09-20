@@ -8,6 +8,7 @@ SamplerState sampler_WorldAmbientOcclusionTexture;
 int _WorldAmbientOcclusionYFlip;
 float _WorldAmbientOcclusionTexelsPerCell;
 float _TerrainAmbientOcclusionStrength;
+float _TerrainAmbientOcclusionFloor;
 
 float KernSampleTerrainAmbientOcclusion(float2 worldPosition, float4 worldLightRect)
 {
@@ -42,7 +43,11 @@ float KernTerrainAmbientOcclusionMultiplier(
         return 1.0;
     }
 
-    return 1.0 - KernSampleTerrainAmbientOcclusion(worldPosition, worldLightRect);
+    // Затенение гасит поверхность не до нуля, а до пола. Полный ноль делал
+    // из тени дыру: пол вплотную к массиву становился чёрным, и граница
+    // читалась полосой, а не притенением. Пол задаётся в TerrainLook.
+    float occlusion = KernSampleTerrainAmbientOcclusion(worldPosition, worldLightRect);
+    return 1.0 - (occlusion * (1.0 - _TerrainAmbientOcclusionFloor));
 }
 
 #endif
