@@ -84,6 +84,30 @@ static void checkReliefRim()
     if(std::fabs(above - below) > 1e-6f)
         throw std::runtime_error("Relief seam is darker on one side than the other");
 
+    // Координата несущего прямоугольника. У якорной клетки она выходит за
+    // пределы клетки на величину смещения углов, и кайма обязана остаться
+    // той же самой: без зажима она садилась в ноль и рисовала чёрную полосу
+    // по краю каждой искажённой клетки. Проверять только 0..1 значило
+    // проверять ровно тот случай, который и так работал.
+    for(int side=0; side<4; ++side)
+    {
+        float foreign = packContour(((~(1 << side)) & 0x0F) + 1);
+        for(float over : {-0.1875f, -0.09f, 1.09f, 1.1875f})
+        {
+            for(float along : {-0.1875f, 0.25f, 0.5f, 0.75f, 1.1875f})
+            {
+                float v = TerrainReliefRim(float2{along, over}, foreign);
+                if(v < 0.1f || v > 1.0f)
+                    throw std::runtime_error(
+                        "Relief rim leaves its range on an anchored carrier sample");
+                v = TerrainReliefRim(float2{over, along}, foreign);
+                if(v < 0.1f || v > 1.0f)
+                    throw std::runtime_error(
+                        "Relief rim leaves its range on an anchored carrier sample");
+            }
+        }
+    }
+
     // Падение монотонно от центра к краю: иначе кайма читается полосой,
     // а не гранью.
     float previous = 2.0f;

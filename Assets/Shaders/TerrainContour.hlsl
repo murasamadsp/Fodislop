@@ -191,8 +191,14 @@ float TerrainReliefRim(float2 contourSample, float packedContour)
         return 1.0;
     }
 
-    float2 p = (QuantizeTerrainFaceUV(contourSample) - 0.5) * KERN_TERRAIN_RELIEF_RIM_SCALE;
-    float edge = saturate(max(p.x * p.x, p.y * p.y));
+    // Зажим в пределы клетки обязателен. У якорной клетки на входе лежит
+    // координата несущего прямоугольника, а он шире клетки на величину
+    // смещения углов — до -0.19..1.19. Без зажима max(x², y²) упирается в
+    // единицу, множитель садится в ноль, и по краям искажённых клеток идёт
+    // чёрная полоса, которой на ровных клетках нет.
+    float2 cellLocal = saturate(QuantizeTerrainFaceUV(contourSample));
+    float2 p = (cellLocal - 0.5) * KERN_TERRAIN_RELIEF_RIM_SCALE;
+    float edge = max(p.x * p.x, p.y * p.y);
     float fall = 1.0 - edge;
     float darken = fall * fall * fall;
 

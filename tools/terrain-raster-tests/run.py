@@ -44,7 +44,8 @@ lighting = (root / 'Assets/Shaders/TerrainLightingData.hlsl').read_text()
 with tempfile.TemporaryDirectory(prefix='kern-terrain-raster-') as directory:
     cpp = Path(directory) / 'test.cpp'
     executable = Path(directory) / 'test'
-    for mutation in (None, "polygon-carrier", "ao-wide-mip", "relief-rim-inverted", "relief-rim-steep"):
+    for mutation in (None, "polygon-carrier", "ao-wide-mip", "relief-rim-inverted", "relief-rim-steep",
+                     "relief-rim-unclamped"):
         candidate = loader
         candidate_ao = ao
         if mutation == "polygon-carrier":
@@ -71,6 +72,15 @@ with tempfile.TemporaryDirectory(prefix='kern-terrain-raster-') as directory:
                 'int foreignSides = (reliefCode - 1) & 0x0F;')
             if candidate_rim == rim:
                 raise RuntimeError('Relief mutation no longer matches the production source')
+        if mutation == "relief-rim-unclamped":
+            # Reproduce the black band along every distorted cell: the rim read
+            # the carrier coordinate, which reaches past the cell on an
+            # anchored quad, and bottomed out at zero there.
+            candidate_rim = candidate_rim.replace(
+                'saturate(QuantizeTerrainFaceUV(contourSample))',
+                'QuantizeTerrainFaceUV(contourSample)')
+            if candidate_rim == rim:
+                raise RuntimeError('Relief clamp mutation no longer matches the production source')
         if mutation == "relief-rim-steep":
             # Reproduce the first shipped defect: the rim scaled by half a side
             # instead of half a diagonal, bottoming out at pure black and
