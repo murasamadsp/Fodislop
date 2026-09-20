@@ -18,10 +18,21 @@ source=re.sub(r'\b(float[234])\(',r'make_\1(',source)
 source=re.sub(r'(res\.(?:tileOffsetUV|availableTileSize|finalUV|minTileUV|maxTileUV)) = 0.0;',r'\1 = make_float2(0.0);',source)
 with tempfile.TemporaryDirectory(prefix='kern-lava-') as tmp:
     cpp=Path(tmp)/'test.cpp';exe=Path(tmp)/'test'
-    for mutation in (False,True):
-        candidate=source.replace('if ((int)(animData.w + 0.5) == 2)','if (false)') if mutation else source
+    mutations={
+        'lava': ('if ((int)(animData.w + 0.5) == 2)','if (false)'),
+        # Сплошной лист обратно в тайл на клетку: шов на каждой границе.
+        'sheet': ('if (isContinuousSheet)','if (false)'),
+    }
+    for mutation in (None,'lava','sheet'):
+        if mutation is None:
+            candidate=source
+        else:
+            old,new=mutations[mutation]
+            candidate=source.replace(old,new)
+            assert candidate!=source, f'Mutation {mutation} no longer matches the production source'
         cpp.write_text(shim+extra+candidate+(Path(__file__).parent/'lava.cpp').read_text())
         subprocess.run(['clang++','-std=c++20','-O2',str(cpp),'-o',str(exe)],check=True)
         result=subprocess.run([str(exe)])
         assert result.returncode != 0 if mutation else result.returncode == 0
-print('Old cell-local lava addressing mutation rejected.')
+        if mutation:
+            print(f'Cell-local addressing mutation rejected: {mutation}')

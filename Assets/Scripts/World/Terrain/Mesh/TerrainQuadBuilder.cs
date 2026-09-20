@@ -156,7 +156,13 @@ internal static class TerrainQuadBuilder
             !isBackground &&
             cellFgType == CellType.BuildingWall &&
             cornerSideMask != 0;
+        // Биты в w: 1 — автотайлинг по соседям, 2 — сплошной лист.
+        // Разбор на стороне шейдера в ResolveTerrainTileUV.
         float packedW = hasTileGroup || useNeighborVariants ? 1f : 0f;
+        if (TerrainSheetCatalog.IsContinuousSheet(cellType))
+        {
+            packedW += 2f;
+        }
 
         if (useNeighborVariants)
         {

@@ -75,7 +75,33 @@ TerrainTileUvResult ResolveTerrainTileUV(
         return res;
     }
 
-    bool isTiling = fmod(worldPos.w, 2.0) > 0.5;
+    // Биты упакованы в TerrainQuadBuilder: 1 — автотайлинг, 2 — сплошной лист.
+    int packedCellFlags = (int)(worldPos.w + 0.5);
+    bool isTiling = (packedCellFlags & 1) != 0;
+    bool isContinuousSheet = (packedCellFlags & 2) != 0;
+
+    // Кристаллы и камень адресуют лист целиком по мировой координате, а не
+    // тайлом на клетку. Клеточная координата фрагмента уже несёт смещение
+    // узлов (packedData.yz у якорной клетки — положение внутри несущего
+    // прямоугольника), поэтому выборка перетекает за край своего тайла в
+    // соседний ровно так же, как в оригинале: там к UV прибавляют тот же
+    // _dists, что и к позиции вершины.
+    //
+    // Тайл на клетку этого не умеет. Его UV зажат в свою клетку, геометрия
+    // уезжает без него, и на каждой границе остаётся шов: массив читается
+    // кладкой из штампов, а не одним камнем.
+    if (isContinuousSheet)
+    {
+        float2 sheetPosition = float2(worldPos.x, -worldPos.y - 1.0) + packedData.yz;
+        float2 sheetUV = frac(sheetPosition / tilesCount);
+        res.finalUV = baseUV + sheetUV * subAtlasSizeUV;
+        res.finalUV.y += animOffsetUV;
+        res.availableTileSize = subAtlasSizeUV;
+        res.minTileUV = baseUV + atlasTexelSize * 0.5;
+        res.maxTileUV = baseUV + subAtlasSizeUV - atlasTexelSize * 0.5;
+        return res;
+    }
+
     float2 wrapped = KernResolveTerrainTileIndex(
         worldPos.xy,
         tilesCount,
