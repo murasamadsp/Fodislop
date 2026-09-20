@@ -43,10 +43,11 @@ public static class TerrainDecalCatalog
             _ => 0,
         };
         int rotation = (int)((hash >> 8) & 3u);
-        int offsetX = (int)((hash >> 10) & 3u);
-        int offsetY = (int)((hash >> 12) & 3u);
-        return 1 + variant + (rotation << 3) +
-            (offsetX << 5) + (offsetY << 7);
+        int mirror = (int)((hash >> 10) & 1u);
+        int offsetX = (int)((hash >> 12) & 3u);
+        int offsetY = (int)((hash >> 14) & 3u);
+        return 1 + variant + (rotation << 3) + (mirror << 5) +
+            (offsetX << 6) + (offsetY << 8);
     }
 
     public static bool IsGroundSurface(CellType cellType) =>

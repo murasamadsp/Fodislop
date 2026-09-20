@@ -4,8 +4,13 @@
 TEXTURE2D(_TerrainDecalAtlas);
 SAMPLER(sampler_TerrainDecalAtlas);
 
-float2 TerrainTransformDecalUV(float2 uv, uint rotation)
+float2 TerrainTransformDecalUV(float2 uv, uint rotation, bool mirror)
 {
+    if (mirror)
+    {
+        uv.x = 1.0 - uv.x;
+    }
+
     if (rotation == 1u)
     {
         return float2(uv.y, 1.0 - uv.x);
@@ -34,9 +39,10 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
     uint code = (uint)round(packedPlacement) - 1u;
     uint variant = code & 7u;
     uint rotation = (code >> 3u) & 3u;
-    uint offsetX = (code >> 5u) & 3u;
-    uint offsetY = (code >> 7u) & 3u;
-    float2 transformedUV = TerrainTransformDecalUV(localUV, rotation);
+    bool mirror = ((code >> 5u) & 1u) != 0u;
+    uint offsetX = (code >> 6u) & 3u;
+    uint offsetY = (code >> 8u) & 3u;
+    float2 transformedUV = TerrainTransformDecalUV(localUV, rotation, mirror);
     float2 placementOffset = float2(offsetX, offsetY) / 3.0 - 0.5;
     transformedUV += placementOffset * 0.18;
 
