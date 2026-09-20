@@ -168,13 +168,7 @@ internal static class TerrainQuadBuilder
             !isBackground &&
             cellFgType == CellType.BuildingWall &&
             cornerSideMask != 0;
-        // Биты в w: 1 — автотайлинг по соседям, 2 — сплошной лист.
-        // Разбор на стороне шейдера в ResolveTerrainTileUV.
         float packedW = hasTileGroup || useNeighborVariants ? 1f : 0f;
-        if (TerrainSheetCatalog.IsContinuousSheet(cellType))
-        {
-            packedW += 2f;
-        }
 
         if (useNeighborVariants)
         {
@@ -279,7 +273,17 @@ internal static class TerrainQuadBuilder
             animOffset,
             (float)animationSettings.Profile);
         Vector4 tileSizeVec = new Vector4(uvTileSize, uvTileSize, (float)animFrames, frameHeight);
-        Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
+        // Признак сплошного листа — бит 5 в z, над колонкой тайлгруппы
+        // (она занимает биты 0-4). В w его класть нельзя: там значение
+        // больше 1.5 уже означает «отбросить», и Terrain.shader вместе с
+        // TerrainCellBuilder выкидывали по нему всю породу и все кристаллы.
+        int packedColumn = descriptor & 0x1F;
+        if (TerrainSheetCatalog.IsContinuousSheet(cellType))
+        {
+            packedColumn |= 32;
+        }
+
+        Vector4 worldPosVec = new Vector4(gridX, serverY, packedColumn, packedW);
 
         bool isGlowing = (props & CellConfigProperties.Glowing) != 0 &&
             !MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellType) &&

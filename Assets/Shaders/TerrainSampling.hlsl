@@ -75,10 +75,14 @@ TerrainTileUvResult ResolveTerrainTileUV(
         return res;
     }
 
-    // Биты упакованы в TerrainQuadBuilder: 1 — автотайлинг, 2 — сплошной лист.
-    int packedCellFlags = (int)(worldPos.w + 0.5);
-    bool isTiling = (packedCellFlags & 1) != 0;
-    bool isContinuousSheet = (packedCellFlags & 2) != 0;
+    // w целиком занят: значение больше 1.5 — чужой маркер, по которому
+    // Terrain.shader отбрасывает фрагмент, а TerrainCellBuilder — вершину.
+    // Признак листа живёт в z, над колонкой тайлгруппы: та занимает биты
+    // 0-4 (descriptor & 0x1F), бит 5 свободен.
+    bool isTiling = fmod(worldPos.w, 2.0) > 0.5;
+    int packedColumn = (int)(worldPos.z + 0.5);
+    bool isContinuousSheet = (packedColumn & 32) != 0;
+    float tileGroupColumn = (float)(packedColumn & 31);
 
     // Кристаллы и камень адресуют лист целиком по мировой координате, а не
     // тайлом на клетку. Клеточная координата фрагмента уже несёт смещение
@@ -105,7 +109,7 @@ TerrainTileUvResult ResolveTerrainTileUV(
     float2 wrapped = KernResolveTerrainTileIndex(
         worldPos.xy,
         tilesCount,
-        worldPos.z,
+        tileGroupColumn,
         isTiling ? 1.0 : 0.0);
     float2 tileOffsetUV = wrapped * tileSizeUV;
     float2 availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
@@ -138,7 +142,7 @@ TerrainTileUvResult ResolveTerrainTileUV(
             float2 wrappedStep = KernResolveTerrainTileIndex(
                 stepPos,
                 tilesCount,
-                worldPos.z,
+                tileGroupColumn,
                 isTiling ? 1.0 : 0.0);
             if (isScrollAnimated)
             {
