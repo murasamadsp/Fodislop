@@ -296,12 +296,13 @@ internal static class TerrainQuadBuilder
             hasRoundedPhysicalContour,
             isPhysicalMass,
             emissionPower);
+        bool hasGroundDecalSurface = isBackground && cellType != CellType.Unloaded;
         Vector4 glowVec = new Vector4(
             packedLightingColor,
             lightingData.PackedFlags,
             lightingData.PackedContour,
-            TerrainDecalCatalog.IsGroundSurface(cellType)
-                ? TerrainDecalCatalog.GetPackedPlacement(cellType, gridX, serverY)
+            hasGroundDecalSurface
+                ? TerrainDecalCatalog.GetGroundPlacement(gridX, serverY)
                 : 0f);
 
         ReadOnlySpan<Vector2> anchors = [anchor0, anchor1, anchor2, anchor3];

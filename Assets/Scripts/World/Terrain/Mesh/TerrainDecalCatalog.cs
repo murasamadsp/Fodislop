@@ -52,6 +52,9 @@ public static class TerrainDecalCatalog
             (offsetX << 7) + (offsetY << 9);
     }
 
+    public static int GetGroundPlacement(int worldX, int serverY) =>
+        GetPackedPlacement(CellType.Empty, worldX, serverY);
+
     public static bool IsGroundSurface(CellType cellType) =>
         cellType == CellType.Empty;
 

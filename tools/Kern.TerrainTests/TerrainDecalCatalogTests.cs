@@ -69,6 +69,17 @@ public sealed class TerrainDecalCatalogTests
     }
 
     [Test]
+    public void GetGroundPlacement_IsIndependentOfFloodFillMaterial()
+    {
+        for (int i = 0; i < 1024; i++)
+        {
+            Assert.That(
+                TerrainDecalCatalog.GetGroundPlacement(i, i * 17),
+                Is.EqualTo(TerrainDecalCatalog.GetPackedPlacement(CellType.Empty, i, i * 17)));
+        }
+    }
+
+    [Test]
     public void GetPackedPlacement_GroundUsesAllVariantsAndOffsets()
     {
         bool[] variants = new bool[TerrainDecalCatalog.VariantCount];
