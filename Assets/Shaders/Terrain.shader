@@ -6,6 +6,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         // deliberately make a missing injection visible instead of rendering
         // an implicit white/gray world.
         [MainTexture] _BaseMap ("Texture Atlas", 2D) = "black" {}
+        _PrismaticFlowMap ("X Crystal Phase Vectors", 2D) = "black" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
         _TerrainDecalAtlas ("Terrain Decal Atlas", 2D) = "black" {}
         _ShimmerColor ("Shimmer Color", Color) = (0,0,0,0)
@@ -97,6 +98,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            TEXTURE2D(_PrismaticFlowMap);
+            SAMPLER(sampler_PrismaticFlowMap);
             TEXTURE2D(_FlowMap);
             SAMPLER(sampler_FlowMap);
 
@@ -308,7 +311,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 int animType = (int)(input.animData.x + 0.5);
                 float3 flowSample = 0.0;
-                if (TerrainAnimationUsesFlowMap(animType, animationProfile))
+                if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
+                {
+                    flowSample = SAMPLE_TEXTURE2D(_PrismaticFlowMap, sampler_PrismaticFlowMap,
+                        PrismaticCrystalFlowUV(input.worldPos.xy, input.packedData.yz)).rgb;
+                }
+                else if (TerrainAnimationUsesFlowMap(animType, animationProfile))
                 {
                     // Geometric quad coordinates stay continuous when atlas
                     // UVs are rotated or mirrored by terrain autotiling.
@@ -400,6 +408,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/TerrainContour.hlsl"
             #include "Assets/Shaders/TerrainDecals.hlsl"
 
+            TEXTURE2D(_PrismaticFlowMap);
+            SAMPLER(sampler_PrismaticFlowMap);
             TEXTURE2D(_FlowMap);
             SAMPLER(sampler_FlowMap);
 
@@ -578,7 +588,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 int albedoAnimationType = (int)(input.animData.x + 0.5);
                 int albedoAnimationProfile = (int)(input.animData.w + 0.5);
                 float3 flowSample = 0.0;
-                if (TerrainAnimationUsesFlowMap(
+                if (albedoAnimationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
+                {
+                    flowSample = SAMPLE_TEXTURE2D(_PrismaticFlowMap, sampler_PrismaticFlowMap,
+                        PrismaticCrystalFlowUV(input.worldPos.xy, input.packedData.yz)).rgb;
+                }
+                else if (TerrainAnimationUsesFlowMap(
                     albedoAnimationType,
                     albedoAnimationProfile))
                 {

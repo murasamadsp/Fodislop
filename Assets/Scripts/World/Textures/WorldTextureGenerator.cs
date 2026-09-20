@@ -7,6 +7,35 @@ namespace Kern.World.Textures;
 
 public static class WorldTextureGenerator
 {
+    public static Texture2D CreatePrismaticFlowMap()
+    {
+        const int width = 160;
+        const int height = 128;
+        TextAsset data = Resources.Load<TextAsset>(Kern.Core.ProjectRuntimeContracts.ResourcePaths.PrismaticFlowMap);
+        if (data == null)
+        {
+            throw new System.InvalidOperationException("Missing X-crystal phase map.");
+        }
+
+        byte[] pixels = data.bytes;
+        Resources.UnloadAsset(data);
+        if (pixels.Length != width * height * 4)
+        {
+            throw new System.InvalidOperationException("Invalid X-crystal phase map dimensions.");
+        }
+
+        var texture = RuntimeTextureFactory.CreateRGBA32NoMip(
+            width,
+            height,
+            "PrismaticFlowMap",
+            RuntimeTextureColorSpace.Linear,
+            FilterMode.Bilinear,
+            TextureWrapMode.Repeat);
+        texture.LoadRawTextureData(pixels);
+        texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+        return texture;
+    }
+
     public static Texture2D CreateFlowMap()
     {
         var texture = RuntimeTextureFactory.CreateRGBA32NoMip(

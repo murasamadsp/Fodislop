@@ -42,6 +42,8 @@ namespace Kern.World
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
         private CellTextureCache _textureCache = null!;
+        private Texture2D? _prismaticFlowMapTexture;
+        public Texture2D? PrismaticFlowMapTexture => _prismaticFlowMapTexture;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
         private readonly TerrainDecalAtlasLoader _decalLoader = new();
@@ -74,6 +76,20 @@ namespace Kern.World
                 _flowMapTexture = null;
             }
 
+            if (_prismaticFlowMapTexture != null)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(_prismaticFlowMapTexture);
+                }
+                else
+                {
+                    DestroyImmediate(_prismaticFlowMapTexture);
+                }
+
+                _prismaticFlowMapTexture = null;
+            }
+
             _decalLoader.Dispose();
         }
 
@@ -93,6 +109,7 @@ namespace Kern.World
                 GetCachedTexture);
             _pendingRequests = new ConcurrentDictionary<CellType, TextureRequest>();
 
+            _prismaticFlowMapTexture = WorldTextureGenerator.CreatePrismaticFlowMap();
             GenerateFlowMap();
             _decalLoader.StartLoad(_textureStorage, _operations, (name, tex) => OnTextureLoaded?.Invoke(name, tex));
         }

@@ -120,6 +120,8 @@ float3 TerrainUnpackRgb24(float packedColor)
         (packed >> 16u) & 0xFFu) / 255.0;
 }
 
+#include "TerrainPrismaticCrystal.hlsl"
+
 // baseColor      — цвет, который анимируется.
 // luminanceSource — по чему считается маска яркости для мерцания. В видимом
 //                   пассе и в поле материалов это цвет текселя атласа.
@@ -140,23 +142,8 @@ float3 AnimateTerrainColor(
 {
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
     {
-        float3 cellColor = TerrainUnpackRgb24(packedCellColor);
-        TerrainShimmerSignal signal = EvaluateTerrainShimmer(
-            luminanceSource,
-            flowSample,
-            animationSpeed,
-            shimmerSpeedScale);
-
-        // The broad band keeps the old X-crystal color travel. A narrower,
-        // brighter crest turns it into a local facet glint without washing
-        // out the atlas texture between highlights.
-        float bodyStrength = signal.body * signal.surfaceMask * 0.68;
-        float glintRamp = saturate((signal.wave - 0.70) * 3.33333333);
-        float glintStrength =
-            glintRamp * glintRamp * signal.surfaceMask * 0.50;
-        float3 coloredFacet = lerp(baseColor, cellColor, bodyStrength);
-        float3 glintColor = lerp(cellColor, 1.0.xxx, 0.68);
-        return coloredFacet + glintColor * glintStrength;
+        return EvaluatePrismaticCrystal(
+            baseColor, flowSample, animationOffset, _Time.y * animationSpeed * 0.05);
     }
 
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)

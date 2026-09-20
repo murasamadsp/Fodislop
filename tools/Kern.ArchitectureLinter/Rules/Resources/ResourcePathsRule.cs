@@ -56,7 +56,7 @@ public sealed class ResourcePathsRule : IRule
                 roots.Add(dir);
         }
 
-        var extensions = new[] { "", ".asset", ".prefab", ".uxml", ".uss", ".compute", ".shader", ".png", ".jpg", ".mat", ".ttf", ".otf", ".json", ".txt", ".anim", ".controller" };
+        var extensions = new[] { "", ".asset", ".prefab", ".uxml", ".uss", ".compute", ".shader", ".png", ".jpg", ".mat", ".ttf", ".otf", ".json", ".txt", ".bytes", ".anim", ".controller" };
         foreach (var (name, value) in paths)
         {
             if (string.IsNullOrEmpty(value)) continue;

@@ -14,12 +14,12 @@ internal enum TerrainAnimationProfile : byte
 
 internal readonly record struct TerrainAnimationSettings(
     TerrainAnimationProfile Profile,
-    float Speed);
+    float Speed,
+    float PaletteIndex = 0f);
 
 internal static class TerrainAnimationProfileCatalog
 {
-    // Matches the pace of the original X-crystal effect. The shader applies
-    // the shared shimmer time scale, so this is not an angular velocity.
+    // Shader converts this legacy speed unit to radians per second (x 0.05).
     private const float PrismaticCrystalSpeed = 50f;
     private const float FacetedCrystalSpeed = 0.06f;
 
@@ -34,7 +34,16 @@ internal static class TerrainAnimationProfileCatalog
         {
             return new TerrainAnimationSettings(
                 TerrainAnimationProfile.PrismaticCrystal,
-                PrismaticCrystalSpeed);
+                PrismaticCrystalSpeed,
+                cellType switch
+                {
+                    CellType.XGreen => 1f,
+                    CellType.XBlue => 2f,
+                    CellType.XRed => 3f,
+                    CellType.XViolet => 4f,
+                    CellType.XCyan => 5f,
+                    _ => throw new System.ArgumentOutOfRangeException(nameof(cellType)),
+                });
         }
 
         if (cellType == CellType.Lava)

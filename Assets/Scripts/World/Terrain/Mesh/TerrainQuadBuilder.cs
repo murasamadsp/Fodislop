@@ -226,7 +226,7 @@ internal static class TerrainQuadBuilder
 
         TerrainAnimationSettings animationSettings =
             TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
-        float animOffset = 0f;
+        float animOffset = animationSettings.PaletteIndex;
 
         if (!useFallback && animType == CellAnimationType.Blinking)
         {

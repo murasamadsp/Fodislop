@@ -71,6 +71,7 @@ public static class ProjectRuntimeContracts
 
     public static class ResourcePaths
     {
+        public const string PrismaticFlowMap = "PrismaticFlowMap";
         public const string GraphicsQualityProfile = "GraphicsQualityProfile";
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";
         public const string PostProcessCompute = "Shaders/PostProcessing/PostProcess";
