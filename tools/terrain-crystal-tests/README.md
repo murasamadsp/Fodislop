@@ -36,3 +36,10 @@ flow-map reads. No extra passes, dispatches or per-frame allocations are added.
 Remaining validation in Unity: compile both Terrain passes and inspect animated
 X-crystals/lava in the running game. The CPU tests do not establish final image
 quality, material binding or GPU performance.
+
+The crystal phase lookup now uses world-anchored 1/32-cell centers, before
+normalizing to the original 10×8 phase sheet. Time and the original color
+formula remain continuous/unchanged. Both Terrain passes call this same helper.
+16,384 subpixel pairs must share phase coordinates; adjacent pixels advance by
+exactly one sample. Removing the position quantization must fail the CPU test.
+Cost: one float2 floor and scale/bias, no extra texture reads or allocations.

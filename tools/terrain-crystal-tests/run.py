@@ -51,16 +51,26 @@ int main(int argc,char** argv){
         auto b=PrismaticCrystalFlowUV(make_float2(x,y+1),make_float2(.2f,.875f));
         if(dot(a-b,a-b)>1e-10) return 2;
     }
+    for(int x : {-33,0,31,32}) for(int y : {-33,0,31,32})
+    for(int px=0;px<32;px++) for(int py=0;py<32;py++) {
+        auto cell=make_float2(x,y);
+        auto a=PrismaticCrystalFlowUV(cell,make_float2((px+.125f)/32,(py+.125f)/32));
+        auto b=PrismaticCrystalFlowUV(cell,make_float2((px+.875f)/32,(py+.875f)/32));
+        if(dot(a-b,a-b)>1e-12) return 3;
+        auto next=PrismaticCrystalFlowUV(cell,make_float2((px+1.125f)/32,(py+.125f)/32));
+        if(std::abs((next.x-a.x)*320-1)>0.001f) return 4;
+    }
     printf("OpenMines reference: %d color samples matched; phase continuity passed.\n",count);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='kern-original-shimmer-') as tmp:
     cpp=Path(tmp)/'test.cpp';exe=Path(tmp)/'test';fixture=Path(tmp)/'cases.bin'
     fixture.write_bytes(cases)
-    for mutation in (None,'wrong-y','wrong-luma'):
+    for mutation in (None,'wrong-y','wrong-luma','unquantized'):
         candidate=shader
         if mutation=='wrong-y': candidate=candidate.replace('serverCell.y - localPosition.y','serverCell.y + localPosition.y')
         if mutation=='wrong-luma': candidate=candidate.replace('float inverseLuma = 1.0 - dot','float inverseLuma = dot')
+        if mutation=='unquantized': candidate=candidate.replace('(floor(surfacePosition * 32.0) + 0.5) / 32.0', 'surfacePosition')
         cpp.write_text(shim+extra+candidate+scenario)
         subprocess.run(['clang++','-std=c++20','-O2',str(cpp),'-o',str(exe)],check=True)
         result=subprocess.run([str(exe),str(fixture)])

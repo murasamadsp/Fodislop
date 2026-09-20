@@ -18,8 +18,11 @@ float2 PrismaticCrystalFlowUV(float2 serverCell, float2 localPosition)
     // Extracted OpenMines phase sheet (25,23), size 10x8 atlas units.
     // Original offsets 100 and 128000 divide evenly by the sheet dimensions.
     // Stored bottom-up; server Y is down, cell-local Y is up.
-    return float2(serverCell.x + localPosition.x, serverCell.y - localPosition.y)
-        / float2(10.0, 8.0);
+    float2 surfacePosition = float2(serverCell.x + localPosition.x, serverCell.y - localPosition.y);
+    // Quantize the lookup position, not the sampled hue or animation time.
+    // Every fragment in one terrain pixel gets the same phase in both passes.
+    float2 pixelCenter = (floor(surfacePosition * 32.0) + 0.5) / 32.0;
+    return pixelCenter / float2(10.0, 8.0);
 }
 
 // Equivalent to Unlit_TerrainShader.shader, animType == 5. Inputs/output
