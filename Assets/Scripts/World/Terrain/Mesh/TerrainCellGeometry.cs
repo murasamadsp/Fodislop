@@ -15,6 +15,8 @@ public readonly record struct TerrainCellGeometry(
     Vector2 Corner11,
     Vector2 Corner01)
 {
+    public const int GridSize = TerrainVertexOffset.GridSize;
+
     public bool IsAnchored =>
         Corner00 != new Vector2(0f, 0f) ||
         Corner10 != new Vector2(1f, 0f) ||
@@ -28,10 +30,10 @@ public readonly record struct TerrainCellGeometry(
         Vector3 offset01)
     {
         return new TerrainCellGeometry(
-            new Vector2(offset00.x, offset00.y),
-            new Vector2(1f + offset10.x, offset10.y),
-            new Vector2(1f + offset11.x, 1f + offset11.y),
-            new Vector2(offset01.x, 1f + offset01.y));
+            Quantize(new Vector2(offset00.x, offset00.y)),
+            Quantize(new Vector2(1f + offset10.x, offset10.y)),
+            Quantize(new Vector2(1f + offset11.x, 1f + offset11.y)),
+            Quantize(new Vector2(offset01.x, 1f + offset01.y)));
     }
 
     public Vector2 GetCorner(int corner)
@@ -45,4 +47,9 @@ public readonly record struct TerrainCellGeometry(
             _ => throw new ArgumentOutOfRangeException(nameof(corner)),
         };
     }
+
+    private static Vector2 Quantize(Vector2 corner) =>
+        new(
+            Mathf.Round(corner.x * GridSize) / GridSize,
+            Mathf.Round(corner.y * GridSize) / GridSize);
 }

@@ -144,6 +144,26 @@ public sealed class TerrainQuantizationContractTests
     }
 
     [Test]
+    public void GeometrySourceQuantizesEveryCornerToThe32PixelGrid()
+    {
+        TerrainCellGeometry geometry = TerrainCellGeometry.FromOffsets(
+            new Vector3(0.037f, -0.021f, 0f),
+            new Vector3(-0.044f, 0.019f, 0f),
+            new Vector3(0.028f, 0.046f, 0f),
+            new Vector3(-0.031f, -0.038f, 0f));
+
+        Vector2[] corners =
+        [geometry.Corner00, geometry.Corner10, geometry.Corner11, geometry.Corner01];
+        foreach (Vector2 corner in corners)
+        {
+            Assert.That(corner.x * TerrainCellGeometry.GridSize,
+                Is.EqualTo(Mathf.Round(corner.x * TerrainCellGeometry.GridSize)).Within(0.0001f));
+            Assert.That(corner.y * TerrainCellGeometry.GridSize,
+                Is.EqualTo(Mathf.Round(corner.y * TerrainCellGeometry.GridSize)).Within(0.0001f));
+        }
+    }
+
+    [Test]
     public void ShaderSourceUsesOneCoverageContractAndPerCellGeometry()
     {
         string terrain = ReadRepoFile("Assets", "Shaders", "Terrain.shader");
