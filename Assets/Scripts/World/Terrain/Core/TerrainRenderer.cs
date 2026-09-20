@@ -151,6 +151,13 @@ namespace Kern.World.Terrain
 
         public ulong TerrainContentRevision => _terrainContentRevision;
 
+        // Exposes the production builder's geometry evidence to PlayMode
+        // contract tests. A hand-authored cell-data texture can pass a shader
+        // test while the live scene still renders a rectangular CPU path; the
+        // count makes that divergence observable without a second renderer.
+        internal int LastFullBuildAnchoredForegroundCellCount =>
+            _cellBuilder.LastFullBuildAnchoredForegroundCellCount;
+
         public bool IsReadyForGameplay =>
             _isInitialized &&
             _cellIDMesh.Mesh != null &&

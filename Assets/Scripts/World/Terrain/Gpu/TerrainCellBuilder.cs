@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Kern.Core.Interfaces;
 using Kern.World.Terrain.Background;
@@ -31,6 +32,15 @@ public sealed class TerrainCellBuilder : IDisposable
     private int _height;
     private float _cellSize;
     private bool _doorsTouched;
+
+    // Captured during the last full production build. This is a diagnostic
+    // contract for the runtime integration test: it proves that the scene
+    // builder produced foreground geometry with non-canonical corners instead
+    // of merely exercising a hand-filled cell-data texture.
+    private int _lastFullBuildAnchoredForegroundCellCount;
+
+    internal int LastFullBuildAnchoredForegroundCellCount =>
+        Volatile.Read(ref _lastFullBuildAnchoredForegroundCellCount);
 
     public TerrainCellDataTextures Textures => _textures;
 
@@ -64,6 +74,7 @@ public sealed class TerrainCellBuilder : IDisposable
         }
 
         _doorsTouched = true;
+        Volatile.Write(ref _lastFullBuildAnchoredForegroundCellCount, 0);
         _doorQuads.Clear();
         _trackDoorQuads = false;
         _trackTextureIndex = false;
@@ -363,6 +374,11 @@ public sealed class TerrainCellBuilder : IDisposable
             x, y, gridX, unityY, sources.CellCache, sources.Precalc, sources.FloodFill,
             sources.WorldWidth, sources.WorldHeight, false, 4, sources.Atlases, sources.UseColorLod,
             sources.MapManager, sources.TextureService);
+
+        if (foreground >= 0 && scratch.Vertices[4].UV5x != 0)
+        {
+            Interlocked.Increment(ref _lastFullBuildAnchoredForegroundCellCount);
+        }
 
         bool door = scratch.Door[0];
         if (door || _doorFlags[x, y])
