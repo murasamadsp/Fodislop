@@ -33,9 +33,9 @@ namespace Kern.World
             Transform trans = _backgroundRenderer.transform;
 
             if (renderer != null &&
-                renderer.sortingOrder != ProjectRuntimeContracts.RequiredLayers.TerrainSortingOrder)
+                renderer.sortingOrder != ProjectRuntimeContracts.RequiredLayers.WorldBackgroundSortingOrder)
             {
-                renderer.sortingOrder = ProjectRuntimeContracts.RequiredLayers.TerrainSortingOrder;
+                renderer.sortingOrder = ProjectRuntimeContracts.RequiredLayers.WorldBackgroundSortingOrder;
             }
 
             if (trans.position.z != 0f)
