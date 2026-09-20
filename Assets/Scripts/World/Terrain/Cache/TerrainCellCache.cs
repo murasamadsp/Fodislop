@@ -18,9 +18,7 @@ public class TerrainCellCache
     private int _cacheHeight;
     private readonly Dictionary<CellType, HashSet<long>> _cellsByType = [];
     private readonly Dictionary<long, CellType> _cellTypeByCoordinate = [];
-
-    // IsPopulated flag lives inside CellMetadata itself — one array instead of two
-    private readonly CellMetadata[] _metadataLookup = new CellMetadata[65536];
+    private readonly TerrainCellMetadataCache _metadataCache = new();
 
     private static CachedCellData _UnloadedCellData => new()
     {
@@ -48,9 +46,7 @@ public class TerrainCellCache
 
     public void ClearCaches()
     {
-        // Array.Clear zeros all bytes → IsPopulated = false for every entry (bool default = false).
-        // Faster than a manual loop: runtime uses SIMD memset internally.
-        Array.Clear(_metadataLookup, 0, _metadataLookup.Length);
+        _metadataCache.Clear();
     }
 
     public void RefreshTextureMetadata(
@@ -59,14 +55,7 @@ public class TerrainCellCache
         ITextureService textureService,
         IReadOnlyList<IAtlasDescriptor> atlases)
     {
-        foreach (CellType cellType in cellTypes)
-        {
-            int index = (int)cellType;
-            if ((uint)index < (uint)_metadataLookup.Length)
-            {
-                _metadataLookup[index].IsPopulated = false;
-            }
-        }
+        _metadataCache.Invalidate(cellTypes);
 
         foreach (CellType cellType in cellTypes)
         {
@@ -75,14 +64,14 @@ public class TerrainCellCache
                 continue;
             }
 
-            CellMetadata metadata = GetMetadata(cellType, mapManager, textureService, atlases);
+            CellMetadata metadata = _metadataCache.GetMetadata(cellType, mapManager, textureService, atlases);
             foreach (long key in cells)
             {
                 int x = UnpackX(key) - _cacheMinX;
                 int y = UnpackY(key) - _cacheMinY;
                 if ((uint)x < (uint)_cacheWidth && (uint)y < (uint)_cacheHeight)
                 {
-                    _cellCache[x, y] = CreateCachedData(cellType, metadata);
+                    _cellCache[x, y] = _metadataCache.CreateCachedData(cellType, metadata);
                 }
             }
         }
@@ -329,91 +318,11 @@ public class TerrainCellCache
         return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
     }
 
-    public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
-    {
-        int idx = (int)type;
-        if ((uint)idx < (uint)_metadataLookup.Length && _metadataLookup[idx].IsPopulated)
-        {
-            return _metadataLookup[idx];
-        }
+    public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases) =>
+        _metadataCache.GetMetadata(type, mm, wtm, atlases);
 
-        var config = mm.GetCellConfig(type);
-
-        int atlasIndex = -1;
-        for (int i = 0; i < atlases.Count; i++)
-        {
-            if (atlases[i].ContainsCell(type))
-            {
-                atlasIndex = i;
-                break;
-            }
-        }
-
-        Vector4 atlasRect = wtm.GetCellFrameRect(type);
-        int frameCount = wtm.GetAnimationFrameCount(type);
-        int frameSize = wtm.GetFrameSize(type);
-
-        var meta = new CellMetadata
-        {
-            Properties = config.Properties,
-            ReliefGroup = config.ReliefGroup,
-            Distortion = config.Distortion,
-            HasTileGroup = mm.TryGetTileGroup(type, out int gid),
-            TileGroupID = gid,
-            MinimapColor = (Color32)mm.GetCellMinimapColor(type),
-            Animation = config.Animation,
-            AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
-            AtlasRect = atlasRect,
-            AtlasIndex = atlasIndex,
-            UVTileSize = atlasIndex >= 0 && atlasIndex < atlases.Count
-                ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size
-                : 0f,
-            AnimationFrameCount = frameCount,
-            FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
-            IsTextureReady = atlasIndex >= 0 && atlasRect.z > 0f,
-            IsPopulated = true,
-        };
-
-        // The metadata is always fully populated (IsPopulated = true) once built here.
-        // Only the fast _metadataLookup cache entry is skipped while the atlas texture is
-        // not yet ready, so callers fall through to RequestTexture instead of caching an
-        // unready rect. The per-cell IsTextureReady flag (read by HasMissingTextures) is
-        // what actually gates drawing of not-yet-loaded cells.
-        if (meta.IsTextureReady && (uint)idx < (uint)_metadataLookup.Length)
-        {
-            _metadataLookup[idx] = meta;
-        }
-
-        if (!meta.IsTextureReady)
-        {
-            wtm.RequestTexture(type);
-        }
-
-        return meta;
-    }
-
-    public CachedCellData CreateCachedData(CellType type, CellMetadata meta)
-    {
-        return new CachedCellData
-        {
-            State = TerrainCellState.Loaded,
-            Type = type,
-            Properties = meta.Properties,
-            ReliefGroup = meta.ReliefGroup,
-            Distortion = meta.Distortion,
-            HasTileGroup = meta.HasTileGroup,
-            TileGroupID = meta.TileGroupID,
-            MinimapColor = meta.MinimapColor, // Color32 = Color32, no conversion
-            Animation = meta.Animation,
-            AnimationSpeed = meta.AnimationSpeed,
-            AtlasRect = meta.AtlasRect,
-            AtlasIndex = meta.AtlasIndex,
-            UVTileSize = meta.UVTileSize,
-            AnimationFrameCount = meta.AnimationFrameCount,
-            FrameHeightTiles = meta.FrameHeightTiles,
-            IsTextureReady = meta.IsTextureReady,
-        };
-    }
+    public CachedCellData CreateCachedData(CellType type, CellMetadata meta) =>
+        _metadataCache.CreateCachedData(type, meta);
 
     private void SetCachedData(int x, int y, CachedCellData data, bool removePrevious = true)
     {
