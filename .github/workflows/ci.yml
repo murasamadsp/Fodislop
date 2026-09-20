@@ -1,10 +1,10 @@
 name: CI
 
 on:
-  # Temporarily manual-only while the client refactor is in progress.
-  # Restore push, pull_request, and schedule triggers to re-enable automation.
-  # With schedule restored (nightly, e.g. cron '0 2 * * *'), the soak job runs
-  # on every scheduled run; manually it runs when the soak input is set.
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       soak:

@@ -80,7 +80,7 @@
 <tr><td>SettingsProbe</td><td class="status ok">PASS внутри линтера</td><td>Проверки defaults/ranges/consumers/localization/audio/graphics завершились OK.</td></tr>
 <tr><td>Unity EditMode/PlayMode</td><td class="status unknown">Не запускался</td><td>Требует явно названной Unity-операции; в CI это self-hosted workflow.</td></tr>
 <tr><td>Windows x64/macOS ARM64 build</td><td class="status unknown">Не запускался</td><td>В workflow jobs существуют, артефактов текущего аудита нет.</td></tr>
-<tr><td>Nightly soak</td><td class="status blocked">Не активен</td><td>Job описан, но schedule отключён; остаётся ручной dispatch с input soak.</td></tr>
+<tr><td>Nightly soak</td><td class="status partial">Активирован в workflow</td><td>Schedule включён на 02:00 UTC; фактический отчёт по 24-часовой стабильности ещё не получен.</td></tr>
 </tbody>
 </table>
 
@@ -89,7 +89,7 @@
 <li>Задать реальный production host/port и выключить dummy connection для release-конфигурации; добавить проверку EDGE-02 в build gate.</li>
 <li>Завершить MOVE-03: серверный <code>DamageCell</code>, VFX-пакет удара, прочность и единичную MapRegion-перезапись; затем проверить RTT 150 мс.</li>
 <li>Закрыть полный протокол программатора и миссий на сервере, после чего провести ручной сценарий ROB-01..05 и MIS-01..03.</li>
-<li>Включить CI для push/pull_request и nightly schedule; получить Windows/macOS артефакты и результаты EditMode/PlayMode/soak.</li>
+<li>Получить Windows/macOS артефакты и результаты EditMode/PlayMode/soak после первого полного CI-прогона.</li>
 <li>Только после этого зафиксировать performance baseline и выполнить публичный чек-лист всех ID.</li>
 </ol>
 
