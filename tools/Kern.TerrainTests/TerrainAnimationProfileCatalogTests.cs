@@ -58,13 +58,14 @@ public sealed class TerrainAnimationProfileCatalogTests
         Assert.That(settings.Speed, Is.EqualTo(0.06f));
     }
 
-    [Test]
-    public void Get_Lava_UsesMoltenProfileAndPreservesConfiguredSpeed()
+    [TestCase(0f)]
+    [TestCase(7f)]
+    public void Get_Lava_UsesOwnShaderSpeed(float configuredSpeed)
     {
         TerrainAnimationSettings settings =
-            TerrainAnimationProfileCatalog.Get(CellType.Lava, 7f);
+            TerrainAnimationProfileCatalog.Get(CellType.Lava, configuredSpeed);
 
         Assert.That(settings.Profile, Is.EqualTo(TerrainAnimationProfile.MoltenSurface));
-        Assert.That(settings.Speed, Is.EqualTo(7f));
+        Assert.That(settings.Speed, Is.EqualTo(10f));
     }
 }

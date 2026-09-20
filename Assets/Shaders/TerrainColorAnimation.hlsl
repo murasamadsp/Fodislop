@@ -1,6 +1,8 @@
 #ifndef KERN_TERRAIN_COLOR_ANIMATION_INCLUDED
 #define KERN_TERRAIN_COLOR_ANIMATION_INCLUDED
 
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+
 // Анимация цвета клетки террейна — одна на оба пасса.
 //
 // ЗАЧЕМ ОТДЕЛЬНЫМ ФАЙЛОМ. Раньше анимация жила только в видимом пассе, а поле
@@ -115,6 +117,7 @@ float3 AnimateTerrainColor(
     float3 baseColor,
     float3 luminanceSource,
     float2 localUV,
+    float2 surfacePosition,
     int animationType,
     int animationProfile,
     float animationSpeed,
@@ -127,8 +130,13 @@ float3 AnimateTerrainColor(
 {
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
     {
+#if defined(UNITY_COLORSPACE_GAMMA)
         return EvaluatePrismaticCrystal(
             baseColor, flowSample, animationOffset, _Time.y * animationSpeed * 0.05);
+#else
+        return SRGBToLinear(EvaluatePrismaticCrystal(
+            LinearToSRGB(baseColor), flowSample, animationOffset, _Time.y * animationSpeed * 0.05));
+#endif
     }
 
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)
@@ -155,7 +163,7 @@ float3 AnimateTerrainColor(
 
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
     {
-        return EvaluateMoltenHeat(baseColor, flowSample, _Time.y * animationSpeed * 0.12);
+        return EvaluateMoltenHeat(baseColor, surfacePosition, _Time.y * animationSpeed * 0.12);
     }
 
     if (animationType == 1) // Blinking

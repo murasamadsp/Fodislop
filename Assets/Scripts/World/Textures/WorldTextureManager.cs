@@ -42,8 +42,6 @@ namespace Kern.World
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
         private CellTextureCache _textureCache = null!;
-        private Texture2D? _xGreenFacetsTexture;
-        public Texture2D? XGreenFacetsTexture => _xGreenFacetsTexture;
         private Texture2D? _prismaticFlowMapTexture;
         public Texture2D? PrismaticFlowMapTexture => _prismaticFlowMapTexture;
         private Texture2D? _flowMapTexture;
@@ -92,20 +90,6 @@ namespace Kern.World
                 _prismaticFlowMapTexture = null;
             }
 
-            if (_xGreenFacetsTexture != null)
-            {
-                if (Application.isPlaying)
-                {
-                    Destroy(_xGreenFacetsTexture);
-                }
-                else
-                {
-                    DestroyImmediate(_xGreenFacetsTexture);
-                }
-
-                _xGreenFacetsTexture = null;
-            }
-
             _decalLoader.Dispose();
         }
 
@@ -125,7 +109,6 @@ namespace Kern.World
                 GetCachedTexture);
             _pendingRequests = new ConcurrentDictionary<CellType, TextureRequest>();
 
-            _xGreenFacetsTexture = WorldTextureGenerator.CreateXGreenFacets();
             _prismaticFlowMapTexture = WorldTextureGenerator.CreatePrismaticFlowMap();
             GenerateFlowMap();
             _decalLoader.StartLoad(_textureStorage, _operations, (name, tex) => OnTextureLoaded?.Invoke(name, tex));

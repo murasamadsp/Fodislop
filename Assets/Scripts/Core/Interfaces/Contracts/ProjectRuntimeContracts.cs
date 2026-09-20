@@ -71,7 +71,6 @@ public static class ProjectRuntimeContracts
 
     public static class ResourcePaths
     {
-        public const string XGreenFacets = "XGreenFacets";
         public const string PrismaticFlowMap = "PrismaticFlowMap";
         public const string GraphicsQualityProfile = "GraphicsQualityProfile";
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";

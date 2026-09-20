@@ -13,12 +13,6 @@ public static class WorldTextureGenerator
             Kern.Core.ProjectRuntimeContracts.ResourcePaths.PrismaticFlowMap, 160, 128, FilterMode.Bilinear);
     }
 
-    public static Texture2D CreateXGreenFacets()
-    {
-        return LoadNumericalTexture(
-            Kern.Core.ProjectRuntimeContracts.ResourcePaths.XGreenFacets, 320, 320, FilterMode.Point);
-    }
-
     private static Texture2D LoadNumericalTexture(string resource, int width, int height, FilterMode filter)
     {
         TextAsset data = Resources.Load<TextAsset>(resource);

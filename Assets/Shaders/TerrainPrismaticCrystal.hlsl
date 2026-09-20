@@ -1,54 +1,57 @@
 #ifndef KERN_TERRAIN_PRISMATIC_CRYSTAL_INCLUDED
 #define KERN_TERRAIN_PRISMATIC_CRYSTAL_INCLUDED
 
-// Palette index lives in animData.z; independent of minimap/emission colors.
+// OpenMines CellRender: animType 5, cells 71..75. These are animation
+// colors, intentionally different from the crystals' minimap colors.
 float3 PrismaticCrystalTint(float paletteIndex)
 {
-    if (paletteIndex == 1.0) { return float3(0.25, 1.0, 0.45); }
-    if (paletteIndex == 2.0) { return float3(0.25, 0.5, 1.0); }
-    if (paletteIndex == 3.0) { return float3(1.0, 0.25, 0.12); }
-    if (paletteIndex == 4.0) { return float3(0.7, 0.3, 1.0); }
-    if (paletteIndex == 5.0) { return float3(0.15, 0.9, 1.0); }
+    if (paletteIndex == 1.0) { return float3(0.2, 1.0, 0.2); }
+    if (paletteIndex == 2.0) { return float3(0.2, 0.2, 1.0); }
+    if (paletteIndex == 3.0) { return float3(1.0, 1.0, 1.0); }
+    if (paletteIndex == 4.0) { return float3(0.1, 1.0, 1.0); }
+    if (paletteIndex == 5.0) { return float3(1.0, 0.0, 0.0); }
     return float3(0.0, 0.0, 0.0);
 }
 
 float2 PrismaticCrystalFlowUV(float2 serverCell, float2 localPosition)
 {
-    // One continuous field over the terrain, independent of atlas rotation,
-    // cell/chunk boundaries and camera. Local Y is up; server Y is down.
+    // Extracted OpenMines phase sheet (25,23), size 10x8 atlas units.
+    // Original offsets 100 and 128000 divide evenly by the sheet dimensions.
+    // Stored bottom-up; server Y is down, cell-local Y is up.
     return float2(serverCell.x + localPosition.x, serverCell.y - localPosition.y)
         / float2(10.0, 8.0);
 }
 
+// Equivalent to Unlit_TerrainShader.shader, animType == 5. Inputs/output
+// are in the original GAMMA working space; caller bridges the linear atlas.
 float3 EvaluatePrismaticCrystal(float3 baseColor, float3 flowSample, float paletteIndex, float phase)
 {
-    float phaseSin;
-    float phaseCos;
-    sincos(phase, phaseSin, phaseCos);
-    float2 phaseVector = flowSample.rg * 2.0 - 1.0;
-    float wave = saturate(0.5 + 0.5 * dot(phaseVector, float2(phaseCos, phaseSin)));
-    float band = wave * wave * wave;
-    float crest = band * band;
-    crest *= crest;
-    crest *= crest;
-
-    if (paletteIndex == 1.0)
+    float maximum = max(flowSample.r, max(flowSample.g, flowSample.b));
+    float minimum = min(flowSample.r, min(flowSample.g, flowSample.b));
+    float chroma = maximum - minimum;
+    float hue = 0.0;
+    if (chroma > 0.0)
     {
-        // X-green prototype: preserve the matrix; weak internal modulation
-        // belongs to mineral pixels only. Reflections are added after lighting.
-        float mineral = saturate((baseColor.g - max(baseColor.r, baseColor.b)) * 4.0);
-        return baseColor * (1.0 + mineral * band * 0.08);
+        if (maximum == flowSample.r)
+        {
+            hue = (flowSample.g - flowSample.b) / chroma;
+        }
+        else if (maximum == flowSample.g)
+        {
+            hue = 2.0 + (flowSample.b - flowSample.r) / chroma;
+        }
+        else
+        {
+            hue = 4.0 + (flowSample.r - flowSample.g) / chroma;
+        }
+        hue = frac(hue / 6.0);
     }
 
-    // A broad chromatic band remains visible on dark facets. Exact black
-    // stays black, while local crests emphasize the authored bright facets.
-    float luminance = dot(baseColor, float3(0.299, 0.587, 0.114));
-    float materialMask = saturate(luminance * 24.0);
-    float facet = saturate(luminance * 3.0);
-    float headroom = saturate(1.0 - luminance);
-    float highlight = materialMask * headroom * (0.55 * band + 0.45 * crest * flowSample.b * facet);
-    return baseColor * (1.0 - 0.40 * band)
-        + PrismaticCrystalTint(paletteIndex) * highlight;
+    float wave = (sin(-(hue * 6.283185 + phase)) + 1.0) * 0.5;
+    float body = wave * wave * wave;
+    float inverseLuma = 1.0 - dot(baseColor, float3(0.3, 0.59, 0.11));
+    return baseColor * (1.0 - body) + PrismaticCrystalTint(paletteIndex)
+        * chroma * body * inverseLuma * inverseLuma * inverseLuma;
 }
 
 #endif

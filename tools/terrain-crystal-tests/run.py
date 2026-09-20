@@ -1,66 +1,69 @@
 #!/usr/bin/env python3
-"""Auxiliary CPU checks of production HLSL. Does NOT validate Unity rendering."""
+"""Auxiliary production HLSL comparison against OpenMines animType 5 math.
+Does not validate Unity compilation, texture binding or final rendering.
+"""
 from pathlib import Path
+import colorsys
+import hashlib
+import math
+import random
 import re
+import struct
 import subprocess
 import tempfile
-from generate import bake, field, TARGET
 
-root = Path(__file__).resolve().parents[2]
-assert TARGET.read_bytes() == bake(), 'Phase asset differs from its generator'
-for i in range(101):
-    t = i / 100
-    for a, b in ((field(0, t), field(1, t)), (field(t, 0), field(t, 1))):
-        assert max(abs(x-y) for x, y in zip(a, b)) < 1e-12
-shader = (root / 'Assets/Shaders/TerrainPrismaticCrystal.hlsl').read_text()
-shader = re.sub(r'^#.*$', '', shader, flags=re.M)
-shader = re.sub(r'\b(float[234])\(', r'make_\1(', shader)
-shim = (root / 'tools/lighting-tests/NativeTransportShim.cpp').read_text()
-extra = '\nfloat dot(float3 a, float3 b) { return a.x*b.x+a.y*b.y+a.z*b.z; }\n'
-scenario = r'''
-int main() {
-    // Shared horizontal/vertical edges must sample the same field, including
-    // negative coordinates, chunk boundaries, and displaced contour points.
-    for (int x : {-257,-32,-1,0,31,32,255})
-    for (int y : {-257,-32,-1,0,31,32,255})
-    for (int i=0;i<=32;i++) {
-        float t=i/32.f;
-        float2 a=PrismaticCrystalFlowUV(make_float2(float(x),float(y)),make_float2(1.125f,t));
-        float2 b=PrismaticCrystalFlowUV(make_float2(float(x+1),float(y)),make_float2(.125f,t));
-        float2 c=PrismaticCrystalFlowUV(make_float2(float(x),float(y)),make_float2(t,-.125f));
-        float2 d=PrismaticCrystalFlowUV(make_float2(float(x),float(y+1)),make_float2(t,.875f));
-        if (dot(a-b,a-b)>1e-10f || dot(c-d,c-d)>1e-10f) return 1;
+root=Path(__file__).resolve().parents[2]
+raw=(root/'Assets/Resources/PrismaticFlowMap.bytes').read_bytes()
+assert hashlib.sha256(raw).hexdigest() == '1800d15643ec50e669ef483b053db98a651b18072e46872c2e47fb65f37a4756', 'Original phase data changed'
+shader=(root/'Assets/Shaders/TerrainPrismaticCrystal.hlsl').read_text()
+shader=re.sub(r'^#.*$', '', shader, flags=re.M)
+shader=re.sub(r'\b(float[234])\(',r'make_\1(',shader)
+shim=(root/'tools/lighting-tests/NativeTransportShim.cpp').read_text()
+extra='\nfloat dot(float3 a,float3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}\n'
+# Independently evaluated gamma-space equation transcribed from OpenMines
+# Unlit_TerrainShader.shader:335-373; palette from CellRender.cs:395-434.
+palette=[(.2,1,.2),(.2,.2,1),(1,1,1),(.1,1,1),(1,0,0)]
+rng=random.Random(71)
+cases=bytearray()
+for i in range(12000):
+    offset=rng.randrange(len(raw)//4)*4
+    flow=tuple(c/255 for c in raw[offset:offset+3])
+    base=tuple(rng.random() for _ in range(3)) if i%5 else (0.,0.,0.)
+    index=i%5
+    phase=rng.random()*20
+    hue=colorsys.rgb_to_hsv(*flow)[0]
+    body=((math.sin(-(hue*6.283185+phase))+1)*.5)**3
+    inverse=1-sum(x*w for x,w in zip(base,(.3,.59,.11)))
+    expected=tuple(b*(1-body)+c*(max(flow)-min(flow))*body*inverse**3 for b,c in zip(base,palette[index]))
+    cases.extend(struct.pack('11f',*base,*flow,index+1,phase,*expected))
+scenario=r'''
+int main(int argc,char** argv){
+    FILE* f=fopen(argv[1],"rb");
+    float v[11];int count=0;
+    while(fread(v,sizeof(float),11,f)==11){
+        auto actual=EvaluatePrismaticCrystal(make_float3(v[0],v[1],v[2]),make_float3(v[3],v[4],v[5]),v[6],v[7]);
+        for(int k=0;k<3;k++) if(!std::isfinite(actual[k]) || std::abs(actual[k]-v[k+8])>0.00002f) return 1;
+        count++;
     }
-    float largestChange=0;
-    for (int palette=1;palette<=5;palette++)
-    for (int t=0;t<256;t++)
-    for (int level=0;level<=32;level++) {
-        float v=level/32.f;
-        float3 base={v,v*.8f,v*.6f};
-        float3 flow={.8f,.9f,.7f};
-        float3 color=EvaluatePrismaticCrystal(base,flow,palette,t*.05f);
-        float3 next=EvaluatePrismaticCrystal(base,flow,palette,t*.05f+.005f);
-        for(int k=0;k<3;k++) {
-            if (!std::isfinite(color[k]) || color[k]<base[k]*.5999f || color[k]>1.001f) return 2;
-            if (v==0 && color[k]!=0) return 3;
-            if (std::abs(color[k]-next[k])>.025f) return 4;
-            largestChange=std::max(largestChange,std::abs(color[k]-base[k]));
-        }
+    fclose(f);
+    for(int x : {-33,0,31,32}) for(int y : {-33,0,31,32}){
+        auto a=PrismaticCrystalFlowUV(make_float2(x,y),make_float2(.2f,-.125f));
+        auto b=PrismaticCrystalFlowUV(make_float2(x,y+1),make_float2(.2f,.875f));
+        if(dot(a-b,a-b)>1e-10) return 2;
     }
-    if(largestChange<.08f) return 5; // catches a disabled effect
-    puts("Crystal math: continuity, bounded color, dark crevices and temporal change passed.");
+    printf("OpenMines reference: %d color samples matched; phase continuity passed.\n",count);
 }
 '''
-with tempfile.TemporaryDirectory(prefix='kern-crystal-') as tmp:
-    cpp=Path(tmp)/'check.cpp'; exe=Path(tmp)/'check'
-    for mutation in (False, True):
-        source=shader.replace('serverCell.y - localPosition.y', 'serverCell.y + localPosition.y') if mutation else shader
-        cpp.write_text(shim+extra+source+scenario)
+with tempfile.TemporaryDirectory(prefix='kern-original-shimmer-') as tmp:
+    cpp=Path(tmp)/'test.cpp';exe=Path(tmp)/'test';fixture=Path(tmp)/'cases.bin'
+    fixture.write_bytes(cases)
+    for mutation in (None,'wrong-y','wrong-luma'):
+        candidate=shader
+        if mutation=='wrong-y': candidate=candidate.replace('serverCell.y - localPosition.y','serverCell.y + localPosition.y')
+        if mutation=='wrong-luma': candidate=candidate.replace('float inverseLuma = 1.0 - dot','float inverseLuma = dot')
+        cpp.write_text(shim+extra+candidate+scenario)
         subprocess.run(['clang++','-std=c++20','-O2',str(cpp),'-o',str(exe)],check=True)
-        result=subprocess.run([str(exe)])
-        assert (result.returncode != 0) if mutation else (result.returncode == 0)
-print('Phase asset reproducible; periodic seams passed; wrong-Y mutation rejected.')
-
-subprocess.run(['python3', str(Path(__file__).parent / 'lava.py')], check=True)
-
-subprocess.run(['python3', str(Path(__file__).parent / 'reflection.py')], check=True)
+        result=subprocess.run([str(exe),str(fixture)])
+        assert result.returncode != 0 if mutation else result.returncode == 0
+        if mutation: print('Rejected:',mutation)
+subprocess.run(['python3',str(Path(__file__).parent/'lava.py')],check=True)

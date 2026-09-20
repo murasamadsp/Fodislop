@@ -23,5 +23,13 @@ int main() {
     auto a=lava(make_float2(2,3),make_float2(.5f,.5f),0,0,0);
     auto b=lava(make_float2(2,3),make_float2(.5f,.5f),1,0,0);
     if(dot(a-b,a-b)<1e-6) return 2;
+    float minimum=100, maximum=-100;
+    for(int t=0;t<200;t++) {
+        auto color=EvaluateMoltenHeat(make_float3(1,.03f,0),make_float2(2.5f,3.5f),t*.12f);
+        minimum=std::min(minimum,color.x);maximum=std::max(maximum,color.x);
+        auto samePixel=EvaluateMoltenHeat(make_float3(1,.03f,0),make_float2(2.51f,3.51f),t*.12f);
+        if(dot(color.xy-samePixel.xy,color.xy-samePixel.xy)>1e-10) return 3;
+    }
+    if(maximum-minimum<.5f) return 4;
     printf("Lava production UV math: %d adjacency checks, carrier/descriptor independence and motion passed.\n", checks);
 }

@@ -21,6 +21,7 @@ internal static class TerrainAnimationProfileCatalog
 {
     // Shader converts this legacy speed unit to radians per second (x 0.05).
     private const float PrismaticCrystalSpeed = 50f;
+    private const float MoltenSurfaceSpeed = 10f;
     private const float FacetedCrystalSpeed = 0.06f;
 
     public static TerrainAnimationSettings Get(CellType cellType, float configuredSpeed)
@@ -50,7 +51,7 @@ internal static class TerrainAnimationProfileCatalog
         {
             return new TerrainAnimationSettings(
                 TerrainAnimationProfile.MoltenSurface,
-                configuredSpeed);
+                MoltenSurfaceSpeed);
         }
 
         if (cellType is
