@@ -56,10 +56,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
         sampler_TerrainDecalAtlas,
         atlasUV,
         0);
-    float decalLuminance = dot(decal.rgb, float3(0.299, 0.587, 0.114));
-    float decalValue = lerp(0.35, 1.45, decalLuminance);
-    float decalOpacity = saturate(decal.a * 1.25);
-    return lerp(baseColor, baseColor * decalValue, decalOpacity);
+    return lerp(baseColor, decal.rgb, decal.a);
 }
 
 #endif
