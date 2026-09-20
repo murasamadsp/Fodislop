@@ -25,10 +25,7 @@ float PhysicalContour(
     bool bottom = (solidBoundaryMask & 4) != 0;
     bool right = (solidBoundaryMask & 8) != 0;
     float2 p = QuantizeTerrainFaceUV(uv) - 0.5;
-    float antialias = min(
-        max(fwidth(length(p)), 0.5 / KERN_TERRAIN_FACE_GRID_SIZE),
-        1.0 / KERN_TERRAIN_FACE_GRID_SIZE);
-    float contour = 1.0 - smoothstep(0.5 - antialias, 0.5 + antialias, length(p));
+    float contour = step(length(p), 0.5);
     contour = (top || left) && p.x <= 0.0 && p.y >= 0.0 ? 1.0 : contour;
     contour = (top || right) && p.x >= 0.0 && p.y >= 0.0 ? 1.0 : contour;
     contour = (bottom || left) && p.x <= 0.0 && p.y <= 0.0 ? 1.0 : contour;
@@ -65,32 +62,29 @@ float EvaluateRoundableBlockAlpha(
     float rBL = (hasSame.z || hasSame.y) ? 0.0 : 0.5;
     float rBR = (hasSame.z || hasSame.w) ? 0.0 : 0.5;
     float dist = length(p);
-    float aa = min(
-        max(fwidth(dist) * antialiasScale, 0.5 / KERN_TERRAIN_FACE_GRID_SIZE),
-        1.0 / KERN_TERRAIN_FACE_GRID_SIZE);
-    float alpha = 1.0 - smoothstep(0.51 - aa, 0.51 + aa, dist);
+    float alpha = step(dist, 0.51);
     if (rTL < 0.25)
     {
-        float fill = smoothstep(-aa, 0.0, -p.x) * smoothstep(-aa, 0.0, p.y);
+        float fill = step(p.x, 0.0) * step(0.0, p.y);
         alpha = max(alpha, fill);
     }
     if (rTR < 0.25)
     {
-        float fill = smoothstep(-aa, 0.0, p.x) * smoothstep(-aa, 0.0, p.y);
+        float fill = step(0.0, p.x) * step(0.0, p.y);
         alpha = max(alpha, fill);
     }
     if (rBL < 0.25)
     {
-        float fill = smoothstep(-aa, 0.0, -p.x) * smoothstep(-aa, 0.0, -p.y);
+        float fill = step(p.x, 0.0) * step(p.y, 0.0);
         alpha = max(alpha, fill);
     }
     if (rBR < 0.25)
     {
-        float fill = smoothstep(-aa, 0.0, p.x) * smoothstep(-aa, 0.0, -p.y);
+        float fill = step(0.0, p.x) * step(p.y, 0.0);
         alpha = max(alpha, fill);
     }
     float cornerDist = abs(abs(p.x) - abs(p.y));
-    float cornerExclude = smoothstep(0.4, 0.5, cornerDist);
+    float cornerExclude = step(0.4, cornerDist);
     return lerp(alpha, 1.0, cornerExclude);
 }
 
