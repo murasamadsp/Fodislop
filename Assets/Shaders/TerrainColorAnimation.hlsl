@@ -72,24 +72,8 @@ TerrainShimmerSignal EvaluateTerrainShimmer(
 
 bool TerrainAnimationUsesFlowMap(int animationType, int animationProfile)
 {
-    return animationType == 2 ||
-        animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL ||
-        animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE;
-}
-
-float2 TerrainFlowSamplePosition(
-    float2 worldPosition,
-    int animationProfile,
-    float animationSpeed)
-{
-    if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
-    {
-        return worldPosition;
-    }
-
-    // Move the vector field more slowly than the lava sheet. The two axes use
-    // different rates so the deformation does not repeat as a diagonal pan.
-    return worldPosition + _Time.y * animationSpeed * float2(0.018, -0.011);
+    return animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE && (animationType == 2 ||
+        animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL);
 }
 
 float2 AnimateTerrainSampleUV(
@@ -170,12 +154,9 @@ float3 AnimateTerrainColor(
 
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
     {
-        float3 flowHSV = TerrainRGBToHSV(flowSample);
-        float flowPulse = 0.5 + 0.5 * sin(
-            flowHSV.x * 6.28318548 + _Time.y * animationSpeed * 0.35);
-        float hotMask = smoothstep(0.38, 0.86, flowPulse);
-        float3 emberColor = float3(1.0, 0.20, 0.015);
-        return lerp(baseColor, max(baseColor, emberColor), hotMask * 0.16);
+        // The authored sheet provides the lava colors; motion is resolved in
+        // TerrainSampling. No independent orange film over the texture.
+        return baseColor;
     }
 
     if (animationType == 1) // Blinking

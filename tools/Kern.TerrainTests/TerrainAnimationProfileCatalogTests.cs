@@ -23,6 +23,16 @@ public sealed class TerrainAnimationProfileCatalogTests
         Assert.That(settings.Speed, Is.EqualTo(50f));
     }
 
+    [TestCase(CellType.XGreen, 1f)]
+    [TestCase(CellType.XBlue, 2f)]
+    [TestCase(CellType.XRed, 3f)]
+    [TestCase(CellType.XViolet, 4f)]
+    [TestCase(CellType.XCyan, 5f)]
+    public void Get_XCrystal_CarriesDistinctPalette(CellType cellType, float palette)
+    {
+        Assert.That(TerrainAnimationProfileCatalog.Get(cellType, 0f).PaletteIndex, Is.EqualTo(palette));
+    }
+
     [TestCase(CellType.PurpleAcid)]
     public void Get_OtherCell_PreservesConfiguredAnimation(CellType cellType)
     {

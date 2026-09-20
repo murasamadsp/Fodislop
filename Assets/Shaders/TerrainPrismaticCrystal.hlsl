@@ -32,13 +32,14 @@ float3 EvaluatePrismaticCrystal(float3 baseColor, float3 flowSample, float palet
     crest *= crest;
     crest *= crest;
 
-    // Texture brightness attaches highlights to authored facets, regardless
-    // of tile rotation. Dark crevices stay dark; no white overlay is added.
+    // A broad chromatic band remains visible on dark facets. Exact black
+    // stays black, while local crests emphasize the authored bright facets.
     float luminance = dot(baseColor, float3(0.299, 0.587, 0.114));
-    float facet = saturate((luminance - 0.08) * 2.5);
+    float materialMask = saturate(luminance * 24.0);
+    float facet = saturate(luminance * 3.0);
     float headroom = saturate(1.0 - luminance);
-    float highlight = facet * headroom * (0.28 * band + 0.75 * crest * flowSample.b);
-    return baseColor * (1.0 - 0.14 * band)
+    float highlight = materialMask * headroom * (0.55 * band + 0.45 * crest * flowSample.b * facet);
+    return baseColor * (1.0 - 0.40 * band)
         + PrismaticCrystalTint(paletteIndex) * highlight;
 }
 

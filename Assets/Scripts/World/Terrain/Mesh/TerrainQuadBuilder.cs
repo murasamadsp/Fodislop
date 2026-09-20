@@ -228,7 +228,8 @@ internal static class TerrainQuadBuilder
             TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
         float animOffset = animationSettings.PaletteIndex;
 
-        if (!useFallback && animType == CellAnimationType.Blinking)
+        if (!useFallback && animationSettings.Profile == TerrainAnimationProfile.Default &&
+            animType == CellAnimationType.Blinking)
         {
             uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
             seed = (seed ^ (seed >> 13)) * 1274126177;

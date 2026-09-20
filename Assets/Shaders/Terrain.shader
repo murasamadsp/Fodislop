@@ -320,10 +320,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 {
                     // Geometric quad coordinates stay continuous when atlas
                     // UVs are rotated or mirrored by terrain autotiling.
-                    float2 flowPosition = TerrainFlowSamplePosition(
-                        input.worldPos.xy + input.packedData.yz,
-                        animationProfile,
-                        input.animData.y);
+                    float2 flowPosition = input.worldPos.xy +
+                        input.packedData.yz * float2(1.0, -1.0);
                     flowSample = SampleFlowMap(flowPosition);
                 }
 
@@ -597,10 +595,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     albedoAnimationType,
                     albedoAnimationProfile))
                 {
-                    float2 flowPosition = TerrainFlowSamplePosition(
-                        input.worldPos.xy + input.packedData.yz,
-                        albedoAnimationProfile,
-                        input.animData.y);
+                    float2 flowPosition = input.worldPos.xy +
+                        input.packedData.yz * float2(1.0, -1.0);
                     flowSample = SAMPLE_TEXTURE2D(
                         _FlowMap,
                         sampler_FlowMap,

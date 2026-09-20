@@ -60,6 +60,21 @@ TerrainTileUvResult ResolveTerrainTileUV(
     float2 tilesCount = ceil(subAtlasSizeUV / tileSizeUV - 0.0001);
     tilesCount = max(tilesCount, 1.0);
 
+    // Molten surfaces scroll one complete authored sheet, never separate cell
+    // tiles. Both raster-carrier and regular quads use the same world position.
+    if ((int)(animData.w + 0.5) == 2)
+    {
+        float2 sheetPosition = float2(worldPos.x, -worldPos.y - 1.0) + packedData.yz;
+        sheetPosition.y += timeY * animData.y * 0.05;
+        float2 sheetUV = frac(sheetPosition / tilesCount);
+        res.finalUV = baseUV + sheetUV * subAtlasSizeUV;
+        res.finalUV.y += animOffsetUV;
+        res.availableTileSize = subAtlasSizeUV;
+        res.minTileUV = baseUV + atlasTexelSize * 0.5;
+        res.maxTileUV = baseUV + subAtlasSizeUV - atlasTexelSize * 0.5;
+        return res;
+    }
+
     bool isTiling = fmod(worldPos.w, 2.0) > 0.5;
     float2 wrapped = KernResolveTerrainTileIndex(
         worldPos.xy,

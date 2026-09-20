@@ -41,9 +41,9 @@ int main() {
         float3 color=EvaluatePrismaticCrystal(base,flow,palette,t*.05f);
         float3 next=EvaluatePrismaticCrystal(base,flow,palette,t*.05f+.005f);
         for(int k=0;k<3;k++) {
-            if (!std::isfinite(color[k]) || color[k]<base[k]*.8599f || color[k]>1.001f) return 2;
+            if (!std::isfinite(color[k]) || color[k]<base[k]*.5999f || color[k]>1.001f) return 2;
             if (v==0 && color[k]!=0) return 3;
-            if (std::abs(color[k]-next[k])>.015f) return 4;
+            if (std::abs(color[k]-next[k])>.025f) return 4;
             largestChange=std::max(largestChange,std::abs(color[k]-base[k]));
         }
     }
@@ -60,3 +60,5 @@ with tempfile.TemporaryDirectory(prefix='kern-crystal-') as tmp:
         result=subprocess.run([str(exe)])
         assert (result.returncode != 0) if mutation else (result.returncode == 0)
 print('Phase asset reproducible; periodic seams passed; wrong-Y mutation rejected.')
+
+subprocess.run(['python3', str(Path(__file__).parent / 'lava.py')], check=True)

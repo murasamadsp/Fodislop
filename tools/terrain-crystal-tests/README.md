@@ -24,3 +24,14 @@ Both Terrain passes bind and sample the same phase texture and invoke the same
 color helper. Remaining validation: compile Terrain's Universal2D and field
 passes in Unity, then inspect a multi-cell X-crystal patch with rotated atlas
 tiles while moving the camera. CPU results do not establish those GPU outcomes.
+
+Lava checks execute `ResolveTerrainTileUV` and `ClampTerrainTileUV` from the
+production includes over 4,608 adjacent samples. They vary carrier anchoring,
+neighbor tile descriptors, time and negative coordinates. Disabling the molten
+sheet path must fail. Lava now samples one scrolling authored sheet; it performs
+no additional flow-map read or color overlay. This still requires Unity visual
+validation, including filtering at the outer sheet wrap.
+
+The crystal broad band includes dark colored facets (the former linear-luma
+threshold excluded roughly half the authored X-crystal sheet); exact black
+remains black. The numerical bounds test is not a claim of perceptual visibility.
