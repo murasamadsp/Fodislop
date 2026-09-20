@@ -156,6 +156,7 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(CountOccurrences(contour, "QuantizeTerrainGeometryPoint("), Is.EqualTo(2));
         Assert.That(contour, Does.Contain("KERN_TERRAIN_FACE_GRID_SIZE = 32.0"));
         Assert.That(contour, Does.Contain("TerrainGeometryCoverage("));
+        Assert.That(contour, Does.Not.Contain("edgeMargins"));
         Assert.That(cellData, Does.Contain("_TerrainCellGeometryX"));
         Assert.That(cellData, Does.Contain("_TerrainCellGeometryY"));
         Assert.That(cellData, Does.Contain("if (layer == 0 && meta.b > 0.5)"));

@@ -33,24 +33,58 @@ float TerrainGeometryCoverage(
     }
 
     float2 quantizedPoint = QuantizeTerrainGeometryPoint(samplePosition);
-    float2 corner0 = float2(cornersX.x, cornersY.x);
-    float2 corner1 = float2(cornersX.y, cornersY.y);
-    float2 corner2 = float2(cornersX.z, cornersY.z);
-    float2 corner3 = float2(cornersX.w, cornersY.w);
-    float4 edgeCrosses = float4(
-        TerrainGeometryEdgeCross(corner0, corner1, quantizedPoint),
-        TerrainGeometryEdgeCross(corner1, corner2, quantizedPoint),
-        TerrainGeometryEdgeCross(corner2, corner3, quantizedPoint),
-        TerrainGeometryEdgeCross(corner3, corner0, quantizedPoint));
-    float4 edgeLengths = float4(
-        length(corner1 - corner0),
-        length(corner2 - corner1),
-        length(corner3 - corner2),
-        length(corner0 - corner3));
-    float4 edgeMargins = edgeLengths / KERN_TERRAIN_FACE_GRID_SIZE;
-    bool insideCounterClockwise = all(edgeCrosses >= -edgeMargins);
-    bool insideClockwise = all(edgeCrosses <= edgeMargins);
-    return (insideCounterClockwise || insideClockwise) ? 1.0 : 0.0;
+    // Quantization belongs to the sample, not to a widened edge. The previous
+    // edge-length margin expanded every side by roughly one pixel and made a
+    // displaced polygon look like the original smooth rasterized quad. Use a
+    // fixed four-edge winding test so concave corner combinations are clipped
+    // by the same quantized pixel-center rule as convex ones.
+    bool inside = false;
+    for (int index = 0; index < 4; index++)
+    {
+        float2 edgeStart = index == 0
+            ? float2(cornersX.x, cornersY.x)
+            : (index == 1
+                ? float2(cornersX.y, cornersY.y)
+                : (index == 2
+                    ? float2(cornersX.z, cornersY.z)
+                    : float2(cornersX.w, cornersY.w)));
+        int nextIndex = (index + 1) & 3;
+        float2 edgeEnd = nextIndex == 0
+            ? float2(cornersX.x, cornersY.x)
+            : (nextIndex == 1
+                ? float2(cornersX.y, cornersY.y)
+                : (nextIndex == 2
+                    ? float2(cornersX.z, cornersY.z)
+                    : float2(cornersX.w, cornersY.w)));
+        float2 edge = edgeEnd - edgeStart;
+        float edgeCross = TerrainGeometryEdgeCross(
+            edgeStart,
+            edgeEnd,
+            quantizedPoint);
+        bool onEdge = abs(edgeCross) <= 0.00001 &&
+            quantizedPoint.x >= min(edgeStart.x, edgeEnd.x) - 0.00001 &&
+            quantizedPoint.x <= max(edgeStart.x, edgeEnd.x) + 0.00001 &&
+            quantizedPoint.y >= min(edgeStart.y, edgeEnd.y) - 0.00001 &&
+            quantizedPoint.y <= max(edgeStart.y, edgeEnd.y) + 0.00001;
+        if (onEdge)
+        {
+            return 1.0;
+        }
+
+        bool crossesScanline = (edgeStart.y > quantizedPoint.y) !=
+            (edgeEnd.y > quantizedPoint.y);
+        if (crossesScanline)
+        {
+            float xAtScanline = edgeStart.x +
+                ((quantizedPoint.y - edgeStart.y) * edge.x / edge.y);
+            if (quantizedPoint.x < xAtScanline)
+            {
+                inside = !inside;
+            }
+        }
+    }
+
+    return inside ? 1.0 : 0.0;
 }
 
 float2 QuantizeTerrainFaceUV(float2 uv)

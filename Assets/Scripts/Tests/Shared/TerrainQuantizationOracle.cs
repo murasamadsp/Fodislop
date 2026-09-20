@@ -75,20 +75,27 @@ public static class TerrainQuantizationOracle
 
         }
 
-        bool positive = true;
-        bool negative = true;
+        bool inside = false;
         for (int index = 0; index < 4; index++)
         {
             Vector2 start = polygon.GetCorner(index);
             Vector2 end = polygon.GetCorner((index + 1) & 3);
             float cross = Cross(end - start, sample - start);
-            positive &= cross >= -Epsilon;
-            negative &= cross <= Epsilon;
+            bool crossesScanline = (start.y > sample.y) != (end.y > sample.y);
+            if (crossesScanline)
+            {
+                float xAtScanline = start.x +
+                    ((sample.y - start.y) * (end.x - start.x) / (end.y - start.y));
+                if (sample.x < xAtScanline)
+                {
+                    inside = !inside;
+                }
+            }
         }
 
-        // The edge signs make the oracle independent from the winding chosen
-        // by the producer, so reversed corner order has the same bitmap.
-        return positive || negative;
+        // The crossing rule handles both winding directions and concave
+        // quadrilaterals without reusing production shader code.
+        return inside;
     }
 
     public static TerrainQuantizedPolygon FromSteps(

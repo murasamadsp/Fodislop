@@ -37,20 +37,31 @@ Shader "Hidden/Kern/TerrainQuantizationProbe"
             {
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
+                float2 geometrySample : TEXCOORD1;
             };
 
             Varyings Vert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                float2 corner = round(input.uv);
+                float2 geometry = corner.x < 0.5
+                    ? (corner.y < 0.5
+                        ? float2(_CornersX.x, _CornersY.x)
+                        : float2(_CornersX.w, _CornersY.w))
+                    : (corner.y < 0.5
+                        ? float2(_CornersX.y, _CornersY.y)
+                        : float2(_CornersX.z, _CornersY.z));
+                output.positionCS = TransformObjectToHClip(
+                    float3((geometry * 2.0) - 1.0, 0.0));
                 output.uv = input.uv;
+                output.geometrySample = geometry;
                 return output;
             }
 
             half4 Frag(Varyings input) : SV_Target
             {
                 float coverage = EvaluateTerrainCellCoverage(
-                    input.uv,
+                    input.geometrySample,
                     input.uv,
                     _CornersX,
                     _CornersY,
@@ -94,20 +105,31 @@ Shader "Hidden/Kern/TerrainQuantizationProbe"
             {
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
+                float2 geometrySample : TEXCOORD1;
             };
 
             Varyings Vert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                float2 corner = round(input.uv);
+                float2 geometry = corner.x < 0.5
+                    ? (corner.y < 0.5
+                        ? float2(_CornersX.x, _CornersY.x)
+                        : float2(_CornersX.w, _CornersY.w))
+                    : (corner.y < 0.5
+                        ? float2(_CornersX.y, _CornersY.y)
+                        : float2(_CornersX.z, _CornersY.z));
+                output.positionCS = TransformObjectToHClip(
+                    float3((geometry * 2.0) - 1.0, 0.0));
                 output.uv = input.uv;
+                output.geometrySample = geometry;
                 return output;
             }
 
             half4 Frag(Varyings input) : SV_Target
             {
                 float coverage = EvaluateTerrainCellCoverage(
-                    input.uv,
+                    input.geometrySample,
                     input.uv,
                     _CornersX,
                     _CornersY,
