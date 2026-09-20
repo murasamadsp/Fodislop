@@ -320,33 +320,7 @@ namespace Kern.Rendering.PostProcessing
                 }
             }
 
-            Vector4 screenToEmission = Vector4.zero;
-            if (bloomActive)
-            {
-                Vector4 worldLightRect = Shader.GetGlobalVector(WorldLightRectID);
-                if (worldLightRect.z > 0.001f && worldLightRect.w > 0.001f)
-                {
-                    Camera camera = cameraData.camera;
-                    float camHeight = camera.orthographicSize * 2f;
-                    float camWidth = camHeight * camera.aspect;
-                    Vector3 camPos = camera.transform.position;
-                    float camMinX = camPos.x - camWidth * 0.5f;
-                    float camMinY = camPos.y - camHeight * 0.5f;
-
-                    float scaleX = camWidth / worldLightRect.z;
-                    float scaleY = camHeight / worldLightRect.w;
-                    float offsetX = (camMinX - worldLightRect.x) / worldLightRect.z;
-                    float offsetY = (camMinY - worldLightRect.y) / worldLightRect.w;
-
-                    if (SystemInfo.graphicsUVStartsAtTop)
-                    {
-                        scaleY = -scaleY;
-                        offsetY = 1f - offsetY;
-                    }
-
-                    screenToEmission = new Vector4(scaleX, scaleY, offsetX, offsetY);
-                }
-            }
+            Vector4 screenToEmission = PostProcessPassDataAssembler.ComputeScreenToEmission(cameraData.camera, bloomActive);
 
             using (var builder = renderGraph.AddUnsafePass<PostProcessPassData>(PassName, out var passData, profilingSampler))
             {

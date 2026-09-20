@@ -356,6 +356,15 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
     // Свечение формируется из цвета блока на экране, поддержанного authored-эмиссией
     float3 brightColor = max(sourceColor.rgb, emissionSample.rgb * 4.0) * emissionStrength;
 
+    // Порог и плавный переход для управления откликом блума от эмиссии
+    float brightness = max(Luminance(brightColor), 1e-4);
+    float knee = max(_BloomThreshold * _BloomSoftKnee, 1e-4);
+    float excess = max(0.0, brightness - (_BloomThreshold - 1.0));
+    float soft = clamp(excess - 1.0 + knee, 0.0, 2.0 * knee);
+    soft = (soft * soft) / (4.0 * knee);
+    float weight = max(soft, excess) / brightness;
+    brightColor *= saturate(weight);
+
     // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
     // целиком: один такой пиксель на входе даёт серое полотно на выходе.
     // NaN ловится сравнением (NaN != NaN), а не isnan(): Metal доказывает

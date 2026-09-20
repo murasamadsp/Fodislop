@@ -52,6 +52,40 @@ namespace Kern.Rendering.PostProcessing
             historyDesc.bindMS = false;
             historyDesc.enableRandomWrite = true;
         }
+
+        internal static Vector4 ComputeScreenToEmission(Camera camera, bool bloomActive)
+        {
+            if (!bloomActive)
+            {
+                return Vector4.zero;
+            }
+
+            Vector4 worldLightRect = Shader.GetGlobalVector(PostProcessShaderConstants.WorldLightRectID);
+            if (worldLightRect.z <= 0.001f || worldLightRect.w <= 0.001f)
+            {
+                return Vector4.zero;
+            }
+
+            float camHeight = camera.orthographicSize * 2f;
+            float camWidth = camHeight * camera.aspect;
+            Vector3 camPos = camera.transform.position;
+            float camMinX = camPos.x - camWidth * 0.5f;
+            float camMinY = camPos.y - camHeight * 0.5f;
+
+            float scaleX = camWidth / worldLightRect.z;
+            float scaleY = camHeight / worldLightRect.w;
+            float offsetX = (camMinX - worldLightRect.x) / worldLightRect.z;
+            float offsetY = (camMinY - worldLightRect.y) / worldLightRect.w;
+
+            if (SystemInfo.graphicsUVStartsAtTop)
+            {
+                scaleY = -scaleY;
+                offsetY = 1f - offsetY;
+            }
+
+            return new Vector4(scaleX, scaleY, offsetX, offsetY);
+        }
+
         internal readonly struct GradeScratch
         {
             internal readonly Vector4[] MasterCurvePoints;
