@@ -8,6 +8,8 @@ namespace Kern.World.Terrain;
 
 public sealed class TerrainVertexDistortionCalculator
 {
+    public const int FaceGridSize = 32;
+
     public TerrainRingGrid<Vector3> GridVertexOffsets { get; } = new();
 
     public bool EnableDistortion { get; set; } = true;
@@ -170,8 +172,8 @@ public sealed class TerrainVertexDistortionCalculator
             return Vector3.zero;
         }
 
-        float rx = RandXd(worldX, worldY) / 16f;
-        float ry = RandYd(worldX, worldY) / 16f;
+        float rx = RandXd(worldX, worldY) / (float)FaceGridSize;
+        float ry = RandYd(worldX, worldY) / (float)FaceGridSize;
 
         if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
         {

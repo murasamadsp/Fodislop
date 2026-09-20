@@ -89,7 +89,8 @@ public class TerrainVertexDistortionCalculatorTests
         int worldX = 12;
         int worldY = 18;
 
-        float expectedRy = TerrainVertexDistortionCalculator.RandYd(worldX, worldY) / 16f;
+        float expectedRy = TerrainVertexDistortionCalculator.RandYd(worldX, worldY)
+            / TerrainVertexDistortionCalculator.FaceGridSize;
         var expected = new Vector3(0, -expectedRy, 0);
 
         Vector3 result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, none, none, worldX, worldY, 100, 100);
