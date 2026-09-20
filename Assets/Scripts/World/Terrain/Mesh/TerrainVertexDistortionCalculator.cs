@@ -6,21 +6,26 @@ using UnityEngine;
 
 namespace Kern.World.Terrain;
 
-public sealed class TerrainVertexDistortionCalculator
+public readonly record struct TerrainVertexOffset(int XSteps, int YSteps, int ZSteps)
 {
-    public const int FaceGridSize = 32;
+    public const int GridSize = 32;
 
-    public TerrainRingGrid<Vector3> GridVertexOffsets { get; } = new();
+    public static TerrainVertexOffset Zero => new(0, 0, 0);
 
-    public bool EnableDistortion { get; set; } = true;
-
-    public static Vector3 QuantizeOffset(Vector3 offset)
+    public Vector3 ToVector3()
     {
         return new Vector3(
-            Mathf.Round(offset.x * FaceGridSize) / FaceGridSize,
-            Mathf.Round(offset.y * FaceGridSize) / FaceGridSize,
-            Mathf.Round(offset.z * FaceGridSize) / FaceGridSize);
+            XSteps / (float)GridSize,
+            YSteps / (float)GridSize,
+            ZSteps / (float)GridSize);
     }
+}
+
+public sealed class TerrainVertexDistortionCalculator
+{
+    public TerrainRingGrid<TerrainVertexOffset> GridVertexOffsets { get; } = new();
+
+    public bool EnableDistortion { get; set; } = true;
 
     public void EnsureCapacity(int meshWidth, int meshHeight)
     {
@@ -148,7 +153,7 @@ public sealed class TerrainVertexDistortionCalculator
     {
         if (!EnableDistortion)
         {
-            GridVertexOffsets[x, y] = Vector3.zero;
+            GridVertexOffsets[x, y] = TerrainVertexOffset.Zero;
             return;
         }
 
@@ -165,7 +170,7 @@ public sealed class TerrainVertexDistortionCalculator
         GridVertexOffsets[x, y] = ComputeOffset(tl, tr, bl, br, worldX, worldY, worldWidth, worldHeight);
     }
 
-    public static Vector3 ComputeOffset(
+    public static TerrainVertexOffset ComputeOffset(
         CachedCellData tl,
         CachedCellData tr,
         CachedCellData bl,
@@ -177,68 +182,68 @@ public sealed class TerrainVertexDistortionCalculator
     {
         if (worldX <= 0 || worldX >= worldWidth || worldY <= 0 || worldY >= worldHeight)
         {
-            return Vector3.zero;
+            return TerrainVertexOffset.Zero;
         }
 
-        float rx = RandXd(worldX, worldY) / (float)FaceGridSize;
-        float ry = RandYd(worldX, worldY) / (float)FaceGridSize;
+        int rx = (int)RandXd(worldX, worldY);
+        int ry = (int)RandYd(worldX, worldY);
 
         if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
         {
-            return Vector3.zero;
+            return TerrainVertexOffset.Zero;
         }
 
         if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))
         {
-            return Vector3.zero;
+            return TerrainVertexOffset.Zero;
         }
 
         if (worldY == 0 || (IsCause(tl) && IsCause(br)) || (IsCause(tr) && IsCause(bl)))
         {
-            return Vector3.zero;
+            return TerrainVertexOffset.Zero;
         }
 
         if (IsCause(tl) && IsCause(tr))
         {
-            return new Vector3(0, -ry, 0);
+            return new TerrainVertexOffset(0, -ry, 0);
         }
 
         if (IsCause(tl) && IsCause(bl))
         {
-            return new Vector3(-rx, 0, 0);
+            return new TerrainVertexOffset(-rx, 0, 0);
         }
 
         if (IsCause(tr) && IsCause(br))
         {
-            return new Vector3(rx, 0, 0);
+            return new TerrainVertexOffset(rx, 0, 0);
         }
 
         if (IsCause(bl) && IsCause(br))
         {
-            return new Vector3(0, ry, 0);
+            return new TerrainVertexOffset(0, ry, 0);
         }
 
         if (IsCause(tl))
         {
-            return new Vector3(-rx, -ry, 0);
+            return new TerrainVertexOffset(-rx, -ry, 0);
         }
 
         if (IsCause(tr))
         {
-            return new Vector3(rx, -ry, 0);
+            return new TerrainVertexOffset(rx, -ry, 0);
         }
 
         if (IsCause(bl))
         {
-            return new Vector3(-rx, ry, 0);
+            return new TerrainVertexOffset(-rx, ry, 0);
         }
 
         if (IsCause(br))
         {
-            return new Vector3(rx, ry, 0);
+            return new TerrainVertexOffset(rx, ry, 0);
         }
 
-        return Vector3.zero;
+        return TerrainVertexOffset.Zero;
     }
 
     public static bool IsCause(CachedCellData data)

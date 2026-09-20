@@ -9,7 +9,7 @@ public class TerrainPrecalculator
     private readonly TerrainVertexDistortionCalculator _distortion = new();
     private readonly TerrainCellMaskCalculator _cellMask = new();
 
-    public TerrainRingGrid<Vector3> GridVertexOffsets => _distortion.GridVertexOffsets;
+    public TerrainRingGrid<TerrainVertexOffset> GridVertexOffsets => _distortion.GridVertexOffsets;
 
     public TerrainRingGrid<int> CellTilingDescriptors => _cellMask.CellTilingDescriptors;
 

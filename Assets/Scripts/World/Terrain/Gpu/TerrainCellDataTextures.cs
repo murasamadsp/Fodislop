@@ -161,7 +161,7 @@ public sealed class TerrainCellDataTextures : IDisposable
     }
 
     // offsets — локальные узлы окна [0, W] × [0, H], minX/minY — мировой узел (0, 0).
-    public void WriteGridOffsets(TerrainRingGrid<Vector3> offsets, int minX, int minY)
+    public void WriteGridOffsets(TerrainRingGrid<TerrainVertexOffset> offsets, int minX, int minY)
     {
         if (!IsAllocated)
         {
@@ -177,8 +177,7 @@ public sealed class TerrainCellDataTextures : IDisposable
             int ringX = Ring(minX + x, nodesWide);
             for (int y = 0; y < height; y++)
             {
-                Vector3 offset = TerrainVertexDistortionCalculator.QuantizeOffset(
-                    offsets[x, y]);
+                Vector3 offset = offsets[x, y].ToVector3();
                 _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
                     new Vector4(offset.x, offset.y, offset.z, 0f);
             }
@@ -188,7 +187,7 @@ public sealed class TerrainCellDataTextures : IDisposable
         _gridOffsetsDirty.MarkAll();
     }
 
-    public void WriteGridOffsetsIncremental(TerrainRingGrid<Vector3> offsets, int minX, int minY, int dx, int dy)
+    public void WriteGridOffsetsIncremental(TerrainRingGrid<TerrainVertexOffset> offsets, int minX, int minY, int dx, int dy)
     {
         if (!IsAllocated)
         {
@@ -357,7 +356,7 @@ public sealed class TerrainCellDataTextures : IDisposable
     }
 
     private void WriteGridOffsetRect(
-        TerrainRingGrid<Vector3> offsets,
+        TerrainRingGrid<TerrainVertexOffset> offsets,
         int minX,
         int minY,
         int startX,
@@ -372,8 +371,7 @@ public sealed class TerrainCellDataTextures : IDisposable
             int ringX = Ring(minX + x, nodesWide);
             for (int y = startY; y < startY + height; y++)
             {
-                Vector3 offset = TerrainVertexDistortionCalculator.QuantizeOffset(
-                    offsets[x, y]);
+                Vector3 offset = offsets[x, y].ToVector3();
                 _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
                     new Vector4(offset.x, offset.y, offset.z, 0f);
             }

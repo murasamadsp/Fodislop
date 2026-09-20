@@ -27,15 +27,15 @@ public class TerrainVertexDistortionCalculatorTests
     {
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
 
-        Vector3 minX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 0, 10, 100, 100);
-        Vector3 maxX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 100, 10, 100, 100);
-        Vector3 minY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 0, 100, 100);
-        Vector3 maxY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 100, 100, 100);
+        TerrainVertexOffset minX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 0, 10, 100, 100);
+        TerrainVertexOffset maxX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 100, 10, 100, 100);
+        TerrainVertexOffset minY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 0, 100, 100);
+        TerrainVertexOffset maxY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 100, 100, 100);
 
-        Assert.AreEqual(Vector3.zero, minX);
-        Assert.AreEqual(Vector3.zero, maxX);
-        Assert.AreEqual(Vector3.zero, minY);
-        Assert.AreEqual(Vector3.zero, maxY);
+        Assert.AreEqual(TerrainVertexOffset.Zero, minX);
+        Assert.AreEqual(TerrainVertexOffset.Zero, maxX);
+        Assert.AreEqual(TerrainVertexOffset.Zero, minY);
+        Assert.AreEqual(TerrainVertexOffset.Zero, maxY);
     }
 
     [Test]
@@ -44,15 +44,15 @@ public class TerrainVertexDistortionCalculatorTests
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
         var block = new CachedCellData { Distortion = CellDistortionType.Block };
 
-        Vector3 tlBlock = TerrainVertexDistortionCalculator.ComputeOffset(block, cause, cause, cause, 10, 10, 100, 100);
-        Vector3 trBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, block, cause, cause, 10, 10, 100, 100);
-        Vector3 blBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, block, cause, 10, 10, 100, 100);
-        Vector3 brBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, block, 10, 10, 100, 100);
+        TerrainVertexOffset tlBlock = TerrainVertexDistortionCalculator.ComputeOffset(block, cause, cause, cause, 10, 10, 100, 100);
+        TerrainVertexOffset trBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, block, cause, cause, 10, 10, 100, 100);
+        TerrainVertexOffset blBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, block, cause, 10, 10, 100, 100);
+        TerrainVertexOffset brBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, block, 10, 10, 100, 100);
 
-        Assert.AreEqual(Vector3.zero, tlBlock);
-        Assert.AreEqual(Vector3.zero, trBlock);
-        Assert.AreEqual(Vector3.zero, blBlock);
-        Assert.AreEqual(Vector3.zero, brBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, tlBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, trBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, blBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, brBlock);
     }
 
     [Test]
@@ -63,9 +63,9 @@ public class TerrainVertexDistortionCalculatorTests
         int worldY = 25;
 
         // Upstream (15bced90): четыре источника вокруг — вершина не сдвигается.
-        Vector3 result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, worldX, worldY, 100, 100);
+        TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, worldX, worldY, 100, 100);
 
-        Assert.AreEqual(Vector3.zero, result);
+        Assert.AreEqual(TerrainVertexOffset.Zero, result);
     }
 
     [Test]
@@ -74,11 +74,11 @@ public class TerrainVertexDistortionCalculatorTests
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
         var none = new CachedCellData { Distortion = (CellDistortionType)0 };
 
-        Vector3 diagonal1 = TerrainVertexDistortionCalculator.ComputeOffset(cause, none, none, cause, 10, 10, 100, 100);
-        Vector3 diagonal2 = TerrainVertexDistortionCalculator.ComputeOffset(none, cause, cause, none, 10, 10, 100, 100);
+        TerrainVertexOffset diagonal1 = TerrainVertexDistortionCalculator.ComputeOffset(cause, none, none, cause, 10, 10, 100, 100);
+        TerrainVertexOffset diagonal2 = TerrainVertexDistortionCalculator.ComputeOffset(none, cause, cause, none, 10, 10, 100, 100);
 
-        Assert.AreEqual(Vector3.zero, diagonal1);
-        Assert.AreEqual(Vector3.zero, diagonal2);
+        Assert.AreEqual(TerrainVertexOffset.Zero, diagonal1);
+        Assert.AreEqual(TerrainVertexOffset.Zero, diagonal2);
     }
 
     [Test]
@@ -89,11 +89,10 @@ public class TerrainVertexDistortionCalculatorTests
         int worldX = 12;
         int worldY = 18;
 
-        float expectedRy = TerrainVertexDistortionCalculator.RandYd(worldX, worldY)
-            / TerrainVertexDistortionCalculator.FaceGridSize;
-        var expected = new Vector3(0, -expectedRy, 0);
+        int expectedRy = (int)TerrainVertexDistortionCalculator.RandYd(worldX, worldY);
+        var expected = new TerrainVertexOffset(0, -expectedRy, 0);
 
-        Vector3 result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, none, none, worldX, worldY, 100, 100);
+        TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, none, none, worldX, worldY, 100, 100);
 
         Assert.AreEqual(expected, result);
     }
@@ -115,10 +114,9 @@ public class TerrainVertexDistortionCalculatorTests
     }
 
     [Test]
-    public void QuantizeOffset_UsesThirtyTwoStepsPerCell()
+    public void TerrainVertexOffset_ConvertsStepsToWorldOffset()
     {
-        Vector3 result = TerrainVertexDistortionCalculator.QuantizeOffset(
-            new Vector3(0.03124f, -0.09376f, 0.18751f));
+        Vector3 result = new TerrainVertexOffset(1, -3, 6).ToVector3();
 
         Assert.That(result.x, Is.EqualTo(1f / 32f).Within(0.000001f));
         Assert.That(result.y, Is.EqualTo(-3f / 32f).Within(0.000001f));
