@@ -251,7 +251,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 int animationProfile = (int)(input.animData.w + 0.5);
                 float applyGeometry = 0.0;
             #if defined(KERN_TERRAIN_CELLS)
-                applyGeometry = 1.0;
+                // Geometry belongs to the foreground layer.  Keep the
+                // background quad rectangular so it can fill the area exposed
+                // by a displaced foreground silhouette.
+                applyGeometry = input.isForeground;
             #endif
                 float2 contourUV = input.packedData.x > 0.5
                     ? input.packedData.yz
@@ -615,7 +618,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // зависимость от точности positionOS.z.
                 float applyGeometry = 0.0;
             #if defined(KERN_TERRAIN_CELLS)
-                applyGeometry = 1.0;
+                applyGeometry = input.isForeground;
             #endif
                 int animationProfile = (int)(input.animData.w + 0.5);
                 float2 contourUV = input.packedData.x > 0.5

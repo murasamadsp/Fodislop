@@ -149,6 +149,7 @@ public sealed class TerrainQuantizationContractTests
         string terrain = ReadRepoFile("Assets", "Shaders", "Terrain.shader");
         string contour = ReadRepoFile("Assets", "Shaders", "TerrainContour.hlsl");
         string cellData = ReadRepoFile("Assets", "Shaders", "TerrainCellData.hlsl");
+        string cellBuilder = ReadRepoFile("Assets", "Scripts", "World", "Terrain", "Gpu", "TerrainCellBuilder.cs");
         string textures = ReadRepoFile("Assets", "Scripts", "World", "Terrain", "Gpu", "TerrainCellDataTextures.cs");
 
         Assert.That(CountOccurrences(terrain, "EvaluateTerrainCellCoverage("), Is.EqualTo(2));
@@ -156,11 +157,15 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(CountOccurrences(contour, "TerrainGeometryCoverage("), Is.EqualTo(2));
         Assert.That(CountOccurrences(contour, "QuantizeTerrainGeometryPoint("), Is.EqualTo(2));
         Assert.That(contour, Does.Contain("KERN_TERRAIN_FACE_GRID_SIZE = 32.0"));
+        Assert.That(contour, Does.Contain("KERN_TERRAIN_GEOMETRY_EPSILON"));
         Assert.That(contour, Does.Contain("TerrainGeometryCoverage("));
         Assert.That(contour, Does.Not.Contain("edgeMargins"));
         Assert.That(cellData, Does.Contain("_TerrainCellGeometryX"));
         Assert.That(cellData, Does.Contain("_TerrainCellGeometryY"));
         Assert.That(cellData, Does.Contain("if (layer == 0 && meta.b > 0.5)"));
+        Assert.That(cellData, Does.Contain("bool anchored = layer > 0 && meta.a > 0.5"));
+        Assert.That(cellBuilder, Does.Contain("if (vertex.UV5x != 0)"));
+        Assert.That(terrain, Does.Contain("applyGeometry = input.isForeground"));
         Assert.That(cellData, Does.Contain("v.atlasIndex = -1.0"));
         Assert.That(textures, Does.Contain("_geometryX.Data[index] = texels.GeometryX"));
         Assert.That(textures, Does.Contain("_geometryY.Data[index] = texels.GeometryY"));

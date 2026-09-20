@@ -308,6 +308,15 @@ public sealed class TerrainCellBuilder : IDisposable
             return false;
         }
 
+        // A displaced foreground quad no longer covers the whole cell.  The
+        // background must remain drawable behind the exposed edge; otherwise
+        // the background is culled as a full rectangle and the quantized
+        // silhouette reveals the cleared render target as a black seam.
+        if (vertex.UV5x != 0)
+        {
+            return false;
+        }
+
         CellType foregroundType = sources.CellCache.GetCellData(x + 1, y + 1).Type;
         return sources.Atlases[foreground].IsFullyOpaque(foregroundType);
     }

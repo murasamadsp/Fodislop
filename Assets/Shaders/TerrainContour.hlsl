@@ -4,6 +4,7 @@
 #include "TerrainLightingData.hlsl"
 
 static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
+static const float KERN_TERRAIN_GEOMETRY_EPSILON = 0.0001;
 
 float2 QuantizeTerrainGeometryPoint(float2 samplePosition)
 {
@@ -19,6 +20,26 @@ float TerrainGeometryEdgeCross(
     float2 edge = edgeEnd - edgeStart;
     float2 toSample = samplePosition - edgeStart;
     return (edge.x * toSample.y) - (edge.y * toSample.x);
+}
+
+float2 TerrainGeometryCorner(float4 cornersX, float4 cornersY, int index)
+{
+    if (index == 0)
+    {
+        return float2(cornersX.x, cornersY.x);
+    }
+
+    if (index == 1)
+    {
+        return float2(cornersX.y, cornersY.y);
+    }
+
+    if (index == 2)
+    {
+        return float2(cornersX.z, cornersY.z);
+    }
+
+    return float2(cornersX.w, cornersY.w);
 }
 
 float TerrainGeometryCoverage(
@@ -41,31 +62,21 @@ float TerrainGeometryCoverage(
     bool inside = false;
     for (int index = 0; index < 4; index++)
     {
-        float2 edgeStart = index == 0
-            ? float2(cornersX.x, cornersY.x)
-            : (index == 1
-                ? float2(cornersX.y, cornersY.y)
-                : (index == 2
-                    ? float2(cornersX.z, cornersY.z)
-                    : float2(cornersX.w, cornersY.w)));
-        int nextIndex = (index + 1) & 3;
-        float2 edgeEnd = nextIndex == 0
-            ? float2(cornersX.x, cornersY.x)
-            : (nextIndex == 1
-                ? float2(cornersX.y, cornersY.y)
-                : (nextIndex == 2
-                    ? float2(cornersX.z, cornersY.z)
-                    : float2(cornersX.w, cornersY.w)));
+        float2 edgeStart = TerrainGeometryCorner(cornersX, cornersY, index);
+        float2 edgeEnd = TerrainGeometryCorner(
+            cornersX,
+            cornersY,
+            (index + 1) & 3);
         float2 edge = edgeEnd - edgeStart;
         float edgeCross = TerrainGeometryEdgeCross(
             edgeStart,
             edgeEnd,
             quantizedPoint);
-        bool onEdge = abs(edgeCross) <= 0.00001 &&
-            quantizedPoint.x >= min(edgeStart.x, edgeEnd.x) - 0.00001 &&
-            quantizedPoint.x <= max(edgeStart.x, edgeEnd.x) + 0.00001 &&
-            quantizedPoint.y >= min(edgeStart.y, edgeEnd.y) - 0.00001 &&
-            quantizedPoint.y <= max(edgeStart.y, edgeEnd.y) + 0.00001;
+        bool onEdge = abs(edgeCross) <= KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.x >= min(edgeStart.x, edgeEnd.x) - KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.x <= max(edgeStart.x, edgeEnd.x) + KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.y >= min(edgeStart.y, edgeEnd.y) - KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.y <= max(edgeStart.y, edgeEnd.y) + KERN_TERRAIN_GEOMETRY_EPSILON;
         if (onEdge)
         {
             return 1.0;

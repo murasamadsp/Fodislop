@@ -96,18 +96,26 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
 
     float4 geometryX = _TerrainCellGeometryX.Load(texel);
     float4 geometryY = _TerrainCellGeometryY.Load(texel);
-    bool anchored = meta.a > 0.5;
-    float2 cornerGeometry = cornerStep.y == 0
+    // Geometry is a foreground-only contract.  Background texels can share
+    // the same ring address and must never inherit a stale anchor bit from a
+    // previous cell upload.
+    bool anchored = layer > 0 && meta.a > 0.5;
+    float2 loadedCornerGeometry = cornerStep.y == 0
         ? (cornerStep.x == 0
             ? float2(geometryX.x, geometryY.x)
             : float2(geometryX.y, geometryY.y))
         : (cornerStep.x == 1
             ? float2(geometryX.z, geometryY.z)
             : float2(geometryX.w, geometryY.w));
+    float2 cornerGeometry = anchored ? loadedCornerGeometry : cornerBase;
     float2 cornerOffset = cornerGeometry - cornerBase;
     v.packedData = float4(anchored ? 1.0 : 0.0, cornerGeometry, 0.0);
-    v.geometryCornersX = geometryX;
-    v.geometryCornersY = geometryY;
+    v.geometryCornersX = anchored
+        ? geometryX
+        : float4(0.0, 1.0, 1.0, 0.0);
+    v.geometryCornersY = anchored
+        ? geometryY
+        : float4(0.0, 0.0, 1.0, 1.0);
     float cellSize = _TerrainCellGridSize.z;
     v.positionOS = float3(
         (x + cornerBase.x) * cellSize,
