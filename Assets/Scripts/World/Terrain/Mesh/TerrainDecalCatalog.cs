@@ -55,6 +55,10 @@ public static class TerrainDecalCatalog
     public static int GetGroundPlacement(int worldX, int serverY) =>
         GetPackedPlacement(CellType.Empty, worldX, serverY);
 
+    public static bool IsGroundDecalSurface(CellType cellType, bool isBackground) =>
+        cellType == CellType.Empty ||
+        (isBackground && cellType != CellType.Unloaded);
+
     public static bool IsGroundSurface(CellType cellType) =>
         cellType == CellType.Empty;
 

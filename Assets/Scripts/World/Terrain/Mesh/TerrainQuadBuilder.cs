@@ -296,7 +296,9 @@ internal static class TerrainQuadBuilder
             hasRoundedPhysicalContour,
             isPhysicalMass,
             emissionPower);
-        bool hasGroundDecalSurface = isBackground && cellType != CellType.Unloaded;
+        bool hasGroundDecalSurface = TerrainDecalCatalog.IsGroundDecalSurface(
+            cellType,
+            isBackground);
         Vector4 glowVec = new Vector4(
             packedLightingColor,
             lightingData.PackedFlags,

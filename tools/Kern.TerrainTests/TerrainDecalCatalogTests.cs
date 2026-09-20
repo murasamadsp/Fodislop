@@ -112,4 +112,24 @@ public sealed class TerrainDecalCatalogTests
         Assert.That(TerrainDecalCatalog.IsGroundSurface(CellType.Rock), Is.False);
         Assert.That(TerrainDecalCatalog.IsGroundSurface(CellType.Lava), Is.False);
     }
+
+    [Test]
+    public void IsGroundDecalSurface_AllowsVisibleEmptyAndBackgroundOnly()
+    {
+        Assert.That(
+            TerrainDecalCatalog.IsGroundDecalSurface(CellType.Empty, isBackground: false),
+            Is.True);
+        Assert.That(
+            TerrainDecalCatalog.IsGroundDecalSurface(CellType.Empty, isBackground: true),
+            Is.True);
+        Assert.That(
+            TerrainDecalCatalog.IsGroundDecalSurface(CellType.Rock, isBackground: true),
+            Is.True);
+        Assert.That(
+            TerrainDecalCatalog.IsGroundDecalSurface(CellType.Rock, isBackground: false),
+            Is.False);
+        Assert.That(
+            TerrainDecalCatalog.IsGroundDecalSurface(CellType.Unloaded, isBackground: true),
+            Is.False);
+    }
 }
