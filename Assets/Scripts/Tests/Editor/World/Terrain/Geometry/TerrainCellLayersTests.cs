@@ -42,7 +42,7 @@ public sealed class TerrainCellLayersTests
 
     // Силуэт меньше клетки — подложка обязана остаться, иначе на
     // освободившемся месте дыра. Ровно это рисовало чёрные ореолы вокруг
-    // круглых капель лавы и чёрные клинья у смещённых масс.
+    // круглых капель лавы.
     [Test]
     public void PartialSilhouetteKeepsIdenticalBackgroundUnderneath()
     {

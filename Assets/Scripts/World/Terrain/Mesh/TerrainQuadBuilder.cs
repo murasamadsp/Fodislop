@@ -81,15 +81,15 @@ internal static class TerrainQuadBuilder
         }
 
         // Силуэт переднего плана считается до выбора слоя: от него зависит,
-        // нужна ли под ним подложка. Смещения берутся те же, что уйдут в
-        // геометрию ниже, — второго источника правды здесь нет.
-        bool foregroundFillsCell =
-            !MapManager.IsRoundableLoose(cellFgType) &&
-            !TerrainCellGeometry.FromOffsets(
-                precalc.GridVertexOffsets[x, y].ToVector3(),
-                precalc.GridVertexOffsets[x + 1, y].ToVector3(),
-                precalc.GridVertexOffsets[x + 1, y + 1].ToVector3(),
-                precalc.GridVertexOffsets[x, y + 1].ToVector3()).IsAnchored;
+        // нужна ли под ним подложка.
+        //
+        // Только скругление, не смещение. Смещённая клетка свой квадрат тоже
+        // не закрывает, но пустоты не оставляет: соседняя смещённая клетка
+        // делит с ней тот же узел и закрывает общее ребро — это проверяет
+        // растровая линейка («Uncovered shared edge between adjacent cells»).
+        // Пока сюда входило и смещение, подложка вставала под каждой клеткой
+        // внутри массива и застилала мир вторым прямоугольным слоем.
+        bool foregroundFillsCell = !MapManager.IsRoundableLoose(cellFgType);
 
         if (!TerrainCellLayers.TryGetType(
             cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
