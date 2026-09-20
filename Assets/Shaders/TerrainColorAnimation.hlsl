@@ -83,8 +83,8 @@ float2 AnimateTerrainSampleUV(
     int animationProfile,
     float3 flowSample)
 {
-    // Molten animation is colour-only. Warping atlas UVs exposes the
-    // rectangular tile boundary and makes a lava cell read as a moving square.
+    // Sheet motion is already resolved by TerrainSampling. Do not warp or
+    // clamp the result again within individual cell tiles.
     return atlasUV;
 }
 
@@ -105,6 +105,7 @@ float3 TerrainUnpackRgb24(float packedColor)
 }
 
 #include "TerrainPrismaticCrystal.hlsl"
+#include "TerrainMoltenHeat.hlsl"
 
 // baseColor      — цвет, который анимируется.
 // luminanceSource — по чему считается маска яркости для мерцания. В видимом
@@ -154,9 +155,7 @@ float3 AnimateTerrainColor(
 
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
     {
-        // The authored sheet provides the lava colors; motion is resolved in
-        // TerrainSampling. No independent orange film over the texture.
-        return baseColor;
+        return EvaluateMoltenHeat(baseColor, flowSample, _Time.y * animationSpeed * 0.12);
     }
 
     if (animationType == 1) // Blinking

@@ -12,6 +12,7 @@ namespace Kern.World.Terrain;
 public sealed class TerrainMaterialManager
 {
     private static readonly int _BaseMapPropertyID = Shader.PropertyToID("_BaseMap");
+    private static readonly int _XGreenFacetsPropertyID = Shader.PropertyToID("_XGreenFacets");
     private static readonly int _PrismaticFlowMapPropertyID = Shader.PropertyToID("_PrismaticFlowMap");
     private static readonly int _FlowMapPropertyID = Shader.PropertyToID("_FlowMap");
     private static readonly int _TerrainDecalAtlasPropertyID = Shader.PropertyToID("_TerrainDecalAtlas");
@@ -240,12 +241,14 @@ public sealed class TerrainMaterialManager
                 atlases[i].Texture,
                 textureService.FlowMapTexture,
                 textureService.PrismaticFlowMapTexture,
+                textureService.XGreenFacetsTexture,
                 textureService.TerrainDecalAtlasTexture);
             BindAtlas(
                 _overlayMaterials[i],
                 atlases[i].Texture,
                 textureService.FlowMapTexture,
                 textureService.PrismaticFlowMapTexture,
+                textureService.XGreenFacetsTexture,
                 textureService.TerrainDecalAtlasTexture);
             if (_cellMaterials.Length > 0 && i < _TerrainAtlasPropertyIDs.Length &&
                 _cellMaterials[0].GetTexture(_TerrainAtlasPropertyIDs[i]) != atlases[i].Texture)
@@ -261,6 +264,7 @@ public sealed class TerrainMaterialManager
                 atlases[0].Texture,
                 textureService.FlowMapTexture,
                 textureService.PrismaticFlowMapTexture,
+                textureService.XGreenFacetsTexture,
                 textureService.TerrainDecalAtlasTexture);
         }
     }
@@ -272,6 +276,7 @@ public sealed class TerrainMaterialManager
         Texture? atlas,
         Texture? flowMap,
         Texture? prismaticFlowMap,
+        Texture? xGreenFacets,
         Texture? terrainDecalAtlas)
     {
         if (material.GetTexture(_BaseMapPropertyID) != atlas)
@@ -287,6 +292,11 @@ public sealed class TerrainMaterialManager
         if (material.GetTexture(_PrismaticFlowMapPropertyID) != prismaticFlowMap)
         {
             material.SetTexture(_PrismaticFlowMapPropertyID, prismaticFlowMap);
+        }
+
+        if (material.GetTexture(_XGreenFacetsPropertyID) != xGreenFacets)
+        {
+            material.SetTexture(_XGreenFacetsPropertyID, xGreenFacets);
         }
 
         if (material.GetTexture(_TerrainDecalAtlasPropertyID) != terrainDecalAtlas)
@@ -384,6 +394,7 @@ public sealed class TerrainMaterialManager
             "_BaseMap",
             "_FlowMap",
             "_PrismaticFlowMap",
+            "_XGreenFacets",
             "_TerrainDecalAtlas",
             "_FlowScale",
             "_ShimmerSpeedScale",

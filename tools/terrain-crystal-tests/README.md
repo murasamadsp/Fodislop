@@ -35,3 +35,33 @@ validation, including filtering at the outer sheet wrap.
 The crystal broad band includes dark colored facets (the former linear-luma
 threshold excluded roughly half the authored X-crystal sheet); exact black
 remains black. The numerical bounds test is not a claim of perceptual visibility.
+
+## X-green reflection prototype and molten heat
+
+`bake_facets.py` requires Pillow and derives a 320×320 RGBA8 numerical map from
+`Assets/Textures/Cells/71.png`. Color-connected plateaus receive one of eight
+inclined planes or a flat plane; B masks green mineral, rejecting blue matrix.
+The bake is deterministic and validated against the committed bytes. It is an
+automatic first pass, not an artist-approved normal map.
+
+Only X-green samples this map (400 KiB, Point, no mipmaps). The visible Terrain
+pass adds a reflection using the gradient of solved world irradiance; this is
+an approximate directional cue, not a true ray direction. Flat light gives no
+reflection. Rotated/mirrored UV bases transform the normals with the texture.
+This reflection is deliberately absent from the material/emission pass to avoid
+feeding solved light back into emission. X-green internal modulation is weak and
+restricted to mineral color; other X-crystals retain their current effect.
+
+Incremental cost: one normal-map read per X-green fragment and four light reads
+for masked mineral fragments, plus tangent/normal and narrow specular math.
+Derivative basis calculation has four float2 derivatives in the visible pass.
+No extra draws, dispatches or per-frame allocations. Lava adds one existing
+phase-map sample and one sincos plus polynomial heat math per lava fragment in
+each terrain pass. Heat modulates authored veins; sheet addressing is unchanged.
+
+`reflection.py` executes the actual HLSL with an analytic irradiance fixture,
+checking directional response, mirrored basis, matrix rejection, uniform-light
+rejection and hot/cold lava contrast. These are CPU math checks only. Unity
+compilation, actual texture binding, visual quality and GPU frame time remain
+unverified; inspect an X-green patch while moving a light and a multi-cell lava
+patch before judging this prototype.

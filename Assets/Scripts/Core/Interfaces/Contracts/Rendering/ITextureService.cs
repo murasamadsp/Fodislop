@@ -22,6 +22,7 @@ public interface ITextureService
         CellType cellType,
         int globalX,
         int globalY);
+    Texture2D? XGreenFacetsTexture { get; }
     Texture2D? PrismaticFlowMapTexture { get; }
     Texture2D? FlowMapTexture { get; }
     Texture2D? TerrainDecalAtlasTexture { get; }

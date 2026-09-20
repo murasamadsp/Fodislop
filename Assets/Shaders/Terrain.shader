@@ -6,6 +6,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         // deliberately make a missing injection visible instead of rendering
         // an implicit white/gray world.
         [MainTexture] _BaseMap ("Texture Atlas", 2D) = "black" {}
+        _XGreenFacets ("X Green Facet Normals and Mask", 2D) = "black" {}
         _PrismaticFlowMap ("X Crystal Phase Vectors", 2D) = "black" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
         _TerrainDecalAtlas ("Terrain Decal Atlas", 2D) = "black" {}
@@ -98,6 +99,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            TEXTURE2D(_XGreenFacets);
+            SAMPLER(sampler_XGreenFacets);
             TEXTURE2D(_PrismaticFlowMap);
             SAMPLER(sampler_PrismaticFlowMap);
             TEXTURE2D(_FlowMap);
@@ -179,6 +182,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float saturation = lerp(0.55, 0.9, MissingTextureHash(cell + 43.0));
                 return TerrainHSVToRGB(float3(hue, saturation, value));
             }
+
+            #include "TerrainCrystalReflection.hlsl"
 
             float3 SampleFlowMap(float2 worldPos)
             {
@@ -311,7 +316,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 int animType = (int)(input.animData.x + 0.5);
                 float3 flowSample = 0.0;
-                if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
+                if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL ||
+                    animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
                 {
                     flowSample = SAMPLE_TEXTURE2D(_PrismaticFlowMap, sampler_PrismaticFlowMap,
                         PrismaticCrystalFlowUV(input.worldPos.xy, input.packedData.yz)).rgb;
@@ -363,6 +369,20 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRGB = finalRGB * worldLight.rgb;
+                float2 basisUV = input.packedData.x > 0.5 ? input.packedData.yz : input.uv;
+                float2 uvDx = ddx(basisUV);
+                float2 uvDy = ddy(basisUV);
+                float2 worldDx = ddx(input.worldPosition.xy);
+                float2 worldDy = ddy(input.worldPosition.xy);
+                if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL &&
+                    input.animData.z == 1.0)
+                {
+                    float2 facetUV = (finalUV - input.subAtlasRect.xy) / input.subAtlasRect.zw;
+                    float3 facets = SAMPLE_TEXTURE2D(_XGreenFacets, sampler_XGreenFacets, facetUV).rgb;
+                    litRGB += EvaluateXGreenReflection(facets, input.worldPosition.xy, worldLight.rgb,
+                        uvDx, uvDy, worldDx, worldDy);
+                }
+
 
                 #ifdef KERN_WORLD_LIGHTING
                 litRGB *= KernTerrainAmbientOcclusionMultiplier(
@@ -586,7 +606,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 int albedoAnimationType = (int)(input.animData.x + 0.5);
                 int albedoAnimationProfile = (int)(input.animData.w + 0.5);
                 float3 flowSample = 0.0;
-                if (albedoAnimationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
+                if (albedoAnimationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL ||
+                    albedoAnimationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
                 {
                     flowSample = SAMPLE_TEXTURE2D(_PrismaticFlowMap, sampler_PrismaticFlowMap,
                         PrismaticCrystalFlowUV(input.worldPos.xy, input.packedData.yz)).rgb;

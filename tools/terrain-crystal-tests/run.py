@@ -62,3 +62,5 @@ with tempfile.TemporaryDirectory(prefix='kern-crystal-') as tmp:
 print('Phase asset reproducible; periodic seams passed; wrong-Y mutation rejected.')
 
 subprocess.run(['python3', str(Path(__file__).parent / 'lava.py')], check=True)
+
+subprocess.run(['python3', str(Path(__file__).parent / 'reflection.py')], check=True)

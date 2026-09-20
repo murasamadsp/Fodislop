@@ -32,6 +32,14 @@ float3 EvaluatePrismaticCrystal(float3 baseColor, float3 flowSample, float palet
     crest *= crest;
     crest *= crest;
 
+    if (paletteIndex == 1.0)
+    {
+        // X-green prototype: preserve the matrix; weak internal modulation
+        // belongs to mineral pixels only. Reflections are added after lighting.
+        float mineral = saturate((baseColor.g - max(baseColor.r, baseColor.b)) * 4.0);
+        return baseColor * (1.0 + mineral * band * 0.08);
+    }
+
     // A broad chromatic band remains visible on dark facets. Exact black
     // stays black, while local crests emphasize the authored bright facets.
     float luminance = dot(baseColor, float3(0.299, 0.587, 0.114));

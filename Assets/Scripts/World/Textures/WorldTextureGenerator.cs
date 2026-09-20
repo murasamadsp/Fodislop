@@ -9,27 +9,37 @@ public static class WorldTextureGenerator
 {
     public static Texture2D CreatePrismaticFlowMap()
     {
-        const int width = 160;
-        const int height = 128;
-        TextAsset data = Resources.Load<TextAsset>(Kern.Core.ProjectRuntimeContracts.ResourcePaths.PrismaticFlowMap);
+        return LoadNumericalTexture(
+            Kern.Core.ProjectRuntimeContracts.ResourcePaths.PrismaticFlowMap, 160, 128, FilterMode.Bilinear);
+    }
+
+    public static Texture2D CreateXGreenFacets()
+    {
+        return LoadNumericalTexture(
+            Kern.Core.ProjectRuntimeContracts.ResourcePaths.XGreenFacets, 320, 320, FilterMode.Point);
+    }
+
+    private static Texture2D LoadNumericalTexture(string resource, int width, int height, FilterMode filter)
+    {
+        TextAsset data = Resources.Load<TextAsset>(resource);
         if (data == null)
         {
-            throw new System.InvalidOperationException("Missing X-crystal phase map.");
+            throw new System.InvalidOperationException($"Missing numerical terrain texture: {resource}.");
         }
 
         byte[] pixels = data.bytes;
         Resources.UnloadAsset(data);
         if (pixels.Length != width * height * 4)
         {
-            throw new System.InvalidOperationException("Invalid X-crystal phase map dimensions.");
+            throw new System.InvalidOperationException($"Invalid numerical terrain texture dimensions: {resource}.");
         }
 
         var texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             width,
             height,
-            "PrismaticFlowMap",
+            resource,
             RuntimeTextureColorSpace.Linear,
-            FilterMode.Bilinear,
+            filter,
             TextureWrapMode.Repeat);
         texture.LoadRawTextureData(pixels);
         texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
