@@ -18,6 +18,7 @@ Texture2D<float4> _InputTex;
 Texture2D<float4> _SourceTex;
 Texture2D<float4> _BaseTex;
 Texture2D<float4> _BloomTex;
+Texture2D<float4> _EmissionTex;
 Texture2D<float4> _HistoryTex;
 
 RWTexture2D<float4> _DestTex;
@@ -37,6 +38,7 @@ float _BloomRadius;
 float _BloomScatter;
 float4 _BloomTint;
 float _BloomIntensity;
+float4 _ScreenToEmission; // xy = scale, zw = offset from screen UV to emission field UV
 
 float _VignetteIntensity;
 float4 _VignetteColor;
@@ -327,81 +329,32 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
     if (id.x >= (uint)_ScreenSize.x || id.y >= (uint)_ScreenSize.y) return;
 
     float2 uv = (id.xy + 0.5) * _ScreenSize.zw;
+    float2 emissionUv = uv * _ScreenToEmission.xy + _ScreenToEmission.zw;
 
-    // Prefilter directly to half resolution. Four source taps retain small
-    // emissive sprites without paying for a separate full-resolution pass.
-    float2 halfTexel = _SourceTexelSize.xy * 0.5;
-    float4 sample0 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2(-halfTexel.x, -halfTexel.y),
-        0);
-    float4 sample1 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2( halfTexel.x, -halfTexel.y),
-        0);
-    float4 sample2 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2(-halfTexel.x,  halfTexel.y),
-        0);
-    float4 sample3 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2( halfTexel.x,  halfTexel.y),
-        0);
-    float3 workingBloom = sample0.rgb + sample1.rgb + sample2.rgb + sample3.rgb;
-    float4 color = float4(
-        workingBloom * 0.25,
-        (sample0.a + sample1.a + sample2.a + sample3.a) * 0.25);
+    // Reject pixels outside the world emission field
+    if (any(emissionUv < 0.0) || any(emissionUv > 1.0))
+    {
+        _DestTex[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
 
-    float lum = Luminance(color.rgb);
+    float4 emissionSample = _EmissionTex.SampleLevel(sampler_LinearClamp, emissionUv, 0);
 
-    // ------------------------------------------------------------------
-    // Яркостный отбор идёт по превышению над локальным фоном, а не по
-    // абсолютному порогу.
-    //
-    // ЗАЧЕМ. CompositeLighting пишет `ambient + directAndBounce` без всякого
-    // потолка: освещённость плавно растёт по мере приближения к источнику и
-    // переваливает любой абсолютный порог посреди ровного террейна. Порог
-    // 1.1 поэтому резал картинку по линии равной освещённости — светилась
-    // «половина блоков», и набор этих блоков менялся с каждым шагом игрока.
-    // Опустить порог ниже 1.0 значило зажечь весь освещённый кадр разом.
-    //
-    // Превышение над фоном лишено обоих недостатков: ровно освещённая стена
-    // не даёт превышения ни при какой яркости источника, а сам источник даёт его
-    // всегда, потому что он ярче собственного окружения. Светятся источники
-    // света, а не то, что ими освещено, — что и значит слово bloom.
-    //
-    // Фон берётся косым крестом из четырёх выборок, а не кольцом из восьми.
-    //
-    // Восемь было перестраховкой и стоило вчетверо дороже самой пирамиды:
-    // 8 чтений на пиксель половинного разрешения — это ~13 млн чтений на кадр
-    // 3420x1890, тогда как все четыре уровня Kawase вместе стоят ~3 млн.
-    // Точность оценки фона столько не стоит: она всё равно размывается всей
-    // последующей пирамидой, а промах в ней сдвигает лишь мягкий край отбора.
-    // Каждая выборка билинейна, то есть уже усредняет 2x2 текселя, и косой
-    // крест покрывает обе диагонали — направленного смещения не даёт.
-    float2 backgroundStep = _SourceTexelSize.xy * 8.0;
-    const float diagonal = 0.70710678;
-    float background =
-        Luminance(_InputTex.SampleLevel(
-            sampler_LinearClamp, uv + float2( diagonal,  diagonal) * backgroundStep, 0).rgb) +
-        Luminance(_InputTex.SampleLevel(
-            sampler_LinearClamp, uv + float2(-diagonal,  diagonal) * backgroundStep, 0).rgb) +
-        Luminance(_InputTex.SampleLevel(
-            sampler_LinearClamp, uv + float2( diagonal, -diagonal) * backgroundStep, 0).rgb) +
-        Luminance(_InputTex.SampleLevel(
-            sampler_LinearClamp, uv + float2(-diagonal, -diagonal) * backgroundStep, 0).rgb);
+    // Блум разрешён ТОЛЬКО для блоков с эмиссией (руды, кристаллы, светящиеся блоки).
+    // Неэмиссионные поверхности (стены, пол, роботы, UI) отсекаются мгновенно без
+    // чтений входного HDR-буфера и без дорогой оценки локального фона.
+    if (emissionSample.a <= 0.001)
+    {
+        _DestTex[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
 
-    background *= 0.25;
+    // Чтение источника выполняется ТОЛЬКО для подтверждённых блоков с эмиссией:
+    float4 sourceColor = _InputTex.SampleLevel(sampler_LinearClamp, uv, 0);
+    float emissionStrength = saturate(emissionSample.a * 4.0);
 
-    // _BloomThreshold теперь во сколько раз пиксель обязан превзойти свой фон.
-    // Ниже единицы порог лишён смысла: он зажёг бы сам ровный фон.
-    float relativeThreshold = max(_BloomThreshold, 1.0);
-    float floorLevel = background * relativeThreshold;
-    float knee = max(floorLevel * _BloomSoftKnee, 0.0001);
-    float soft = clamp(lum - floorLevel + knee, 0.0, 2.0 * knee);
-    soft = soft * soft / (4.0 * knee + 0.0001);
-    float contribution = max(lum - floorLevel, soft) / max(lum, 0.0001);
-    float3 brightColor = color.rgb * saturate(contribution);
+    // Свечение формируется из цвета блока на экране, поддержанного authored-эмиссией
+    float3 brightColor = max(sourceColor.rgb, emissionSample.rgb * 4.0) * emissionStrength;
 
     // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
     // целиком: один такой пиксель на входе даёт серое полотно на выходе.
@@ -410,7 +363,7 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
     brightColor = min(max(brightColor, 0.0), 65504.0);
     brightColor = any(brightColor != brightColor) ? float3(0.0, 0.0, 0.0) : brightColor;
 
-    _DestTex[id.xy] = float4(brightColor * _BloomTint.rgb, color.a);
+    _DestTex[id.xy] = float4(brightColor * _BloomTint.rgb, emissionStrength);
 }
 
 [numthreads(8, 8, 1)]

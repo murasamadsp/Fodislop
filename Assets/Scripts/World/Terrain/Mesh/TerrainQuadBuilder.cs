@@ -74,19 +74,18 @@ internal static class TerrainQuadBuilder
             return -1;
         }
 
-        CellType cellType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
-
+        CellType backgroundType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
         if (isBackground && IsBuildingBlock(cellFgType) && (ccd.Properties & CellConfigProperties.Passable) != 0)
         {
-            cellType = CellType.Road;
+            backgroundType = CellType.Road;
         }
 
-        bool isSameCell = !isBackground || cellType == cellFgType;
-
-        if (isBackground && (cellType == cellFgType || cellType == CellType.Unloaded))
+        if (!TerrainCellLayers.TryGetType(cellFgType, backgroundType, isBackground, out CellType cellType))
         {
             return -1;
         }
+
+        bool isSameCell = !isBackground || cellType == cellFgType;
 
         CellRenderProperties renderProps = GetRenderProperties(
             isSameCell,

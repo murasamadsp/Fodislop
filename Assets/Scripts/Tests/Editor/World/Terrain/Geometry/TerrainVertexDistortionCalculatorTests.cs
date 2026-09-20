@@ -149,4 +149,62 @@ public class TerrainVertexDistortionCalculatorTests
         Assert.That(result.y, Is.EqualTo(-3f / 32f).Within(0.000001f));
         Assert.That(result.z, Is.EqualTo(6f / 32f).Within(0.000001f));
     }
+    [TestCase(CellType.BlackBoulder1)]
+    [TestCase(CellType.BlackBoulder2)]
+    [TestCase(CellType.BlackBoulder3)]
+    [TestCase(CellType.MetalBoulder1)]
+    [TestCase(CellType.MetalBoulder2)]
+    [TestCase(CellType.MetalBoulder3)]
+    [TestCase(CellType.Boulder1)]
+    [TestCase(CellType.Boulder2)]
+    [TestCase(CellType.Boulder3)]
+    [TestCase(CellType.DeepMagmaBoulder)]
+    [TestCase(CellType.AliveCyan)]
+    [TestCase(CellType.AliveRed)]
+    [TestCase(CellType.AliveViol)]
+    [TestCase(CellType.AliveNigger)]
+    [TestCase(CellType.AliveWhite)]
+    [TestCase(CellType.AliveRainbow)]
+    [TestCase(CellType.AliveBlue)]
+    [TestCase(CellType.QuadBlock)]
+    [TestCase(CellType.Support)]
+    [TestCase(CellType.MilitaryBlockFrame)]
+    [TestCase(CellType.MilitaryBlock)]
+    [TestCase(CellType.GreenBlock)]
+    [TestCase(CellType.YellowBlock)]
+    [TestCase(CellType.FedBlock)]
+    [TestCase(CellType.RedBlock)]
+    [TestCase(CellType.BuildingWall)]
+    [TestCase(CellType.BuildingDoor)]
+    [TestCase(CellType.BuildingCorner)]
+    [TestCase(CellType.BuildingRoad)]
+    [TestCase(CellType.Gate)]
+    [TestCase(CellType.TeleportBlock)]
+    [TestCase(CellType.Box)]
+    public void FixedSilhouettePinsEverySharedCornerEvenWithServerCauseFlag(CellType type)
+    {
+        foreach (CellDistortionType configured in new[] { CellDistortionType.Neutral, CellDistortionType.Cause })
+        {
+            var fixedCell = new CachedCellData { Type = type, Distortion = configured };
+            Assert.That(TerrainVertexDistortionCalculator.IsCause(fixedCell), Is.False);
+            for (int corner = 0; corner < 4; corner++)
+            {
+                var cells = new CachedCellData[4];
+                cells[corner] = fixedCell;
+                cells[(corner + 1) % 4] = new CachedCellData
+                {
+                    Type = CellType.Green,
+                    Distortion = CellDistortionType.Cause,
+                };
+                for (int seed = 1; seed <= 16; seed++)
+                {
+                    TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(
+                        cells[0], cells[1], cells[2], cells[3], seed * 17, seed * 29);
+                    Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero),
+                        $"{type}, config {configured}, shared corner {corner}, seed {seed}");
+                }
+            }
+        }
+    }
+
 }

@@ -257,12 +257,14 @@ public sealed class TerrainVertexDistortionCalculator
 
     public static bool IsCause(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Cause;
+        return data.Distortion == CellDistortionType.Cause &&
+            !MapCellConfigCatalog.HasFixedTerrainGeometry(data.Type);
     }
 
     public static bool IsBlock(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Block;
+        return data.Distortion == CellDistortionType.Block ||
+            MapCellConfigCatalog.HasFixedTerrainGeometry(data.Type);
     }
 
     public static bool IsRoundableLoose(CachedCellData data)

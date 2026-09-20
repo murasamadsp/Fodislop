@@ -144,8 +144,11 @@ internal static class PostProcessPassExecutor
             data.PostProcessCS,
             SourceTexelSizeID,
             new Vector4(1f / width, 1f / height, width, height));
+        cmd.SetComputeVectorParam(data.PostProcessCS, ScreenToEmissionID, data.ScreenToEmission);
+        Texture emissionTex = Shader.GetGlobalTexture(WorldEmissionTextureID) ?? Texture2D.blackTexture;
         cmd.BeginSample("Kern.PostProcess.Bloom.Prefilter");
         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, InputTexID, data.ColorTexture);
+        cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, EmissionTexID, emissionTex);
         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, DestTexID, data.BloomPrefilterTexture);
         cmd.DispatchCompute(
             data.PostProcessCS,

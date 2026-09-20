@@ -25,6 +25,7 @@ internal sealed class LightingPresentation
         Shader.PropertyToID("_WorldAmbientOcclusionYFlip");
     private static readonly int _worldAmbientOcclusionTexelsPerCellID =
         Shader.PropertyToID("_WorldAmbientOcclusionTexelsPerCell");
+    private static readonly int _worldEmissionTextureID = Shader.PropertyToID("_WorldEmissionTexture");
 
     private readonly LightingResourceManager _resources;
     private bool _disabledStatePublished;
@@ -58,6 +59,7 @@ internal sealed class LightingPresentation
         Shader.SetGlobalInteger(_worldAmbientOcclusionYFlipID, 0);
         Shader.SetGlobalFloat(_worldAmbientOcclusionTexelsPerCellID, 1f);
         Shader.SetGlobalFloat(_worldEmissionScaleID, LightingConfigHolder.EmissionScale);
+        Shader.SetGlobalTexture(_worldEmissionTextureID, Texture2D.blackTexture);
         _disabledStatePublished = true;
     }
 
@@ -83,6 +85,9 @@ internal sealed class LightingPresentation
         _disabledStatePublished = false;
         Shader.SetGlobalTexture(_worldLightTextureID, lightmap);
         Shader.SetGlobalTexture(_worldAmbientOcclusionTextureID, ambientOcclusion);
+        Shader.SetGlobalTexture(
+            _worldEmissionTextureID,
+            (Texture?)_resources.StaticEmissionField ?? Texture2D.blackTexture);
         Shader.SetGlobalInteger(
             _worldAmbientOcclusionYFlipID,
             SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
