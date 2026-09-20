@@ -15,8 +15,6 @@ public enum TerrainDecalFamily : byte
 
 public static class TerrainDecalCatalog
 {
-    public const int VariantCount = 16;
-
     private const uint PlacementPercent = 30;
 
     public static int GetPackedPlacement(CellType cellType, int worldX, int serverY)
@@ -41,15 +39,15 @@ public static class TerrainDecalCatalog
             TerrainDecalFamily.Stone => (int)(hash % 4u) * 2,
             TerrainDecalFamily.Sand => (int)(hash % 4u) * 2 + 1,
             TerrainDecalFamily.Road => (int)(hash % 8u),
-            TerrainDecalFamily.Ground => (int)(hash % VariantCount),
+            TerrainDecalFamily.Ground => (int)(hash % 8u),
             _ => 0,
         };
         int rotation = (int)((hash >> 8) & 3u);
         int mirror = (int)((hash >> 10) & 1u);
         int offsetX = (int)((hash >> 12) & 3u);
         int offsetY = (int)((hash >> 14) & 3u);
-        return 1 + variant + (rotation << 4) + (mirror << 6) +
-            (offsetX << 7) + (offsetY << 9);
+        return 1 + variant + (rotation << 3) + (mirror << 5) +
+            (offsetX << 6) + (offsetY << 8);
     }
 
     public static bool IsGroundSurface(CellType cellType) =>
