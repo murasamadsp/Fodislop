@@ -47,6 +47,9 @@
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainMeshScroller.cs" Link="Game/TerrainMeshScroller.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainCellMaskCalculator.cs" Link="Game/TerrainCellMaskCalculator.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainVertexDistortionCalculator.cs" Link="Game/TerrainVertexDistortionCalculator.cs" />
+    <Compile Include="$(Game)/World/Common/Contracts/RenderingConstants.cs" Link="Game/RenderingConstants.cs" />
+    <Compile Include="$(Game)/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
+    <Compile Include="$(Game)/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainAnimationProfile.cs" Link="Game/TerrainAnimationProfile.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainDecalCatalog.cs" Link="Game/TerrainDecalCatalog.cs" />
     <Compile Include="$(Game)/World/Terrain/Gpu/TerrainCellDataPacker.cs" Link="Game/TerrainCellDataPacker.cs" />

@@ -45,5 +45,8 @@
     <Compile Include="../../Assets/Scripts/World/Common/TileBitmaskConverter.cs" Link="Game/TileBitmaskConverter.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainCellMaskCalculator.cs" Link="Game/TerrainCellMaskCalculator.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainVertexDistortionCalculator.cs" Link="Game/TerrainVertexDistortionCalculator.cs" />
+    <Compile Include="../../Assets/Scripts/World/Common/Contracts/RenderingConstants.cs" Link="Game/RenderingConstants.cs" />
+    <Compile Include="../../Assets/Scripts/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
+    <Compile Include="../../Assets/Scripts/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
   </ItemGroup>
 </Project>

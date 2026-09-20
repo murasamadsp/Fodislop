@@ -56,6 +56,33 @@ public class TerrainVertexDistortionCalculatorTests
     }
 
     [Test]
+    public void ComputeOffset_RoundableLooseCell_ReturnsZero()
+    {
+        var cause = new CachedCellData
+        {
+            Distortion = CellDistortionType.Cause,
+            Type = CellType.Rock,
+        };
+        var lava = new CachedCellData
+        {
+            Distortion = CellDistortionType.Cause,
+            Type = CellType.Lava,
+        };
+
+        TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(
+            lava,
+            cause,
+            cause,
+            cause,
+            10,
+            10,
+            100,
+            100);
+
+        Assert.AreEqual(TerrainVertexOffset.Zero, result);
+    }
+
+    [Test]
     public void ComputeOffset_AllFourAreCause_ReturnsZero()
     {
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };

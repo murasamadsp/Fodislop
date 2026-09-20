@@ -185,6 +185,15 @@ public sealed class TerrainVertexDistortionCalculator
             return TerrainVertexOffset.Zero;
         }
 
+        // Loose cells have their own single-cell contour in the terrain
+        // shader. A shared node offset here would apply a second distortion to
+        // the same cell and produce stretched lava/sand silhouettes.
+        if (IsRoundableLoose(tl) || IsRoundableLoose(tr) ||
+            IsRoundableLoose(bl) || IsRoundableLoose(br))
+        {
+            return TerrainVertexOffset.Zero;
+        }
+
         int rx = (int)RandXd(worldX, worldY);
         int ry = (int)RandYd(worldX, worldY);
 
@@ -254,6 +263,11 @@ public sealed class TerrainVertexDistortionCalculator
     public static bool IsBlock(CachedCellData data)
     {
         return data.Distortion == CellDistortionType.Block;
+    }
+
+    public static bool IsRoundableLoose(CachedCellData data)
+    {
+        return MapCellConfigCatalog.IsRoundableLoose(data.Type);
     }
 
     public static float RandXd(int x, int y)
