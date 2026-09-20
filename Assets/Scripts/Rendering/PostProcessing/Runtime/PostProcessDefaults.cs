@@ -21,13 +21,13 @@ public static class PostProcessDefaults
     // Порог теперь относительный: во сколько раз пиксель обязан превзойти
     // собственный локальный фон. Значения ниже единицы лишены смысла — они
     // зажгли бы сам фон, — поэтому нижняя граница равна единице, а не нулю.
-    public static ClampedFloatParameter BloomThreshold() => new(1.6f, 1f, 8f);
+    public static ClampedFloatParameter BloomThreshold() => new(1.1f, 0.5f, 8f);
 
     public static ClampedFloatParameter BloomSoftKnee() => new(0.5f, 0f, 1f);
 
-    public static ClampedFloatParameter BloomRadius() => new(3f, 0.5f, 8f);
+    public static ClampedFloatParameter BloomRadius() => new(1.5f, 0.5f, 8f);
 
-    public static ClampedFloatParameter BloomScatter() => new(0.1f, 0.1f, 1f);
+    public static ClampedFloatParameter BloomScatter() => new(0.35f, 0.1f, 1f);
 
     public static ColorParameter BloomTint() => new(Color.white);
 

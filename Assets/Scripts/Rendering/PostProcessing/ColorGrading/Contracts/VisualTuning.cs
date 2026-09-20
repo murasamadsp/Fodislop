@@ -8,20 +8,11 @@ namespace Kern.Rendering.PostProcessing
     {
         public static class Bloom
         {
-            public const float Intensity = 0.7f;
-
-            // Во сколько раз пиксель обязан превзойти свой локальный фон.
-            // Абсолютного порога здесь больше нет: освещённость не ограничена
-            // сверху (CompositeLighting пишет `ambient + directAndBounce` без
-            // потолка), и любое абсолютное число резало кадр по линии равной
-            // освещённости — светилась «половина блоков», а порог ниже 1.0
-            // зажигал весь освещённый кадр.
-            public const float Threshold = 1.6f;
+            public const float Intensity = 0.35f;
+            public const float Threshold = 1.1f;
             public const float SoftKnee = 0.5f;
-            public const float Radius = 3f;
-            // Шире прежнего: пирамида стала глубже, и рассеяние теперь
-            // распределяет свет по пяти уровням, а не по двум.
-            public const float Scatter = 0.7f;
+            public const float Radius = 1.5f;
+            public const float Scatter = 0.35f;
 
             public static Color Tint => Color.white;
         }

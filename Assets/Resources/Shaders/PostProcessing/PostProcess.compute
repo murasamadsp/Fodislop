@@ -338,32 +338,31 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    float4 emissionSample = _EmissionTex.SampleLevel(sampler_LinearClamp, emissionUv, 0);
+    // Point-выборка гарантирует чёткую границу клетки: пустые соседи не получают паразитного ореола
+    float4 emissionSample = _EmissionTex.SampleLevel(sampler_PointClamp, emissionUv, 0);
 
     // Блум разрешён ТОЛЬКО для блоков с эмиссией (руды, кристаллы, светящиеся блоки).
     // Неэмиссионные поверхности (стены, пол, роботы, UI) отсекаются мгновенно без
-    // чтений входного HDR-буфера и без дорогой оценки локального фона.
+    // чтений входного HDR-буфера.
     if (emissionSample.a <= 0.001)
     {
         _DestTex[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
         return;
     }
 
-    // Чтение источника выполняется ТОЛЬКО для подтверждённых блоков с эмиссией:
-    float4 sourceColor = _InputTex.SampleLevel(sampler_LinearClamp, uv, 0);
-    float emissionStrength = saturate(emissionSample.a * 4.0);
+    float4 sourceColor = _InputTex.SampleLevel(sampler_PointClamp, uv, 0);
+    float lum = Luminance(sourceColor.rgb);
 
-    // Свечение формируется из цвета блока на экране, поддержанного authored-эмиссией
-    float3 brightColor = max(sourceColor.rgb, emissionSample.rgb * 4.0) * emissionStrength;
-
-    // Порог и плавный переход для управления откликом блума от эмиссии
-    float brightness = max(Luminance(brightColor), 1e-4);
-    float knee = max(_BloomThreshold * _BloomSoftKnee, 1e-4);
-    float excess = max(0.0, brightness - (_BloomThreshold - 1.0));
-    float soft = clamp(excess - 1.0 + knee, 0.0, 2.0 * knee);
+    // Плавная кривая отсечки (мягкое колено): отбирает только яркие пики и блики
+    float threshold = _BloomThreshold;
+    float knee = max(threshold * _BloomSoftKnee, 1e-4);
+    float soft = lum - threshold + knee;
+    soft = clamp(soft, 0.0, 2.0 * knee);
     soft = (soft * soft) / (4.0 * knee);
-    float weight = max(soft, excess) / brightness;
-    brightColor *= saturate(weight);
+    float weight = max(soft, lum - threshold) / max(lum, 1e-4);
+
+    // Отбирается только чистое превышение яркости с сохранением сочного цвета и силы эмиссии
+    float3 brightColor = sourceColor.rgb * saturate(weight) * saturate(emissionSample.a);
 
     // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
     // целиком: один такой пиксель на входе даёт серое полотно на выходе.
@@ -372,7 +371,7 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
     brightColor = min(max(brightColor, 0.0), 65504.0);
     brightColor = any(brightColor != brightColor) ? float3(0.0, 0.0, 0.0) : brightColor;
 
-    _DestTex[id.xy] = float4(brightColor * _BloomTint.rgb, emissionStrength);
+    _DestTex[id.xy] = float4(brightColor * _BloomTint.rgb, sourceColor.a);
 }
 
 [numthreads(8, 8, 1)]
