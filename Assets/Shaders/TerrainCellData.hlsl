@@ -46,8 +46,6 @@ struct TerrainCellVertex
     float4 animData;
     float4 packedData;
     float4 glowData;
-    float4 geometryCornersX;
-    float4 geometryCornersY;
     float atlasIndex;
     float layer;
 };
@@ -127,17 +125,6 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
             : (cornerStep.x == 1 ? offset11 : offset01);
     }
     v.packedData = float4(anchored ? 1.0 : 0.0, cornerBase + offset.xy, 0.0);
-    v.geometryCornersX = float4(
-        offset00.x,
-        1.0 + offset10.x,
-        1.0 + offset11.x,
-        offset01.x);
-    v.geometryCornersY = float4(
-        offset00.y,
-        offset10.y,
-        1.0 + offset11.y,
-        1.0 + offset01.y);
-
     float cellSize = _TerrainCellGridSize.z;
     v.positionOS = float3(
         (x + cornerBase.x) * cellSize,

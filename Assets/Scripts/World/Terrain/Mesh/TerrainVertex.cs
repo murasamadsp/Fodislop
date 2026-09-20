@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
-[StructLayout(LayoutKind.Explicit, Size = 100)]
+[StructLayout(LayoutKind.Explicit, Size = 84)]
 public struct TerrainVertex
 {
     // ── Float32 ────────────────────────────────────── offset  bytes
@@ -46,10 +46,8 @@ public struct TerrainVertex
 
     // ── Float32 (packed RGB color reaches 16 777 215) ──
     [FieldOffset(68)] public Vector4 UV6;          // 68    16
-    // ── Float32 (four packed pairs of quantized geometry coordinates) ──
-    [FieldOffset(84)] public Vector4 UV7;          // 84    16
     //                                             ───────────
-    //                                             total  100
+    //                                             total   84
 
     // ── Write-only properties: float → half ───────────────
 
@@ -127,22 +125,4 @@ public struct TerrainVertex
         return (ushort)(sign | (exp << 10) | (mantissa >> 13));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float PackGeometryPair(float first, float second)
-    {
-        const int gridSize = 32;
-        const int bias = 2048;
-        const int range = 4096;
-        int firstSteps = Mathf.RoundToInt(first * gridSize);
-        int secondSteps = Mathf.RoundToInt(second * gridSize);
-        if ((uint)(firstSteps + bias) >= range ||
-            (uint)(secondSteps + bias) >= range)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(first),
-                "Terrain geometry coordinate is outside the packed range.");
-        }
-
-        return ((firstSteps + bias) * range) + secondSteps + bias;
-    }
 }

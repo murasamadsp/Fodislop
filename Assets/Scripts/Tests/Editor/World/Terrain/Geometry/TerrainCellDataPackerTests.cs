@@ -120,33 +120,8 @@ public class TerrainCellDataPackerTests
     }
 
     [Test]
-    public void VertexStrideIncludesGeometryCornerChannels()
+    public void VertexStrideMatchesMeshLayout()
     {
-        Assert.That(Marshal.SizeOf<TerrainVertex>(), Is.EqualTo(100));
-    }
-
-    [Test]
-    public void GeometryCornerChannelsPreserveQuantizedCoordinates()
-    {
-        TerrainVertex vertex = default;
-        vertex.UV7 = new Vector4(
-            TerrainVertex.PackGeometryPair(-0.125f, 1.03125f),
-            TerrainVertex.PackGeometryPair(0.96875f, 0f),
-            TerrainVertex.PackGeometryPair(0f, -0.03125f),
-            TerrainVertex.PackGeometryPair(1.0625f, 0.96875f));
-
-        Assert.That(UnpackGeometryPair(vertex.UV7.x), Is.EqualTo(new Vector2(-0.125f, 1.03125f)));
-        Assert.That(UnpackGeometryPair(vertex.UV7.y), Is.EqualTo(new Vector2(0.96875f, 0f)));
-        Assert.That(UnpackGeometryPair(vertex.UV7.z), Is.EqualTo(new Vector2(0f, -0.03125f)));
-        Assert.That(UnpackGeometryPair(vertex.UV7.w), Is.EqualTo(new Vector2(1.0625f, 0.96875f)));
-    }
-
-    private static Vector2 UnpackGeometryPair(float packed)
-    {
-        const int bias = 2048;
-        const int range = 4096;
-        int high = Mathf.FloorToInt(packed / range);
-        int low = (int)packed - (high * range);
-        return new((high - bias) / 32f, (low - bias) / 32f);
+        Assert.That(Marshal.SizeOf<TerrainVertex>(), Is.EqualTo(84));
     }
 }
