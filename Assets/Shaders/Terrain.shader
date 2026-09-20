@@ -58,6 +58,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/TerrainAmbientOcclusion.hlsl"
             #include "Assets/Shaders/PixelArtFiltering.hlsl"
             #include "Assets/Shaders/WorldLightSampling.hlsl"
+            #include "Assets/Shaders/TerrainDebugView.hlsl"
             #include "Assets/Shaders/TerrainAtlasSampling.hlsl"
             #include "Assets/Shaders/TerrainSampling.hlsl"
             #include "Assets/Shaders/TerrainContour.hlsl"
@@ -276,6 +277,33 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #if defined(KERN_TERRAIN_CELLS)
                 clip(cellCoverage - 0.5);
             #endif
+                if (KernTerrainDebugActive())
+                {
+                    float debugOcclusion = 1.0;
+                    #ifdef KERN_WORLD_LIGHTING
+                    debugOcclusion = KernTerrainAmbientOcclusionMultiplier(
+                        input.glowData.y,
+                        input.worldPosition.xy,
+                        _WorldLightRect);
+                    #endif
+                    float debugForeground = 1.0;
+                #if defined(KERN_TERRAIN_CELLS)
+                    debugForeground = input.isForeground;
+                #endif
+                    return half4(
+                        KernTerrainDebugColor(
+                            contourUV,
+                            input.packedData.yz,
+                            input.glowData.z,
+                            input.glowData.y,
+                            cellCoverage,
+                            input.packedData.x,
+                            debugForeground,
+                            input.worldPos.z,
+                            debugOcclusion),
+                        1.0);
+                }
+
                 if (input.subAtlasRect.z < 0.0001)
                 {
                     if (input.color.a < 0.05)

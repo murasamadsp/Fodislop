@@ -46,7 +46,7 @@ namespace Kern.UI
         private Kern.World.Terrain.TerrainRenderer _terrainRenderer = null!;
 
         private readonly WorldGizmoOptions _gizmos = new();
-        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[8];
+        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[9];
         private RenderBypassWindow? _bypassWindow;
         private bool _registered;
 
@@ -152,6 +152,7 @@ namespace Kern.UI
             var breakdown = new FrameBreakdownWindow();
             var packets = new PacketTrafficWindow();
             var color = new ColorOutputWindow(_clientConfig, _displayManager, _lighting);
+            var terrainDebug = new TerrainDebugWindow(_terrainRenderer);
             _bypassWindow = bypass;
             _ownedWindows[0] = toolbar;
             _ownedWindows[1] = stats;
@@ -161,6 +162,7 @@ namespace Kern.UI
             _ownedWindows[5] = breakdown;
             _ownedWindows[6] = packets;
             _ownedWindows[7] = color;
+            _ownedWindows[8] = terrainDebug;
 
             foreach (ToolWindow? window in _ownedWindows)
             {
