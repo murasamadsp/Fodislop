@@ -15,7 +15,6 @@ public sealed class TerrainDecalCatalogTests
     [TestCase(CellType.DarkBlueSand, 2)]
     [TestCase(CellType.Road, 3)]
     [TestCase(CellType.Empty, 4)]
-    [TestCase(CellType.BackgroundWithHeavyTraces, 4)]
     [TestCase(CellType.Lava, 0)]
     [TestCase(CellType.XGreen, 0)]
     [TestCase(CellType.Green, 0)]
@@ -58,8 +57,8 @@ public sealed class TerrainDecalCatalogTests
     [Test]
     public void IsBackgroundSurface_ExcludesSolidForeground()
     {
-        Assert.That(TerrainDecalCatalog.IsBackgroundSurface(CellType.Empty), Is.True);
-        Assert.That(TerrainDecalCatalog.IsBackgroundSurface(CellType.Rock), Is.False);
-        Assert.That(TerrainDecalCatalog.IsBackgroundSurface(CellType.Lava), Is.False);
+        Assert.That(TerrainDecalCatalog.IsGroundSurface(CellType.Empty), Is.True);
+        Assert.That(TerrainDecalCatalog.IsGroundSurface(CellType.Rock), Is.False);
+        Assert.That(TerrainDecalCatalog.IsGroundSurface(CellType.Lava), Is.False);
     }
 }
