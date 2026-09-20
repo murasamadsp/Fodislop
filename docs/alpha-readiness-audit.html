@@ -39,9 +39,13 @@
 <p class="small">Проверка: <code>rg -n 'Aggression|aggression|Agression|EnableAggression|DisableAggression' Assets</code> не вернул строк.</p>
 </div>
 <div class="card warning">
-<h3>CI не является обязательным непрерывным гейтом</h3>
-<p>Workflow содержит только <code>workflow_dispatch</code>; push, pull_request и schedule отключены комментарием. Поэтому архитектура, тесты, soak и production-сборки не проверяются автоматически при изменениях.</p>
+<h3>Результаты CI ещё не получены</h3>
+<p>Workflow теперь запускается на push, pull_request и nightly schedule. Фактические Unity-тесты, soak и production-сборки ещё не получены из CI.</p>
 <p class="small">Доказательство: <a href="../.github/workflows/ci.yml">ci.yml</a>, строки 3–8.</p>
+</div>
+<div class="card danger">
+<h3>Release-сборка намеренно остановится до настройки endpoint</h3>
+<p>Добавлен <code>ProductionServerEndpointValidator</code>: Windows x64 и macOS ARM64 не соберутся с dummy transport, localhost/loopback или недопустимым портом. Сейчас validator закономерно отклонит сборку, потому что production host отсутствует.</p>
 </div>
 
 <h2>Проверка критериев</h2>
@@ -79,7 +83,7 @@
 <tr><td>ArchitectureLinter</td><td class="status partial">PASS с предупреждениями</td><td>51 правил, 12 assemblies; 0 errors и 3 warnings.</td></tr>
 <tr><td>SettingsProbe</td><td class="status ok">PASS внутри линтера</td><td>Проверки defaults/ranges/consumers/localization/audio/graphics завершились OK.</td></tr>
 <tr><td>Unity EditMode/PlayMode</td><td class="status unknown">Не запускался</td><td>Требует явно названной Unity-операции; в CI это self-hosted workflow.</td></tr>
-<tr><td>Windows x64/macOS ARM64 build</td><td class="status unknown">Не запускался</td><td>В workflow jobs существуют, артефактов текущего аудита нет.</td></tr>
+<tr><td>Windows x64/macOS ARM64 build</td><td class="status blocked">Заблокирован endpoint-гейтом</td><td>Jobs существуют, но <code>ProductionServerEndpointValidator</code> отклонит текущие defaults localhost + dummy; production-артефактов нет.</td></tr>
 <tr><td>Nightly soak</td><td class="status partial">Активирован в workflow</td><td>Schedule включён на 02:00 UTC; фактический отчёт по 24-часовой стабильности ещё не получен.</td></tr>
 </tbody>
 </table>

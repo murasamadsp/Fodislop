@@ -44,7 +44,7 @@ internal static class DebugOverlayTextFormatter
               .Append("Чанк: ").Append(chunkX).Append(", ").Append(chunkY)
               .Append("  ·  Клетка: ").Append(inChunkX).Append(", ").Append(inChunkY).Append("\n")
               .Append("Направление: ").Append(player.LastDirection)
-              .Append("  ·  Автокопка: ").Append(player.AutoDig ? "да" : "нет")
+              .Append("  ·  Автокопка: ").Append(player.AutoDig ? "да" : "нет").Append("\n");
         }
         else
         {
