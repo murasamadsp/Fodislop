@@ -57,7 +57,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
         atlasUV,
         0);
     float3 screen = 1.0 - (1.0 - baseColor) * (1.0 - decal.rgb);
-    return lerp(baseColor, screen, decal.a * 0.35);
+    return lerp(baseColor, screen, decal.a * 0.55);
 }
 
 #endif
