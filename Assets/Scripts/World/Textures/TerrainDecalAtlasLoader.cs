@@ -43,10 +43,10 @@ internal sealed class TerrainDecalAtlasLoader
             throw new InvalidOperationException(
                 "Required terrain decal atlas 'terrain-decals.png' could not be decoded.");
 
-        if (texture.width != 128 || texture.height != 32)
+        if (texture.width != 256 || texture.height != 32)
         {
             throw new InvalidOperationException(
-                $"Terrain decal atlas must be 128x32, got {texture.width}x{texture.height}.");
+                $"Terrain decal atlas must be 256x32, got {texture.width}x{texture.height}.");
         }
 
         RuntimeTextureFactory.ApplySampling(

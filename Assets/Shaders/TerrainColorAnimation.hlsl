@@ -99,17 +99,9 @@ float2 AnimateTerrainSampleUV(
     int animationProfile,
     float3 flowSample)
 {
-    if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
-    {
-        return atlasUV;
-    }
-
-    float2 flowDirection = flowSample.rg * 2.0 - 1.0;
-    float2 distortion = flowDirection * tileSizeUV * 0.14;
-    float2 localUV = atlasUV - subAtlasRect.xy + distortion;
-    localUV.y = fmod(fmod(localUV.y, subAtlasRect.w) + subAtlasRect.w, subAtlasRect.w);
-    localUV.x = clamp(localUV.x, 0.0, subAtlasRect.z);
-    return subAtlasRect.xy + localUV;
+    // Molten animation is colour-only. Warping atlas UVs exposes the
+    // rectangular tile boundary and makes a lava cell read as a moving square.
+    return atlasUV;
 }
 
 float TerrainContourAntialiasScale(int animationProfile)
@@ -187,6 +179,16 @@ float3 AnimateTerrainColor(
         float3 cellColor = TerrainUnpackRgb24(packedCellColor);
         float3 glintColor = lerp(cellColor, 1.0.xxx, 0.72);
         return baseColor + glintColor * strength;
+    }
+
+    if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
+    {
+        float3 flowHSV = TerrainRGBToHSV(flowSample);
+        float flowPulse = 0.5 + 0.5 * sin(
+            flowHSV.x * 6.28318548 + _Time.y * animationSpeed * 0.35);
+        float hotMask = smoothstep(0.38, 0.86, flowPulse);
+        float3 emberColor = float3(1.0, 0.20, 0.015);
+        return lerp(baseColor, max(baseColor, emberColor), hotMask * 0.16);
     }
 
     if (animationType == 1) // Blinking

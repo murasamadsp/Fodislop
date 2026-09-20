@@ -300,7 +300,9 @@ internal static class TerrainQuadBuilder
             packedLightingColor,
             lightingData.PackedFlags,
             lightingData.PackedContour,
-            TerrainDecalCatalog.GetPackedPlacement(cellType, gridX, serverY));
+            !isBackground
+                ? TerrainDecalCatalog.GetPackedPlacement(cellType, gridX, serverY)
+                : 0f);
 
         ReadOnlySpan<Vector2> anchors = [anchor0, anchor1, anchor2, anchor3];
 

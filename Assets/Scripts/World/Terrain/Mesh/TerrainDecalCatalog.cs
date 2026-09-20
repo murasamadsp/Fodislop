@@ -14,7 +14,7 @@ public enum TerrainDecalFamily : byte
 
 public static class TerrainDecalCatalog
 {
-    private const uint PlacementPercent = 22;
+    private const uint PlacementPercent = 30;
 
     public static int GetPackedPlacement(CellType cellType, int worldX, int serverY)
     {
@@ -32,14 +32,18 @@ public static class TerrainDecalCatalog
 
         int variant = family switch
         {
-            TerrainDecalFamily.Stone => (hash & 1u) == 0u ? 0 : 2,
-            TerrainDecalFamily.Sand => (hash & 1u) == 0u ? 1 : 3,
-            TerrainDecalFamily.Road => (int)(hash % 3u),
+            TerrainDecalFamily.Stone => (int)(hash % 4u) * 2,
+            TerrainDecalFamily.Sand => (int)(hash % 4u) * 2 + 1,
+            TerrainDecalFamily.Road => (int)(hash % 8u),
             _ => 0,
         };
         int rotation = (int)((hash >> 8) & 3u);
         int mirror = (int)((hash >> 10) & 1u);
-        return 1 + variant + (rotation << 2) + (mirror << 4);
+        int offsetX = (int)((hash >> 12) & 3u);
+        int offsetY = (int)((hash >> 14) & 3u);
+        int applicationMode = (int)((hash >> 16) & 3u);
+        return 1 + variant + (rotation << 3) + (mirror << 5) +
+            (offsetX << 6) + (offsetY << 8) + (applicationMode << 10);
     }
 
     public static TerrainDecalFamily GetFamily(CellType cellType)
