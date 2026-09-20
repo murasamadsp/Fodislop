@@ -45,7 +45,6 @@ internal static class DebugOverlayTextFormatter
               .Append("  ·  Клетка: ").Append(inChunkX).Append(", ").Append(inChunkY).Append("\n")
               .Append("Направление: ").Append(player.LastDirection)
               .Append("  ·  Автокопка: ").Append(player.AutoDig ? "да" : "нет")
-              .Append("  ·  Агрессия: ").Append(player.Aggression ? "да" : "нет").Append("\n");
         }
         else
         {

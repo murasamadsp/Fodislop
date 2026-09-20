@@ -48,7 +48,6 @@ internal sealed class DummyWorldStartupResponder(
         // StartBotSimulation(lifecycleVersion);
 
         playerState.SetPosition(25, 50);
-        sendPacket(new ServerPacket(new AggressionStatePacket(false)));
         sendPacket(new ServerPacket(new AutoMineStatePacket(false)));
         sendPacket(new ServerPacket(new DailyBonusStatePacket(false)));
         buffManager.ResetDailyBonus();

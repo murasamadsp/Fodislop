@@ -27,13 +27,9 @@ public interface ILocalPlayer
 
     bool AutoDig { get; set; }
 
-    bool Aggression { get; set; }
-
     event Action<Vector2Int, Vector2Int>? OnPlayerMoved;
 
     event Action<bool>? OnAutoDigChanged;
-
-    event Action<bool>? OnAggressionChanged;
 
     void UpdateServerPosition(Vector2Int position);
 
@@ -42,8 +38,6 @@ public interface ILocalPlayer
     void Initialize(uint botID);
 
     void SetGameplayVisible();
-
-    void ToggleAggression();
 
     T GetComponent<T>();
 

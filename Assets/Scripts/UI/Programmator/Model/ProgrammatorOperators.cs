@@ -64,7 +64,6 @@ public static class ProgrammatorOperators
             ProgAction.CallState, ProgAction.ReturnState,
             ProgAction.DebugPause, ProgAction.DebugShow,
             ProgAction.EnableAutoDig, ProgAction.DisableAutoDig,
-            ProgAction.EnableAggression, ProgAction.DisableAggression,
             ProgAction.EnableHand, ProgAction.DisableHand,
             ProgAction.SetStartWhenDied, ProgAction.SetStartWhenHurt,
             ProgAction.SetStartWhenBotNearby,

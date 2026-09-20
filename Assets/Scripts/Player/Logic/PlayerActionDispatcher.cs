@@ -17,17 +17,14 @@ internal sealed class PlayerActionDispatcher
 {
     private readonly IPlayerInput _input;
     private readonly INetworkService? _networkService;
-    private readonly Action _toggleAggression;
     private float _lastDigTime;
 
     public PlayerActionDispatcher(
         IPlayerInput input,
-        INetworkService? networkService,
-        Action toggleAggression)
+        INetworkService? networkService)
     {
         _input = input ?? throw new ArgumentNullException(nameof(input));
         _networkService = networkService;
-        _toggleAggression = toggleAggression ?? throw new ArgumentNullException(nameof(toggleAggression));
     }
 
     /// <param name="robot">Робот игрока; до его появления делать нечего.</param>
@@ -74,11 +71,6 @@ internal sealed class PlayerActionDispatcher
         if (_input.WantsToToggleAutoDig)
         {
             _networkService?.SendAction(new ToggleAutoDigPacket());
-        }
-
-        if (_input.WantsToToggleAggression)
-        {
-            _toggleAggression();
         }
 
         if (_input.WantsToGeo)

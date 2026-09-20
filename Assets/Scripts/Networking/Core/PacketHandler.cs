@@ -110,7 +110,6 @@ public sealed class PacketHandler(
         On<MaxDepthPacket>(_playerStats.Process);
 
         On<AutoMineStatePacket>(_playerInfo.Process);
-        On<AggressionStatePacket>(_playerInfo.Process);
         On<SkillProgressPacket>(_playerStats.Process);
         On<DailyBonusStatePacket>(_playerStats.Process);
         On<TeleportPacket>(_playerInfo.Process);

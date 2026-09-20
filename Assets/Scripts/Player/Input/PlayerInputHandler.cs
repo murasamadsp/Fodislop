@@ -23,10 +23,6 @@ namespace Kern.Player.Input
             (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame) ||
             (Gamepad.current != null && Gamepad.current.buttonNorth.wasPressedThisFrame);
 
-        public bool WantsToToggleAggression =>
-            (Keyboard.current != null && Keyboard.current.lKey.wasPressedThisFrame) ||
-            (Gamepad.current != null && Gamepad.current.leftShoulder.wasPressedThisFrame);
-
         public bool WantsToGeo =>
             (Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame) ||
             (Gamepad.current != null && Gamepad.current.dpad.left.wasPressedThisFrame);

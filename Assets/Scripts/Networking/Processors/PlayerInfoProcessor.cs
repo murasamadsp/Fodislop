@@ -20,8 +20,7 @@ public sealed class PlayerInfoProcessor(
     IPacketProcessor<TeleportPacket>,
     IPacketProcessor<RobotInfoPacket>,
     IPacketProcessor<RobotPositionPacket>,
-    IPacketProcessor<AutoMineStatePacket>,
-    IPacketProcessor<AggressionStatePacket>
+    IPacketProcessor<AutoMineStatePacket>
 {
     public void Process(PlayerInfoPacket packet)
     {
@@ -85,12 +84,4 @@ public sealed class PlayerInfoProcessor(
         }
     }
 
-    public void Process(AggressionStatePacket packet)
-    {
-        var player = localPlayer.Current;
-        if (player != null)
-        {
-            player.Aggression = packet.Enabled;
-        }
-    }
 }

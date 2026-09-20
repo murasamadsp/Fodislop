@@ -68,11 +68,6 @@
             <ui:Label name="AutoDigLabel" class="hud-toggle-btn-label"  text="" picking-mode="Ignore" />
         </ui:Button>
 
-        <ui:Button name="AggressionButton" class="hud-button hud-toggle-btn hud-toggle-aggression" tooltip="hud.tooltip.aggression">
-            <ui:VisualElement name="AggressionIndicator" class="hud-mode-led" picking-mode="Ignore" />
-            <ui:Label name="AggressionLabel" class="hud-toggle-btn-label"  text="" picking-mode="Ignore" />
-        </ui:Button>
-
         <!-- ════════════ ЧАТ И ПРОГРАММАТОР (снизу слева) ════════════ -->
         <ui:Button name="ChatButton" class="hud-btn-action hud-chat-button" text="hud.chat" tooltip="hud.tooltip.chat" />
         <ui:Button name="ProgrammatorButton" class="hud-btn-action hud-programmator-button"  text="" />

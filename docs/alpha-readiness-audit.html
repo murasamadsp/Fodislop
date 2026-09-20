@@ -33,10 +33,10 @@
 <p><code>dotnet run --project tools/Kern.ArchitectureLinter -- --project-root .</code> завершился с кодом 0 после появления <code>TerrainSheetCatalog.cs.meta</code>. Остались три предупреждения: <code>PostProcessRenderPass.cs</code> имеет 501 строку; два UI guard-а молча возвращают управление при отсутствии <code>rootVisualElement</code>.</p>
 <p class="small">Отчёт SARIF сохранён во временный путь <code>/tmp/fodinae-architecture-lint.sarif</code>; в репозиторий не добавлялся.</p>
 </div>
-<div class="card danger">
-<h3>Агрессия всё ещё присутствует в клиентском наборе операторов</h3>
-<p>В <code>ProgrammatorOperators</code> зарегистрированы <code>ProgAction.EnableAggression</code> и <code>ProgAction.DisableAggression</code>. Это противоречит DEATH-00 и протокольному пункту об удалении PvP из альфы.</p>
-<p class="small">Доказательство: <a href="../Assets/Scripts/UI/Programmator/Model/ProgrammatorOperators.cs">ProgrammatorOperators.cs</a>, строки 63–69.</p>
+<div class="card positive">
+<h3>DEATH-00 очищен статически</h3>
+<p>Из клиентского исходника удалены обработка клавиши L, состояние и HUD агрессии, операторы программатора, локализация, <code>AggressionStatePacket</code> processor/подписка и dummy-поток. Поиск по <code>Assets</code> больше не находит агрессию или PvP-переключатель.</p>
+<p class="small">Проверка: <code>rg -n 'Aggression|aggression|Agression|EnableAggression|DisableAggression' Assets</code> не вернул строк.</p>
 </div>
 <div class="card warning">
 <h3>CI не является обязательным непрерывным гейтом</h3>
@@ -53,8 +53,9 @@
 <tr><td>EDGE-02</td><td class="status blocked">Блокер</td><td>Дефолт — localhost и dummy connection; публичный адрес отсутствует.</td></tr>
 <tr><td>EDGE-03</td><td class="status partial">Частично</td><td>Есть <code>AuthToken6</code>, <code>AuthTokenPacket</code> и ClientHello в клиенте/dummy. Первый вход и повторный вход против production-сервера не подтверждены.</td></tr>
 <tr><td>EDGE-05</td><td class="status partial">Частично</td><td>Линтер проверяет локализацию и проходит правило локализации; финальность русских текстов и zh/zh-hant ручным сценарием не проверена.</td></tr>
-<tr><td>MOVE-01..MOVE-06</td><td class="status partial">Частично</td><td>Есть <code>MovePacket</code>, <code>ClickCellPacket</code>, cooldown 0.3 с, input/UI guards и координатные сервисы. RTT ≤150 мс, серверные подтверждения и отсутствие телепортов требуют публичного сценария.</td></tr>
-<tr><td>DEATH-00</td><td class="status blocked">Блокер</td><td>Операторы агрессии присутствуют в ProgrammatorOperators.</td></tr>
+<tr><td>MOVE-01, MOVE-02, MOVE-04..MOVE-06</td><td class="status partial">Частично</td><td>Есть <code>MovePacket</code>, cooldown 0.3 с, input/UI guards и координатные сервисы. RTT ≤150 мс, серверные подтверждения и отсутствие телепортов требуют публичного сценария.</td></tr>
+<tr><td>MOVE-03</td><td class="status partial">Частично</td><td>Клиент отправляет <code>ActionClientPacket(x,y,new BzPacket())</code>, а <code>MapRegionProcessor</code> принимает вырожденный регион 1×1; dummy отправляет перезапись клетки. Реальный <code>DamageCell</code>, прочность, production <code>VFXPacket/DirectedFX.Bz</code> и единственный серверный пакет не подтверждены.</td></tr>
+<tr><td>DEATH-00</td><td class="status ok">Закрыт статически</td><td>Агрессия удалена из input, HUD, локального контракта, processor, dummy и программатора; ручное подтверждение отсутствия PvP на сервере ещё требуется.</td></tr>
 <tr><td>DEATH-01, DEATH-02</td><td class="status unknown">Не проверено</td><td>Источники урона и серверная политика смерти не подтверждены; остаётся открытый вопрос документа.</td></tr>
 <tr><td>INV-01..INV-05</td><td class="status partial">Частично</td><td>Есть inventory processors/models и dummy responder. Согласование, сохранение, защита от потери предметов против сервера не проверены.</td></tr>
 <tr><td>WORLD-01..WORLD-07</td><td class="status partial">Частично</td><td>Есть WorldInit, MapStorage, region processors, chunk cache и CoordinateUtils. Размер 30 000×60 000, карты, dirty saves, камеру и lighting нужно подтвердить runtime-сценарием.</td></tr>
@@ -86,15 +87,14 @@
 <h2>Приоритет исправлений</h2>
 <ol>
 <li>Задать реальный production host/port и выключить dummy connection для release-конфигурации; добавить проверку EDGE-02 в build gate.</li>
-<li>Удалить агрессию из <code>ProgAction</code>, списка операторов, локализации, UI и packet flow; затем проверить DEATH-00 поиском и тестом.</li>
-<li>Добавить отсутствующий <code>TerrainSheetCatalog.cs.meta</code>; устранить три нарушения линтера.</li>
+<li>Завершить MOVE-03: серверный <code>DamageCell</code>, VFX-пакет удара, прочность и единичную MapRegion-перезапись; затем проверить RTT 150 мс.</li>
 <li>Закрыть полный протокол программатора и миссий на сервере, после чего провести ручной сценарий ROB-01..05 и MIS-01..03.</li>
 <li>Включить CI для push/pull_request и nightly schedule; получить Windows/macOS артефакты и результаты EditMode/PlayMode/soak.</li>
 <li>Только после этого зафиксировать performance baseline и выполнить публичный чек-лист всех ID.</li>
 </ol>
 
 <h2>Ограничения этого аудита</h2>
-<p>Проверка не утверждает, что визуальные, GPU, сетевые и performance-критерии выполнены: для них нужны production-путь, Unity, реальные данные, сборка и публичный сервер. Серверный исходник в текущем workspace не является частью проверенного набора. Незакоммиченные изменения пользователя в terrain-файлах сохранены без изменений.</p>
+<p>Проверка не утверждает, что визуальные, GPU, сетевые и performance-критерии выполнены: для них нужны production-путь, Unity, реальные данные, сборка и публичный сервер. Серверный исходник в текущем workspace не является частью проверенного набора. Unity и NuGet restore в этом проходе не запускались.</p>
 </main>
 </body>
 </html>

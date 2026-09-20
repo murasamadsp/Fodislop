@@ -626,7 +626,6 @@
 }
 
 .hud-toggle-auto-dig { bottom: 281px; }
-.hud-toggle-aggression { bottom: 314px; }
 .hud-toggle-collision { bottom: 347px; }
 
 .hud-btn-top-row {

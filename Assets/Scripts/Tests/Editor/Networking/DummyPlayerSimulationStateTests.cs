@@ -31,9 +31,7 @@ public sealed class DummyPlayerSimulationStateTests
 
         Assert.That(state.ToggleAutoDig(), Is.True);
         Assert.That(state.ToggleAutoDig(), Is.False);
-        Assert.That(state.ToggleAggression(), Is.True);
         Assert.That(state.AutoDig, Is.False);
-        Assert.That(state.Aggression, Is.True);
     }
 
     [Test]

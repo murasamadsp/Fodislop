@@ -41,7 +41,6 @@ namespace Kern.Player.Logic
         private SpriteRenderer[] _playerRenderers = Array.Empty<SpriteRenderer>();
 
         private bool _autoDig = false;
-        private bool _aggression = false;
         private bool _ignoreCollision = false;
         private float _lastMoveTime;
         private Direction? _lastSentDirection;
@@ -126,7 +125,7 @@ namespace Kern.Player.Logic
             _localPlayerState?.Publish(this);
             if (_input != null)
             {
-                _actionDispatcher = new PlayerActionDispatcher(_input, _networkService, ToggleAggression);
+                _actionDispatcher = new PlayerActionDispatcher(_input, _networkService);
             }
         }
 
@@ -212,24 +211,6 @@ namespace Kern.Player.Logic
 
         public event Action<bool>? OnAutoDigChanged;
 
-        public bool Aggression
-        {
-            get => _aggression;
-            set
-            {
-                _aggression = value;
-                OnAggressionChanged?.Invoke(value);
-            }
-        }
-
-        public event Action<bool>? OnAggressionChanged;
-
-        public void ToggleAggression()
-        {
-            _aggression = !_aggression;
-            _networkService?.SendAction(new ToggleAgressionPacket());
-            OnAggressionChanged?.Invoke(_aggression);
-        }
         public bool IgnoreCollision
         {
             get => _ignoreCollision;

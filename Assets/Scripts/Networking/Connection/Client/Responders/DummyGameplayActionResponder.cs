@@ -47,10 +47,6 @@ internal sealed class DummyGameplayActionResponder(
                 sendPacket(new ServerPacket(
                     new AutoMineStatePacket(playerState.ToggleAutoDig())));
                 break;
-            case ToggleAgressionPacket:
-                sendPacket(new ServerPacket(
-                    new AggressionStatePacket(playerState.ToggleAggression())));
-                break;
             case BzPacket:
                 HandleDig(packet.X, packet.Y);
                 break;
