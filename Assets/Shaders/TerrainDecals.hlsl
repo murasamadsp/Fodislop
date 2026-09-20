@@ -60,7 +60,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
         2.0 * baseColor * decal.rgb,
         1.0 - 2.0 * (1.0 - baseColor) * (1.0 - decal.rgb),
         step(0.5, baseColor));
-    return lerp(baseColor, overlay, decal.a * 0.32);
+    return lerp(baseColor, overlay, decal.a * 0.65);
 }
 
 #endif
