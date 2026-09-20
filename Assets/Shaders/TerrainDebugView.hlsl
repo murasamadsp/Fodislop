@@ -70,7 +70,13 @@ float3 KernTerrainDebugColor(
 
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_COVERAGE)
     {
-        return float3(coverage, coverage, coverage);
+        // Бирюза — пиксель принадлежит клетке, малиновый — вырезан.
+        // Чёрно-белым «принадлежит» заливало экран белым и было
+        // неотличимо от пересвета.
+        return lerp(
+            float3(0.95, 0.15, 0.55),
+            float3(0.10, 0.85, 0.95),
+            saturate(coverage));
     }
 
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_LAYER)
@@ -111,7 +117,13 @@ float3 KernTerrainDebugColor(
 
     // Единственный оставшийся вид; неизвестный номер сюда не доходит,
     // его отсекает KernTerrainDebugActive.
-    return float3(ambientOcclusion, ambientOcclusion, ambientOcclusion);
+    //
+    // Рампа, а не серая шкала. Серым «затенения нет» выходило белой заливкой
+    // и было неотличимо от пересвеченного кадра: по скриншоту нельзя было
+    // сказать, включён вид или нет. Отладочный вид обязан выглядеть как
+    // отладочный вид при любом значении.
+    float occlusion = 1.0 - ambientOcclusion;
+    return float3(occlusion, 1.0 - occlusion, 0.35);
 }
 
 #endif
