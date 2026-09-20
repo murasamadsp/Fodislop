@@ -129,10 +129,10 @@ internal static class TerrainQuadBuilder
         float lx = x * cellSize;
         float ly = y * cellSize;
 
-        Vector3 off00 = precalc.GridVertexOffsets[x, y].ToVector3();
-        Vector3 off10 = precalc.GridVertexOffsets[x + 1, y].ToVector3();
-        Vector3 off01 = precalc.GridVertexOffsets[x, y + 1].ToVector3();
-        Vector3 off11 = precalc.GridVertexOffsets[x + 1, y + 1].ToVector3();
+        Vector3 off00 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x, y].ToVector3();
+        Vector3 off10 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x + 1, y].ToVector3();
+        Vector3 off01 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x, y + 1].ToVector3();
+        Vector3 off11 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x + 1, y + 1].ToVector3();
 
         bool isAnchored = off00 != Vector3.zero || off10 != Vector3.zero || off01 != Vector3.zero || off11 != Vector3.zero;
         float anchorFlag = isAnchored ? 1f : 0f;

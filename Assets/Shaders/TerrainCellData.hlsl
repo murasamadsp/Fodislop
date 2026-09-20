@@ -114,7 +114,7 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
     float3 offset10 = 0.0;
     float3 offset11 = 0.0;
     float3 offset01 = 0.0;
-    if (_TerrainCellGridSize.w > 0.5)
+    if (_TerrainCellGridSize.w > 0.5 && layer > 0)
     {
         offset00 = TerrainGridOffset(int2(x, y));
         offset10 = TerrainGridOffset(int2(x + 1, y));
