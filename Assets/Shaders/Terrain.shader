@@ -586,10 +586,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
                 float occupancy = isPhysicalMass ? 1.0 : 0.0;
-                float2 contourUV = input.packedData.x > 0.5 ? input.packedData.yz : input.uv;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
-                        contourUV,
+                        input.uv,
                         solidBoundaryMask,
                         solidDiagonalMask)
                     : 1.0;

@@ -7,10 +7,11 @@ static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 
 float2 QuantizeTerrainFaceUV(float2 uv)
 {
-    // Keep displaced contour coordinates outside [0, 1]. Saturating here
-    // collapses an offset vertex onto the edge and creates oversized lava
-    // steps whenever a rounded quad is distorted.
-    float2 pixel = floor(uv * KERN_TERRAIN_FACE_GRID_SIZE);
+    // Contours are evaluated in the canonical 0..1 face space. Vertex
+    // distortion is already quantized in TerrainVertexDistortionCalculator;
+    // feeding displaced interpolants here would quantize the same movement a
+    // second time and produce oversized steps at the lava boundary.
+    float2 pixel = floor(saturate(uv) * KERN_TERRAIN_FACE_GRID_SIZE);
     return (pixel + 0.5) / KERN_TERRAIN_FACE_GRID_SIZE;
 }
 
