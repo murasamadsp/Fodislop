@@ -99,7 +99,7 @@ public sealed class TerrainQuantizationContractTests
     [Test]
     public void FuzzedCornerSetsAreDeterministicAndBounded()
     {
-        var random = new Random(0x5EED_32);
+        var random = new System.Random(0x5EED_32);
         for (int iteration = 0; iteration < 10_000; iteration++)
         {
             TerrainQuantizedPolygon polygon = TerrainQuantizationOracle.FromSteps(
