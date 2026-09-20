@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Linq;
 using Kern.World.Terrain;
 using MinesServer.Data;
 using NUnit.Framework;
@@ -65,6 +66,32 @@ public sealed class TerrainDecalCatalogTests
         }
 
         Assert.That(placed, Is.InRange(sampleSize * 14 / 100, sampleSize * 22 / 100));
+    }
+
+    [Test]
+    public void GetPackedPlacement_GroundUsesAllVariantsAndOffsets()
+    {
+        bool[] variants = new bool[8];
+        bool[] offsetsX = new bool[4];
+        bool[] offsetsY = new bool[4];
+
+        for (int i = 0; i < 20000; i++)
+        {
+            int packed = TerrainDecalCatalog.GetPackedPlacement(CellType.Empty, i, i * 37);
+            if (packed == 0)
+            {
+                continue;
+            }
+
+            int code = packed - 1;
+            variants[code & 7] = true;
+            offsetsX[(code >> 6) & 3] = true;
+            offsetsY[(code >> 8) & 3] = true;
+        }
+
+        Assert.That(variants.All(value => value), Is.True);
+        Assert.That(offsetsX.All(value => value), Is.True);
+        Assert.That(offsetsY.All(value => value), Is.True);
     }
 
     [Test]

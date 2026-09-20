@@ -44,7 +44,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
     uint offsetY = (code >> 8u) & 3u;
     float2 transformedUV = TerrainTransformDecalUV(localUV, rotation, mirror);
     float2 placementOffset = float2(offsetX, offsetY) / 3.0 - 0.5;
-    transformedUV += placementOffset * 0.30;
+    transformedUV += placementOffset * 0.50;
 
     // Eight horizontal 32x32 slots in a 256x32 atlas. Sampling texel centres
     // prevents a transformed edge from crossing into the neighbouring slot.
