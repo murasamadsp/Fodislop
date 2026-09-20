@@ -19,10 +19,16 @@ static const int KERN_TERRAIN_DEBUG_ANCHORED = 5;
 static const int KERN_TERRAIN_DEBUG_CELL_LOCAL = 6;
 static const int KERN_TERRAIN_DEBUG_RELIEF_GROUP = 7;
 static const int KERN_TERRAIN_DEBUG_CONTINUOUS_SHEET = 8;
+static const int KERN_TERRAIN_DEBUG_AMBIENT_OCCLUSION = 9;
 
+// Диапазон, а не «не ноль». Глобаль живёт в нативной части и переживает
+// доменную перезагрузку: номер удалённого вида остаётся в ней и после того,
+// как C# сбросился в Off. Пока проверка была «не ноль», такой осиротевший
+// номер проваливался в последнюю ветку и заливал мир её цветом.
 bool KernTerrainDebugActive()
 {
-    return _TerrainDebugView != KERN_TERRAIN_DEBUG_OFF;
+    return _TerrainDebugView >= KERN_TERRAIN_DEBUG_FOREIGN_SIDES &&
+        _TerrainDebugView <= KERN_TERRAIN_DEBUG_AMBIENT_OCCLUSION;
 }
 
 // Стороны кодируются раздельными каналами, иначе «сверху и снизу» не
@@ -103,6 +109,8 @@ float3 KernTerrainDebugColor(
             : float3(0.2, 0.1, 0.1);
     }
 
+    // Единственный оставшийся вид; неизвестный номер сюда не доходит,
+    // его отсекает KernTerrainDebugActive.
     return float3(ambientOcclusion, ambientOcclusion, ambientOcclusion);
 }
 

@@ -31,6 +31,13 @@ public static class TerrainDebugViewState
 {
     private static readonly int _terrainDebugViewID = Shader.PropertyToID("_TerrainDebugView");
 
+    // Глобаль шейдера живёт в нативной части и переживает доменную
+    // перезагрузку, а статическое поле — нет. Без публикации на старте они
+    // расходятся: C# считает, что вид выключен, а кадр рисуется прошлым
+    // выбранным видом, которого может уже и не быть в перечислении.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    public static void PublishOnLoad() => Publish();
+
     public static TerrainDebugView Active { get; private set; } = TerrainDebugView.Off;
 
     public static string Describe(TerrainDebugView view) => view switch
