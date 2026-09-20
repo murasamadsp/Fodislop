@@ -15,20 +15,20 @@ public sealed class TerrainCellLayersTests
     public void ExposedGroundHasOneBackgroundQuadAndNoDistortedForeground(CellType propagatedType)
     {
         Assert.That(TerrainCellLayers.TryGetType(
-            CellType.Empty, propagatedType, true, out CellType background), Is.True);
+            CellType.Empty, propagatedType, true, true, out CellType background), Is.True);
         Assert.That(background, Is.EqualTo(CellType.Empty));
         Assert.That(TerrainCellLayers.TryGetType(
-            CellType.Empty, propagatedType, false, out _), Is.False);
+            CellType.Empty, propagatedType, false, true, out _), Is.False);
     }
 
     [Test]
     public void SolidBlockKeepsItsForegroundAndUnderlyingGround()
     {
         Assert.That(TerrainCellLayers.TryGetType(
-            CellType.Rock, CellType.Empty, false, out CellType foreground), Is.True);
+            CellType.Rock, CellType.Empty, false, true, out CellType foreground), Is.True);
         Assert.That(foreground, Is.EqualTo(CellType.Rock));
         Assert.That(TerrainCellLayers.TryGetType(
-            CellType.Rock, CellType.Empty, true, out CellType background), Is.True);
+            CellType.Rock, CellType.Empty, true, true, out CellType background), Is.True);
         Assert.That(background, Is.EqualTo(CellType.Empty));
     }
 
@@ -37,6 +37,26 @@ public sealed class TerrainCellLayersTests
     public void MissingOrIdenticalSolidBackgroundIsNotDuplicated(CellType propagatedType)
     {
         Assert.That(TerrainCellLayers.TryGetType(
-            CellType.Rock, propagatedType, true, out _), Is.False);
+            CellType.Rock, propagatedType, true, true, out _), Is.False);
+    }
+
+    // Силуэт меньше клетки — подложка обязана остаться, иначе на
+    // освободившемся месте дыра. Ровно это рисовало чёрные ореолы вокруг
+    // круглых капель лавы и чёрные клинья у смещённых масс.
+    [Test]
+    public void PartialSilhouetteKeepsIdenticalBackgroundUnderneath()
+    {
+        Assert.That(TerrainCellLayers.TryGetType(
+            CellType.Rock, CellType.Rock, true, false, out CellType background), Is.True);
+        Assert.That(background, Is.EqualTo(CellType.Rock));
+    }
+
+    // Незагруженная подложка остаётся отброшенной при любом силуэте: рисовать
+    // под клеткой нечего, данных попросту нет.
+    [Test]
+    public void PartialSilhouetteStillDropsUnloadedBackground()
+    {
+        Assert.That(TerrainCellLayers.TryGetType(
+            CellType.Rock, CellType.Unloaded, true, false, out _), Is.False);
     }
 }

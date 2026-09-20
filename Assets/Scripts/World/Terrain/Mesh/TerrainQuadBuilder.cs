@@ -80,7 +80,19 @@ internal static class TerrainQuadBuilder
             backgroundType = CellType.Road;
         }
 
-        if (!TerrainCellLayers.TryGetType(cellFgType, backgroundType, isBackground, out CellType cellType))
+        // Силуэт переднего плана считается до выбора слоя: от него зависит,
+        // нужна ли под ним подложка. Смещения берутся те же, что уйдут в
+        // геометрию ниже, — второго источника правды здесь нет.
+        bool foregroundFillsCell =
+            !MapManager.IsRoundableLoose(cellFgType) &&
+            !TerrainCellGeometry.FromOffsets(
+                precalc.GridVertexOffsets[x, y].ToVector3(),
+                precalc.GridVertexOffsets[x + 1, y].ToVector3(),
+                precalc.GridVertexOffsets[x + 1, y + 1].ToVector3(),
+                precalc.GridVertexOffsets[x, y + 1].ToVector3()).IsAnchored;
+
+        if (!TerrainCellLayers.TryGetType(
+            cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
         {
             return -1;
         }
