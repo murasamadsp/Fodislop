@@ -113,4 +113,15 @@ public class TerrainVertexDistortionCalculatorTests
             }
         }
     }
+
+    [Test]
+    public void QuantizeOffset_UsesThirtyTwoStepsPerCell()
+    {
+        Vector3 result = TerrainVertexDistortionCalculator.QuantizeOffset(
+            new Vector3(0.03124f, -0.09376f, 0.18751f));
+
+        Assert.That(result.x, Is.EqualTo(1f / 32f).Within(0.000001f));
+        Assert.That(result.y, Is.EqualTo(-3f / 32f).Within(0.000001f));
+        Assert.That(result.z, Is.EqualTo(6f / 32f).Within(0.000001f));
+    }
 }

@@ -14,6 +14,14 @@ public sealed class TerrainVertexDistortionCalculator
 
     public bool EnableDistortion { get; set; } = true;
 
+    public static Vector3 QuantizeOffset(Vector3 offset)
+    {
+        return new Vector3(
+            Mathf.Round(offset.x * FaceGridSize) / FaceGridSize,
+            Mathf.Round(offset.y * FaceGridSize) / FaceGridSize,
+            Mathf.Round(offset.z * FaceGridSize) / FaceGridSize);
+    }
+
     public void EnsureCapacity(int meshWidth, int meshHeight)
     {
         if (GridVertexOffsets.Width != meshWidth + 1 || GridVertexOffsets.Height != meshHeight + 1)

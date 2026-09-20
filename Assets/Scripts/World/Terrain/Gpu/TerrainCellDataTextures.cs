@@ -177,7 +177,8 @@ public sealed class TerrainCellDataTextures : IDisposable
             int ringX = Ring(minX + x, nodesWide);
             for (int y = 0; y < height; y++)
             {
-                Vector3 offset = offsets[x, y];
+                Vector3 offset = TerrainVertexDistortionCalculator.QuantizeOffset(
+                    offsets[x, y]);
                 _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
                     new Vector4(offset.x, offset.y, offset.z, 0f);
             }
@@ -371,7 +372,8 @@ public sealed class TerrainCellDataTextures : IDisposable
             int ringX = Ring(minX + x, nodesWide);
             for (int y = startY; y < startY + height; y++)
             {
-                Vector3 offset = offsets[x, y];
+                Vector3 offset = TerrainVertexDistortionCalculator.QuantizeOffset(
+                    offsets[x, y]);
                 _gridOffsets.Data[(Ring(minY + y, nodesHigh) * nodesWide) + ringX] =
                     new Vector4(offset.x, offset.y, offset.z, 0f);
             }
