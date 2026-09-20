@@ -61,8 +61,14 @@ static void checkReliefRim()
 
     // Чужой только сверху: маска 0b1110 = 14, код 15.
     float topForeign = packContour(15);
-    if(TerrainReliefRim(nearTop, topForeign) >= 0.05f)
+    float darkest = TerrainReliefRim(nearTop, topForeign);
+    if(darkest >= 0.25f)
         throw std::runtime_error("Relief rim missing on the foreign side");
+    // Нижняя граница так же обязательна, как верхняя: кайма, севшая в
+    // чёрный, режет массив на отдельные плитки. Оригинальный масштаб по
+    // половине диагонали не даёт ей упасть ниже 0.125.
+    if(darkest <= 0.1f)
+        throw std::runtime_error("Relief rim is darker than the original scale allows");
     if(TerrainReliefRim(nearBottom, topForeign) != 1.0f ||
        TerrainReliefRim(nearLeft, topForeign) != 1.0f ||
        TerrainReliefRim(nearRight, topForeign) != 1.0f)

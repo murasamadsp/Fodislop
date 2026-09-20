@@ -44,7 +44,7 @@ lighting = (root / 'Assets/Shaders/TerrainLightingData.hlsl').read_text()
 with tempfile.TemporaryDirectory(prefix='kern-terrain-raster-') as directory:
     cpp = Path(directory) / 'test.cpp'
     executable = Path(directory) / 'test'
-    for mutation in (None, "polygon-carrier", "ao-wide-mip", "relief-rim-inverted"):
+    for mutation in (None, "polygon-carrier", "ao-wide-mip", "relief-rim-inverted", "relief-rim-steep"):
         candidate = loader
         candidate_ao = ao
         if mutation == "polygon-carrier":
@@ -71,6 +71,14 @@ with tempfile.TemporaryDirectory(prefix='kern-terrain-raster-') as directory:
                 'int foreignSides = (reliefCode - 1) & 0x0F;')
             if candidate_rim == rim:
                 raise RuntimeError('Relief mutation no longer matches the production source')
+        if mutation == "relief-rim-steep":
+            # Reproduce the first shipped defect: the rim scaled by half a side
+            # instead of half a diagonal, bottoming out at pure black and
+            # outlining every crystal cell separately.
+            candidate_rim = candidate_rim.replace(
+                '* KERN_TERRAIN_RELIEF_RIM_SCALE;', '* 2.0;')
+            if candidate_rim == rim:
+                raise RuntimeError('Relief scale mutation no longer matches the production source')
         cpp.write_text(
             shim + extra + ao_shim +
             translate(candidate + contour + lighting + quantize_uv + candidate_rim + candidate_ao) +

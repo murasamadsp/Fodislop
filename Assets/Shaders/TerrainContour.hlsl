@@ -5,6 +5,8 @@
 
 static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 static const float KERN_TERRAIN_GEOMETRY_EPSILON = 0.0001;
+// sqrt(2): углы клетки уезжают на ±1/√2, как в оригинале.
+static const float KERN_TERRAIN_RELIEF_RIM_SCALE = 1.41421356;
 
 float2 QuantizeTerrainGeometryPoint(float2 samplePosition)
 {
@@ -160,9 +162,15 @@ float EvaluateRoundableBlockAlpha(
 // вплотную и границы семьи в картинке нет.
 //
 // Падение (1 - max(x², y²))³ повторяет оригинал: в центре клетки множитель
-// равен единице и текстура не трогается вовсе, к краю уходит в ноль. Куб
-// держит затемнение прижатым к самому краю — линейное расплывалось бы на
-// половину клетки и читалось как тень, а не как грань.
+// равен единице и текстура не трогается вовсе. Куб держит затемнение
+// прижатым к краю — линейное расплывалось бы на половину клетки и читалось
+// как тень, а не как грань.
+//
+// Половина диагонали, а не половина стороны. Углы клетки в оригинале лежат
+// на ±1/√2, поэтому max(x², y²) у границы равен ровно 1/2, и самое тёмное,
+// что кайма даёт, — 0.125, а не ноль. С масштабом по стороне кайма садилась
+// в чистый чёрный по всему периметру: кристаллы получали жирную обводку и
+// распадались на отдельные плитки вместо одного тела.
 //
 // Клетка делится диагоналями на четыре сектора, по одному на сторону, и
 // сектор темнеет только если его сторона чужая. Сектор ровно один на
@@ -183,7 +191,7 @@ float TerrainReliefRim(float2 contourSample, float packedContour)
         return 1.0;
     }
 
-    float2 p = (QuantizeTerrainFaceUV(contourSample) - 0.5) * 2.0;
+    float2 p = (QuantizeTerrainFaceUV(contourSample) - 0.5) * KERN_TERRAIN_RELIEF_RIM_SCALE;
     float edge = saturate(max(p.x * p.x, p.y * p.y));
     float fall = 1.0 - edge;
     float darken = fall * fall * fall;
