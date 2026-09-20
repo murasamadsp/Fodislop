@@ -27,7 +27,7 @@ public static class TerrainDecalCatalog
 
         uint hash = Hash(worldX, serverY, (uint)cellType);
         uint placementPercent = family == TerrainDecalFamily.Ground
-            ? 100u
+            ? 18u
             : PlacementPercent;
         if ((hash % 100u) >= placementPercent)
         {

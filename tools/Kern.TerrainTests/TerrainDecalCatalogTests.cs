@@ -55,6 +55,19 @@ public sealed class TerrainDecalCatalogTests
     }
 
     [Test]
+    public void GetPackedPlacement_GroundRemainsSparse()
+    {
+        int placed = 0;
+        const int sampleSize = 4096;
+        for (int i = 0; i < sampleSize; i++)
+        {
+            placed += TerrainDecalCatalog.GetPackedPlacement(CellType.Empty, i, i * 17) > 0 ? 1 : 0;
+        }
+
+        Assert.That(placed, Is.InRange(sampleSize * 14 / 100, sampleSize * 22 / 100));
+    }
+
+    [Test]
     public void IsBackgroundSurface_ExcludesSolidForeground()
     {
         Assert.That(TerrainDecalCatalog.IsGroundSurface(CellType.Empty), Is.True);

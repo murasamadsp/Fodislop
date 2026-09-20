@@ -75,8 +75,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
         sampler_TerrainDecalAtlas,
         atlasUV,
         0);
-    float3 visibleDecalColor = lerp(float3(1.0, 0.58, 0.22), decal.rgb, 0.35);
-    return lerp(baseColor, visibleDecalColor, decal.a * 0.72);
+    return lerp(baseColor, decal.rgb, decal.a);
 }
 
 #endif
