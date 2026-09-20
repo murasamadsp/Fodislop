@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fodinae — Alpha readiness audit</title>
+<style>
+:root{color-scheme:dark;--bg:#101318;--panel:#181d24;--line:#303846;--text:#e8edf4;--muted:#9ca8b8;--ok:#62d394;--warn:#f1c75b;--bad:#ff7777;--accent:#8bb8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1280px;margin:0 auto;padding:40px 24px 72px}h1{font-size:34px;line-height:1.15;margin:0 0 8px}h2{font-size:22px;margin:34px 0 12px;border-bottom:1px solid var(--line);padding-bottom:8px}h3{font-size:17px;margin:24px 0 8px}.meta{color:var(--muted);margin:0 0 26px}.lead{font-size:18px;max-width:920px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin:14px 0}.danger{border-left:4px solid var(--bad)}.warning{border-left:4px solid var(--warn)}.positive{border-left:4px solid var(--ok)}table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);font-size:14px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{color:var(--muted);font-weight:600}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#c6d8ff;background:#202733;padding:1px 4px;border-radius:4px}a{color:var(--accent)}.status{font-weight:700;white-space:nowrap}.ok{color:var(--ok)}.partial{color:var(--warn)}.blocked{color:var(--bad)}.unknown{color:var(--muted)}.small{font-size:13px;color:var(--muted)}ul{margin:8px 0 0 22px;padding:0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;color:#c9d5e6}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.metric b{display:block;font-size:25px}.metric span{color:var(--muted)}@media(max-width:760px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:25px 14px}table{font-size:13px}}
+</style>
+</head>
+<body>
+<main>
+<h1>Fodinae — аудит Alpha Ready</h1>
+<p class="meta">Срез репозитория: 20 сентября 2026 · статический аудит без Unity Editor, публичного сервера и сборки.</p>
+<p class="lead">Клиент не подтверждён как Alpha Ready. В коде есть значительная offline/dummy-вертикаль и архитектурные контракты, но обязательный публичный серверный контур, полная функциональность программатора, реальные миссии, обучение, производительность и две production-сборки доказательствами не закрыты.</p>
+
+<div class="summary">
+<div class="metric"><b class="partial">0</b><span>ошибок архитектурного гейта</span></div>
+<div class="metric"><b class="partial">3</b><span>предупреждения архитектурного гейта</span></div>
+<div class="metric"><b class="partial">manual</b><span>CI запускается только вручную</span></div>
+<div class="metric"><b class="blocked">0</b><span>подтверждённых production-билдов</span></div>
+</div>
+
+<h2>Блокеры перед замерами</h2>
+<div class="card danger">
+<h3>Публичный сервер не задан</h3>
+<p><code>ProjectRuntimeContracts.ClientConfiguration</code> задаёт <code>DefaultServerHost = "127.0.0.1"</code>, <code>DefaultServerPort = 8090</code> и <code>DefaultUseDummyConnection = true</code>. Это не соответствует EDGE-02 и рамке альфы: чистый билд по умолчанию не подключается к одному публичному production-адресу.</p>
+<p class="small">Доказательство: <a href="../Assets/Scripts/Core/Interfaces/Contracts/ProjectRuntimeContracts.cs">ProjectRuntimeContracts.cs</a>, строки 28–40.</p>
+</div>
+<div class="card danger">
+<h3>Архитектурный гейт жёлтый</h3>
+<p><code>dotnet run --project tools/Kern.ArchitectureLinter -- --project-root .</code> завершился с кодом 0 после появления <code>TerrainSheetCatalog.cs.meta</code>. Остались три предупреждения: <code>PostProcessRenderPass.cs</code> имеет 501 строку; два UI guard-а молча возвращают управление при отсутствии <code>rootVisualElement</code>.</p>
+<p class="small">Отчёт SARIF сохранён во временный путь <code>/tmp/fodinae-architecture-lint.sarif</code>; в репозиторий не добавлялся.</p>
+</div>
+<div class="card danger">
+<h3>Агрессия всё ещё присутствует в клиентском наборе операторов</h3>
+<p>В <code>ProgrammatorOperators</code> зарегистрированы <code>ProgAction.EnableAggression</code> и <code>ProgAction.DisableAggression</code>. Это противоречит DEATH-00 и протокольному пункту об удалении PvP из альфы.</p>
+<p class="small">Доказательство: <a href="../Assets/Scripts/UI/Programmator/Model/ProgrammatorOperators.cs">ProgrammatorOperators.cs</a>, строки 63–69.</p>
+</div>
+<div class="card warning">
+<h3>CI не является обязательным непрерывным гейтом</h3>
+<p>Workflow содержит только <code>workflow_dispatch</code>; push, pull_request и schedule отключены комментарием. Поэтому архитектура, тесты, soak и production-сборки не проверяются автоматически при изменениях.</p>
+<p class="small">Доказательство: <a href="../.github/workflows/ci.yml">ci.yml</a>, строки 3–8.</p>
+</div>
+
+<h2>Проверка критериев</h2>
+<p class="small">«Частично» означает наличие клиентского кода или dummy-сценария без доказательства against public server. «Не проверено» означает, что критерий требует Unity, сборки, реального сервера, ручного сценария или performance-замера.</p>
+<table>
+<thead><tr><th>Критерии</th><th>Статус</th><th>Доказательство и недостающая проверка</th></tr></thead>
+<tbody>
+<tr><td>EDGE-01, EDGE-04, EDGE-06</td><td class="status unknown">Не проверено</td><td>Нужны запуск Windows/macOS, прохождение onboarding и проверка переходов.</td></tr>
+<tr><td>EDGE-02</td><td class="status blocked">Блокер</td><td>Дефолт — localhost и dummy connection; публичный адрес отсутствует.</td></tr>
+<tr><td>EDGE-03</td><td class="status partial">Частично</td><td>Есть <code>AuthToken6</code>, <code>AuthTokenPacket</code> и ClientHello в клиенте/dummy. Первый вход и повторный вход против production-сервера не подтверждены.</td></tr>
+<tr><td>EDGE-05</td><td class="status partial">Частично</td><td>Линтер проверяет локализацию и проходит правило локализации; финальность русских текстов и zh/zh-hant ручным сценарием не проверена.</td></tr>
+<tr><td>MOVE-01..MOVE-06</td><td class="status partial">Частично</td><td>Есть <code>MovePacket</code>, <code>ClickCellPacket</code>, cooldown 0.3 с, input/UI guards и координатные сервисы. RTT ≤150 мс, серверные подтверждения и отсутствие телепортов требуют публичного сценария.</td></tr>
+<tr><td>DEATH-00</td><td class="status blocked">Блокер</td><td>Операторы агрессии присутствуют в ProgrammatorOperators.</td></tr>
+<tr><td>DEATH-01, DEATH-02</td><td class="status unknown">Не проверено</td><td>Источники урона и серверная политика смерти не подтверждены; остаётся открытый вопрос документа.</td></tr>
+<tr><td>INV-01..INV-05</td><td class="status partial">Частично</td><td>Есть inventory processors/models и dummy responder. Согласование, сохранение, защита от потери предметов против сервера не проверены.</td></tr>
+<tr><td>WORLD-01..WORLD-07</td><td class="status partial">Частично</td><td>Есть WorldInit, MapStorage, region processors, chunk cache и CoordinateUtils. Размер 30 000×60 000, карты, dirty saves, камеру и lighting нужно подтвердить runtime-сценарием.</td></tr>
+<tr><td>ROB-01..ROB-05</td><td class="status blocked">Блокер</td><td>Есть локальная модель/редактор и ProgAction, но в клиентском исходнике не найден подтверждённый полный поток Save/Open/Run/Step/Breakpoint/Memory через реальный серверный протокол.</td></tr>
+<tr><td>MIS-01..MIS-03</td><td class="status partial">Частично</td><td>Клиент принимает MissionInit, MissionProgress и MissionArrow; dummy их генерирует. Серверная выдача, сброс 18:00 МСК, награды и клановый контур не доказаны.</td></tr>
+<tr><td>ECO-01..ECO-05</td><td class="status partial">Частично</td><td>Есть OpenWindow/CloseWindow и dummy Storage/Crafter/Market/teleport сценарии. Серверная экономика, полный перечень зданий и отсутствие payment API не проверены.</td></tr>
+<tr><td>CHAT-01, CHAT-02</td><td class="status partial">Частично</td><td>Есть chat processors/responder и lifecycle cleanup в dummy. Production-сервер, история каналов и стресс при движении не проверены.</td></tr>
+<tr><td>AUD-01..AUD-03</td><td class="status partial">Частично</td><td>В dummy создаются SFX/audio packets; FMOD банки и 3D-позиционирование в production build не проверены.</td></tr>
+<tr><td>SET-01, SET-02</td><td class="status partial">Частично</td><td>SettingsProbe проходит в архитектурном линтере; применение, миграции schema v15, HDR и переключение языка в Unity не запускались.</td></tr>
+<tr><td>REC-01</td><td class="status partial">Частично</td><td>ConnectionManager имеет disconnect/reconnect и возврат через scene navigator; разрыв production-соединения и отсутствие zombie subscriptions не проверены.</td></tr>
+<tr><td>REC-02, REC-03</td><td class="status unknown">Не проверено</td><td>В CI описаны soak и map/config artifacts, но Unity workflow в этом аудите не запускался; CI schedule отключён.</td></tr>
+<tr><td>REC-04</td><td class="status partial">Частично</td><td>В просмотренных файлах не найдено требование искусственного FPS cap; полный поиск и runtime proof ещё не являются тестом производительности.</td></tr>
+<tr><td>PERF-01..PERF-06</td><td class="status unknown">Не проверено</td><td>Нет baseline p95/GC/памяти и замеров на среднем/слабом железе. Unity Editor, build и публичный сервер намеренно не запускались.</td></tr>
+</tbody>
+</table>
+
+<h2>Автоматические гейты</h2>
+<table>
+<thead><tr><th>Гейт</th><th>Результат</th><th>Комментарий</th></tr></thead>
+<tbody>
+<tr><td>ArchitectureLinter</td><td class="status partial">PASS с предупреждениями</td><td>51 правил, 12 assemblies; 0 errors и 3 warnings.</td></tr>
+<tr><td>SettingsProbe</td><td class="status ok">PASS внутри линтера</td><td>Проверки defaults/ranges/consumers/localization/audio/graphics завершились OK.</td></tr>
+<tr><td>Unity EditMode/PlayMode</td><td class="status unknown">Не запускался</td><td>Требует явно названной Unity-операции; в CI это self-hosted workflow.</td></tr>
+<tr><td>Windows x64/macOS ARM64 build</td><td class="status unknown">Не запускался</td><td>В workflow jobs существуют, артефактов текущего аудита нет.</td></tr>
+<tr><td>Nightly soak</td><td class="status blocked">Не активен</td><td>Job описан, но schedule отключён; остаётся ручной dispatch с input soak.</td></tr>
+</tbody>
+</table>
+
+<h2>Приоритет исправлений</h2>
+<ol>
+<li>Задать реальный production host/port и выключить dummy connection для release-конфигурации; добавить проверку EDGE-02 в build gate.</li>
+<li>Удалить агрессию из <code>ProgAction</code>, списка операторов, локализации, UI и packet flow; затем проверить DEATH-00 поиском и тестом.</li>
+<li>Добавить отсутствующий <code>TerrainSheetCatalog.cs.meta</code>; устранить три нарушения линтера.</li>
+<li>Закрыть полный протокол программатора и миссий на сервере, после чего провести ручной сценарий ROB-01..05 и MIS-01..03.</li>
+<li>Включить CI для push/pull_request и nightly schedule; получить Windows/macOS артефакты и результаты EditMode/PlayMode/soak.</li>
+<li>Только после этого зафиксировать performance baseline и выполнить публичный чек-лист всех ID.</li>
+</ol>
+
+<h2>Ограничения этого аудита</h2>
+<p>Проверка не утверждает, что визуальные, GPU, сетевые и performance-критерии выполнены: для них нужны production-путь, Unity, реальные данные, сборка и публичный сервер. Серверный исходник в текущем workspace не является частью проверенного набора. Незакоммиченные изменения пользователя в terrain-файлах сохранены без изменений.</p>
+</main>
+</body>
+</html>
