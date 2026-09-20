@@ -5,6 +5,78 @@
 
 static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 
+static const float KERN_TERRAIN_GEOMETRY_COORD_BIAS = 2048.0;
+static const float KERN_TERRAIN_GEOMETRY_COORD_RANGE = 4096.0;
+
+float2 UnpackTerrainGeometryPair(float packedPair)
+{
+    float high = floor(packedPair / KERN_TERRAIN_GEOMETRY_COORD_RANGE);
+    float low = packedPair - (high * KERN_TERRAIN_GEOMETRY_COORD_RANGE);
+    return (float2(high, low) - KERN_TERRAIN_GEOMETRY_COORD_BIAS) /
+        KERN_TERRAIN_FACE_GRID_SIZE;
+}
+
+void UnpackTerrainGeometryCorners(
+    float4 packedCorners,
+    out float4 cornersX,
+    out float4 cornersY)
+{
+    float2 corner0 = UnpackTerrainGeometryPair(packedCorners.x);
+    float2 corner1 = UnpackTerrainGeometryPair(packedCorners.y);
+    float2 corner2 = UnpackTerrainGeometryPair(packedCorners.z);
+    float2 corner3 = UnpackTerrainGeometryPair(packedCorners.w);
+    cornersX = float4(corner0.x, corner1.x, corner2.x, corner3.x);
+    cornersY = float4(corner0.y, corner1.y, corner2.y, corner3.y);
+}
+
+float2 QuantizeTerrainGeometryPoint(float2 samplePosition)
+{
+    return (floor(samplePosition * KERN_TERRAIN_FACE_GRID_SIZE) + 0.5) /
+        KERN_TERRAIN_FACE_GRID_SIZE;
+}
+
+float TerrainGeometryEdgeCross(
+    float2 edgeStart,
+    float2 edgeEnd,
+    float2 samplePosition)
+{
+    float2 edge = edgeEnd - edgeStart;
+    float2 toSample = samplePosition - edgeStart;
+    return (edge.x * toSample.y) - (edge.y * toSample.x);
+}
+
+float TerrainGeometryCoverage(
+    float2 samplePosition,
+    float4 cornersX,
+    float4 cornersY,
+    float anchored)
+{
+    if (anchored < 0.5)
+    {
+        return 1.0;
+    }
+
+    float2 quantizedPoint = QuantizeTerrainGeometryPoint(samplePosition);
+    float2 corner0 = float2(cornersX.x, cornersY.x);
+    float2 corner1 = float2(cornersX.y, cornersY.y);
+    float2 corner2 = float2(cornersX.z, cornersY.z);
+    float2 corner3 = float2(cornersX.w, cornersY.w);
+    float4 edgeCrosses = float4(
+        TerrainGeometryEdgeCross(corner0, corner1, quantizedPoint),
+        TerrainGeometryEdgeCross(corner1, corner2, quantizedPoint),
+        TerrainGeometryEdgeCross(corner2, corner3, quantizedPoint),
+        TerrainGeometryEdgeCross(corner3, corner0, quantizedPoint));
+    float4 edgeLengths = float4(
+        length(corner1 - corner0),
+        length(corner2 - corner1),
+        length(corner3 - corner2),
+        length(corner0 - corner3));
+    float4 edgeMargins = edgeLengths / KERN_TERRAIN_FACE_GRID_SIZE;
+    bool insideCounterClockwise = all(edgeCrosses >= -edgeMargins);
+    bool insideClockwise = all(edgeCrosses <= edgeMargins);
+    return (insideCounterClockwise || insideClockwise) ? 1.0 : 0.0;
+}
+
 float2 QuantizeTerrainFaceUV(float2 uv)
 {
     // The input can be the displaced corner coordinate. Keep it outside the

@@ -22,6 +22,7 @@ public sealed class TerrainMeshManager
         new(VertexAttribute.TexCoord4, VertexAttributeFormat.Float16, 4), // animData         16 → 8 bytes
         new(VertexAttribute.TexCoord5, VertexAttributeFormat.Float16, 4), // anchorData       16 → 8 bytes
         new(VertexAttribute.TexCoord6, VertexAttributeFormat.Float32, 4), // glowVec: stays float32 (packed RGB > 65504)
+        new(VertexAttribute.TexCoord7, VertexAttributeFormat.Float32, 4), // packed geometry corners 16 bytes
     ];
 
     private readonly RenderTargetIdentifier[] _lightingFieldTargets = new RenderTargetIdentifier[2];

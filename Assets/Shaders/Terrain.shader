@@ -75,6 +75,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
                 float4 glowAttr     : TEXCOORD6;
+                float4 packedGeometryCorners : TEXCOORD7;
             };
 
             struct Varyings
@@ -91,6 +92,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 glowData     : TEXCOORD7;
                 nointerpolation float atlasIndex : TEXCOORD8;
                 nointerpolation float isForeground : TEXCOORD9;
+                nointerpolation float4 geometryCornersX : TEXCOORD10;
+                nointerpolation float4 geometryCornersY : TEXCOORD11;
             };
 
             TEXTURE2D(_BaseMap);
@@ -199,6 +202,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.worldPos = cell.worldPos;
                 output.worldPosition = TransformObjectToWorld(cell.positionOS);
                 output.glowData = cell.glowData;
+                output.geometryCornersX = cell.geometryCornersX;
+                output.geometryCornersY = cell.geometryCornersY;
                 output.animData = cell.animData;
                 output.packedData = cell.packedData;
                 output.isForeground = cell.layer > 0.5 ? 1.0 : 0.0;
@@ -215,6 +220,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.animData = input.animData;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.packedData = input.packedData;
+                UnpackTerrainGeometryCorners(
+                    input.packedGeometryCorners,
+                    output.geometryCornersX,
+                    output.geometryCornersY);
                 output.atlasIndex = 0.0;
 
                 return output;
@@ -240,6 +249,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // TBDR: no discard anywhere in this shader — transparent output instead.
                 // discard kills Hidden Surface Removal on Apple GPUs; alpha-0 blending is visually identical.
                 if (input.worldPos.w > 1.5) return half4(0.0, 0.0, 0.0, 0.0);
+                float geometryCoverage = TerrainGeometryCoverage(
+                    input.packedData.yz,
+                    input.geometryCornersX,
+                    input.geometryCornersY,
+                    input.packedData.x);
                 if (input.subAtlasRect.z < 0.0001)
                 {
                     if (input.color.a < 0.05)
@@ -249,7 +263,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                     float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                     float3 diagnosticTexture = SampleMissingTexture(input.worldPos.xy);
-                    return half4(diagnosticTexture * worldLight.rgb, input.color.a);
+                    return half4(
+                        diagnosticTexture * worldLight.rgb,
+                        input.color.a * geometryCoverage);
                 }
                 if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
@@ -328,6 +344,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.glowData.z,
                     input.glowData.y,
                     TerrainContourAntialiasScale(animationProfile));
+                finalAlpha *= geometryCoverage;
 
                 float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRGB = finalRGB * worldLight.rgb;
@@ -438,6 +455,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
                 float4 glowAttr     : TEXCOORD6;
+                float4 packedGeometryCorners : TEXCOORD7;
             };
 
             struct MaterialFieldVaryings
@@ -453,6 +471,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 subAtlasRect : TEXCOORD6;
                 float4 tileSizeUV   : TEXCOORD7;
                 nointerpolation float atlasIndex : TEXCOORD8;
+                nointerpolation float4 geometryCornersX : TEXCOORD9;
+                nointerpolation float4 geometryCornersY : TEXCOORD10;
             };
 
             struct MaterialFieldOutput
@@ -475,6 +495,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.animData = cell.animData;
                 output.packedData = cell.packedData;
                 output.glowData = cell.glowData;
+                output.geometryCornersX = cell.geometryCornersX;
+                output.geometryCornersY = cell.geometryCornersY;
                 output.isForeground = cell.layer > 0.5 ? 1.0 : 0.0;
                 output.subAtlasRect = cell.subAtlasRect;
                 output.tileSizeUV = cell.tileSizeUV;
@@ -487,6 +509,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.worldPos = input.worldPosAttr;
                 output.animData = input.animData;
                 output.packedData = input.packedData;
+                UnpackTerrainGeometryCorners(
+                    input.packedGeometryCorners,
+                    output.geometryCornersX,
+                    output.geometryCornersY);
                 output.glowData = input.glowAttr;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.subAtlasRect = input.subAtlasRect;
@@ -589,6 +615,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
                 float occupancy = isPhysicalMass ? 1.0 : 0.0;
+                occupancy *= TerrainGeometryCoverage(
+                    input.packedData.yz,
+                    input.geometryCornersX,
+                    input.geometryCornersY,
+                    input.packedData.x);
                 float2 contourUV = input.packedData.x > 0.5
                     ? input.packedData.yz
                     : input.uv;
