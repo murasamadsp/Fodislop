@@ -19,10 +19,11 @@ float KernSampleTerrainAmbientOcclusion(float2 worldPosition, float4 worldLightR
     }
 
     float texelsPerCell = max(_WorldAmbientOcclusionTexelsPerCell, 1.0);
-    // Mip 1.5 is the established AO radius at one texel per cell. The
-    // density offset keeps that radius in world space while mip zero retains
-    // the authored rounded and alpha-cutout silhouette.
-    float mip = 1.5 + log2(texelsPerCell);
+    // Contact AO must retain the cell silhouette. Averaging over 2.8 cells
+    // erased displaced/rounded edges even though mip zero held correct geometry.
+    // A half-cell footprint follows the contour at every field resolution;
+    // keep the established response curve and strength below unchanged.
+    float mip = max(log2(texelsPerCell) - 1.0, 0.0);
     float nearbyOccupancy = _WorldAmbientOcclusionTexture.SampleLevel(
         sampler_WorldAmbientOcclusionTexture,
         saturate(uv),

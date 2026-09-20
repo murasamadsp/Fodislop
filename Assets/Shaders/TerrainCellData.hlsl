@@ -100,16 +100,24 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
     // the same ring address and must never inherit a stale anchor bit from a
     // previous cell upload.
     bool anchored = layer > 0 && meta.a > 0.5;
-    float2 loadedCornerGeometry = cornerStep.y == 0
-        ? (cornerStep.x == 0
-            ? float2(geometryX.x, geometryY.x)
-            : float2(geometryX.y, geometryY.y))
-        : (cornerStep.x == 1
-            ? float2(geometryX.z, geometryY.z)
-            : float2(geometryX.w, geometryY.w));
-    float2 cornerGeometry = anchored ? loadedCornerGeometry : cornerBase;
-    float2 cornerOffset = cornerGeometry - cornerBase;
-    v.packedData = float4(anchored ? 1.0 : 0.0, cornerGeometry, 0.0);
+    // Rasterize a carrier enclosing the ENTIRE pixel silhouette. Rasterizing
+    // the displaced polygon first loses fragments on the outward half of every
+    // staircase; fragment clipping cannot bring those fragments back.
+    // Corners are cell-local, so the interpolant and POSITION use one scale.
+    float2 carrierCorner = cornerBase;
+    if (anchored)
+    {
+        float2 boundsMin = float2(
+            min(min(geometryX.x, geometryX.y), min(geometryX.z, geometryX.w)),
+            min(min(geometryY.x, geometryY.y), min(geometryY.z, geometryY.w)));
+        float2 boundsMax = float2(
+            max(max(geometryX.x, geometryX.y), max(geometryX.z, geometryX.w)),
+            max(max(geometryY.x, geometryY.y), max(geometryY.z, geometryY.w)));
+        boundsMin = floor(boundsMin * 32.0) / 32.0;
+        boundsMax = ceil(boundsMax * 32.0) / 32.0;
+        carrierCorner = lerp(boundsMin, boundsMax, cornerBase);
+    }
+    v.packedData = float4(anchored ? 1.0 : 0.0, carrierCorner, 0.0);
     v.geometryCornersX = anchored
         ? geometryX
         : float4(0.0, 1.0, 1.0, 0.0);
@@ -118,12 +126,9 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
         : float4(0.0, 0.0, 1.0, 1.0);
     float cellSize = _TerrainCellGridSize.z;
     v.positionOS = float3(
-        (x + cornerBase.x) * cellSize,
-        (y + cornerBase.y) * cellSize,
+        (x + carrierCorner.x) * cellSize,
+        (y + carrierCorner.y) * cellSize,
         layer == 0 ? 0.1 : 0.0);
-    // Offsets are stored in world units (one 1/32 step is one pixel), while
-    // cornerGeometry remains in cell-local units for contour quantization.
-    v.positionOS.xy += cornerOffset;
     return v;
 }
 

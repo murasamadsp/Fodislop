@@ -36,6 +36,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Validate architecture, USS, and localization
         run: dotnet run --project tools/Kern.ArchitectureLinter
+      - name: Test terrain raster coverage and AO geometry without Unity
+        run: python3 tools/terrain-raster-tests/run.py
       - name: Test display mode lifecycle without Unity
         run: dotnet test tools/Kern.DisplayTests/Kern.DisplayTests.csproj --verbosity minimal
 

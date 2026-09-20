@@ -54,11 +54,14 @@ public sealed class TerrainCellIDMesh : IDisposable
         var corners = new Vector2[quads * 4];
         var indices = new int[quads * 6];
         int quad = 0;
-        for (int y = 0; y < meshHeight; y++)
+        // Alpha blending does not write depth. Draw the entire background
+        // before foreground: a later neighbour's background must not erase
+        // a foreground silhouette extending outside its original cell.
+        for (int layer = 0; layer < TerrainCellDataPacker.LayersPerCell; layer++)
         {
-            for (int x = 0; x < meshWidth; x++)
+            for (int y = 0; y < meshHeight; y++)
             {
-                for (int layer = 0; layer < TerrainCellDataPacker.LayersPerCell; layer++)
+                for (int x = 0; x < meshWidth; x++)
                 {
                     int vertex = quad * 4;
                     for (int corner = 0; corner < 4; corner++)
