@@ -28,6 +28,15 @@ internal readonly record struct TerrainLightingData(
     private const float EmissionFractionScale = 0.25f;
     private const byte SolidDiagonalShift = 4;
     private const float ContourFlagsRange = 4f;
+
+    // Маска рельефа лежит над диагональной: биты 0-1 — флаги контура,
+    // 2-5 — диагональные соседи, 6-10 — код рельефа. Код, а не маска:
+    // ноль означает «клетка без рельефа, каймы нет», а маска рельефа
+    // хранится как mask + 1. Иначе клетка без рельефа и клетка, у которой
+    // все четыре соседа чужие, выглядели бы одинаково.
+    private const int ReliefCodeShift = 6;
+    private const float ReliefCodeRange = 64f;
+    public const int NoRelief = 0;
     private const int GlowingContourFlag = 1 << 0;
     private const int RoundableContourFlag = 1 << 1;
 
@@ -37,6 +46,8 @@ internal readonly record struct TerrainLightingData(
     public int SolidBoundary => (int)Flags & SolidBoundaryMask;
 
     public int SolidDiagonal => (int)MathF.Round(PackedContour) >> 2 & SolidBoundaryMask;
+
+    public int ReliefCode => ((int)MathF.Round(PackedContour) >> ReliefCodeShift) & 0x1F;
 
     public bool IsEmissive => (Flags & TerrainLightingFlags.Emissive) != 0;
 
@@ -59,7 +70,9 @@ internal readonly record struct TerrainLightingData(
         bool isGlowing,
         bool hasRoundedPhysicalContour,
         bool isPhysicalMass,
-        float emissionStrength)
+        float emissionStrength,
+        byte reliefMask,
+        bool hasRelief)
     {
         var flags = (TerrainLightingFlags)(solidConnectivityMask & SolidBoundaryMask);
         if (isGlowing)
@@ -80,8 +93,10 @@ internal readonly record struct TerrainLightingData(
         int contourFlags = (isGlowing ? GlowingContourFlag : 0) |
             (hasRoundedPhysicalContour ? RoundableContourFlag : 0);
         int solidDiagonal = solidConnectivityMask >> SolidDiagonalShift;
+        int reliefCode = hasRelief ? (reliefMask & SolidBoundaryMask) + 1 : NoRelief;
         return new TerrainLightingData(
             (byte)flags + (emissionStrength * EmissionFractionScale),
-            contourFlags + (solidDiagonal * ContourFlagsRange));
+            contourFlags + (solidDiagonal * ContourFlagsRange) +
+                (reliefCode * ReliefCodeRange));
     }
 }

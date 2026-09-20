@@ -16,7 +16,9 @@ public class TerrainLightingDataTests
             isGlowing: true,
             hasRoundedPhysicalContour: true,
             isPhysicalMass: true,
-            emissionStrength: 0.6f);
+            emissionStrength: 0.6f,
+            reliefMask: 0,
+            hasRelief: false);
 
         Assert.That(data.PackedFlags, Is.EqualTo(117.15f).Within(0.0001f));
         Assert.That(data.PackedContour, Is.EqualTo(43f));
@@ -37,7 +39,9 @@ public class TerrainLightingDataTests
             isGlowing,
             hasRoundedPhysicalContour,
             isPhysicalMass,
-            isGlowing ? 0.6f : 0f);
+            isGlowing ? 0.6f : 0f,
+            reliefMask: 0,
+            hasRelief: false);
 
         Assert.That(data.SolidBoundary, Is.EqualTo(0x05));
         Assert.That(data.SolidDiagonal, Is.EqualTo(0x0A));
@@ -58,7 +62,9 @@ public class TerrainLightingDataTests
             isGlowing: true,
             hasRoundedPhysicalContour: true,
             isPhysicalMass: isPhysicalMass,
-            emissionStrength: 1f);
+            emissionStrength: 1f,
+            reliefMask: 0,
+            hasRelief: false);
 
         Assert.That(data.ReceivesAmbientOcclusion, Is.EqualTo(expectedReceiver));
     }
@@ -75,7 +81,9 @@ public class TerrainLightingDataTests
             isGlowing: true,
             hasRoundedPhysicalContour: true,
             isPhysicalMass: true,
-            emissionStrength: emissionStrength);
+            emissionStrength: emissionStrength,
+            reliefMask: 0,
+            hasRelief: false);
 
         Assert.That(data.EmissionStrength, Is.EqualTo(emissionStrength).Within(0.0001f));
         Assert.That(data.SolidBoundary, Is.EqualTo(0x0A));
@@ -92,7 +100,9 @@ public class TerrainLightingDataTests
             isGlowing: false,
             hasRoundedPhysicalContour: false,
             isPhysicalMass: false,
-            emissionStrength: 0.75f);
+            emissionStrength: 0.75f,
+            reliefMask: 0,
+            hasRelief: false);
 
         Assert.That(data.EmissionStrength, Is.Zero);
     }
@@ -109,5 +119,40 @@ public class TerrainLightingDataTests
     public void BuildingAndArtificialBlocksAreIdentifiedAsNonEmissive(MinesServer.Data.CellType cellType)
     {
         Assert.That(Kern.World.MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellType), Is.True);
+    }
+
+    // Код рельефа лежит над остальными полями контура и обязан их не задевать:
+    // одно число несёт флаги, диагональных соседей и кайму разом.
+    [TestCase(0, 1)]
+    [TestCase(0x05, 6)]
+    [TestCase(0x0F, 16)]
+    public void ReliefCodeRoundTripsBesideContourFields(int reliefMask, int expectedCode)
+    {
+        TerrainLightingData data = TerrainLightingData.Pack(
+            0xA5,
+            isGlowing: true,
+            hasRoundedPhysicalContour: true,
+            isPhysicalMass: true,
+            emissionStrength: 0.6f,
+            reliefMask: (byte)reliefMask,
+            hasRelief: true);
+
+        Assert.That(data.ReliefCode, Is.EqualTo(expectedCode));
+        Assert.That(data.SolidDiagonal, Is.EqualTo(0x0A));
+        Assert.That(data.IsRoundable, Is.True);
+    }
+
+    // Ноль означает «рельефа нет», поэтому клетка без семьи и клетка, у
+    // которой все четыре соседа чужие, обязаны различаться.
+    [Test]
+    public void NoReliefIsDistinctFromAllNeighborsForeign()
+    {
+        TerrainLightingData without = TerrainLightingData.Pack(
+            0, false, false, false, 0f, reliefMask: 0, hasRelief: false);
+        TerrainLightingData surrounded = TerrainLightingData.Pack(
+            0, false, false, false, 0f, reliefMask: 0, hasRelief: true);
+
+        Assert.That(without.ReliefCode, Is.EqualTo(TerrainLightingData.NoRelief));
+        Assert.That(surrounded.ReliefCode, Is.EqualTo(1));
     }
 }

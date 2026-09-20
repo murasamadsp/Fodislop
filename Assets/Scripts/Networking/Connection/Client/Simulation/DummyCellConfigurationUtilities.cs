@@ -87,27 +87,32 @@ internal static class DummyCellConfigurationUtilities
         SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
         SetConfig(configs, CellType.BuildingWall, INDESTRUCTIBLE_PROPS, 2, color: unchecked((int)0xFF666666), distortion: CellDistortionType.Block);
 
+        // Рельефная группа — семья, внутри которой клетки сливаются в один
+        // массив. По границе между разными группами рисуется кайма, поэтому
+        // группа 3 (кристаллы) и группа 5 (порода) разведены намеренно: пока
+        // они делили один номер, кристалл врастал в породу и жила читалась
+        // куском той же стены. В оригинале это тоже две разные семьи.
         SetConfig(configs, CellType.XGreen, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF3D), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XViolet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.DeepTurquoiseRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.DeepRainbowRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Green, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Red, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Blue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Violet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.White, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Cyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.AcidRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
 
         SetConfig(configs, CellType.AliveCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.AliveRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);

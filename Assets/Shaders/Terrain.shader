@@ -360,6 +360,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     finalRGB,
                     input.uv,
                     input.glowData.w);
+                finalRGB *= TerrainReliefRim(contourUV, input.glowData.z);
 
                 float finalAlpha = cellCoverage;
 
@@ -676,6 +677,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     surfaceAlbedo,
                     input.uv,
                     input.glowData.w);
+                // Та же кайма, что и на экране: поле материалов обязано нести
+                // ровно то альбедо, которое видно, иначе свет отскакивает от
+                // цвета, которого в кадре нет.
+                surfaceAlbedo *= TerrainReliefRim(contourUV, input.glowData.z);
 
                 float surface = step(0.05, input.color.a) * isForeground;
                 output.material = half4(surfaceAlbedo * surface, occupancy);

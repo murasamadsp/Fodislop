@@ -292,12 +292,19 @@ internal static class TerrainQuadBuilder
         float emissionPower = isGlowing
             ? Mathf.Max(1f / byte.MaxValue, minimapColor.a / 255f)
             : 0f;
+        // Кайма рельефа — только у переднего плана: фон её не рисует, а
+        // ring-адрес у фонового текселя тот же, и чужой код рельефа въехал бы
+        // в соседний слой.
+        byte reliefMask = precalc.CellReliefMasks[x, y];
+        bool hasRelief = !isBackground && ccd.ReliefGroup != 0;
         TerrainLightingData lightingData = TerrainLightingData.Pack(
             solidConnectivityMask,
             isGlowing,
             hasRoundedPhysicalContour,
             isPhysicalMass,
-            emissionPower);
+            emissionPower,
+            reliefMask,
+            hasRelief);
         bool hasGroundDecalSurface = TerrainDecalCatalog.IsGroundDecalSurface(
             cellType,
             isBackground);

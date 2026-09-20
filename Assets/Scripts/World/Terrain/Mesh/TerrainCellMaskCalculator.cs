@@ -251,6 +251,15 @@ public sealed class TerrainCellMaskCalculator
         return cornerSideMask;
     }
 
+    // Рельефная маска: бит стоит там, где сосед принадлежит ТОЙ ЖЕ рельефной
+    // группе. Ноль у клетки без рельефа (группа 0) — у неё нет и каймы.
+    //
+    // Сравнение именно на равенство, а не «сосед не ниже». Кайма рисуется по
+    // сторонам, где сосед чужой, и порядковое сравнение делало её
+    // односторонней: кристалл (группа 3) рядом с неразрушимой породой
+    // (группа 4) считал соседа своим и сливался с ним, а порода рядом с
+    // кристаллом — чужим и обводилась. Шов получался у одной клетки из двух.
+    // В оригинале сравнение равенством, и обе стороны обводят друг друга.
     public static byte CalculateReliefMask(
         CachedCellData data,
         CachedCellData top,
@@ -258,23 +267,28 @@ public sealed class TerrainCellMaskCalculator
         CachedCellData bottom,
         CachedCellData right)
     {
+        if (data.ReliefGroup == 0)
+        {
+            return 0;
+        }
+
         byte rm = 0;
-        if (top.ReliefGroup >= data.ReliefGroup)
+        if (top.ReliefGroup == data.ReliefGroup)
         {
             rm |= 1;
         }
 
-        if (left.ReliefGroup >= data.ReliefGroup)
+        if (left.ReliefGroup == data.ReliefGroup)
         {
             rm |= 2;
         }
 
-        if (bottom.ReliefGroup >= data.ReliefGroup)
+        if (bottom.ReliefGroup == data.ReliefGroup)
         {
             rm |= 4;
         }
 
-        if (right.ReliefGroup >= data.ReliefGroup)
+        if (right.ReliefGroup == data.ReliefGroup)
         {
             rm |= 8;
         }

@@ -35,23 +35,47 @@ public class TerrainCellMaskCalculatorFuzzTests
         Assert.That(mask, Is.EqualTo(15));
     }
 
-    // Бит ставится, когда сосед не ниже центра: высокий рельеф примыкает к низкому.
+    // Бит ставится только на равенстве: рельефная группа — семья, а не
+    // высота. Раньше сравнение было порядковым, и шов между двумя семьями
+    // рисовался лишь с той стороны, где номер больше.
     [Test]
-    public void CalculateReliefMask_HigherNeighbors_ProduceFullMask()
+    public void CalculateReliefMask_ForeignNeighbors_ProduceZero()
     {
         var center = new CachedCellData { ReliefGroup = 5 };
-        var side = new CachedCellData { ReliefGroup = 7 };
-        byte mask = TerrainCellMaskCalculator.CalculateReliefMask(center, side, side, side, side);
-        Assert.That(mask, Is.EqualTo(15));
+        var higher = new CachedCellData { ReliefGroup = 7 };
+        var lower = new CachedCellData { ReliefGroup = 3 };
+        Assert.That(
+            TerrainCellMaskCalculator.CalculateReliefMask(center, higher, higher, higher, higher),
+            Is.EqualTo(0));
+        Assert.That(
+            TerrainCellMaskCalculator.CalculateReliefMask(center, lower, lower, lower, lower),
+            Is.EqualTo(0));
     }
 
+    // Обе стороны шва обязаны видеть друг друга чужими, иначе кайму рисует
+    // одна клетка из двух и граница выглядит смещённой на полклетки.
     [Test]
-    public void CalculateReliefMask_LowerNeighbors_ProduceZero()
+    public void CalculateReliefMask_ForeignPairIsSymmetric()
     {
-        var center = new CachedCellData { ReliefGroup = 7 };
-        var side = new CachedCellData { ReliefGroup = 5 };
-        byte mask = TerrainCellMaskCalculator.CalculateReliefMask(center, side, side, side, side);
-        Assert.That(mask, Is.EqualTo(0));
+        var crystal = new CachedCellData { ReliefGroup = 3 };
+        var rock = new CachedCellData { ReliefGroup = 5 };
+        byte fromCrystal = TerrainCellMaskCalculator.CalculateReliefMask(
+            crystal, rock, crystal, crystal, crystal);
+        byte fromRock = TerrainCellMaskCalculator.CalculateReliefMask(
+            rock, rock, rock, crystal, rock);
+        Assert.That(fromCrystal & 1, Is.EqualTo(0), "кристалл не считает породу своей");
+        Assert.That(fromRock & 4, Is.EqualTo(0), "порода не считает кристалл своим");
+    }
+
+    // Клетка без рельефа не обводится ничем: у неё нет семьи, и кайма по
+    // всем четырём сторонам залила бы пол сеткой.
+    [Test]
+    public void CalculateReliefMask_NoReliefGroup_ProducesZero()
+    {
+        var ground = new CachedCellData { ReliefGroup = 0 };
+        Assert.That(
+            TerrainCellMaskCalculator.CalculateReliefMask(ground, ground, ground, ground, ground),
+            Is.EqualTo(0));
     }
 
     [Test]

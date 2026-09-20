@@ -17,6 +17,13 @@ int KernTerrainSolidBoundary(uint lightingFlags)
     return int(lightingFlags & KERN_TERRAIN_SOLID_BOUNDARY_MASK);
 }
 
+// Код рельефа: 0 — клетки без рельефа (каймы нет), иначе маска + 1.
+// Раскладка описана в TerrainLightingData.Pack.
+int KernTerrainReliefCode(float packedContour)
+{
+    return (int(round(packedContour)) >> 6) & 31;
+}
+
 int KernTerrainSolidDiagonal(float packedContour)
 {
     return (int(round(packedContour)) >> 2) & int(KERN_TERRAIN_SOLID_BOUNDARY_MASK);

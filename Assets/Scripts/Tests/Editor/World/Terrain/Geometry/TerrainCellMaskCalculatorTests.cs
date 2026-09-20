@@ -64,20 +64,19 @@ public class TerrainCellMaskCalculatorTests
     }
 
     [Test]
-    public void CalculateReliefMask_NeighborsHigherOrEqual_SetsBitmask()
+    public void CalculateReliefMask_OnlyEqualNeighbors_SetBitmask()
     {
         var center = new CachedCellData { ReliefGroup = 5 };
-        var higher = new CachedCellData { ReliefGroup = 6 };
         var equal = new CachedCellData { ReliefGroup = 5 };
-        var lower = new CachedCellData { ReliefGroup = 4 };
+        var foreign = new CachedCellData { ReliefGroup = 6 };
 
-        byte allHigher = TerrainCellMaskCalculator.CalculateReliefMask(center, higher, equal, higher, equal);
-        Assert.AreEqual(1 | 2 | 4 | 8, (int)allHigher);
+        byte allEqual = TerrainCellMaskCalculator.CalculateReliefMask(center, equal, equal, equal, equal);
+        Assert.AreEqual(1 | 2 | 4 | 8, (int)allEqual);
 
-        byte allLower = TerrainCellMaskCalculator.CalculateReliefMask(center, lower, lower, lower, lower);
-        Assert.AreEqual(0, (int)allLower);
+        byte allForeign = TerrainCellMaskCalculator.CalculateReliefMask(center, foreign, foreign, foreign, foreign);
+        Assert.AreEqual(0, (int)allForeign);
 
-        byte topAndRight = TerrainCellMaskCalculator.CalculateReliefMask(center, higher, lower, lower, equal);
+        byte topAndRight = TerrainCellMaskCalculator.CalculateReliefMask(center, equal, foreign, foreign, equal);
         Assert.AreEqual(1 | 8, (int)topAndRight);
     }
 

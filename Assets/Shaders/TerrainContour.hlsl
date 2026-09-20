@@ -154,6 +154,55 @@ float EvaluateRoundableBlockAlpha(
     return lerp(alpha, 1.0, cornerExclude);
 }
 
+// Кайма рельефа: затемнение к той стороне клетки, за которой лежит чужая
+// рельефная группа. Ради неё вся маска и считается — без каймы кристалл и
+// порода образуют одно сплошное пятно, потому что тайлы у них смыкаются
+// вплотную и границы семьи в картинке нет.
+//
+// Падение (1 - max(x², y²))³ повторяет оригинал: в центре клетки множитель
+// равен единице и текстура не трогается вовсе, к краю уходит в ноль. Куб
+// держит затемнение прижатым к самому краю — линейное расплывалось бы на
+// половину клетки и читалось как тень, а не как грань.
+//
+// Клетка делится диагоналями на четыре сектора, по одному на сторону, и
+// сектор темнеет только если его сторона чужая. Сектор ровно один на
+// фрагмент: диагонали делят клетку без перекрытий.
+float TerrainReliefRim(float2 contourSample, float packedContour)
+{
+    int reliefCode = KernTerrainReliefCode(packedContour);
+    if (reliefCode == 0)
+    {
+        return 1.0;
+    }
+
+    // Код хранит маску своих соседей со сдвигом на единицу; кайме нужны
+    // чужие, то есть дополнение до четырёх сторон.
+    int foreignSides = (~(reliefCode - 1)) & 0x0F;
+    if (foreignSides == 0)
+    {
+        return 1.0;
+    }
+
+    float2 p = (QuantizeTerrainFaceUV(contourSample) - 0.5) * 2.0;
+    float edge = saturate(max(p.x * p.x, p.y * p.y));
+    float fall = 1.0 - edge;
+    float darken = fall * fall * fall;
+
+    bool aboveMinorDiagonal = (p.y - p.x) > 0.0;
+    bool aboveMainDiagonal = (p.y + p.x) > 0.0;
+    int side;
+    if (aboveMinorDiagonal)
+    {
+        side = aboveMainDiagonal ? 1 : 2;
+    }
+    else
+    {
+        side = aboveMainDiagonal ? 8 : 4;
+    }
+
+    return (foreignSides & side) != 0 ? darken : 1.0;
+}
+
 // The visible terrain and the material field must use the same cell shape.
 // Geometry is evaluated only for the GPU cell path; CPU overlays already carry
 // the displaced polygon in POSITION and therefore do not need a second mask.
