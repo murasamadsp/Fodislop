@@ -26,6 +26,12 @@ public sealed class TerrainDebugWindow : ToolWindow
         : base("Отладка террейна", new Rect(600f, 16f, 300f, 420f))
     {
         _terrainRenderer = terrainRenderer;
+
+        // Открыто сразу, как окно кадровой статистики. Остальные окна
+        // стартуют скрытыми и включаются галочкой на тулбаре; диагностика,
+        // которую открывают, чтобы разобрать конкретный артефакт, так
+        // теряется: её ищут глазами по кадру, а не по списку.
+        Visible = true;
     }
 
     public override bool WantsSampling => false;
