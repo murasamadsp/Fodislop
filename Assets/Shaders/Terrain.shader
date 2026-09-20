@@ -243,8 +243,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         1.0);
                 }
 
-                // TBDR: no discard anywhere in this shader — transparent output instead.
-                // discard kills Hidden Surface Removal on Apple GPUs; alpha-0 blending is visually identical.
+                // Cell geometry is a binary 32x32 silhouette. Alpha-zero
+                // blending is not equivalent here: the rasterizer/MSAA
+                // coverage can still soften a primitive edge before blending.
+                // Reject the quantized cell fragment before atlas sampling.
                 if (input.worldPos.w > 1.5) return half4(0.0, 0.0, 0.0, 0.0);
                 int animationProfile = (int)(input.animData.w + 0.5);
                 float applyGeometry = 0.0;
@@ -264,6 +266,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.glowData.y,
                     TerrainContourAntialiasScale(animationProfile),
                     applyGeometry);
+            #if defined(KERN_TERRAIN_CELLS)
+                clip(cellCoverage - 0.5);
+            #endif
                 if (input.subAtlasRect.z < 0.0001)
                 {
                     if (input.color.a < 0.05)
@@ -626,6 +631,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.glowData.y,
                     TerrainContourAntialiasScale(animationProfile),
                     applyGeometry);
+            #if defined(KERN_TERRAIN_CELLS)
+                clip(cellCoverage - 0.5);
+            #endif
                 float occupancy = isPhysicalMass
                     ? TerrainCellOccupancy(cellCoverage)
                     : 0.0;

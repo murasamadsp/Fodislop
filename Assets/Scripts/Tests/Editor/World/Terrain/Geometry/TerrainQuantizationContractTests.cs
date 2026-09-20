@@ -152,6 +152,7 @@ public sealed class TerrainQuantizationContractTests
         string textures = ReadRepoFile("Assets", "Scripts", "World", "Terrain", "Gpu", "TerrainCellDataTextures.cs");
 
         Assert.That(CountOccurrences(terrain, "EvaluateTerrainCellCoverage("), Is.EqualTo(2));
+        Assert.That(CountOccurrences(terrain, "clip(cellCoverage - 0.5);"), Is.EqualTo(2));
         Assert.That(CountOccurrences(contour, "TerrainGeometryCoverage("), Is.EqualTo(2));
         Assert.That(CountOccurrences(contour, "QuantizeTerrainGeometryPoint("), Is.EqualTo(2));
         Assert.That(contour, Does.Contain("KERN_TERRAIN_FACE_GRID_SIZE = 32.0"));
