@@ -75,8 +75,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
                 float4 glowAttr     : TEXCOORD6;
-                float4 geometryCornersX : TEXCOORD7;
-                float4 geometryCornersY : TEXCOORD8;
+                float4 packedGeometryCorners : TEXCOORD7;
             };
 
             struct Varyings
@@ -221,8 +220,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.animData = input.animData;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.packedData = input.packedData;
-                output.geometryCornersX = input.geometryCornersX;
-                output.geometryCornersY = input.geometryCornersY;
+                UnpackTerrainGeometryCorners(
+                    input.packedGeometryCorners,
+                    output.geometryCornersX,
+                    output.geometryCornersY);
                 output.atlasIndex = 0.0;
 
                 return output;
@@ -454,8 +455,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
                 float4 glowAttr     : TEXCOORD6;
-                float4 geometryCornersX : TEXCOORD7;
-                float4 geometryCornersY : TEXCOORD8;
+                float4 packedGeometryCorners : TEXCOORD7;
             };
 
             struct MaterialFieldVaryings
@@ -509,8 +509,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.worldPos = input.worldPosAttr;
                 output.animData = input.animData;
                 output.packedData = input.packedData;
-                output.geometryCornersX = input.geometryCornersX;
-                output.geometryCornersY = input.geometryCornersY;
+                UnpackTerrainGeometryCorners(
+                    input.packedGeometryCorners,
+                    output.geometryCornersX,
+                    output.geometryCornersY);
                 output.glowData = input.glowAttr;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.subAtlasRect = input.subAtlasRect;

@@ -308,8 +308,11 @@ internal static class TerrainQuadBuilder
                 : 0f);
 
         ReadOnlySpan<Vector2> anchors = [anchor0, anchor1, anchor2, anchor3];
-        Vector4 geometryCornersX = new(anchor0.x, anchor1.x, anchor2.x, anchor3.x);
-        Vector4 geometryCornersY = new(anchor0.y, anchor1.y, anchor2.y, anchor3.y);
+        Vector4 packedGeometryCorners = new(
+            TerrainVertex.PackGeometryPair(anchor0.x, anchor0.y),
+            TerrainVertex.PackGeometryPair(anchor1.x, anchor1.y),
+            TerrainVertex.PackGeometryPair(anchor2.x, anchor2.y),
+            TerrainVertex.PackGeometryPair(anchor3.x, anchor3.y));
 
         for (int i = 0; i < 4; i++)
         {
@@ -321,8 +324,7 @@ internal static class TerrainQuadBuilder
             vertex.UV4 = animDataVec;
             vertex.UV5 = new Vector4(anchorFlag, anchors[i].x, anchors[i].y, 0f);
             vertex.UV6 = glowVec;
-            vertex.UV7 = geometryCornersX;
-            vertex.UV8 = geometryCornersY;
+            vertex.UV7 = packedGeometryCorners;
         }
 
         return atlasIndex;
