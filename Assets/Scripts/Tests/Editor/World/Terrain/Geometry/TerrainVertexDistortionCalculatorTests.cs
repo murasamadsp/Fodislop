@@ -82,46 +82,52 @@ public class TerrainVertexDistortionCalculatorTests
         Assert.AreEqual(TerrainVertexOffset.Zero, result);
     }
 
+    // Узел внутри сплошного массива. Оригинал Mines (TerrainRenderer.GetDistortion,
+    // первая ветка) двигает его свободно в обе стороны; именно эта ветка делает
+    // кристалл цельным камнем, а не плиткой. Раньше здесь стоял ноль, и
+    // внутренность любого массива оставалась идеальной решёткой.
     [Test]
-    public void ComputeOffset_AllFourAreCause_ReturnsZero()
+    public void ComputeOffset_AllFourAreCause_JittersFreely()
     {
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        int worldX = 15;
-        int worldY = 25;
+        int limit = 3 * TerrainVertexDistortionCalculator.DistortionStrengthSteps;
+        int moved = 0;
+        bool negativeX = false;
+        bool positiveX = false;
+        bool negativeY = false;
+        bool positiveY = false;
 
-        // Upstream (15bced90): четыре источника вокруг — вершина не сдвигается.
-        TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, worldX, worldY, 100, 100);
+        for (int worldX = 1; worldX <= 40; worldX++)
+        {
+            for (int worldY = 1; worldY <= 40; worldY++)
+            {
+                TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(
+                    cause, cause, cause, cause, worldX, worldY, 100, 100);
 
-        Assert.AreEqual(TerrainVertexOffset.Zero, result);
-    }
+                Assert.That(result.XSteps, Is.InRange(-limit, limit), $"X at {worldX},{worldY}");
+                Assert.That(result.YSteps, Is.InRange(-limit, limit), $"Y at {worldX},{worldY}");
+                Assert.That(result.ZSteps, Is.Zero, $"Z at {worldX},{worldY}");
 
-    [Test]
-    public void ComputeOffset_TwoOppositeAreCause_ReturnsZero()
-    {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        var none = new CachedCellData { Distortion = (CellDistortionType)0 };
+                if (result != TerrainVertexOffset.Zero)
+                {
+                    moved++;
+                }
 
-        TerrainVertexOffset diagonal1 = TerrainVertexDistortionCalculator.ComputeOffset(cause, none, none, cause, 10, 10, 100, 100);
-        TerrainVertexOffset diagonal2 = TerrainVertexDistortionCalculator.ComputeOffset(none, cause, cause, none, 10, 10, 100, 100);
+                negativeX |= result.XSteps < 0;
+                positiveX |= result.XSteps > 0;
+                negativeY |= result.YSteps < 0;
+                positiveY |= result.YSteps > 0;
+            }
+        }
 
-        Assert.AreEqual(TerrainVertexOffset.Zero, diagonal1);
-        Assert.AreEqual(TerrainVertexOffset.Zero, diagonal2);
-    }
+        Assert.That(moved, Is.GreaterThan(0), "Ни один узел внутри массива не сдвинулся");
 
-    [Test]
-    public void ComputeOffset_TopAdjacentCause_PushesDown()
-    {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        var none = new CachedCellData { Distortion = (CellDistortionType)0 };
-        int worldX = 12;
-        int worldY = 18;
-
-        int expectedRy = (int)TerrainVertexDistortionCalculator.RandYd(worldX, worldY);
-        var expected = new TerrainVertexOffset(0, -expectedRy, 0);
-
-        TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, none, none, worldX, worldY, 100, 100);
-
-        Assert.AreEqual(expected, result);
+        // Джиттер обязан быть центрирован. Потеряется вычитание середины —
+        // и весь массив уедет вправо-вверх целиком вместо того, чтобы
+        // колыхаться на месте; диапазон при этом останется прежним, поэтому
+        // одной проверки границ мало.
+        Assert.That(negativeX && positiveX, Is.True, "Джиттер по X только в одну сторону");
+        Assert.That(negativeY && positiveY, Is.True, "Джиттер по Y только в одну сторону");
     }
 
     [Test]

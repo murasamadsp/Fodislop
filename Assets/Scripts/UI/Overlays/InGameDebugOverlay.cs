@@ -42,6 +42,8 @@ namespace Kern.UI
         private IClientConfigManager _clientConfig = null!;
         [Inject]
         private Kern.Rendering.DisplayManager _displayManager = null!;
+        [Inject]
+        private Kern.World.Terrain.TerrainRenderer _terrainRenderer = null!;
 
         private readonly WorldGizmoOptions _gizmos = new();
         private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[8];
@@ -107,7 +109,8 @@ namespace Kern.UI
             if (_telemetry == null ||
                 _debugSettings == null ||
                 _clientConfig == null ||
-                _displayManager == null)
+                _displayManager == null ||
+                _terrainRenderer == null)
             {
                 return;
             }
@@ -142,7 +145,9 @@ namespace Kern.UI
                 _gizmos,
                 _surfaceRenderer,
                 _entityRenderer,
-                _gameUIDocument);
+                _gameUIDocument,
+                _clientConfig,
+                _terrainRenderer);
             var lightingCost = new LightingCostWindow(_lighting, _telemetry);
             var breakdown = new FrameBreakdownWindow();
             var packets = new PacketTrafficWindow();

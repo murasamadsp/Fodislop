@@ -23,6 +23,17 @@ public readonly record struct TerrainVertexOffset(int XSteps, int YSteps, int ZS
 
 public sealed class TerrainVertexDistortionCalculator
 {
+    // Сила искажения: сколько шагов сетки 1/32 приходится на единицу
+    // randxd/randyd. Оригинал Mines делит те же хэши на 16, мы храним
+    // смещение шагами по 1/32 — поэтому двойка и есть оригинальная
+    // амплитуда, а не удвоенная. Единица оставит вдвое более спокойную
+    // сетку; ноль равносилен выключенному искажению.
+    public const int DistortionStrengthSteps = 2;
+
+    // Середина свободного джиттера. Хэш даёт 0..6, вычитание трёх центрирует
+    // его в ноль, то есть узел уезжает в обе стороны, а не только наружу.
+    private const int FreeJitterCenterSteps = 3 * DistortionStrengthSteps;
+
     public TerrainRingGrid<TerrainVertexOffset> GridVertexOffsets { get; } = new();
 
     public bool EnableDistortion { get; set; } = true;
@@ -194,12 +205,23 @@ public sealed class TerrainVertexDistortionCalculator
             return TerrainVertexOffset.Zero;
         }
 
-        int rx = (int)RandXd(worldX, worldY);
-        int ry = (int)RandYd(worldX, worldY);
+        int rx = (int)RandXd(worldX, worldY) * DistortionStrengthSteps;
+        int ry = (int)RandYd(worldX, worldY) * DistortionStrengthSteps;
 
+        // Узел внутри сплошного массива породы. Здесь нет стороны, «в которую»
+        // его двигать, поэтому он ходит свободно в обе стороны — это и делает
+        // кристалл цельным камнем, а не плиткой: у нас эта ветка возвращала
+        // ноль, и внутренность любого массива оставалась идеальной решёткой,
+        // хотя в оригинале именно она и колышется.
+        //
+        // Блока среди четырёх здесь заведомо нет: IsCause и IsBlock
+        // несовместимы, — поэтому ветка стоит раньше проверки на блок.
         if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
         {
-            return TerrainVertexOffset.Zero;
+            return new TerrainVertexOffset(
+                rx - FreeJitterCenterSteps,
+                -(ry - FreeJitterCenterSteps),
+                0);
         }
 
         if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))

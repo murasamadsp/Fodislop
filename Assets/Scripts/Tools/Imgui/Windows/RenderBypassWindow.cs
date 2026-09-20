@@ -3,6 +3,7 @@
 using Kern.Core.Interfaces;
 using Kern.Rendering.PostProcessing;
 using Kern.World.Lighting;
+using Kern.World.Terrain;
 using Kern.Game;
 using Kern.World;
 using UnityEngine;
@@ -13,6 +14,8 @@ namespace Kern.Tools.Imgui.Windows;
 public sealed class RenderBypassWindow : ToolWindow
 {
     private readonly IRuntimeDebugSettings _debugSettings;
+    private readonly IClientConfigManager? _clientConfig;
+    private readonly TerrainRenderer? _terrainRenderer;
     private readonly LightingEngine? _lighting;
     private readonly WorldGizmoOptions _gizmos;
     private readonly SurfaceRenderer? _surfaceRenderer;
@@ -33,10 +36,14 @@ public sealed class RenderBypassWindow : ToolWindow
         WorldGizmoOptions gizmos,
         SurfaceRenderer? surfaceRenderer = null,
         WorldEntityBatchRenderer? entityRenderer = null,
-        UIDocument? gameUIDocument = null)
+        UIDocument? gameUIDocument = null,
+        IClientConfigManager? clientConfig = null,
+        TerrainRenderer? terrainRenderer = null)
         : base("Диагностика рендера", new Rect(16f, 382f, 260f, 390f))
     {
         _debugSettings = debugSettings;
+        _clientConfig = clientConfig;
+        _terrainRenderer = terrainRenderer;
         _lighting = lighting;
         _gizmos = gizmos;
         _surfaceRenderer = surfaceRenderer;
@@ -91,6 +98,8 @@ public sealed class RenderBypassWindow : ToolWindow
             _debugSettings.ShowRobotDebugVisuals = DrawSwitch(
                 _debugSettings.ShowRobotDebugVisuals, "Отладка роботов", ToolTheme.FrameGraphColor);
 
+            DrawTerrainGeometry();
+
             ToolChrome.SectionHeader("ГИЗМО В МИРЕ");
             _gizmos.ShowGrid = DrawSwitch(_gizmos.ShowGrid, "Сетка чанков", ToolTheme.FrameGraphColor);
             _gizmos.ShowCursor = DrawSwitch(_gizmos.ShowCursor, "Курсор клетки", ToolTheme.FrameGraphColor);
@@ -109,6 +118,37 @@ public sealed class RenderBypassWindow : ToolWindow
 
             DrawLightingViewPicker(_lighting);
         }
+    }
+
+    // Искажение сетки террейна. Это настройка игрока (Terrain.EnableDistortion),
+    // а не отдельный отладочный флаг: второй источник правды тут же разошёлся бы
+    // с первым. Здесь она продублирована потому, что смотреть на неё надо на
+    // живой сцене — меню паузы закрывает собой ровно ту картинку, по которой
+    // сравниваешь ровную сетку с неровной.
+    //
+    // Смена флага заставляет TerrainRenderer.ApplyClientConfig пересобрать
+    // меши, поэтому щелчок стоит кадра-другого и тут же виден.
+    private void DrawTerrainGeometry()
+    {
+        if (_clientConfig?.Config == null || _terrainRenderer == null)
+        {
+            return;
+        }
+
+        ToolChrome.SectionHeader("ГЕОМЕТРИЯ ТЕРРЕЙНА");
+        bool distortion = _clientConfig.Config.Terrain.EnableDistortion;
+        if (DrawSwitch(distortion, "Искажение сетки", ToolTheme.Success) != distortion)
+        {
+            bool next = !distortion;
+            _clientConfig.UpdateSection(config => config.Terrain, terrain => terrain.EnableDistortion = next);
+            _terrainRenderer.ApplyClientConfig();
+        }
+
+        GUILayout.Label(
+            "Выключено — клетки стоят ровной решёткой. Включено — углы клеток " +
+            "внутри массивов породы разъезжаются, и порода читается цельным " +
+            "камнем, а не плиткой. Силуэт построек не трогается в обоих случаях.",
+            MutedLabelStyle);
     }
 
     // A/B для замера цены слоя: рендереры включаются и выключаются каждый

@@ -37,10 +37,17 @@ public sealed class TerrainSettings
     [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainMaterialManager.DebugMode")]
     public bool DebugMode;
 
-    [SettingUnbounded("Тумблер искажения кромки блока.")]
+    // Смещение узлов сетки террейна. Название ключа говорит про кромку
+    // блока — так было, пока смещались только границы массивов породы;
+    // теперь колышется и их внутренность, как в оригинале Mines.
+    //
+    // По умолчанию включено: это и есть задуманный вид, а выключенное
+    // состояние оставляет механическую решётку. Выключатель остаётся —
+    // и в настройках графики, и в инструментах (F1).
+    [SettingUnbounded("Тумблер искажения сетки террейна.")]
     [SettingLabel("settings.world.block_edge_distortion")]
     [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainRenderer._precalc.EnableDistortion")]
-    public bool EnableDistortion;
+    public bool EnableDistortion = true;
 
     [SettingLabel("settings.world.surface_emission_color")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]

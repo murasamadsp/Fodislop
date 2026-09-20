@@ -94,8 +94,25 @@ int runChecks()
         float4 xs,ys;
         for(int i=0;i<4;++i)
         {
-            xs[i]=corners[i].x+(int(rng()%9)-4)/32.f;
-            ys[i]=corners[i].y+(int(rng()%9)-4)/32.f;
+            // Диапазон обязан покрывать продакшен целиком. Свободный джиттер
+            // внутри массива породы даёт +-3*DistortionStrengthSteps шагов,
+            // то есть +-6/32; при +-4/32 две самые сильные ступени не
+            // проверялись вовсе.
+            xs[i]=corners[i].x+(int(rng()%13)-6)/32.f;
+            ys[i]=corners[i].y+(int(rng()%13)-6)/32.f;
+        }
+        // Предпосылка oracle(): четырёхугольник выпуклый. При смещении до
+        // 6/32 это выполняется с запасом — чтобы стать невыпуклым, углу надо
+        // пересечь диагональ соседей, а это больше половины клетки. Проверяем,
+        // а не предполагаем: поднимут амплитуду — падёт здесь, а не в виде
+        // молчаливого расхождения с оракулом.
+        for(int i=0;i<4;++i)
+        {
+            int j=(i+1)%4, k=(i+2)%4;
+            float turn=cross2(float2{xs[j]-xs[i],ys[j]-ys[i]},
+                              float2{xs[k]-xs[j],ys[k]-ys[j]});
+            if(turn<=0) throw std::runtime_error(
+                "Generated quad is not convex; oracle() precondition broken");
         }
         _TerrainCellGeometryX.data[1]=xs;
         _TerrainCellGeometryY.data[1]=ys;

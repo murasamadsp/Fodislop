@@ -88,7 +88,7 @@
   "settings.graphics.custom_profile": "Custom Profile",
   "settings.graphics.render_scale": "Render Scale",
   "settings.graphics.anti_aliasing": "Anti-Aliasing (MSAA)",
-  "settings.world.block_edge_distortion": "Block Edge Distortion",
+  "settings.world.block_edge_distortion": "Terrain Grid Distortion",
   "settings.lighting.density": "Lighting Density",
   "settings.lighting.max_size": "Maximum Lighting Size",
   "settings.lighting.max_dynamic_lights": "Maximum Dynamic Lights",
