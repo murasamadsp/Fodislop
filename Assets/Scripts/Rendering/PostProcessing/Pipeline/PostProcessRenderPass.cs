@@ -376,6 +376,9 @@ namespace Kern.Rendering.PostProcessing
 
                 passData.HistoryValid = _historyValid;
                 passData.TimeSeconds = Time.time;
+                passData.FrameIndex = Time.frameCount;
+                passData.CalibrationPattern = (int)PostProcessRuntimeState.CalibrationMode;
+                passData.CalibrationValue = PostProcessRuntimeState.CalibrationValue;
 
                 // Готовый кадр лежит в промежуточной текстуре. Если цель камеры —
                 // не экран, копировать его обратно не нужно: промежуточная

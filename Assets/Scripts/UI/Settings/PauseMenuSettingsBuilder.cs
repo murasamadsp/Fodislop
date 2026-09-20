@@ -87,7 +87,7 @@ internal sealed class PauseMenuSettingsBuilder
 
     public VisualElement BuildDisplayPage(ScrollView displayScroll)
     {
-        var builder = new PauseMenuDisplayTabBuilder(_clientConfig, _displayManager, _refreshers, _loc);
+        var builder = new PauseMenuDisplayTabBuilder(_doc, _clientConfig, _displayManager, _refreshers, _loc);
         return builder.Build(displayScroll);
     }
 
@@ -160,57 +160,11 @@ internal sealed class PauseMenuSettingsBuilder
             return;
         }
 
-        (string Key, LightingEngine.DebugView View)[] lightingDebugViews =
-        [
-            ("settings.debug.final_lighting", LightingEngine.DebugView.FinalLighting),
-            ("settings.debug.occupancy", LightingEngine.DebugView.Occupancy),
-            ("settings.debug.albedo", LightingEngine.DebugView.Albedo),
-            ("settings.debug.emission", LightingEngine.DebugView.Emission),
-            ("settings.debug.transmission", LightingEngine.DebugView.Transmission),
-            ("settings.debug.static_direct", LightingEngine.DebugView.StaticDirect),
-            ("settings.debug.dynamic_direct", LightingEngine.DebugView.DynamicDirect),
-            ("settings.debug.diffuse_bounce", LightingEngine.DebugView.DiffuseBounce),
-            ("settings.debug.exposure", LightingEngine.DebugView.Exposure),
-            ("settings.debug.ao", LightingEngine.DebugView.AmbientOcclusion),
-        ];
-        int activeDebugIndex = Array.FindIndex(
-            lightingDebugViews,
-            entry => entry.View == _lightingEngine.ActiveDebugView);
-        if (activeDebugIndex < 0)
-        {
-            activeDebugIndex = 0;
-        }
-
-        var lightingDebugView = new Button();
-        void UpdateLightingDebugButton()
-        {
-            lightingDebugView.text =
-                _loc.Get("settings.debug.lighting_label") + ": " +
-                _loc.Get(lightingDebugViews[activeDebugIndex].Key);
-        }
-
-        lightingDebugView.clicked += () =>
-        {
-            activeDebugIndex = (activeDebugIndex + 1) % lightingDebugViews.Length;
-            _lightingEngine.SetDebugView(lightingDebugViews[activeDebugIndex].View);
-
-            UpdateLightingDebugButton();
-        };
-        lightingDebugView.AddToClassList("pause-btn");
-        UpdateLightingDebugButton();
-        debugSection.Add(lightingDebugView);
-
-        Toggle bypassPostProcessToggle = PauseMenuUIFactory.CreateBoundToggle(
-            "Bypass Post-Process (Bisect)",
-            () => PostProcessRuntimeState.BypassPostProcessEffects,
-            value =>
-            {
-                PostProcessRuntimeState.BypassPostProcessEffects = value;
-                Debug.Log($"[PostProcess] BypassPostProcessEffects = {value}");
-            },
-            _refreshers);
-        debugSection.Add(bypassPostProcessToggle);
-
+        // Перебор видов освещения и тумблеры постпроцесса живут в
+        // инструментах (F1, «Диагностика рендера»). Здесь они дублировались, и
+        // дубль был хуже оригинала: меню паузы закрывает собой ту самую
+        // картинку, по которой смотрят вид освещения. Осталась только
+        // диагностика, которой в инструментах пока нет.
         debugSection.Add(PauseMenuUIFactory.CreateLabel(_loc.Get("settings.lighting.actual_params")));
         var lightingDiagnostics = new Label();
         lightingDiagnostics.AddToClassList("pause-slider-label");

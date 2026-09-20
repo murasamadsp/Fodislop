@@ -14,19 +14,19 @@ namespace Kern.Rendering.PostProcessing
     {
         // Keep the serialized Volume parameter names stable for existing profiles.
 #pragma warning disable SA1307
-        [Tooltip("Strength of fine animated film grain in near-black areas. This is the effect's only strength control.")]
+        [Tooltip("How far the black point is lifted toward the eigengrau color. 1 means black sits exactly at the eye's own grey.")]
         public ClampedFloatParameter intensity = PostProcessDefaults.EigengrauIntensity();
 
-        [Tooltip("Subtle tint of the grain in near-black areas.")]
+        [Tooltip("The eigengrau itself: the colour black is lifted to. Default is #16161D, the grey the eye reports in full darkness.")]
         public ColorParameter color = PostProcessDefaults.EigengrauColor();
 
-        [Tooltip("Maximum perceptual (sRGB) luminance affected by Eigengrau. Fully lit pixels are excluded.")]
+        [Tooltip("Maximum perceptual (sRGB) luminance affected by Eigengrau. Lit pixels keep their own black point.")]
         public ClampedFloatParameter darknessThreshold = PostProcessDefaults.EigengrauDarknessThreshold();
 
-        [Tooltip("Film-grain size in physical screen pixels.")]
+        [Tooltip("Size of the retinal noise cells, in physical screen pixels.")]
         public ClampedFloatParameter noiseScale = PostProcessDefaults.EigengrauNoiseScale();
 
-        [Tooltip("How many independent grain patterns are generated per second.")]
+        [Tooltip("How fast the lifted floor shimmers, in independent noise patterns per second.")]
         public ClampedFloatParameter animationSpeed = PostProcessDefaults.EigengrauAnimationSpeed();
 
         public bool IsActive() => intensity.value > 0f;

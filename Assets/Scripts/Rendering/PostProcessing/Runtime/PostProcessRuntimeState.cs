@@ -52,6 +52,19 @@ public static class PostProcessRuntimeState
     // постобработки URP. Меряет цену самих проходов, а не эффектов.
     public static bool SkipPasses { get; set; }
 
+    // Калибровочный узор дисплея. Состояние держится здесь, а не в UI:
+    // рисует его проход вывода, и жить оно обязано там же, где остальные
+    // решения о кадре. CalibrationValue — выбранное значение в нитах.
+    public static CalibrationPattern CalibrationMode { get; private set; }
+
+    public static float CalibrationValue { get; private set; }
+
+    public static void SetCalibrationPattern(CalibrationPattern pattern, float valueNits)
+    {
+        CalibrationMode = pattern;
+        CalibrationValue = valueNits;
+    }
+
     public static bool TemporaryBypass
     {
         get => _temporaryBypass;
@@ -154,6 +167,8 @@ public static class PostProcessRuntimeState
         _bypassPostProcessEffects = false;
         _temporaryBypass = false;
         SkipPasses = false;
+        CalibrationMode = CalibrationPattern.Off;
+        CalibrationValue = 0f;
     }
 
     public static void SetDisplayCalibration(float paperWhiteNits, float peakBrightnessNits)

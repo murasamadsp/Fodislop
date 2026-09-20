@@ -140,4 +140,13 @@ internal sealed class PostProcessPassData
     // Промежуточная текстура становится цветом камеры вместо копирования обратно.
     public bool SwapColor;
     public float TimeSeconds;
+
+    // Номер кадра, а не время: узор зерна эйгенграу обязан меняться ровно
+    // раз в кадр, и привязка к секундам этого не даёт — при любой частоте
+    // кадров выше заданной узор бы держался по нескольку кадров подряд.
+    public float FrameIndex;
+
+    // Калибровочный узор: 0 — нет, 1 — белая точка, 2 — лестница пика.
+    public int CalibrationPattern;
+    public float CalibrationValue;
 }

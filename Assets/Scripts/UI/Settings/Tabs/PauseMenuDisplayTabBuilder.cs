@@ -14,6 +14,9 @@ namespace Kern.UI;
 
 internal sealed class PauseMenuDisplayTabBuilder
 {
+    // Окно подтверждения живёт в корне документа, а не внутри вкладки:
+    // вкладку закрывают, а откат режима вывода обязан пережить закрытие.
+    private readonly UIDocument _doc;
     private readonly IClientConfigManager _clientConfig;
     private readonly DisplayManager _displayManager;
     private readonly ICollection<Action> _refreshers;
@@ -23,11 +26,13 @@ internal sealed class PauseMenuDisplayTabBuilder
     private Action? _refreshResolutionDropdown;
 
     public PauseMenuDisplayTabBuilder(
+        UIDocument doc,
         IClientConfigManager clientConfig,
         DisplayManager displayManager,
         ICollection<Action> refreshers,
         ILocalizationService loc)
     {
+        _doc = doc;
         _clientConfig = clientConfig;
         _displayManager = displayManager;
         _refreshers = refreshers;
@@ -214,7 +219,7 @@ internal sealed class PauseMenuDisplayTabBuilder
         Toggle hdrToggle = hdrOutputGroup.Q<Toggle>("HDRToggle") ??
             throw new InvalidOperationException("[PauseMenu] HDRToggle is missing from PauseMenu.uxml.");
         hdrToggle.label = _loc.Get("menu.settings.hdr");
-        hdrToggle.RegisterValueChangedCallback(evt => _displayManager.SetHDREnabled(evt.newValue));
+        hdrToggle.RegisterValueChangedCallback(evt => RequestHDR(hdrToggle, evt.newValue));
         Label hdrStatus = hdrOutputGroup.Q<Label>("HDRStatus") ??
             throw new InvalidOperationException("[PauseMenu] HDRStatus is missing from PauseMenu.uxml.");
         Button hdrRetry = hdrOutputGroup.Q<Button>("HDRRetry") ??
@@ -227,7 +232,8 @@ internal sealed class PauseMenuDisplayTabBuilder
             _loc,
             () => _clientConfig.Config.Display.PaperWhiteNits,
             value => _displayManager.SetPaperWhiteNits(value),
-            _refreshers);
+            _refreshers,
+            DisplaySettings.BrightnessStepNits);
         hdrOutputGroup.Add(paperWhiteSlider);
 
         VisualElement peakBrightnessSlider = PauseMenuUIFactory.CreateBoundSlider<DisplaySettings>(
@@ -235,8 +241,15 @@ internal sealed class PauseMenuDisplayTabBuilder
             _loc,
             () => _clientConfig.Config.Display.PeakBrightnessNits,
             value => _displayManager.SetPeakBrightnessNits(value),
-            _refreshers);
+            _refreshers,
+            DisplaySettings.BrightnessStepNits);
         hdrOutputGroup.Add(peakBrightnessSlider);
+
+        var calibrationButton = new Button(() =>
+            new HDRCalibrationScreen(_doc, _clientConfig, _displayManager, _loc).Open());
+        calibrationButton.text = _loc.Get("settings.display.calibration_open");
+        calibrationButton.AddToClassList("pause-btn");
+        hdrOutputGroup.Add(calibrationButton);
 
         void UpdateHDRSlidersState()
         {
@@ -262,6 +275,7 @@ internal sealed class PauseMenuDisplayTabBuilder
             UIState.SetHidden(hdrRetry, HDROutput.Status != HDROutputController.Phase.Failed && !HDROutput.CanRetryRead);
             paperWhiteSlider.SetEnabled(hdrOn);
             peakBrightnessSlider.SetEnabled(hdrOn);
+            calibrationButton.SetEnabled(hdrOn);
         }
 
         _refreshers.Add(UpdateHDRSlidersState);
@@ -269,6 +283,46 @@ internal sealed class PauseMenuDisplayTabBuilder
         UpdateHDRSlidersState();
 
         return displayScroll;
+    }
+
+    // Сколько держать окно отката. Пятнадцать секунд — столько человек
+    // тратит, чтобы понять, что на экране творится что-то не то, и найти
+    // мышь; меньше этого окно успевает истечь раньше, чем его прочитали.
+    private const int HDRConfirmSeconds = 15;
+
+    private void RequestHDR(Toggle toggle, bool enabled)
+    {
+        bool previous = !enabled;
+        HDROutput.ApplyRequestResult result = _displayManager.SetHDREnabled(enabled);
+
+        // Спрашивать есть смысл только о том, что система приняла. Отказ
+        // виден по строке состояния, и окно поверх него только мешало бы.
+        if (result is HDROutput.ApplyRequestResult.RejectedUnsupported
+            or HDROutput.ApplyRequestResult.RejectedNotSwitchable
+            or HDROutput.ApplyRequestResult.Failed)
+        {
+            // Метку безопасного старта ставит SetHDREnabled до запроса. Режим
+            // не сменился, экран цел — снимаем, иначе следующий запуск честно
+            // решит, что игру закрыли на чёрном экране, и выключит HDR.
+            _displayManager.ConfirmHDRSwitchSeen();
+            toggle.SetValueWithoutNotify(previous);
+            return;
+        }
+
+        PauseMenuUIFactory.ShowTimedConfirmation(
+            _doc,
+            _loc.Get("settings.display.hdr_confirm_title"),
+            _loc.Get("settings.display.hdr_confirm_desc"),
+            _loc.Get("settings.display.hdr_confirm_keep"),
+            _loc.Get("settings.display.hdr_confirm_revert"),
+            HDRConfirmSeconds,
+            () => _displayManager.ConfirmHDRSwitchSeen(),
+            () =>
+            {
+                _displayManager.SetHDREnabled(previous);
+                _displayManager.ConfirmHDRSwitchSeen();
+                toggle.SetValueWithoutNotify(previous);
+            });
     }
 
     private void ToggleFullscreen()

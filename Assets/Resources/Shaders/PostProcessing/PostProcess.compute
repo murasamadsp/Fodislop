@@ -101,6 +101,13 @@ float _EigengrauDarknessThreshold;
 float _EigengrauNoiseScale;
 float _EigengrauAnimationSpeed;
 float _Time;
+float _FrameIndex;
+
+// Калибровка дисплея. 0 — узор не рисуется, 1 — белая точка, 2 — лестница
+// пиковой яркости. _CalibrationValue несёт выбранное пользователем значение
+// в нитах: белую точку для режима 1, пик для режима 2.
+float _CalibrationPattern;
+float _CalibrationValue;
 
 float _MotionBlurHistory; // доля истории в смазе движения
 
@@ -192,6 +199,14 @@ float LinearToPerceptual(float linearValue)
         : 1.055 * pow(linearValue, 1.0 / 2.4) - 0.055;
 }
 
+float PerceptualToLinear(float perceptualValue)
+{
+    perceptualValue = max(perceptualValue, 0.0);
+    return perceptualValue <= 0.04045
+        ? perceptualValue / 12.92
+        : pow((perceptualValue + 0.055) / 1.055, 2.4);
+}
+
 float Hash31(float3 p)
 {
     p = frac(p * float3(0.1031, 0.1030, 0.0973));
@@ -205,14 +220,19 @@ float FilmGrain(float2 pixel)
     // scale values are clamped here so they can never create giant cells.
     float grainSize = clamp(_EigengrauNoiseScale, 0.75, 2.0);
     float2 grainPixel = floor(pixel / grainSize);
-    float frame = _Time * clamp(_EigengrauAnimationSpeed, 1.0, 60.0);
-    float epoch = floor(frame);
-    float phase = frac(frame);
-    float blend = phase * phase * (3.0 - 2.0 * phase);
+    // Эпоха считается по номеру кадра, а не по времени: шум зрения обновляется
+    // каждый кадр, и привязка к секундам этого не даёт — при частоте кадров выше
+    // заданной один узор держался бы по нескольку кадров, что читается как
+    // подрагивание картинки, а не как зерно.
+    //
+    // Animation Speed задаёт удержание: 60 (штатное) — новый узор каждый кадр,
+    // меньшие значения держат узор по нескольку кадров для тех, кому нужно
+    // спокойнее. Межкадровое смешивание убрано — усреднять белый шум значит
+    // делать его серым.
+    float holdFrames = max(1.0, round(60.0 / clamp(_EigengrauAnimationSpeed, 1.0, 60.0)));
+    float epoch = floor(_FrameIndex / holdFrames);
 
-    float previous = Hash31(float3(grainPixel, epoch * 1.618 + 17.0));
-    float next = Hash31(float3(grainPixel, (epoch + 1.0) * 1.618 + 17.0));
-    return lerp(previous, next, blend) * 2.0 - 1.0;
+    return Hash31(float3(grainPixel, epoch * 1.618 + 17.0)) * 2.0 - 1.0;
 }
 
 float3 ApplyCreativeGrade(float3 color)
@@ -553,30 +573,115 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         color = lerp(color, _VignetteColor.rgb, saturate(edgeMask * _VignetteIntensity));
     }
 
-    // 6. Eigengrau: fine, zero-mean film grain in dark areas. This is not a
-    // bright overlay and contains no low-frequency or scrolling texture.
+    // 6. Eigengrau — «собственный серый»: то, что видит глаз в полной
+    // темноте. Это не зерно поверх картинки, а пол зрения: сетчатка не
+    // отдаёт чёрного, её тепловой шум держит восприятие на уровне около
+    // #16161D, и этот уровень обновляется каждый кадр.
+    //
+    // ПРОСТРАНСТВО. Кадр здесь прошёл ApplyDisplayTransform и кривые, то есть
+    // он линейный относительно белого экрана (кодирование в sRGB/PQ делает
+    // URP после нас). Отсюда два разных перевода, и путать их нельзя:
+    //   * цвет пола и порог заданы уровнями кодирования (#16161D — это то,
+    //     что показывает пипетка), поэтому на вход им нужен PerceptualToLinear
+    //     и LinearToPerceptual соответственно;
+    //   * сама прибавка света считается в линейном, потому что свет
+    //     складывается линейно, а не в гамме.
     if (_EigengrauIntensity > 0.001)
     {
-        // The camera target is linear. Darkness Threshold is exposed in
-        // perceptual space; comparing it directly to linear luminance made
-        // ordinary lit pixels look "dark" and spread grain over the screen.
-        float perceptualLuminance = LinearToPerceptual(Luminance(color));
-        float threshold = max(_EigengrauDarknessThreshold, 0.0001);
-        float darkness = 1.0 - smoothstep(threshold * 0.2, threshold, perceptualLuminance);
-        darkness = darkness * darkness * darkness;
+        // Пол переводится из уровня кодирования в линейный один раз и здесь.
+        // Держать в VisualTuning уже пересчитанные числа нельзя: там перестало
+        // бы читаться, что это #16161D, и любой правке цвета пришлось бы
+        // повторять этот перевод на глаз.
+        float3 floorColor = float3(
+            PerceptualToLinear(_EigengrauColor.r),
+            PerceptualToLinear(_EigengrauColor.g),
+            PerceptualToLinear(_EigengrauColor.b)) * saturate(_EigengrauIntensity);
 
+        // Тепловой шум сетчатки модулирует сам пол, а не кадр: где сцена
+        // светит, подниматься нечему — значит и шевелиться нечему. Узор
+        // обновляется каждый кадр, см. FilmGrain.
         float grain = FilmGrain(id.xy + 0.5);
-        // 0.05, а не 0.01. При прежнем множителе пиковая амплитуда зерна
-        // составляла 0.01 * 0.25 = 0.0025 относительных единиц дисплея, то
-        // есть примерно 0.6 уровня из 256 — ниже порога различимости и ниже
-        // шага квантования вывода. Хэш считался на каждый пиксель кадра,
-        // результат увидеть было нельзя.
-        float amplitude = 0.05 * saturate(_EigengrauIntensity) * darkness;
-        float maxTint = max(max(_EigengrauColor.r, _EigengrauColor.g), _EigengrauColor.b);
-        float3 grainTint = maxTint > 0.0001
-            ? lerp(float3(1.0, 1.0, 1.0), _EigengrauColor.rgb / maxTint, 0.35)
-            : float3(1.0, 1.0, 1.0);
-        color = max(0.0, color + grain * amplitude * grainTint);
+        floorColor *= 1.0 + grain * 0.35;
+
+        // Darkness Threshold задан уровнем кодирования, значит и сравнивать
+        // его надо с закодированной яркостью, а не с линейной. Нижняя граница
+        // спада — яркость самого пола: гаснуть прибавка обязана относительно
+        // того, что поднимаем, а не относительно доли порога.
+        float floorLuma = LinearToPerceptual(Luminance(floorColor));
+        float sceneLuma = LinearToPerceptual(Luminance(color));
+        float reach = max(_EigengrauDarknessThreshold, floorLuma * 2.0);
+        floorColor *= 1.0 - smoothstep(floorLuma, reach, sceneLuma);
+
+        // Мягкий пол, а не подъём чёрной точки. Подъём (floor + c * (1 - floor))
+        // сдвигал всю тёмную зону целиком и съедал в ней контраст: полтона ниже
+        // пола становились одной плашкой на весь экран. Здесь прибавка гаснет
+        // экспоненциально по мере того, как сцена выходит из-под собственного
+        // шума глаза: сигнал слабее шума не виден, сигнал сильнее виден как
+        // есть. На чёрном прибавка равна полу, на уровне пола — треть от него,
+        // втрое выше пола её нет.
+        color += floorColor * exp(-color / max(floorColor, 1e-6));
+    }
+
+    // Калибровочный узор. Рисуется здесь и только здесь: это единственная
+    // точка кадра, где величина задаётся в долях paper white и не будет потом
+    // переделана ни кривой вывода, ни грейдом. Узор заменяет кадр целиком —
+    // сравнивать яркость можно только с чёрным, а не с игрой за ним.
+    //
+    // Дальше идёт временной смаз: он мешал бы ступени проявиться сразу, и
+    // ниже узор выходит из функции, не доходя до него.
+    if (_CalibrationPattern > 0.5)
+    {
+        float paperWhite = max(_DisplayPaperWhiteNits, 1.0);
+        float3 patternColor = float3(0.0, 0.0, 0.0);
+
+        if (_CalibrationPattern < 1.5)
+        {
+            // Белая точка: одно большое поле ровно в paper white на чёрном.
+            // Человек поднимает ползунок, пока белое не станет бумагой при
+            // его освещении в комнате, а не лампой.
+            float2 half = _ScreenSize.xy * 0.5;
+            float2 distanceFromCenter = abs(screenUv * _ScreenSize.xy - half);
+            bool insidePatch = distanceFromCenter.x < half.x * 0.35 &&
+                distanceFromCenter.y < half.y * 0.45;
+            patternColor = insidePatch ? float3(1.0, 1.0, 1.0) : float3(0.0, 0.0, 0.0);
+        }
+        else
+        {
+            // Лестница пика. Ступени логарифмические: восприятие яркости
+            // логарифмично, и равномерный шаг в нитах дал бы внизу лестницы
+            // неразличимые ступени, а наверху — провалы.
+            //
+            // Выбранный пик обведён рамкой. Смысл процедуры: найти верхнюю
+            // ступень, которая ещё светлее соседней снизу, и поставить пик
+            // туда. Выше неё дисплей уже не различает — обещать ему больше
+            // значит отдать блики в плоскую заливку.
+            const float stepCount = 12.0;
+            float2 pixel = screenUv * _ScreenSize.xy;
+            float2 ladderSize = float2(_ScreenSize.x * 0.75, _ScreenSize.y * 0.3);
+            float2 ladderOrigin = (_ScreenSize.xy - ladderSize) * 0.5;
+            float2 local = pixel - ladderOrigin;
+            if (local.x >= 0.0 && local.y >= 0.0 && local.x < ladderSize.x && local.y < ladderSize.y)
+            {
+                float stepWidth = ladderSize.x / stepCount;
+                float stepIndex = floor(local.x / stepWidth);
+                float t = stepIndex / (stepCount - 1.0);
+                float peakNits = max(_CalibrationValue, paperWhite);
+                float topNits = max(peakNits, paperWhite * 2.0) * 1.5;
+                float stepNits = paperWhite * pow(topNits / paperWhite, t);
+                patternColor = float3(stepNits, stepNits, stepNits) / paperWhite;
+
+                // Рамка вокруг ступени, ближайшей к выбранному пику.
+                float selected = round(log(peakNits / paperWhite) / log(topNits / paperWhite) * (stepCount - 1.0));
+                float withinStep = local.x - stepIndex * stepWidth;
+                bool onFrame = abs(stepIndex - selected) < 0.5 &&
+                    (withinStep < 3.0 || withinStep > stepWidth - 3.0 ||
+                     local.y < 3.0 || local.y > ladderSize.y - 3.0);
+                patternColor = onFrame ? float3(0.0, 0.0, 0.0) : patternColor;
+            }
+        }
+
+        _OutputTex[id.xy] = float4(ToDisplayOutput(patternColor), srcAlpha);
+        return;
     }
 
     // ------------------------------------------------------------------

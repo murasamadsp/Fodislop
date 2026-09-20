@@ -94,13 +94,28 @@ namespace Kern.Rendering.PostProcessing
 
         public static class FilmGrain
         {
-            public const float Intensity = 0.3f;
+            // Сила подъёма чёрной точки к цвету эйгенграу. Единица означает
+            // «чёрный ровно на уровне собственного серого», то есть сам
+            // эффект целиком; это не громкость зерна.
+            public const float Intensity = 1f;
 
             public const float DarknessThreshold = 0.22f;
             public const float NoiseScale = 0.75f;
+            // 60 — новый узор каждый кадр: шум зрения не держит кадр.
+            // Мигало раньше не от частоты, а от амплитуды: зерно прибавлялось
+            // к кадру в линейных величинах и качало его на десятки уровней
+            // вывода. Теперь шум модулирует только пол в несколько уровней,
+            // и обновление раз в кадр читается как зернистость, а не как
+            // мельтешение. Меньшие значения удерживают узор по нескольку
+            // кадров.
             public const float AnimationSpeed = 60f;
 
-            public static Color Color => new(0.02f, 0.02f, 0.02f, 1f);
+            // #16161D: собственный серый глаза, чуть холоднее нейтрали.
+            // Числа — уровни кодирования, ровно те, что показывает пипетка;
+            // в линейные их переводит шейдер, на единственном шаге, где это
+            // уместно. Здесь пересчитывать нельзя: константа перестанет
+            // читаться как цвет.
+            public static Color Color => new(0.0863f, 0.0863f, 0.1137f, 1f);
         }
 
         public static class MotionBlur
@@ -134,8 +149,44 @@ namespace Kern.World.Lighting
             LightingFeatureFlags.VisibilityAwareMerge |
             LightingFeatureFlags.WallAwareUpsample;
 
-        public const float AmbientIntensity = 0.25f;
-        public const float EmissionScale = 6.0f;
+        // Общая экспозиция сцены. Одно число, на которое умножается весь свет:
+        // и заполняющий, и прямой, и эмиссия. Соотношения между ними не
+        // меняются — меняется только то, где вся картина стоит относительно
+        // белой точки дисплея.
+        //
+        // Яркость нельзя чинить эмиссией. Эмиссия поднимает только источники,
+        // то есть ровно то, что и так лежит выше белого и всё равно будет
+        // сжато выводом: кадр от неё не светлеет, а источники выжигаются.
+        // Темноту двигает экспозиция, и двигать её надо здесь, у источника
+        // величин, а не грейдом на выводе: грейд стоит полноэкранного прохода,
+        // а здесь это тот же умножитель, что уже уходит в шейдер.
+        //
+        // Единица — исходная авторская калибровка. При ней даже полностью
+        // освещённая поверхность не доходила до белой точки, выше единицы
+        // жили только сами источники, и вся работа вывода — плавное сжатие
+        // пересвета — не начиналась вовсе: сжимать было нечего. Штатные два
+        // поднимают сцену на стоп, после чего освещённое доходит до белого,
+        // а пересвет попадает туда, где SDR его свернёт, а HDR покажет.
+        // Это единственная ручка общей яркости; крутить её и только её.
+        //
+        // Свойство, а не константа: ручка вынесена в инструменты (F1, окно
+        // «Цвет и вывод»), и подбирать экспозицию надо глазом на живой сцене.
+        // Значение здесь — штатное; инструмент меняет его на сессию, файл
+        // остаётся авторским источником правды.
+        public const float DefaultSceneExposureScale = 2.0f;
+
+        public static float SceneExposureScale { get; set; } = DefaultSceneExposureScale;
+
+        // Базовые величины — авторская калибровка при экспозиции 1. Наружу
+        // отдаются уже помноженными: потребители читают их каждый кадр, и
+        // поворот ручки виден сразу, без пересборки.
+        public const float BaseAmbientIntensity = 0.25f;
+        public const float BaseEmissionScale = 10.0f;
+        public const float BaseDynamicLightIntensity = 1.0f;
+        public const float BaseMaximumLightMultiplier = 8.0f;
+
+        public static float AmbientIntensity => BaseAmbientIntensity * SceneExposureScale;
+        public static float EmissionScale => BaseEmissionScale * SceneExposureScale;
         public static readonly Color AmbientColor = Color.white;
         // Per RGB channel: sigma = ExtinctionRGB * ExtinctionMultiplier.
         // Transmission after d cells = exp(-sigma * d); multiply incoming light by it.
@@ -153,10 +204,15 @@ namespace Kern.World.Lighting
         // Шкала в стопах від білого: 8.0 = +3 стопи. Контент HDR by design
         // (емісія до EmissionScale), тому стеля 1.0 фарбувала червоним весь
         // робочий HDR-запас.
-        public const float MaximumLightMultiplier = 8.0f;
+        // Масштабируется вместе со сценой: это потолок в тех же величинах,
+        // и без множителя ложная раскраска показывала бы пересвет там, где
+        // его нет.
+        public static float MaximumLightMultiplier =>
+            BaseMaximumLightMultiplier * SceneExposureScale;
 
         public static bool DynamicLightEnabled => (EnabledFeatures & LightingFeatureFlags.DynamicLights) != 0;
-        public const float DynamicLightIntensity = 1.0f;
+        public static float DynamicLightIntensity =>
+            BaseDynamicLightIntensity * SceneExposureScale;
         public static readonly Color DynamicLightColor = Color.white;
     }
 }

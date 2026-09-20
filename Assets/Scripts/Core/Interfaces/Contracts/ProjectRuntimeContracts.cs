@@ -27,10 +27,15 @@ public static class ProjectRuntimeContracts
 
     public static class ClientConfiguration
     {
-        // По умолчанию — реальный сервер 127.0.0.1:8090 (порт сервера из
-        // appsettings.json, ключ Mines3:Port; прежний дефолт 7777 с портом
-        // сервера не совпадал).
-        public const bool DefaultUseDummyConnection = false;
+        // По умолчанию — штатная заглушка транспорта. Дефолт обязан быть тем
+        // состоянием, в котором клиент запускается и работает: сервер поднят
+        // не всегда, и при выключенной заглушке чистый конфиг встречает
+        // человека отказом соединения в первую же секунду.
+        //
+        // Адрес и порт остаются настоящими — 127.0.0.1:8090 из appsettings.json
+        // сервера, ключ Mines3:Port: заглушку выключают одним тумблером, и
+        // тогда клиент идёт туда, куда надо, без правки адреса.
+        public const bool DefaultUseDummyConnection = true;
         public const string DefaultServerHost = "127.0.0.1";
         public const int DefaultServerPort = 8090;
         public const bool DefaultHDREnabled = true;

@@ -385,6 +385,9 @@ internal static class PostProcessPassExecutor
         }
 
         cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
+        cmd.SetComputeFloatParam(data.PostProcessCS, FrameIndexID, data.FrameIndex);
+        cmd.SetComputeFloatParam(data.PostProcessCS, CalibrationPatternID, data.CalibrationPattern);
+        cmd.SetComputeFloatParam(data.PostProcessCS, CalibrationValueID, data.CalibrationValue);
         cmd.SetComputeFloatParam(data.PostProcessCS, MotionBlurHistoryID, data.MotionBlurHistory);
         cmd.SetComputeMatrixParam(
             data.PostProcessCS,

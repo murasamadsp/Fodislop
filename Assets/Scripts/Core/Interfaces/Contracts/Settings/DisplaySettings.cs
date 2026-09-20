@@ -8,6 +8,12 @@ namespace Kern.Core;
 [Serializable]
 public sealed class DisplaySettings
 {
+    // Шаг калибровки яркости. Разница в один нит не видна никому и не
+    // означает ничего: обе величины — это то, что человек выставляет глазом
+    // по узору, а не измеряет. Шаг в 50 делает настройку повторяемой и
+    // избавляет от ложной точности вида «347.8 нит».
+    public const float BrightnessStepNits = 50f;
+
     public const float PaperWhiteMin = 100f;
     public const float PaperWhiteMax = 400f;
     public const float PeakBrightnessMin = 400f;
@@ -46,6 +52,16 @@ public sealed class DisplaySettings
     [SettingLabel("menu.settings.hdr")]
     [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetHDREnabled / HDROutput")]
     public bool HDREnabled = ProjectRuntimeContracts.ClientConfiguration.DefaultHDREnabled;
+
+    // Безопасный старт. Ставится перед переключением режима вывода и
+    // снимается, когда человек подтвердил, что он это переключение видит.
+    // Флаг, найденный при запуске, означает ровно одно: в прошлый раз игру
+    // закрыли между переключением и подтверждением, то есть увидеть экран,
+    // скорее всего, было нельзя. Тогда HDR не включается, и человек попадает
+    // в рабочую картинку, а не в чёрный экран по кругу.
+    [SettingUnbounded("Метка незавершённого переключения режима вывода.")]
+    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetHDREnabled / DisplayManager.ApplyInitialSettings")]
+    public bool HDRSwitchPending;
 
     // −1 означает «без ограничения». Отрезком это не выражается.
     [SettingUnbounded("Минус единица либо 30..1000; проверяется отдельно.")]

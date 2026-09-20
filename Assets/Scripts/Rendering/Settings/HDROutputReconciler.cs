@@ -40,6 +40,15 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
         _tonemapping.detectBrightnessLimits.Override(false);
         _tonemapping.minNits.Override(0f);
         _tonemapping.hueShiftAmount.Override(0f);
+
+        // Override, а не просто присваивание в UpdateCalibration. У параметра
+        // Volume два поля: значение и признак переопределения. Без признака
+        // система параметр не берёт вовсе, и обе калибровочные величины
+        // молча оставались профильными — настройка пиковой яркости не влияла
+        // ни на что. Значения дальше обновляются каждый тик, признак ставится
+        // здесь один раз.
+        _tonemapping.paperWhite.Override(PostProcessRuntimeState.DisplayPaperWhiteNits);
+        _tonemapping.maxNits.Override(PostProcessRuntimeState.DisplayPeakBrightnessNits);
         _volume = _camera.Camera.gameObject.AddComponent<Volume>();
         _volume.isGlobal = true;
         _volume.priority = float.MaxValue;

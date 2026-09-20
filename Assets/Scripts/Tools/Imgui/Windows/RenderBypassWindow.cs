@@ -56,6 +56,7 @@ public sealed class RenderBypassWindow : ToolWindow
         _debugSettings.BypassCpuMeshRebuild = false;
         _debugSettings.ShowRobotDebugVisuals = false;
         PostProcessRuntimeState.SkipPasses = false;
+        PostProcessRuntimeState.BypassPostProcessEffects = false;
         _hideSurface = false;
         _hideEntities = false;
         _hideGameUI = false;
@@ -78,6 +79,11 @@ public sealed class RenderBypassWindow : ToolWindow
                 _debugSettings.BypassCpuMeshRebuild, "Пересборка меша");
             PostProcessRuntimeState.SkipPasses = DrawSwitch(
                 PostProcessRuntimeState.SkipPasses, "Проходы постпроцесса");
+            // Рядом, но это не одно и то же: выше проходы не ставятся в
+            // очередь вовсе (цена самих проходов), ниже они идут, но без
+            // эффектов (цена эффектов). Разделение и есть смысл пары.
+            PostProcessRuntimeState.BypassPostProcessEffects = DrawSwitch(
+                PostProcessRuntimeState.BypassPostProcessEffects, "Эффекты постпроцесса");
             _hideSurface = DrawSwitch(_hideSurface, "Поверхность");
             _hideEntities = DrawSwitch(_hideEntities, "Сущности мира");
             _hideGameUI = DrawSwitch(_hideGameUI, "Интерфейс игры");
@@ -95,7 +101,7 @@ public sealed class RenderBypassWindow : ToolWindow
             }
 
             ToolChrome.SectionHeader("ДИНАМИЧЕСКИЙ СВЕТ");
-            bool lit = _lighting.DynamicLightIntensity > 0.01f;
+            bool lit = LightingConfigHolder.DynamicLightEnabled;
             if (DrawSwitch(lit, "Динамический свет", ToolTheme.Success) != lit)
             {
                 ToggleDynamicLight();
@@ -156,6 +162,11 @@ public sealed class RenderBypassWindow : ToolWindow
         }
 
         if (PostProcessRuntimeState.SkipPasses)
+        {
+            active++;
+        }
+
+        if (PostProcessRuntimeState.BypassPostProcessEffects)
         {
             active++;
         }
@@ -240,13 +251,23 @@ public sealed class RenderBypassWindow : ToolWindow
         lighting.SetDebugView((LightingEngine.DebugView)next);
     }
 
+    // Переключается флаг возможности, а не яркость. Яркость выведена из общей
+    // экспозиции сцены и обнулять её здесь значило бы тихо ломать экспозицию;
+    // флаг же смотрит LightingFrameExecutor каждый кадр, то есть проход
+    // динамического света действительно перестаёт считаться.
+    //
+    // Раньше метод был пуст: переключатель рисовался, щёлкал и не делал
+    // ничего — комментарий «константа, не настраивается» описывал тупик,
+    // а не решение.
     public void ToggleDynamicLight()
     {
-        if (_lighting == null)
-        {
-            return;
-        }
+        LightingConfigHolder.EnabledFeatures = LightingConfigHolder.DynamicLightEnabled
+            ? LightingConfigHolder.EnabledFeatures & ~LightingFeatureFlags.DynamicLights
+            : LightingConfigHolder.EnabledFeatures | LightingFeatureFlags.DynamicLights;
 
-        // DynamicLightIntensity — константа, не настраивается
+        // Снятый флаг только отключает расчёт прохода — уже посчитанное
+        // динамическое излучение осталось бы висеть в поле, и свет не погас
+        // бы до первого чужого сброса кэша.
+        _lighting?.InvalidateRadiance();
     }
 }

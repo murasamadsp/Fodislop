@@ -31,7 +31,7 @@ internal sealed class UnityHDROutputBackend : HDROutputController.IBackend
         return new HDROutputController.Snapshot(
             new HDROutputController.OutputIdentity(
                 display.name, display.workArea.x, display.workArea.y, display.width, display.height,
-                (int)Screen.fullScreenMode, Screen.width, Screen.height),
+                (int)Screen.fullScreenMode),
             (flags & HDRDisplaySupportFlags.Supported) != 0,
             pipeline != null && pipeline.supportsHDR,
             available, output.active, output.HDRModeChangeRequested,

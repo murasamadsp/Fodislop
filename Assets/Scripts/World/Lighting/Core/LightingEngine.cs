@@ -513,6 +513,25 @@ namespace Kern.World.Lighting
             Debug.Log($"[LightingEngine] SetDebugView: {debugView}");
         }
 
+        // Пересчитать свет теми же полями. Нужно, когда изменилась величина,
+        // входящая в решение, но не его размерность: экспозиция сцены, флаг
+        // прохода. Без этого новое значение не доехало бы до экрана — свет
+        // считается не каждый кадр, — а при следующем движении в мире кадр
+        // собрался бы из кусков, посчитанных до и после правки.
+        //
+        // Отдельно от ResetRuntimeLightingPreferences: тот заново применяет
+        // настройки качества и метит поле грязным, то есть переаллоцирует
+        // текстуры. На каждый кадр перетаскивания ползунка это недопустимо,
+        // да и размерность при смене экспозиции та же самая.
+        public void InvalidateRadiance()
+        {
+            _runtimeState.HasRenderedLightState = false;
+            _runtimeState.HasStaticRadianceState = false;
+            _runtimeState.HasDynamicRadianceState = false;
+            _runtimeState.CompositeDirty = true;
+            _runtimeState.BounceDirty = true;
+        }
+
 
         public void ResetRuntimeLightingPreferences()
         {

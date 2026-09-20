@@ -7,7 +7,9 @@ namespace Kern.Core;
 [Serializable]
 public class ClientConfig
 {
-    public const int CurrentSchemaVersion = 30;
+    // 31: DisplaySettings.HDRSwitchPending — метка безопасного старта
+    // режима вывода.
+    public const int CurrentSchemaVersion = 31;
 
     public int SchemaVersion;
     public AudioSettings Audio = new();

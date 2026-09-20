@@ -103,6 +103,9 @@ internal static class PostProcessShaderConstants
     public static readonly int EigengrauNoiseScaleID = Shader.PropertyToID("_EigengrauNoiseScale");
     public static readonly int EigengrauAnimationSpeedID = Shader.PropertyToID("_EigengrauAnimationSpeed");
     public static readonly int TimeID = Shader.PropertyToID("_Time");
+    public static readonly int FrameIndexID = Shader.PropertyToID("_FrameIndex");
+    public static readonly int CalibrationPatternID = Shader.PropertyToID("_CalibrationPattern");
+    public static readonly int CalibrationValueID = Shader.PropertyToID("_CalibrationValue");
 
     public static readonly int HistoryTexID = Shader.PropertyToID("_HistoryTex");
     public static readonly int MotionBlurHistoryID = Shader.PropertyToID("_MotionBlurHistory");

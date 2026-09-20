@@ -38,9 +38,13 @@ namespace Kern.UI
         private Kern.Game.WorldEntityBatchRenderer _entityRenderer = null!;
         [Inject]
         private UIDocument _gameUIDocument = null!;
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
+        [Inject]
+        private Kern.Rendering.DisplayManager _displayManager = null!;
 
         private readonly WorldGizmoOptions _gizmos = new();
-        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[7];
+        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[8];
         private RenderBypassWindow? _bypassWindow;
         private bool _registered;
 
@@ -100,7 +104,10 @@ namespace Kern.UI
 
         private void EnsureWindows()
         {
-            if (_telemetry == null || _debugSettings == null)
+            if (_telemetry == null ||
+                _debugSettings == null ||
+                _clientConfig == null ||
+                _displayManager == null)
             {
                 return;
             }
@@ -139,6 +146,7 @@ namespace Kern.UI
             var lightingCost = new LightingCostWindow(_lighting, _telemetry);
             var breakdown = new FrameBreakdownWindow();
             var packets = new PacketTrafficWindow();
+            var color = new ColorOutputWindow(_clientConfig, _displayManager, _lighting);
             _bypassWindow = bypass;
             _ownedWindows[0] = toolbar;
             _ownedWindows[1] = stats;
@@ -147,6 +155,7 @@ namespace Kern.UI
             _ownedWindows[4] = lightingCost;
             _ownedWindows[5] = breakdown;
             _ownedWindows[6] = packets;
+            _ownedWindows[7] = color;
 
             foreach (ToolWindow? window in _ownedWindows)
             {

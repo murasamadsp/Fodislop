@@ -17,6 +17,18 @@ public static class TerrainDecalCatalog
 {
     public const int VariantCount = 16;
 
+    // Доля клеток, получающих декаль. Порог сравнивается с хэшем клетки,
+    // поэтому величина обладает полезным свойством: её подъём только
+    // добавляет декали, не трогая уже стоящие. Мир не перерисовывается
+    // заново, к нему добавляется гуще.
+    private const uint GroundPlacementPercent = 24;
+
+    // Доля для камня, песка и дороги. Сегодня недостижима: единственный вызов
+    // снаружи — GetGroundPlacement, а он жёстко передаёт CellType.Empty, то
+    // есть семейство всегда Ground. Ветки Stone/Sand/Road вместе с их раскладкой
+    // вариантов — заготовка под декали на непроходимых клетках, которой ещё
+    // нет потребителя. Цифра оставлена прежней намеренно: менять её значило бы
+    // делать вид, что это на что-то влияет.
     private const uint PlacementPercent = 30;
 
     public static int GetPackedPlacement(CellType cellType, int worldX, int serverY)
@@ -29,7 +41,7 @@ public static class TerrainDecalCatalog
 
         uint hash = Hash(worldX, serverY, (uint)cellType);
         uint placementPercent = family == TerrainDecalFamily.Ground
-            ? 18u
+            ? GroundPlacementPercent
             : PlacementPercent;
         if ((hash % 100u) >= placementPercent)
         {

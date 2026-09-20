@@ -55,7 +55,8 @@ internal static class PauseMenuUIFactory
         ILocalizationService loc,
         Func<float> readValue,
         Action<float> onChange,
-        ICollection<Action> refreshers)
+        ICollection<Action> refreshers,
+        float quantum = 0f)
         where TSection : class, new()
     {
         SettingRangeAttribute range = SettingSchema.RangeOf<TSection>(fieldName);
@@ -65,16 +66,22 @@ internal static class PauseMenuUIFactory
             onChange,
             range.Minimum,
             range.Maximum,
-            refreshers);
+            refreshers,
+            quantum);
     }
 
+    // quantum > 0 переводит ползунок на фиксированный шаг: значение кратно
+    // шагу и показывается целым. Магнитная привязка SnapValue рассчитана на
+    // доли единицы и для величин вроде нит бесполезна — там нет ни целых, ни
+    // половин, к которым стоит липнуть.
     public static VisualElement CreateBoundSlider(
         string labelText,
         Func<float> readValue,
         Action<float> onChange,
         float minimum,
         float maximum,
-        ICollection<Action> refreshers)
+        ICollection<Action> refreshers,
+        float quantum = 0f)
     {
         var container = new VisualElement();
         container.AddToClassList("pause-slider-container");
@@ -84,22 +91,29 @@ internal static class PauseMenuUIFactory
         container.Add(label);
 
         var slider = new Slider(minimum, maximum);
+        float Quantize(float value) => quantum > 0f
+            ? Mathf.Clamp(Mathf.Round(value / quantum) * quantum, minimum, maximum)
+            : SnapValue(value, minimum, maximum);
+        string Format(float value) => quantum > 0f
+            ? $"{labelText}: {value:F0}"
+            : $"{labelText}: {value:F2}";
+
         void Refresh()
         {
-            float value = SnapValue(readValue(), minimum, maximum);
+            float value = Quantize(readValue());
             slider.SetValueWithoutNotify(value);
-            label.text = $"{labelText}: {value:F2}";
+            label.text = Format(value);
         }
 
         slider.RegisterValueChangedCallback(evt =>
         {
-            float snapped = SnapValue(evt.newValue, minimum, maximum);
+            float snapped = Quantize(evt.newValue);
             if (!Mathf.Approximately(snapped, evt.newValue))
             {
                 slider.SetValueWithoutNotify(snapped);
             }
 
-            label.text = $"{labelText}: {snapped:F2}";
+            label.text = Format(snapped);
             onChange(snapped);
         });
         container.Add(slider);
@@ -211,6 +225,107 @@ internal static class PauseMenuUIFactory
         var label = new Label(text);
         label.AddToClassList("pause-slider-label");
         return label;
+    }
+
+    // Подтверждение с обратным отсчётом: изменение уже применено, и вопрос
+    // стоит не «применять ли», а «видно ли вам это окно». Отсюда и устройство:
+    // молчание означает откат, а не согласие. Для режима вывода это
+    // единственный способ выбраться, когда экран после переключения стал
+    // нечитаемым и найти ползунок глазами уже нельзя.
+    public static void ShowTimedConfirmation(
+        UIDocument doc,
+        string title,
+        string description,
+        string keepText,
+        string revertFormat,
+        int seconds,
+        Action onKeep,
+        Action onRevert)
+    {
+        if (doc == null || doc.rootVisualElement == null)
+        {
+            return;
+        }
+
+        if (seconds <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(seconds));
+        }
+
+        VisualElement root = doc.rootVisualElement;
+
+        var overlay = new VisualElement();
+        overlay.name = "TimedConfirmOverlay";
+        overlay.AddToClassList("pause-confirm-overlay");
+        overlay.AddToClassList("ui-overlay");
+        overlay.AddToClassList("ui-overlay--modal");
+
+        var panel = new VisualElement();
+        panel.AddToClassList("pause-confirm-panel");
+        panel.AddToClassList("ui-panel");
+        panel.AddToClassList("ui-panel--modal");
+
+        var titleLabel = new Label(title);
+        titleLabel.AddToClassList("pause-confirm-title");
+        panel.Add(titleLabel);
+
+        var descLabel = new Label(description);
+        descLabel.AddToClassList("pause-confirm-desc");
+        panel.Add(descLabel);
+
+        var buttonsRow = new VisualElement();
+        buttonsRow.AddToClassList("pause-confirm-buttons");
+        buttonsRow.AddToClassList("ui-actions-row");
+
+        int remaining = seconds;
+        IVisualElementScheduledItem? countdown = null;
+        bool resolved = false;
+
+        void Resolve(Action outcome)
+        {
+            // Отсчёт и обе кнопки ведут в одну точку: иначе истекший таймер
+            // успевает откатить то, что пользователь уже подтвердил.
+            if (resolved)
+            {
+                return;
+            }
+
+            resolved = true;
+            countdown?.Pause();
+            if (overlay.parent != null)
+            {
+                overlay.RemoveFromHierarchy();
+            }
+
+            outcome();
+        }
+
+        var keepBtn = new Button(() => Resolve(onKeep));
+        keepBtn.text = keepText;
+        keepBtn.AddToClassList("pause-btn-confirm");
+
+        var revertBtn = new Button(() => Resolve(onRevert));
+        revertBtn.text = string.Format(revertFormat, remaining);
+        revertBtn.AddToClassList("pause-btn");
+
+        buttonsRow.Add(keepBtn);
+        buttonsRow.Add(revertBtn);
+        panel.Add(buttonsRow);
+
+        overlay.Add(panel);
+        root.Add(overlay);
+
+        countdown = overlay.schedule.Execute(() =>
+        {
+            remaining--;
+            if (remaining <= 0)
+            {
+                Resolve(onRevert);
+                return;
+            }
+
+            revertBtn.text = string.Format(revertFormat, remaining);
+        }).Every(1000);
     }
 
     public static void ShowConfirmation(UIDocument doc, string title, string description, string confirmText, Action onConfirm, ILocalizationService loc)

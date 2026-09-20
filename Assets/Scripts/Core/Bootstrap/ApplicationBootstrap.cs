@@ -58,7 +58,10 @@ public sealed class ApplicationBootstrap : IStartable
             _clientConfig.EnsureInitialized();
             ClientConfig config = _clientConfig.Config;
 
-            DisplayManager.ApplyInitialSettings(config.Display);
+            if (DisplayManager.ApplyInitialSettings(config.Display))
+            {
+                _clientConfig.SaveDeferred();
+            }
 
             _loadingScreen.Initialize();
 
