@@ -51,12 +51,15 @@ public static class TerrainDecalCatalog
             (offsetX << 6) + (offsetY << 8) + (applicationMode << 10);
     }
 
-    public static TerrainDecalFamily GetFamily(CellType cellType)
-    {
-        if (cellType is
+    public static bool IsBackgroundSurface(CellType cellType) =>
+        cellType is
             CellType.Empty or
             CellType.BackgroundWithLightTraces or
-            CellType.BackgroundWithHeavyTraces)
+            CellType.BackgroundWithHeavyTraces;
+
+    public static TerrainDecalFamily GetFamily(CellType cellType)
+    {
+        if (IsBackgroundSurface(cellType))
         {
             return TerrainDecalFamily.Ground;
         }

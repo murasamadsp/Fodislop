@@ -300,7 +300,7 @@ internal static class TerrainQuadBuilder
             packedLightingColor,
             lightingData.PackedFlags,
             lightingData.PackedContour,
-            isBackground
+            (isBackground || TerrainDecalCatalog.IsBackgroundSurface(cellType))
                 ? TerrainDecalCatalog.GetPackedPlacement(cellType, gridX, serverY)
                 : 0f);
 
