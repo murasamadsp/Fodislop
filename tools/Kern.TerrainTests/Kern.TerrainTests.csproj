@@ -69,6 +69,7 @@
     <!-- Тесты из Assets: те же, что гоняет Unity. -->
     <Compile Include="$(Game)/Tests/Editor/World/BackgroundFloodFill*.cs" LinkBase="Tests" />
     <Compile Include="$(Game)/Tests/Editor/World/Terrain/Geometry/*.cs" LinkBase="Tests/Geometry" />
+    <Compile Include="$(Game)/Tests/Shared/TerrainQuantizationOracle.cs" Link="Tests/Shared/TerrainQuantizationOracle.cs" />
     <Compile Include="$(Game)/Tests/Editor/World/Lighting/LightingRegionCalculator*.cs" LinkBase="Tests/Lighting" />
     <Compile Include="$(Game)/Tests/Editor/World/Lighting/LightingRuntimeStateTests.cs" Link="Tests/Lighting/LightingRuntimeStateTests.cs" />
     <Compile Include="$(Game)/Tests/Editor/World/Streaming/StreamingGovernorTests.cs" Link="Tests/Streaming/StreamingGovernorTests.cs" />
