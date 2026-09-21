@@ -69,6 +69,7 @@ public sealed class PlayerInfoProcessor(
     public void Process(RobotPositionPacket packet)
     {
         robotManager.UpdateRobotPosition(packet.BotId, packet.X, packet.Y, packet.Rotation);
+        robotManager.PruneStaleRobots();
         if (packet.BotId != 0 && packet.BotId == robotManager.LocalPlayerBotID)
         {
             localPlayer.Current?.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));

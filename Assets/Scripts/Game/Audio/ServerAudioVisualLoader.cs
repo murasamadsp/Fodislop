@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.World;
 using UnityEngine;
 
 namespace Kern.Game;

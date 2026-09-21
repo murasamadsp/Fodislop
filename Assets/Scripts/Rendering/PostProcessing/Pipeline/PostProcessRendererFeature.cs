@@ -18,7 +18,7 @@ namespace Kern.Rendering.PostProcessing
         {
             [SerializeField]
             [Tooltip("Optional override. If empty, the feature loads Resources/Shaders/PostProcessing/PostProcess.compute.")]
-            private ComputeShader? _computeShader;
+            private ComputeShader? _computeShader = null;
 
             public ComputeShader? ComputeShader => _computeShader;
         }

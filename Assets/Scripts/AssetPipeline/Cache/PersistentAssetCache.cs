@@ -112,7 +112,6 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         WriteAtomically(manifestPath, PersistentAssetCacheEntryManifest.Create(data, etag).Serialize());
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public void SaveAsset(string filename, byte[] data, string etag)
     {
         if (string.IsNullOrWhiteSpace(filename))
@@ -201,7 +200,6 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public string? GetETag(string filename)
     {
         string assetPath = GetAssetPath(filename);

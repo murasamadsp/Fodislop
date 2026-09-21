@@ -467,7 +467,7 @@ namespace Kern.Core
         private void ValidateServiceGroups()
         {
             // Группа существует, только пока в ней есть компонент, которому нужен
-            // GameObject. Сеть и геймплей — чистый C# в контейнере (SCENE_STANDARD.md §1).
+            // GameObject. Сеть и геймплей — чистый C# в контейнере (docs/architecture/SCENE_STANDARD.md §1).
             string[] requiredGroups = ["World", "Rendering", "UI", "Audio"];
             foreach (string group in requiredGroups)
             {

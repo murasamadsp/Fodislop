@@ -134,8 +134,6 @@ public static class ProjectRuntimeContracts
         public const string Terrain = "Universal Render Pipeline/Custom/Terrain";
         public const string WorldSurface = "Kern/World Surface";
         public const string WorldEntity = "Kern/World Entity";
-        public const string PlanetSurface = "Kern/UI/PlanetSurface";
-        public const string PlanetAtmosphere = "Kern/UI/PlanetAtmosphere";
         public const string Starfield = "Kern/UI/Starfield";
         public const string MenuLineUnlit = "Kern/UI/MenuLineUnlit";
         public const string UnpremultiplyAlpha = "Kern/UI/UnpremultiplyAlpha";

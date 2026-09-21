@@ -14,7 +14,7 @@
     python3 tools/compare-components.py            # отчёт
     python3 tools/compare-components.py --check    # расхождений не больше потолка
 
-Потолок живёт в docs/design-component-drift.md — файл машинный, его печатает
+Потолок живёт в docs/design/design-component-drift.md — файл машинный, его печатает
 этот же инструмент.
 """
 
@@ -27,7 +27,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 REPO = ROOT.parent.parent
 MAP = ROOT / "component-map.json"
 GAME_STYLES = REPO / "Assets" / "Resources" / "Styles"
-OUT = REPO / "docs" / "design-component-drift.md"
+OUT = REPO / "docs" / "design" / "design-component-drift.md"
 
 # Значение сравнивается разрешённым: var(--space-6) в игре и 12px в макете —
 # одно и то же, и ловить такую «разницу» значит топить настоящие находки в

@@ -110,14 +110,23 @@ public sealed class TerrainWindow : IDisposable
     /// Перечитать клетки типов, у которых приехала текстура. Возвращает false,
     /// если перечитывать нечем: атласов ещё нет.
     /// </summary>
-    public bool RefreshPendingTextureCells(in TerrainBuildServices services)
+    /// <param name="willRebuildWindow">
+    /// Кадр всё равно соберёт окно целиком. Тогда перечитывать клетки под
+    /// приехавшие текстуры незачем: полная сборка пройдёт по тем же клеткам
+    /// сама, и проход до неё — работа в никуда. На входе в мир текстуры
+    /// приезжают пачками ровно в те кадры, когда окно и так собирается.
+    /// </param>
+    public bool RefreshPendingTextureCells(
+        in TerrainBuildServices services,
+        bool willRebuildWindow)
     {
         if (!_driver.TryContinueBuild(services, out TerrainBuildContext context))
         {
             return false;
         }
 
-        _driver.RefreshTextureCells(context, _pendingTextureCellTypes, Origin.x, Origin.y);
+        _driver.RefreshTextureCells(
+            context, _pendingTextureCellTypes, Origin.x, Origin.y, !willRebuildWindow);
         _pendingTextureCellTypes.Clear();
         _cellTexturesDirty = true;
         return true;

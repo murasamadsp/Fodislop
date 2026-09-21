@@ -130,7 +130,7 @@ namespace Kern.Core
         private void Show(string sceneName)
         {
             // The MainMenu -> MainGame transition is owned entirely by the MainMenu
-            // descent screen and loader (LoaderContainer with planet animation & phase steps).
+            // descent screen and loader (LoaderContainer with descent animation & phase steps).
             // Do not show the generic bootstrap overlay over it.
             if (string.Equals(
                     sceneName,

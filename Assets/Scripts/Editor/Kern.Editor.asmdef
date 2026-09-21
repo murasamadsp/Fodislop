@@ -2,7 +2,10 @@
     "name": "Kern.Editor",
     "rootNamespace": "Kern.Editor",
     "references": [
-        "Kern.Runtime",
+        "Kern.Core",
+        "Kern.Infrastructure",
+        "Kern.Application",
+        "Kern.Presentation",
         "Kern.Bootstrap",
         "Kern.UI",
         "Kern.World",

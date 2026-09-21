@@ -17,8 +17,6 @@ public sealed class ShaderWarmupContractTests
         ProjectRuntimeContracts.ShaderNames.Terrain,
         ProjectRuntimeContracts.ShaderNames.WorldSurface,
         ProjectRuntimeContracts.ShaderNames.WorldEntity,
-        ProjectRuntimeContracts.ShaderNames.PlanetSurface,
-        ProjectRuntimeContracts.ShaderNames.PlanetAtmosphere,
         ProjectRuntimeContracts.ShaderNames.Starfield,
         ProjectRuntimeContracts.ShaderNames.MenuLineUnlit,
         ProjectRuntimeContracts.ShaderNames.UnpremultiplyAlpha,

@@ -13,7 +13,7 @@ internal static class CompareComponentsTool
         string repo = Path.GetFullPath(Path.Combine(root, "..", ".."));
         string mapPath = Path.Combine(root, "component-map.json");
         string gameStylesDir = Path.Combine(repo, "Assets", "Resources", "Styles");
-        string outPath = Path.Combine(repo, "docs", "design-component-drift.md");
+        string outPath = Path.Combine(repo, "docs", "design", "design-component-drift.md");
 
         var map = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(File.ReadAllText(mapPath)) ?? new();
         var game = ParseRules(Directory.GetFiles(gameStylesDir, "*.uss"));

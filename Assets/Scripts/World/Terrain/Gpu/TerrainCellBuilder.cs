@@ -29,6 +29,11 @@ public sealed class TerrainCellBuilder : IDisposable
     private readonly Scratch _mainScratch = new();
     private readonly TerrainRingGrid<int> _foregroundAtlases = new();
     private readonly TerrainRingGrid<bool> _doorFlags = new();
+
+    // Отпечаток дверного квада: по нему видно, изменилась ли его геометрия.
+    // Накладка строится по вершинам, поэтому «дверь задета» обязано означать
+    // «вершины другие», а не «клетку перезаписали».
+    private readonly TerrainRingGrid<int> _doorQuadFingerprints = new();
     private readonly HashSet<int> _doorQuads = [];
     private int[] _doorQuadScratch = [];
     private readonly TerrainCellTextureIndex _textureIndex = new();
@@ -39,6 +44,11 @@ public sealed class TerrainCellBuilder : IDisposable
     private int _height;
     private float _cellSize;
     private bool _doorsTouched;
+
+    // Тики, а не миллисекунды: складываются на каждой клетке, переводятся один
+    // раз в конце прохода.
+    private long _quadTicks;
+    private long _packTicks;
 
     // Captured during the last full production build. This is a diagnostic
     // contract for the runtime integration test: it proves that the scene
@@ -56,6 +66,32 @@ public sealed class TerrainCellBuilder : IDisposable
 
     public bool HasDoors => _doorQuads.Count > 0;
 
+    /// <summary>Сколько стоила последняя сборка, по стадиям.</summary>
+    ///
+    /// Графа «тексели» в отчёте о провисе оказалась на порядок дороже той же
+    /// работы в бенчмарке, а внутри неё четыре разных дела: перенос колец,
+    /// снятие уехавших клеток с индекса типов, прогрев метаданных и сама
+    /// заливка. Без разбивки следующий шаг опять был бы догадкой.
+    public float LastScrollMs { get; private set; }
+
+    public float LastIndexRemoveMs { get; private set; }
+
+    public float LastWarmupMs { get; private set; }
+
+    public float LastFillMs { get; private set; }
+
+    public int LastFilledCells { get; private set; }
+
+    /// <summary>Внутри заливки: сборка двух квадов против упаковки и записи в тексели.</summary>
+    ///
+    /// Заливка полосы оказалась в тридцать раз дороже той же работы в
+    /// бенчмарке, а в ней два разных дела: TerrainQuadBuilder.FillQuad (его
+    /// бенчмарк не меряет вообще) и упаковка с записью (её меряет, 43 нс на
+    /// клетку). Разделение показывает, какое из двух врёт.
+    public float LastQuadMs { get; private set; }
+
+    public float LastPackMs { get; private set; }
+
     public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
     {
         _cellSize = cellSize;
@@ -68,7 +104,9 @@ public sealed class TerrainCellBuilder : IDisposable
         _height = meshHeight;
         _foregroundAtlases.EnsureSize(meshWidth, meshHeight);
         _doorFlags.EnsureSize(meshWidth, meshHeight);
+        _doorQuadFingerprints.EnsureSize(meshWidth, meshHeight);
         _doorQuads.Clear();
+        _textureIndex.EnsureWindow(meshWidth, meshHeight);
         _textureIndex.Clear();
         _textures.EnsureCapacity(meshWidth, meshHeight);
     }
@@ -80,6 +118,7 @@ public sealed class TerrainCellBuilder : IDisposable
             return;
         }
 
+        ResetStageTimings();
         _doorsTouched = true;
         Volatile.Write(ref _lastFullBuildAnchoredForegroundCellCount, 0);
         _doorQuads.Clear();
@@ -89,7 +128,14 @@ public sealed class TerrainCellBuilder : IDisposable
 
         // Типы разрешаются здесь и последовательно: FillCell ниже идёт из
         // рабочих потоков и имеет право только читать.
+        long warmStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _warmup.WarmRect(sources, 0, _width, 0, _height);
+        LastWarmupMs = ElapsedMs(warmStart);
+
+        // Разбивка на квады и упаковку здесь не ведётся: счётчики складываются
+        // без синхронизации, а этот путь идёт из рабочих потоков. Общее время
+        // и число клеток — ведутся.
+        long fillStart = System.Diagnostics.Stopwatch.GetTimestamp();
         Parallel.For(
             0,
             _width,
@@ -104,6 +150,8 @@ public sealed class TerrainCellBuilder : IDisposable
                 return scratch;
             },
             static _ => { });
+        LastFillMs = ElapsedMs(fillStart);
+        LastFilledCells = _width * _height;
         _trackDoorQuads = true;
         RebuildDoorQuadIndex();
         _trackTextureIndex = true;
@@ -129,21 +177,43 @@ public sealed class TerrainCellBuilder : IDisposable
         // локальные массивы дверей, и накладка встаёт на новые координаты.
         // Если состав дверей не изменился, renderer может компенсировать
         // сдвиг родителя без повторной выгрузки всех дверных квадов.
+        ResetStageTimings();
+        long scrollStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _doorsTouched = false;
         int previousDoorCount = _doorQuads.Count;
         if (dx != 0 || dy != 0)
         {
             _foregroundAtlases.Scroll(dx, dy);
             _doorFlags.Scroll(dx, dy);
+            _doorQuadFingerprints.Scroll(dx, dy);
             ScrollDoorQuads(dx, dy);
             _doorsTouched = _doorQuads.Count != previousDoorCount;
-            _textureIndex.RemoveScrolledOutCells(minX, minY, dx, dy, _width, _height);
+            LastScrollMs = ElapsedMs(scrollStart);
+
+            // Уехавшие клетки с индекса типов не снимаются: слот кольца
+            // передаётся приехавшей клетке, и UpdateCell ниже снимает
+            // прежнего жильца сам. Полоса заливки накрывает каждый такой
+            // слот, поэтому отдельный проход был чистым дублем — и стоил
+            // хеш-операции на каждую клетку полосы.
         }
 
         // Кайма в одну клетку: тексель клетки несёт маски соседства, и у
         // клетки на старой границе сосед снаружи только что появился.
         TerrainScrollBands bands = TerrainScrollBands.Resolve(
             _width, _height, dx, dy, neighbourMargin: 1);
+
+        // Кольцевой сдвиг не чистит вошедшую полосу: в её слотах лежат флаги
+        // уехавших клеток. Множество дверей при этом уже почищено сдвигом,
+        // поэтому «дверь была» там врёт, а FillCell по нему решает, трогать
+        // ли множество. Полоса обнуляется до заливки, и каждая её клетка
+        // приходит в FillCell как новая — какой она и является.
+        //
+        // Обнуляется РОВНО вошедшее, без каймы соседства: клетки каймы
+        // остались на месте вместе со своими дверями, и стереть им флаг
+        // значило бы разойтись с множеством в другую сторону.
+        TerrainScrollBands entered = TerrainScrollBands.Resolve(_width, _height, dx, dy);
+        ClearDoorFlags(entered.ColumnBand);
+        ClearDoorFlags(entered.RowBand);
         FillBand(bands.ColumnBand, minX, minY, sources);
         FillBand(bands.RowBand, minX, minY, sources);
     }
@@ -157,6 +227,7 @@ public sealed class TerrainCellBuilder : IDisposable
         int countX,
         int countY)
     {
+        ResetStageTimings();
         _doorsTouched = false;
         if (!CanBuild(sources))
         {
@@ -181,13 +252,25 @@ public sealed class TerrainCellBuilder : IDisposable
             return;
         }
 
+        ResetStageTimings();
+
+        long warmStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _warmup.WarmRect(sources, 0, _width, 0, _height);
+        LastWarmupMs = ElapsedMs(warmStart);
+
+        // Сбор квадов по типам занимает отдельную графу: он идёт по обратному
+        // индексу, а не по окну, и его цена растёт с числом приехавших типов.
+        long collectStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _textureIndex.CollectRefreshQuads(cellTypes, minX, minY, _width, _height);
+        LastIndexRemoveMs = ElapsedMs(collectStart);
         List<int> refreshQuads = _textureIndex.TextureRefreshQuads;
         bool trackTextureIndex = _trackTextureIndex;
         _trackTextureIndex = false;
         try
         {
+            long fillStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            _quadTicks = 0;
+            _packTicks = 0;
             for (int index = 0; index < refreshQuads.Count; index++)
             {
                 int quad = refreshQuads[index];
@@ -195,6 +278,11 @@ public sealed class TerrainCellBuilder : IDisposable
                 int y = quad % _height;
                 _doorsTouched |= FillCell(x, y, minX, minY, sources, _mainScratch);
             }
+
+            LastFillMs = ElapsedMs(fillStart);
+            LastQuadMs = TicksToMs(_quadTicks);
+            LastPackMs = TicksToMs(_packTicks);
+            LastFilledCells = refreshQuads.Count;
         }
         finally
         {
@@ -251,8 +339,23 @@ public sealed class TerrainCellBuilder : IDisposable
             indices.Clear();
         }
 
-        foreach (int quad in _doorQuads)
+        // Порядок обхода множества зависит от истории вставок и удалений, а
+        // она у двух клиентов на одной клетке разная: кто как сюда шёл. Из
+        // множества выходила бы накладка с теми же квадами в другом порядке
+        // вершин. Дверей в окне десятки, сортировка ничего не стоит, а
+        // геометрия становится функцией от состояния окна, а не от пути к нему.
+        int doorCount = _doorQuads.Count;
+        if (_doorQuadScratch.Length < doorCount)
         {
+            _doorQuadScratch = new int[doorCount];
+        }
+
+        _doorQuads.CopyTo(_doorQuadScratch);
+        Array.Sort(_doorQuadScratch, 0, doorCount);
+
+        for (int index = 0; index < doorCount; index++)
+        {
+            int quad = _doorQuadScratch[index];
             int x = quad / _height;
             int y = quad % _height;
             int atlas = _foregroundAtlases[x, y];
@@ -334,6 +437,83 @@ public sealed class TerrainCellBuilder : IDisposable
     private bool CanBuild(TerrainCellSources sources) =>
         _textures.IsAllocated && sources.Atlases != null && sources.Atlases.Count > 0;
 
+    // Графы отчёта обнуляются на входе в КАЖДЫЙ путь сборки. Пока это делали
+    // только сдвиг и перечитывание текстур, отчёт о полной сборке печатал
+    // числа прошлого кадра — и они выглядели как измерение, а не как мусор.
+    private void ResetStageTimings()
+    {
+        LastScrollMs = 0f;
+        LastIndexRemoveMs = 0f;
+        LastWarmupMs = 0f;
+        LastFillMs = 0f;
+        LastFilledCells = 0;
+        LastQuadMs = 0f;
+        LastPackMs = 0f;
+    }
+
+    // Отпечаток, а не сравнение вершин: хранить копию четырёх вершин на
+    // клетку — это 336 байт там, где хватает четырёх. Совпадение отпечатка при
+    // разной геометрии означало бы не пересобранную накладку, поэтому в него
+    // входит всё, что накладка рисует: положение углов, цвет и упакованные
+    // данные слоя.
+    private static int DoorQuadFingerprint(Scratch scratch)
+    {
+        var hash = new System.HashCode();
+        for (int corner = 4; corner < 8; corner++)
+        {
+            // Поля, а не свойства: свойства у вершины только на запись, они
+            // пакуют float в half. Хеш идёт по тому, что реально уедет на GPU.
+            ref TerrainVertex vertex = ref scratch.Vertices[corner];
+            hash.Add(vertex.Position);
+            hash.Add(vertex.Color);
+            hash.Add(vertex.UV0x);
+            hash.Add(vertex.UV0y);
+            hash.Add(vertex.UV1x);
+            hash.Add(vertex.UV1y);
+            hash.Add(vertex.UV1z);
+            hash.Add(vertex.UV1w);
+            hash.Add(vertex.UV2x);
+            hash.Add(vertex.UV2y);
+            hash.Add(vertex.UV2z);
+            hash.Add(vertex.UV2w);
+            hash.Add(vertex.UV3);
+            hash.Add(vertex.UV4x);
+            hash.Add(vertex.UV4y);
+            hash.Add(vertex.UV4z);
+            hash.Add(vertex.UV4w);
+            hash.Add(vertex.UV5x);
+            hash.Add(vertex.UV5y);
+            hash.Add(vertex.UV5z);
+            hash.Add(vertex.UV5w);
+            hash.Add(vertex.UV6);
+        }
+
+        // Ноль означает «двери здесь нет»; настоящий отпечаток не имеет права
+        // с ним совпасть, иначе появление двери с таким хешем осталось бы
+        // незамеченным.
+        int value = hash.ToHashCode();
+        return value == 0 ? 1 : value;
+    }
+
+    private static float TicksToMs(long ticks) =>
+        (float)(ticks * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+
+    private static float ElapsedMs(long startTimestamp) =>
+        (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 /
+            System.Diagnostics.Stopwatch.Frequency);
+
+    private void ClearDoorFlags(RectInt band)
+    {
+        for (int x = band.xMin; x < band.xMax; x++)
+        {
+            for (int y = band.yMin; y < band.yMax; y++)
+            {
+                _doorFlags[x, y] = false;
+                _doorQuadFingerprints[x, y] = 0;
+            }
+        }
+    }
+
     private void FillBand(RectInt band, int minX, int minY, TerrainCellSources sources) =>
         FillRect(band.xMin, band.xMax, band.yMin, band.yMax, minX, minY, sources);
 
@@ -344,7 +524,13 @@ public sealed class TerrainCellBuilder : IDisposable
             return;
         }
 
+        long warmStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _warmup.WarmRect(sources, startX, endX, startY, endY);
+        LastWarmupMs += ElapsedMs(warmStart);
+
+        long fillStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        _quadTicks = 0;
+        _packTicks = 0;
         for (int x = startX; x < endX; x++)
         {
             for (int y = startY; y < endY; y++)
@@ -352,6 +538,11 @@ public sealed class TerrainCellBuilder : IDisposable
                 _doorsTouched |= FillCell(x, y, minX, minY, sources, _mainScratch);
             }
         }
+
+        LastFillMs += ElapsedMs(fillStart);
+        LastQuadMs += TicksToMs(_quadTicks);
+        LastPackMs += TicksToMs(_packTicks);
+        LastFilledCells += (endX - startX) * (endY - startY);
 
         _textures.MarkCells(
             TerrainCellDataTextures.Ring(minX + startX, _width),
@@ -369,12 +560,14 @@ public sealed class TerrainCellBuilder : IDisposable
         int quad = (x * _height) + y;
         var site = new TerrainQuadSite(x, y, gridX, unityY, _cellSize);
 
+        long quadStart = System.Diagnostics.Stopwatch.GetTimestamp();
         int background = TerrainQuadBuilder
             .FillQuad(sources, site, TerrainQuadLayer.Background, scratch.Background)
             .AtlasIndex;
         TerrainQuadResult foregroundQuad = TerrainQuadBuilder.FillQuad(
             sources, site, TerrainQuadLayer.Foreground, scratch.Foreground);
         int foreground = foregroundQuad.AtlasIndex;
+        _quadTicks += System.Diagnostics.Stopwatch.GetTimestamp() - quadStart;
 
         if (foregroundQuad.HasAtlas && scratch.Vertices[4].UV5x != 0)
         {
@@ -382,10 +575,19 @@ public sealed class TerrainCellBuilder : IDisposable
         }
 
         bool door = foregroundQuad.IsDoor;
-        bool doorsChanged = door || _doorFlags[x, y];
+        bool wasDoor = _doorFlags[x, y];
+
+        // «Дверь задета» — это появление, исчезновение или СМЕНА ГЕОМЕТРИИ уже
+        // стоявшей двери: накладка строится по вершинам. Просто пройти мимо
+        // двери и перезалить её клетку поводом не является, а раньше являлось
+        // — и каждый такой кадр пересобирал всю накладку заново.
+        int fingerprint = door ? DoorQuadFingerprint(scratch) : 0;
+        bool doorsChanged = door != wasDoor ||
+            (door && fingerprint != _doorQuadFingerprints[x, y]);
 
         _foregroundAtlases[x, y] = foreground;
         _doorFlags[x, y] = door;
+        _doorQuadFingerprints[x, y] = fingerprint;
         if (_trackTextureIndex)
         {
             _textureIndex.UpdateCell(
@@ -394,15 +596,22 @@ public sealed class TerrainCellBuilder : IDisposable
                 sources.FloodFill.Buffer[x, y],
                 sources.CellCache.GetCellData(x + 1, y + 1).Type);
         }
-        if (_trackDoorQuads && door)
+        // Дверей в окне единицы, а заплатка перечитывает тысячи клеток.
+        // Безусловный Remove на каждой не-двери был хешированием впустую —
+        // тем же, чем была безусловная перезапись в индексе типов.
+        if (_trackDoorQuads && door != wasDoor)
         {
-            _doorQuads.Add(quad);
-        }
-        else if (_trackDoorQuads)
-        {
-            _doorQuads.Remove(quad);
+            if (door)
+            {
+                _doorQuads.Add(quad);
+            }
+            else
+            {
+                _doorQuads.Remove(quad);
+            }
         }
 
+        long packStart = System.Diagnostics.Stopwatch.GetTimestamp();
         int ringX = TerrainCellDataTextures.Ring(gridX, _width);
         int ringY = TerrainCellDataTextures.Ring(unityY, _height);
         TerrainCellTexels backgroundTexels = TerrainCellDataPacker.PackQuad(scratch.Vertices.AsSpan(0, 4), background);
@@ -422,6 +631,7 @@ public sealed class TerrainCellBuilder : IDisposable
         _textures.SetCell(
             ringX, ringY, TerrainCellDataPacker.ForegroundLayer,
             TerrainCellDataPacker.PackQuad(scratch.Vertices.AsSpan(4, 4), foreground));
+        _packTicks += System.Diagnostics.Stopwatch.GetTimestamp() - packStart;
         return doorsChanged;
     }
 

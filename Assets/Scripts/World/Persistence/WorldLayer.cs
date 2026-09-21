@@ -713,10 +713,6 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         return true;
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "SonarAnalyzer.CSharp",
-        "S3877",
-        Justification = "Persistent map close failures must propagate instead of becoming silent data loss.")]
     public void Dispose()
     {
         if (_disposed)

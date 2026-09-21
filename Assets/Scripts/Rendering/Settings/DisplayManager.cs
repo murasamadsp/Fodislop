@@ -12,7 +12,7 @@ using VContainer.Unity;
 
 namespace Kern.Rendering
 {
-    // Чистый сервис контейнера (SCENE_STANDARD.md §1): настройки вывода
+    // Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): настройки вывода
     // применяются при старте scope.
     public sealed class DisplayManager : IStartable
     {

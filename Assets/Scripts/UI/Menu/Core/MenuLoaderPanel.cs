@@ -3,14 +3,12 @@
 using System;
 using Kern.Core.Interfaces;
 using Kern.Core.Localization;
-using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Kern.UI
 {
     /// <summary>
-    /// Owns the loading panel: element lookup (with placeholder synthesis
-    /// when MainMenu.uxml is missing nodes), show/hide, and progress updates.
+    /// Owns the loading panel: element lookup, show/hide, and progress updates.
     /// </summary>
     internal sealed class MenuLoaderPanel
     {
@@ -28,27 +26,26 @@ namespace Kern.UI
             Label? phaseCount = tree.Q<Label>("LoaderPhaseCount") ?? searchRoot.Q<Label>("LoaderPhaseCount");
             VisualElement? phaseList = tree.Q<VisualElement>("LoaderPhaseList") ?? searchRoot.Q<VisualElement>("LoaderPhaseList");
 
-            if (_container == null || _content == null ||
-                progressFill == null || phaseLabel == null ||
-                phaseCount == null || phaseList == null)
+            // Подстановка пустышек вместо недостающих элементов запрещена.
+            // Она молча превращала «в разметке нет того, чего ждёт код» в
+            // «меню построено», после чего кадр умирал тремя секундами позже
+            // на таймауте готовности, и в логе не было ни одного имени, за
+            // которое можно зацепиться. Отказ называет всё недостающее сразу.
+            string[] missing =
+            [
+                .. _container == null ? new[] { "LoaderContainer" } : [],
+                .. _content == null ? new[] { "LoaderContent" } : [],
+                .. progressFill == null ? new[] { "LoaderProgressFill" } : [],
+                .. phaseLabel == null ? new[] { "LoaderPhaseLabel" } : [],
+                .. phaseCount == null ? new[] { "LoaderPhaseCount" } : [],
+                .. phaseList == null ? new[] { "LoaderPhaseList" } : [],
+            ];
+            if (missing.Length > 0)
             {
-                Debug.LogWarning("[MainMenu] Some loader elements missing from MainMenu.uxml, synthesizing placeholders to prevent startup crash.");
-                _container ??= new VisualElement { name = "LoaderContainer" };
-                _content ??= new VisualElement { name = "LoaderContent" };
-                progressFill ??= new VisualElement { name = "LoaderProgressFill" };
-                phaseLabel ??= new Label { name = "LoaderPhaseLabel" };
-                phaseCount ??= new Label { name = "LoaderPhaseCount" };
-                phaseList ??= new VisualElement { name = "LoaderPhaseList" };
-
-                _container.Add(_content);
-                _content.Add(progressFill);
-                _content.Add(phaseLabel);
-                _content.Add(phaseCount);
-                _content.Add(phaseList);
-                if (searchRoot != null && !searchRoot.Contains(_container))
-                {
-                    searchRoot.Add(_container);
-                }
+                throw new InvalidOperationException(
+                    "[MainMenu] В Resources/UI/MainMenu.uxml нет элементов, которых ждёт загрузчик: " +
+                    string.Join(", ", missing) +
+                    ". Имя или тип элемента в разметке разошлись с кодом.");
             }
 
             _progress = new MenuLoaderProgress(

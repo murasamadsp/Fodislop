@@ -194,6 +194,47 @@ public class DirtyRectSetFuzzTests
             "Two small chunks must not trip the full-rebuild threshold.");
     }
 
+    // Касание углом — не повод сливать: объединение вчетверо больше суммы, а
+    // цепочка таких слияний вдоль диагонали снова собирала прямоугольник во
+    // весь экран. Полоса вплотную при этом обязана продолжать сливаться.
+    [Test]
+    public void DiagonallyTouchingChunksDoNotMerge()
+    {
+        var set = new DirtyRectSet();
+        set.Add(new RectInt(1000, 2000, 32, 32), _Bounds);
+        set.Add(new RectInt(1032, 2032, 32, 32), _Bounds);
+
+        Assert.That(set.Count, Is.EqualTo(2), "Углом касаются — площади не делят.");
+        Assert.That(set.TotalArea, Is.EqualTo(2 * 32 * 32));
+    }
+
+    // Цепочка по диагонали: каждый следующий чанк касается предыдущего углом.
+    // Раньше это схлопывалось в один прямоугольник, растущий по всему окну.
+    [Test]
+    public void ADiagonalChainDoesNotGrowIntoTheWholeWindow()
+    {
+        var set = new DirtyRectSet();
+        const int Steps = 8;
+        for (int i = 0; i < Steps; i++)
+        {
+            set.Add(new RectInt(1000 + (i * 32), 2000 + (i * 32), 32, 32), _Bounds);
+        }
+
+        Assert.That(set.TotalArea, Is.EqualTo(Steps * 32 * 32));
+    }
+
+    // Перекрывающиеся прямоугольники обязаны сливаться: иначе клетка попадает
+    // в заплатку дважды и дважды же считается в оценке стоимости.
+    [Test]
+    public void OverlappingChunksMerge()
+    {
+        var set = new DirtyRectSet();
+        set.Add(new RectInt(1000, 2000, 32, 32), _Bounds);
+        set.Add(new RectInt(1016, 2016, 32, 32), _Bounds);
+
+        Assert.That(set.Count, Is.EqualTo(1), "Перекрытие обязано слиться.");
+    }
+
     [Test]
     public void AdjacentChunksMergeInsteadOfConsumingSlots()
     {

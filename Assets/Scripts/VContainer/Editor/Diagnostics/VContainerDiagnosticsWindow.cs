@@ -14,8 +14,8 @@ namespace VContainer.Editor.Diagnostics
         static readonly GUIContent FlattenHeadContent = EditorGUIUtility.TrTextContent("Flatten", "Flatten dependencies");
         static readonly GUIContent ReloadHeadContent = EditorGUIUtility.TrTextContent("Reload", "Reload View");
 
-        internal static bool EnableAutoReload;
-        internal static bool EnableCaptureStackTrace;
+        internal static bool EnableAutoReload = false;
+        internal static bool EnableCaptureStackTrace = false;
 
         [MenuItem("Window/VContainer Diagnostics")]
         public static void OpenWindow()

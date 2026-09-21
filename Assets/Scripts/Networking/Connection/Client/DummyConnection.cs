@@ -265,11 +265,13 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         {
             _worldState.Reset();
             _movementResponder.CancelPath();
+            _missionRunner.Reset();
             return;
         }
 
         _worldState.Reset();
         _movementResponder.CancelPath();
+        _missionRunner.Reset();
 
         // Cleared so the buff loop can start again on the next connection.
         // It was never reset, so after one disconnect StartBuffLoop's guard
@@ -306,6 +308,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         // this the loops outlive the object that owns them.
         _session.Stop();
         _buffManager.ResetLoopGuard();
+        _missionRunner.Reset();
 
         _worldState.Dispose();
         _movementResponder.Dispose();

@@ -53,59 +53,34 @@ namespace Kern.World.Lighting
 
         private readonly LightingResourceManager _resources = new();
         private readonly LightingRuntimeState _runtimeState = new();
-        private StaticLightingSolver? _staticLightingSolver;
-        private DynamicLightingSolver? _dynamicLightingSolver;
-        private IndirectLightingSolver? _indirectLightingSolver;
-        private GeometryLightingSolver? _geometryLightingSolver;
-        private LightingFrameExecutor? _lightingFrameExecutor;
-        private LightingGPULifecycle? _lightingGPULifecycle;
-        private LightingPresentation? _lightingPresentation;
-        private LightingUpdateCoordinator? _lightingUpdateCoordinator;
+        private LightingComposition? _composition;
+        private LightingDiagnosticsReporter? _diagnostics;
         private readonly LightingInvalidationJournal _journal = new();
         private readonly DynamicLightManager _dynamicLightManager = new();
         private GraphicsQualitySettings _qualitySettings;
 
-        private StaticLightingSolver StaticSolver =>
-            _staticLightingSolver ??= new StaticLightingSolver(_resources, _telemetry);
-        private DynamicLightingSolver DynamicSolver =>
-            _dynamicLightingSolver ??= new DynamicLightingSolver(
-                _resources,
-                _dynamicLightManager,
-                new DynamicLightTileCache());
-        private IndirectLightingSolver IndirectSolver =>
-            _indirectLightingSolver ??= new IndirectLightingSolver(_resources);
-        private GeometryLightingSolver GeometrySolver =>
-            _geometryLightingSolver ??= new GeometryLightingSolver(_resources);
-        private LightingFrameExecutor FrameExecutor =>
-            _lightingFrameExecutor ??= new LightingFrameExecutor(
-                _resources,
-                GeometrySolver,
-                StaticSolver,
-                DynamicSolver,
-                IndirectSolver,
-                _dynamicLightManager,
-                _lightingGeometryRegistry,
-                _telemetry);
-
-        private LightingGPULifecycle GPULifecycle =>
-            _lightingGPULifecycle ??= new LightingGPULifecycle(
-                _resources,
-                FrameExecutor);
-
-        private LightingPresentation Presentation =>
-            _lightingPresentation ??= new LightingPresentation(_resources);
-
-        private LightingUpdateCoordinator UpdateCoordinator =>
-            _lightingUpdateCoordinator ??= new LightingUpdateCoordinator(
+        // Граф строится по первому требованию: его вход — внедрённые
+        // зависимости, а их у MonoBehaviour на момент инициализации полей ещё
+        // нет. Отсутствие графа означает, что GPU-ресурсы не создавались.
+        private LightingComposition Composition =>
+            _composition ??= new LightingComposition(
                 _resources,
                 _runtimeState,
-                GPULifecycle,
-                FrameExecutor,
-                Presentation,
-                _lightingGeometryRegistry,
                 _dynamicLightManager,
+                _lightingGeometryRegistry,
                 _telemetry,
                 _journal);
+
+        private LightingDiagnosticsReporter Diagnostics =>
+            _diagnostics ??= new LightingDiagnosticsReporter(
+                _resources, _runtimeState, _telemetry);
+
+        private LightingDiagnosticsContext DiagnosticsContext => new(
+            _initialized,
+            _lightingQualityMode,
+            WorldRect,
+            CellSize,
+            MaximumIntervalSteps);
 
         private List<CascadeLayout> _cascades => _resources.Cascades;
         private int _fieldWidth => _resources.FieldWidth;
@@ -127,7 +102,6 @@ namespace Kern.World.Lighting
         private IRuntimeDebugSettings _debugSettings = null!;
 
         private bool _initialized;
-        private bool _budgetViolationCaptured;
 
         public bool IsInitialized => _initialized;
 
@@ -213,96 +187,16 @@ namespace Kern.World.Lighting
         // One clipped DDA path crosses at most every row and column once.
         public int MaximumIntervalSteps => _fieldWidth + _fieldHeight + 1;
 
-        public void CollectCascadeCosts(List<CascadeCostSample> destination)
-        {
-            if (_lightingQualityMode == LightingQualityMode.PerBlock)
-            {
-                destination.Clear();
-                return;
-            }
-
-            CascadeCostCalculator.CollectCascadeCosts(_cascades, MaximumIntervalSteps, destination);
-        }
+        public void CollectCascadeCosts(List<CascadeCostSample> destination) =>
+            Diagnostics.CollectCascadeCosts(destination, DiagnosticsContext);
 
         public LightingInvalidationJournal Journal => _journal;
 
-        public string? DumpCurrentFrame(string? targetDirectory = null)
-        {
-            if (!_initialized || _resources.Registry.Compute == null)
-            {
-                return null;
-            }
+        public string? DumpCurrentFrame(string? targetDirectory = null) =>
+            Diagnostics.DumpCurrentFrame(DiagnosticsContext, targetDirectory);
 
-            return LightingFrameDumper.DumpCurrentFrame(
-                _resources.Registry,
-                WorldRect,
-                CellSize,
-                _lightingQualityMode,
-                _telemetry,
-                _resources.LightingCounters,
-                targetDirectory);
-        }
-
-        public void CaptureBudgetViolationIfNeeded()
-        {
-            long estimatedRayWork = CascadeCostCalculator.EstimateRayWorkUnits(_cascades);
-            bool staticRayBudgetViolation =
-                estimatedRayWork > LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits;
-            bool measuredBudgetViolation =
-                !LightingPerformanceBudget.CheckBudget(_telemetry, out _) ||
-                !LightingPerformanceBudget.CheckFrameBudget(_telemetry, out _);
-            bool repeatedStaticSolve =
-                _runtimeState.SolveCount > 1 &&
-                _telemetry.LightingStaticSolveCount > 0 &&
-                (_telemetry.LightingRegionChangeCount > 0 ||
-                    _telemetry.LightingFieldRebuildCount > 0);
-            bool repeatedTerrainFullRebuild =
-                _runtimeState.SolveCount > 1 &&
-                _telemetry.TerrainFullPopulateCount > 1 &&
-                (_telemetry.StreamingPlanKind == (int)StreamingPlanKind.FullRebuild ||
-                    _telemetry.StreamingPlanKind == (int)StreamingPlanKind.Resize);
-            if (_budgetViolationCaptured ||
-                !_initialized ||
-                _resources.Registry.Compute == null ||
-                !measuredBudgetViolation &&
-                !staticRayBudgetViolation &&
-                !repeatedStaticSolve &&
-                !repeatedTerrainFullRebuild)
-            {
-                return;
-            }
-
-            _budgetViolationCaptured = true;
-            Debug.LogWarning(
-                $"[Lighting] Budget diagnostic captured: " +
-                $"estimatedStaticRayWork={estimatedRayWork}, " +
-                $"limit={LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits}, " +
-                $"staticRayBudgetViolation={staticRayBudgetViolation}, " +
-                $"measuredBudgetViolation={measuredBudgetViolation}, " +
-                $"repeatedStaticSolve={repeatedStaticSolve}, " +
-                $"repeatedTerrainFullRebuild={repeatedTerrainFullRebuild}, " +
-                $"staticSolves={_telemetry.LightingStaticSolveCount}, " +
-                $"terrainFullPopulates={_telemetry.TerrainFullPopulateCount}.");
-            try
-            {
-                // A violation is already the expensive frame. Full ReadPixels
-                // plus PNG encoding here would add seven synchronous GPU/CPU
-                // readbacks and turn one bad frame into a visible freeze.
-                LightingFrameDumper.DumpCurrentFrame(
-                    _resources.Registry,
-                    WorldRect,
-                    CellSize,
-                    _lightingQualityMode,
-                    _telemetry,
-                    lightingCounters: null,
-                    targetDirectory: null,
-                    includeTextures: false);
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"[Lighting] Budget diagnostic capture failed: {exception.Message}");
-            }
-        }
+        public void CaptureBudgetViolationIfNeeded() =>
+            Diagnostics.CaptureBudgetViolationIfNeeded(DiagnosticsContext);
 
         public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
@@ -314,20 +208,8 @@ namespace Kern.World.Lighting
             _runtimeState.LastVisibleRegion.z * ProjectRuntimeContracts.World.CellSize,
             _runtimeState.LastVisibleRegion.w * ProjectRuntimeContracts.World.CellSize);
 
-        public IReadOnlyList<string> GetCascadeUniformSummaries()
-        {
-            var summaries = new List<string>(_cascades.Count);
-            for (int index = 0; index < _cascades.Count; index++)
-            {
-                CascadeLayout cascade = _cascades[index];
-                summaries.Add(
-                    $"Cascade {index}: offset={cascade.Offset}, entries={cascade.EntryCount}, " +
-                    $"probe={cascade.ProbeWidth}x{cascade.ProbeHeight}, spacing={cascade.ProbeSpacing}, " +
-                    $"directions={cascade.DirectionCount}, interval={cascade.IntervalStart:F2}..{cascade.IntervalEnd:F2}");
-            }
-
-            return summaries;
-        }
+        public IReadOnlyList<string> GetCascadeUniformSummaries() =>
+            LightingDiagnosticsReporter.DescribeCascadeUniforms(_cascades);
 
         public int AtlasEntryCount => _atlasEntryCount;
 
@@ -546,7 +428,7 @@ namespace Kern.World.Lighting
             MapManager? mapManager,
             TerrainRenderer terrainRenderer)
         {
-            UpdateCoordinator.Update(
+            Composition.UpdateCoordinator.Update(
                 visibleMinX,
                 visibleMinY,
                 visibleWidth,
@@ -564,14 +446,14 @@ namespace Kern.World.Lighting
         private void DisableGPULighting()
         {
             ReleaseGPUPipeline();
-            Presentation.PublishDisabled();
+            Composition.Presentation.PublishDisabled();
         }
 
         private void ReleaseGPUPipeline()
         {
-            if (_lightingGPULifecycle != null)
+            if (_composition != null)
             {
-                _lightingGPULifecycle.ReleasePipeline();
+                _composition.GpuLifecycle.ReleasePipeline();
                 return;
             }
 
@@ -608,7 +490,7 @@ namespace Kern.World.Lighting
             }
             else
             {
-                Presentation.MarkEnabled();
+                Composition.Presentation.MarkEnabled();
                 Shader.EnableKeyword(LightingPresentation.WorldLightingKeyword);
             }
 
@@ -674,9 +556,9 @@ namespace Kern.World.Lighting
 
         private void ReleaseResources()
         {
-            if (_lightingGPULifecycle != null)
+            if (_composition != null)
             {
-                GPULifecycle.ReleaseResources();
+                _composition.GpuLifecycle.ReleaseResources();
             }
             else
             {

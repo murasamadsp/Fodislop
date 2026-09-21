@@ -15,10 +15,8 @@ namespace Kern.UI
 
         private CommandBuffer? _commandBuffer;
         private readonly List<(Mesh Mesh, Matrix4x4 Matrix, Material Material, int SubMesh, float Distance)> _draws = new();
-        private OrbitRingRenderer? _ring;
         private bool _initialized;
         private OrbitalStationMotion? _station;
-        private Transform? _planet;
         private Transform? _occluder;
 
         // Потолок стороны offscreen-кадра.
@@ -42,7 +40,7 @@ namespace Kern.UI
         private RenderTexture? _outputTexture;
 
         [SerializeField]
-        private Material? _resolveMaterialAsset;
+        private Material? _resolveMaterialAsset = null;
 
         private Material? _resolveMaterial;
         private bool _ownsResolveMaterial;
@@ -197,16 +195,6 @@ namespace Kern.UI
                 }
             }
 
-            if (_ring != null && _ring.isActiveAndEnabled && _ring.Material != null)
-            {
-                Mesh? ringMesh = _ring.BuildFacing(viewpoint.Position);
-                if (ringMesh != null)
-                {
-                    float distance = (ringMesh.bounds.center - viewpoint.Position).sqrMagnitude;
-                    _draws.Add((ringMesh, Matrix4x4.identity, _ring.Material, 0, distance));
-                }
-            }
-
             _draws.Sort(static (a, b) =>
             {
                 int queue = a.Material.renderQueue.CompareTo(b.Material.renderQueue);
@@ -257,22 +245,8 @@ namespace Kern.UI
 
         private void EnsureInitialized()
         {
-            _ring ??= GetComponentInChildren<OrbitRingRenderer>(includeInactive: true);
             _station ??= GetComponentInChildren<OrbitalStationMotion>(includeInactive: true);
-            _planet ??= transform.Find("PlanetSurface");
-
-            if (_planet != null)
-            {
-                _planet.localPosition = Vector3.zero;
-            }
-
-            Transform? atmosphere = transform.Find("PlanetAtmosphere");
-            if (atmosphere != null)
-            {
-                atmosphere.localPosition = Vector3.zero;
-            }
-
-            _occluder = _planet;
+            _occluder = null;
             _initialized = true;
             EnsureTargets();
             EnsureResolveMaterial();
@@ -361,12 +335,12 @@ namespace Kern.UI
 
             // Радиус берётся из сцены, а не задаётся числом: масштаб шара уже
             // менялся, и зашитая дистанция однажды окажется внутри поверхности.
-            float planetRadius = _planet != null ? 0.5f * _planet.lossyScale.x : 1f;
+            const float sceneBodyRadius = 1f;
 
             MenuSceneryFraming.Placement placement = MenuSceneryFraming.Solve(
                 _framingProgress,
                 landingLocalDirection,
-                planetRadius,
+                sceneBodyRadius,
                 _targetWidth / (float)_targetHeight);
 
             // Зум задаётся только дистанцией, а не сужением FOV: макет
@@ -393,7 +367,7 @@ namespace Kern.UI
 
         public bool TryGetOrbitPointViewportPosition(float angleDegrees, out Vector2 viewportPosition)
         {
-            Transform centerTransform = _planet != null ? _planet : transform;
+            Transform centerTransform = transform;
             return MenuSceneryProjection.TryGetOrbitPointViewportPosition(
                 Viewpoint,
                 centerTransform,
@@ -401,13 +375,5 @@ namespace Kern.UI
                 out viewportPosition);
         }
 
-        public bool TryGetPlanetSurfaceViewportPosition(Vector3 localSurfaceDir, out Vector2 viewportPosition)
-        {
-            return MenuSceneryProjection.TryGetSurfaceViewportPosition(
-                Viewpoint,
-                _planet,
-                localSurfaceDir,
-                out viewportPosition);
-        }
     }
 }

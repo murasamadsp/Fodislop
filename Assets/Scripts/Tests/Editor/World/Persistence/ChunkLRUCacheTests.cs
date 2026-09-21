@@ -149,4 +149,62 @@ public class ChunkLruCacheTests
         Assert.That(cache.Contains(5), Is.True);
         Assert.That(cache.Contains(4), Is.True, "Trimming evicted the most recently used chunk.");
     }
+
+    // Кэш мира бережёт грязные чанки, а всё, что приехало с сервера, грязное
+    // до записи на диск. Пока стример льёт чанки, вытеснять нечего — и это
+    // обязано стоить O(1), а не обхода всего списка на каждую вставку.
+    // Проверяется наблюдаемое поведение: ничего не вытеснено, кэш вырос выше
+    // ёмкости, а после сброса грязноты вытеснение возобновилось.
+    [Test]
+    public void DirtyChunksAreNeverEvictedAndTheCacheGrowsPastCapacity()
+    {
+        var cache = new ChunkLruCache<int>(maxCapacity: 4, allowDirtyEviction: false);
+
+        for (int index = 0; index < 32; index++)
+        {
+            cache.AddOrUpdate(index, [index]);
+            cache.MarkDirty(index);
+        }
+
+        Assert.AreEqual(32, cache.LoadedCount);
+        for (int index = 0; index < 32; index++)
+        {
+            Assert.IsTrue(cache.Contains(index), $"чанк {index} вытеснен, хотя грязный");
+        }
+    }
+
+    [Test]
+    public void EvictionResumesOnceTheDirtySetIsCleared()
+    {
+        var cache = new ChunkLruCache<int>(maxCapacity: 4, allowDirtyEviction: false);
+        for (int index = 0; index < 8; index++)
+        {
+            cache.AddOrUpdate(index, [index]);
+            cache.MarkDirty(index);
+        }
+
+        cache.ClearDirty();
+        cache.AddOrUpdate(100, [100]);
+
+        Assert.AreEqual(4, cache.LoadedCount);
+        Assert.IsTrue(cache.Contains(100));
+    }
+
+    [Test]
+    public void ADetachedChunkIsNotEvictedUntilItsWriteCompletes()
+    {
+        var cache = new ChunkLruCache<int>(maxCapacity: 2, allowDirtyEviction: false);
+        cache.AddOrUpdate(1, [1]);
+        cache.MarkDirty(1);
+        List<(int Index, int[] Chunk)> snapshot = cache.DetachDirtySnapshot();
+
+        cache.AddOrUpdate(2, [2]);
+        cache.AddOrUpdate(3, [3]);
+        Assert.IsTrue(cache.Contains(1), "чанк вытеснен, пока его писали на диск");
+
+        cache.CompleteDirtySnapshot(snapshot.ConvertAll(entry => entry.Index));
+        cache.AddOrUpdate(4, [4]);
+
+        Assert.IsFalse(cache.Contains(1));
+    }
 }

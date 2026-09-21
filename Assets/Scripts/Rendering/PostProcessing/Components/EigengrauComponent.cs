@@ -13,7 +13,6 @@ namespace Kern.Rendering.PostProcessing
     public class EigengrauComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter names stable for existing profiles.
-#pragma warning disable SA1307
         [Tooltip("How far the black point is lifted toward the eigengrau color. 1 means black sits exactly at the eye's own grey.")]
         public ClampedFloatParameter intensity = PostProcessDefaults.EigengrauIntensity();
 

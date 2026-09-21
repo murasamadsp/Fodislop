@@ -18,6 +18,11 @@ public sealed class ChunkLruCache<T>
     private readonly HashSet<int> _dirtyChunks;
     private readonly HashSet<int> _detachedDirtyChunks;
 
+    // Загруженные чанки, которые МОЖНО вытеснить: ни грязные, ни отданные в
+    // запись. Держится отдельным множеством, а не выводится обходом, потому
+    // что обход — ровно то, что здесь стоило кадра (см. FindEvictionNode).
+    private readonly HashSet<int> _evictableChunks;
+
     public ChunkLruCache(
         int maxCapacity,
         Action<int, T[]>? onEvictDirty = null,
@@ -39,6 +44,7 @@ public sealed class ChunkLruCache<T>
         _lruList = new LinkedList<int>();
         _dirtyChunks = new HashSet<int>();
         _detachedDirtyChunks = new HashSet<int>();
+        _evictableChunks = new HashSet<int>();
     }
 
     /// <summary>
@@ -85,6 +91,7 @@ public sealed class ChunkLruCache<T>
             _lruList.Remove(existingNode);
             _lruIndexMap.Remove(chunkIndex);
             _loadedChunks.Remove(chunkIndex);
+            _evictableChunks.Remove(chunkIndex);
         }
 
         // Пока чанки грязные, вытеснять нечего, и кэш растёт выше ёмкости.
@@ -96,15 +103,25 @@ public sealed class ChunkLruCache<T>
         _loadedChunks[chunkIndex] = chunk;
         var node = _lruList.AddFirst(chunkIndex);
         _lruIndexMap[chunkIndex] = node;
+        RefreshEvictable(chunkIndex);
     }
 
     public void MarkDirty(int chunkIndex)
     {
         _dirtyChunks.Add(chunkIndex);
+        _evictableChunks.Remove(chunkIndex);
     }
 
     public void ClearDirty()
     {
+        foreach (int index in _dirtyChunks)
+        {
+            if (!_detachedDirtyChunks.Contains(index) && _loadedChunks.ContainsKey(index))
+            {
+                _evictableChunks.Add(index);
+            }
+        }
+
         _dirtyChunks.Clear();
     }
 
@@ -138,6 +155,7 @@ public sealed class ChunkLruCache<T>
 
         T[] writableChunk = (T[])chunk.Clone();
         _loadedChunks[chunkIndex] = writableChunk;
+        RefreshEvictable(chunkIndex);
         return writableChunk;
     }
 
@@ -146,6 +164,7 @@ public sealed class ChunkLruCache<T>
         foreach (int index in indices)
         {
             _detachedDirtyChunks.Remove(index);
+            RefreshEvictable(index);
         }
     }
 
@@ -155,6 +174,7 @@ public sealed class ChunkLruCache<T>
         {
             _detachedDirtyChunks.Remove(index);
             _dirtyChunks.Add(index);
+            _evictableChunks.Remove(index);
         }
     }
 
@@ -165,6 +185,7 @@ public sealed class ChunkLruCache<T>
         _lruList.Clear();
         _dirtyChunks.Clear();
         _detachedDirtyChunks.Clear();
+        _evictableChunks.Clear();
     }
 
     private void TrimTo(int count)
@@ -192,25 +213,49 @@ public sealed class ChunkLruCache<T>
 
         _loadedChunks.Remove(oldestIndex);
         _lruIndexMap.Remove(oldestIndex);
+        _evictableChunks.Remove(oldestIndex);
         _lruList.Remove(evictionNode);
         return true;
     }
 
+    // Кандидат на вытеснение, идя от хвоста списка.
+    //
+    // ПОЧЕМУ ЗДЕСЬ СТОИТ БЫСТРЫЙ ВЫХОД. Кэш мира настроен беречь грязные
+    // чанки, а всё, что приехало с сервера, грязное до ближайшей записи на
+    // диск. Пока стример льёт чанки, чистых в кэше нет вовсе — и этот обход
+    // каждый раз проходил ВЕСЬ список, чтобы не найти ничего. Список при этом
+    // растёт выше ёмкости (вытеснять-то нечего), так что цена обхода росла
+    // вместе с ним: чем дольше идёшь по миру, тем дороже приход каждого чанка.
+    // Счётчик чистых чанков отвечает на тот же вопрос за O(1).
     private LinkedListNode<int>? FindEvictionNode()
     {
-        LinkedListNode<int>? node = _lruList.Last;
         if (_allowDirtyEviction)
         {
-            return node;
+            return _lruList.Last;
         }
 
-        while (node != null &&
-               (_dirtyChunks.Contains(node.Value) ||
-                _detachedDirtyChunks.Contains(node.Value)))
+        if (_evictableChunks.Count == 0)
+        {
+            return null;
+        }
+
+        LinkedListNode<int>? node = _lruList.Last;
+        while (node != null && !_evictableChunks.Contains(node.Value))
         {
             node = node.Previous;
         }
 
         return node;
+    }
+
+    private void RefreshEvictable(int chunkIndex)
+    {
+        if (_dirtyChunks.Contains(chunkIndex) || _detachedDirtyChunks.Contains(chunkIndex))
+        {
+            _evictableChunks.Remove(chunkIndex);
+            return;
+        }
+
+        _evictableChunks.Add(chunkIndex);
     }
 }

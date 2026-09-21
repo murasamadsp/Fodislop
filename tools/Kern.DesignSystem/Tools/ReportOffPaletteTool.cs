@@ -12,7 +12,7 @@ internal static class ReportOffPaletteTool
         string repo = Path.GetFullPath(Path.Combine(root, "..", ".."));
         string palettePath = Path.Combine(repo, "Assets", "Resources", "Styles", "token-palette.json");
         string stylesDir = Path.Combine(repo, "Assets", "Resources", "Styles");
-        string outPath = Path.Combine(repo, "docs", "design-debt-uss.md");
+        string outPath = Path.Combine(repo, "docs", "design", "design-debt-uss.md");
 
         var palette = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(palettePath)) ?? new();
         var colors = palette.GetValueOrDefault("colors");

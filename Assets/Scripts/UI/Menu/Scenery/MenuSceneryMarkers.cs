@@ -13,17 +13,10 @@ public sealed class MenuSceneryMarkers
         VisualElement? beaconPing,
         VisualElement? stationBadge,
         VisualElement? sidebar,
-        VisualElement? targetReticle,
-        Image? planetBodyImage,
+        Image? sceneryImage,
         MenuSceneryController? scenery)
     {
-        UpdateStationMarker(beacon, beaconPing, stationBadge, sidebar, planetBodyImage, scenery);
-        UpdateLandingSectorMarker(targetReticle, planetBodyImage, scenery);
-
-        if (targetReticle != null)
-        {
-            targetReticle.style.scale = new Scale(Vector3.one);
-        }
+        UpdateStationMarker(beacon, beaconPing, stationBadge, sidebar, sceneryImage, scenery);
     }
 
     private static void UpdateStationMarker(
@@ -31,7 +24,7 @@ public sealed class MenuSceneryMarkers
         VisualElement? beaconPing,
         VisualElement? stationBadge,
         VisualElement? sidebar,
-        Image? planetBodyImage,
+        Image? sceneryImage,
         MenuSceneryController? scenery)
     {
         if (beacon == null)
@@ -42,7 +35,7 @@ public sealed class MenuSceneryMarkers
         IPanel? hostPanel = beacon.panel;
 
         if (hostPanel == null ||
-            !TryGetPlanetFrame(planetBodyImage, scenery, out Rect rect, out Rect image) ||
+            !TryGetSceneryFrame(sceneryImage, scenery, out Rect rect, out Rect image) ||
             scenery == null ||
             !scenery.TryGetStationViewportPosition(out Vector2 viewport))
         {
@@ -106,33 +99,6 @@ public sealed class MenuSceneryMarkers
         beacon.style.top = y - markerHalfSize.y;
     }
 
-    private static void UpdateLandingSectorMarker(
-        VisualElement? targetReticle,
-        Image? planetBodyImage,
-        MenuSceneryController? scenery)
-    {
-        if (targetReticle == null)
-        {
-            return;
-        }
-
-        if (!TryGetPlanetFrame(planetBodyImage, scenery, out Rect rect, out _) ||
-            scenery == null ||
-            !scenery.TryGetPlanetSurfaceViewportPosition(MenuSceneryPresenter.LandingSiteDirection, out Vector2 viewport))
-        {
-            UIState.Hide(targetReticle);
-            return;
-        }
-
-        float x = rect.x + (viewport.x * rect.width);
-        float y = rect.y + ((1f - viewport.y) * rect.height);
-
-        Vector2 markerHalfSize = ResolveHalfSize(targetReticle);
-        targetReticle.style.left = x - markerHalfSize.x;
-        targetReticle.style.top = y - markerHalfSize.y;
-        UIState.Show(targetReticle);
-    }
-
     private static Vector2 ResolveHalfSize(VisualElement element)
     {
         float width = element.resolvedStyle.width;
@@ -142,8 +108,8 @@ public sealed class MenuSceneryMarkers
             float.IsFinite(height) && height > 0f ? height * 0.5f : 0f);
     }
 
-    public static bool TryGetPlanetFrame(
-        Image? planetBodyImage,
+    public static bool TryGetSceneryFrame(
+        Image? sceneryImage,
         MenuSceneryController? scenery,
         out Rect localFrame,
         out Rect worldFrame)
@@ -151,17 +117,17 @@ public sealed class MenuSceneryMarkers
         localFrame = default;
         worldFrame = default;
 
-        if (planetBodyImage == null || scenery == null || scenery.OutputTexture == null)
+        if (sceneryImage == null || scenery == null || scenery.OutputTexture == null)
         {
             return false;
         }
 
-        if (!ReferenceEquals(planetBodyImage.image, scenery.OutputTexture))
+        if (!ReferenceEquals(sceneryImage.image, scenery.OutputTexture))
         {
             return false;
         }
 
-        Rect rect = planetBodyImage.layout;
+        Rect rect = sceneryImage.layout;
         if (rect.width <= 1f || rect.height <= 1f ||
             float.IsNaN(rect.width) || float.IsNaN(rect.height))
         {
@@ -169,7 +135,7 @@ public sealed class MenuSceneryMarkers
         }
 
         localFrame = rect;
-        worldFrame = planetBodyImage.worldBound;
+        worldFrame = sceneryImage.worldBound;
         return true;
     }
 }

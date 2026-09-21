@@ -11,11 +11,11 @@ namespace Kern.UI
     public class OrbitalStationMotion : MonoBehaviour
     {
         [SerializeField]
-        private Transform? _center;
+        private Transform? _center = null;
         [SerializeField]
         private float _radius = MenuSceneryDefaults.OrbitRadius;
         [SerializeField]
-        private float _startAngleDegrees;
+        private float _startAngleDegrees = 0f;
         [SerializeField]
         private Vector3 _orbitPlaneEulerAngles = MenuSceneryDefaults.OrbitPlaneEulerAngles;
 

@@ -19,7 +19,7 @@ using VContainer.Unity;
 
 namespace Kern.Networking;
 
-// Чистый сервис контейнера (SCENE_STANDARD.md §1): подписка на пакеты при
+// Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): подписка на пакеты при
 // старте scope, отписка при его уничтожении.
 public sealed class PacketHandler(
     INetworkService networkService,

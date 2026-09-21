@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kern.Audio.Core;
@@ -13,7 +12,6 @@ using UnityAudioSettings = UnityEngine.AudioSettings;
 
 namespace Kern.Audio.Backend
 {
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch startup exceptions to prevent game crash.")]
     [DefaultExecutionOrder(-10000)]
     public sealed class AudioSystem : MonoBehaviour, IAudioSystem
     {

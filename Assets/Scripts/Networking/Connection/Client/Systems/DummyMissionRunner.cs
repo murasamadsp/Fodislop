@@ -39,10 +39,19 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         new(2, "Мастер-копатель", "Сломайте 500 блоков", 500, ItemType.Cred, 300),
     ];
 
+    private bool _persistentMission;
+
     public int ActiveMissionID { get; private set; } = -1;
     public long MissionProgress { get; private set; }
     public bool[] MissionCompleted { get; } = new bool[_Missions.Length];
     public int MissionCount => _Missions.Length;
+
+    public void StartPersistentMission(ushort x, ushort y)
+    {
+        MissionCompleted[0] = false;
+        StartMission(0, x, y);
+        _persistentMission = true;
+    }
 
     public void SendMissionWindow(ushort x, ushort y)
     {
@@ -151,6 +160,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         }
 
         var m = _Missions[missionID];
+        _persistentMission = false;
         ActiveMissionID = missionID;
         MissionProgress = 0;
         onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
@@ -169,6 +179,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
 
         ActiveMissionID = -1;
         MissionProgress = 0;
+        _persistentMission = false;
         onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
         onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
     }
@@ -176,6 +187,11 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
     public void OnBlockMined(Dictionary<ItemType, long> inventory)
     {
         if (ActiveMissionID < 0)
+        {
+            return;
+        }
+
+        if (MissionCompleted[ActiveMissionID])
         {
             return;
         }
@@ -193,6 +209,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
     {
         ActiveMissionID = -1;
         MissionProgress = 0;
+        _persistentMission = false;
         Array.Clear(MissionCompleted, 0, MissionCompleted.Length);
     }
 
@@ -212,6 +229,19 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         MissionCompleted[ActiveMissionID] = true;
         ActiveMissionID = -1;
         MissionProgress = 0;
+
+        if (_persistentMission)
+        {
+            ActiveMissionID = m.Id;
+            MissionProgress = m.Target;
+            onReceived.Invoke(new ServerPacket(new MissionProgressPacket(MissionProgress, m.Target)));
+            onReceived.Invoke(new ServerPacket(new ModalWindowPacket(
+                "Миссия выполнена!",
+                $"Вы завершили миссию \"{m.Title}\"!\n\nНаграда: {m.RewardAmount} кредитов.",
+                "OK",
+                string.Empty)));
+            return;
+        }
 
         onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
         onReceived.Invoke(new ServerPacket(new ModalWindowPacket(

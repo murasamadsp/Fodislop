@@ -155,7 +155,25 @@ namespace Kern.World
 
         protected void Update()
         {
-            if (!IsWorldInitialized || Time.unscaledTime < _nextMapFlushTime)
+            if (!IsWorldInitialized)
+            {
+                return;
+            }
+
+            // Сброс на диск идёт по таймеру, но есть вторая причина его
+            // позвать — переполнение кэша чанков.
+            //
+            // Кэш мира настроен беречь грязные чанки, поэтому пока сброса не
+            // было, вытеснять ему нечего, и он растёт ВЫШЕ своей ёмкости.
+            // Всё, что приезжает со стримера, грязное до записи на диск, так
+            // что при долгой ходьбе кэш растёт всю дорогу и по таймеру
+            // подрезается только раз в пять секунд. Давление снимается
+            // досрочным сбросом: он делает чанки чистыми, и кэш сразу
+            // обрезается до ёмкости сам.
+            bool overCapacity =
+                _worldStorage?.CellLayer is { } layer &&
+                layer.GetLoadedCount() > layer.MaxChunksInMemory;
+            if (!overCapacity && Time.unscaledTime < _nextMapFlushTime)
             {
                 return;
             }

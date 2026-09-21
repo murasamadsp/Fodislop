@@ -143,7 +143,7 @@ internal static class PlayModeHarness
         return null;
     }
 
-    // Сервисы сцены живут в её контейнере, а не на объектах (SCENE_STANDARD.md §1).
+    // Сервисы сцены живут в её контейнере, а не на объектах (docs/architecture/SCENE_STANDARD.md §1).
     public static T? ResolveInGame<T>()
         where T : class
     {

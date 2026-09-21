@@ -5,7 +5,10 @@
         "TestAssemblies"
     ],
     "references": [
-        "Kern.Runtime",
+        "Kern.Core",
+        "Kern.Infrastructure",
+        "Kern.Application",
+        "Kern.Presentation",
         "Kern.Bootstrap",
         "Kern.UI",
         "Kern.Editor",

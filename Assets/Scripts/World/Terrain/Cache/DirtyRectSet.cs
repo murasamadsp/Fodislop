@@ -64,11 +64,20 @@ public sealed class DirtyRectSet
                 return true;
             }
 
-            // Merge only where the union costs no more than keeping the two
-            // rectangles apart - touching or overlapping ones. Merging
-            // distant rectangles is what produced the screen-sized union.
+            // Два повода слить. Перекрытие — чтобы одна и та же клетка не
+            // лежала в двух прямоугольниках: заплатка сделала бы её дважды, а
+            // оценка стоимости посчитала бы её дважды и раньше времени
+            // потребовала полной пересборки. И выгода — когда объединение не
+            // больше суммы.
+            //
+            // КАСАНИЕ САМО ПО СЕБЕ ПОВОДОМ НЕ ЯВЛЯЕТСЯ. Два соседних по
+            // диагонали чанка касаются углом, а их объединение вчетверо
+            // больше их суммы; цепочка таких слияний вдоль диагонали снова
+            // давала прямоугольник во весь экран — ровно ту регрессию, ради
+            // которой этот тип и существует. Полоса вплотную сливается и без
+            // этого: у неё объединение равно сумме.
             RectInt union = Union(existing, merged);
-            if (IntersectsOrTouches(existing, merged) ||
+            if (Overlaps(existing, merged) ||
                 Area(union) <= Area(existing) + Area(merged))
             {
                 merged = union;
@@ -140,11 +149,13 @@ public sealed class DirtyRectSet
         return new RectInt((int)minX, (int)minY, (int)(maxX - minX), (int)(maxY - minY));
     }
 
-    private static bool IntersectsOrTouches(RectInt left, RectInt right)
+    // Строгое перекрытие: общая площадь, а не общая граница. Касание по ребру
+    // или углу площади не даёт и слиянием не оплачивается.
+    private static bool Overlaps(RectInt left, RectInt right)
     {
-        return left.xMin <= right.xMax &&
-            left.xMax >= right.xMin &&
-            left.yMin <= right.yMax &&
-            left.yMax >= right.yMin;
+        return left.xMin < right.xMax &&
+            left.xMax > right.xMin &&
+            left.yMin < right.yMax &&
+            left.yMax > right.yMin;
     }
 }

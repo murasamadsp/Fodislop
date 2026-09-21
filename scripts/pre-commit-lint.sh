@@ -113,6 +113,10 @@ done
 # editor code against a stale runtime assembly and report false missing members.
 PROJECTS=()
 for PROJECT_FILE in \
+    "./Kern.Core.csproj" \
+    "./Kern.Infrastructure.csproj" \
+    "./Kern.Application.csproj" \
+    "./Kern.Presentation.csproj" \
     "./Kern.Runtime.csproj" \
     "./Kern.Editor.csproj" \
     "./Kern.Tests.Editor.csproj"; do

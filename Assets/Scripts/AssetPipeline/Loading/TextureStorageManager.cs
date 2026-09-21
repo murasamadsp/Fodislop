@@ -19,7 +19,7 @@ namespace Kern.AssetPipeline
         [Inject]
         private IRuntimeAssetPaths _runtimeAssetPaths = null!;
         [SerializeField]
-        private bool _enableDebugLogging;
+        private bool _enableDebugLogging = false;
 
         private readonly ConcurrentDictionary<string, Texture2D> _textureCache =
             new(StringComparer.OrdinalIgnoreCase);

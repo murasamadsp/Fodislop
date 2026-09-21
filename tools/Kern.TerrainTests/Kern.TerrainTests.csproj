@@ -14,7 +14,6 @@
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);CS8981;CS0105;NUnit2045</NoWarn>
     <ScriptAssemblies>../../Library/ScriptAssemblies</ScriptAssemblies>
     <Game>../../Assets/Scripts</Game>
   </PropertyGroup>

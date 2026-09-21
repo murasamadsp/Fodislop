@@ -18,6 +18,10 @@ git clone https://github.com/MinesReborn/Kern.git
 
 Подробнее для разработчиков — в [**`AGENTS.md`**](AGENTS.md).
 
+Карта директорий, границы asmdef и каталог проектной документации — в
+[`.agents/repository-map.md`](.agents/repository-map.md) и
+[`docs/index.html`](docs/index.html).
+
 ## Лицензия
 
 [MIT](LICENSE)

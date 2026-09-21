@@ -93,7 +93,7 @@ internal static class TerrainQuadBuilder
         // растровая линейка («Uncovered shared edge between adjacent cells»).
         // Пока сюда входило и смещение, подложка вставала под каждой клеткой
         // внутри массива и застилала мир вторым прямоугольным слоем.
-        bool foregroundFillsCell = !MapManager.IsRoundableLoose(cellFgType);
+        bool foregroundFillsCell = !MapCellConfigCatalog.IsRoundableLoose(cellFgType);
 
         if (!TerrainCellLayers.TryGetType(
             cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
@@ -107,7 +107,7 @@ internal static class TerrainQuadBuilder
             isSameCell,
             in ccd,
             cellType,
-            metadataLookup);
+            sources.MetadataLookup);
 
         Vector4 atlasRect = renderProps.AtlasRect;
         float uvTileSize = renderProps.UVTileSize;
@@ -236,7 +236,7 @@ internal static class TerrainQuadBuilder
             (minimapColor.b << 16);
 
         bool hasRoundedPhysicalContour =
-            !isBackground && MapManager.IsRoundableLoose(cellFgType);
+            !isBackground && MapCellConfigCatalog.IsRoundableLoose(cellFgType);
 
         // Маска соседства кладётся и фоновым квадам тоже.
         //

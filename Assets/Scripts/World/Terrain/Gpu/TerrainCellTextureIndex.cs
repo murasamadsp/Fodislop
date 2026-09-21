@@ -19,10 +19,21 @@ internal sealed class TerrainCellTextureIndex
     private readonly CellTypeSpatialIndex _foreground = new();
     private readonly List<int> _textureRefreshQuads = [];
     private readonly HashSet<long> _textureRefreshMarks = [];
+    private readonly List<(long Key, CellType Type)> _textureRefreshEntries = [];
     private int _textureRefreshWindowX;
     private int _textureRefreshWindowY;
 
     public List<int> TextureRefreshQuads => _textureRefreshQuads;
+
+    /// <summary>
+    /// Задать размер окна обоим слоям. Индексы адресуют клетку кольцом по
+    /// этому размеру, поэтому его смена сбрасывает их.
+    /// </summary>
+    public void EnsureWindow(int width, int height)
+    {
+        _background.EnsureWindow(width, height);
+        _foreground.EnsureWindow(width, height);
+    }
 
     public void Clear()
     {
@@ -30,6 +41,7 @@ internal sealed class TerrainCellTextureIndex
         _foreground.Clear();
         _textureRefreshQuads.Clear();
         _textureRefreshMarks.Clear();
+        _textureRefreshEntries.Clear();
     }
 
     public void Rebuild(TerrainCellSources sources, int minX, int minY, int width, int height)
@@ -64,68 +76,39 @@ internal sealed class TerrainCellTextureIndex
     {
         _textureRefreshQuads.Clear();
         _textureRefreshMarks.Clear();
+        _textureRefreshEntries.Clear();
         _textureRefreshWindowX = minX;
         _textureRefreshWindowY = minY;
-        foreach (CellType cellType in cellTypes)
+
+        // Один проход на слой вместо прохода на каждый приехавший тип: типов
+        // в пачке бывают десятки, а слотов в окне всегда столько же.
+        _background.CollectEntries(cellTypes, _textureRefreshEntries);
+        _foreground.CollectEntries(cellTypes, _textureRefreshEntries);
+        for (int index = 0; index < _textureRefreshEntries.Count; index++)
         {
-            AddTextureRefreshQuads(_background, cellType, width, height);
-            AddTextureRefreshQuads(_foreground, cellType, width, height);
+            AddTextureRefreshQuad(_textureRefreshEntries[index].Key, width, height);
         }
 
         _textureRefreshQuads.Sort();
     }
 
-    public void RemoveScrolledOutCells(int minX, int minY, int dx, int dy, int width, int height)
+
+    private void AddTextureRefreshQuad(long key, int width, int height)
     {
-        int oldMinX = minX - dx;
-        int oldMinY = minY - dy;
-        if (dx > 0)
+        int worldX = TerrainCoordinateKey.UnpackX(key);
+        int worldY = TerrainCoordinateKey.UnpackY(key);
+        if ((uint)(worldX - _textureRefreshWindowX) >= (uint)width ||
+            (uint)(worldY - _textureRefreshWindowY) >= (uint)height)
         {
-            RemoveRect(oldMinX, oldMinX + dx, oldMinY, oldMinY + height);
-        }
-        else if (dx < 0)
-        {
-            RemoveRect(minX + width, oldMinX + width, oldMinY, oldMinY + height);
+            return;
         }
 
-        if (dy > 0)
+        if (!_textureRefreshMarks.Add(key))
         {
-            RemoveRect(minX, minX + width, oldMinY, oldMinY + dy);
+            return;
         }
-        else if (dy < 0)
-        {
-            RemoveRect(minX, minX + width, minY + height, oldMinY + height);
-        }
-    }
 
-    private void RemoveRect(int startX, int endX, int startY, int endY)
-    {
-        _background.RemoveRect(startX, endX, startY, endY);
-        _foreground.RemoveRect(startX, endX, startY, endY);
-    }
-
-    private void AddTextureRefreshQuads(
-        CellTypeSpatialIndex index,
-        CellType cellType,
-        int width,
-        int height)
-    {
-        foreach (long key in index.KeysOf(cellType))
-        {
-            int worldX = TerrainCoordinateKey.UnpackX(key);
-            int worldY = TerrainCoordinateKey.UnpackY(key);
-            if ((uint)(worldX - _textureRefreshWindowX) >= (uint)width ||
-                (uint)(worldY - _textureRefreshWindowY) >= (uint)height)
-            {
-                continue;
-            }
-
-            int quad = ((worldX - _textureRefreshWindowX) * height) +
-                (worldY - _textureRefreshWindowY);
-            if (_textureRefreshMarks.Add(key))
-            {
-                _textureRefreshQuads.Add(quad);
-            }
-        }
+        _textureRefreshQuads.Add(
+            ((worldX - _textureRefreshWindowX) * height) + (worldY - _textureRefreshWindowY));
     }
 }

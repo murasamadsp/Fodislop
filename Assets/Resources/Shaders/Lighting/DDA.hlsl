@@ -57,6 +57,45 @@ void CheckDiagonalStepOccluded(int2 prevCell, int2 currentCell, out bool isOcclu
     }
 }
 
+// COST: O(1). Пересечение отрезка с полем (slab-тест).
+// Пространство вне поля пусто и не светится, поэтому марш идёт только по
+// пересечению, а хвосты снаружи учитываются одним множителем пропускания.
+void ClipSegmentToField(
+    float2 segmentStart,
+    float2 inverseDirection,
+    float intervalLength,
+    out float entry,
+    out float exitDistance)
+{
+    float2 slabA = -segmentStart * inverseDirection;
+    float2 slabB = (float2(_FieldSize) - segmentStart) * inverseDirection;
+    float2 slabNear = min(slabA, slabB);
+    float2 slabFar = max(slabA, slabB);
+    entry = max(0.0, max(slabNear.x, slabNear.y));
+    exitDistance = min(intervalLength, min(slabFar.x, slabFar.y));
+}
+
+// COST: O(1). Расстояние, за которым изолированный источник уже не светит.
+//
+// Изолированный источник излучает только текселями, чьи центры лежат внутри
+// sourceRect, то есть целочисленной коробкой [ceil(min - 0.5), ceil(max - 0.5)).
+// Выйдя из неё, луч вернуться в неё не может, и каждый следующий тексель
+// добавляет ровно ноль. Остановка здесь не меняет radiance; частичным остаётся
+// только пропускание, а вызывающие с isolateSource его не читают.
+float EmissiveBoxExit(float2 segmentStart, float2 inverseDirection, float4 sourceRect)
+{
+    float2 boxA = (ceil(sourceRect.xy - 0.5) - segmentStart) * inverseDirection;
+    float2 boxB = (ceil(sourceRect.zw - 0.5) - segmentStart) * inverseDirection;
+    float2 boxFar = max(boxA, boxB);
+    return min(boxFar.x, boxFar.y);
+}
+
+// COST: O(1). Клетка, которой принадлежит тексель поля.
+int2 CellOfTexel(int2 texel, float2 cellsPerPixel)
+{
+    return int2(floor((float2(texel) + 0.5) * cellsPerPixel));
+}
+
 // COST: O(N) where N is crossed cells in segment (DDA marching traversal)
 void TraceLightSegment(
     float2 segmentStart,
@@ -85,16 +124,12 @@ void TraceLightSegment(
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     float cellsPerDistance = length(direction * cellsPerPixel);
 
-    // Clip traversal to the field. Space outside it is empty and non-emissive.
     float2 inverseDirection = float2(
         abs(direction.x) > 1e-20 ? 1.0 / direction.x : 1e20,
         abs(direction.y) > 1e-20 ? 1.0 / direction.y : 1e20);
-    float2 slabA = -segmentStart * inverseDirection;
-    float2 slabB = (float2(_FieldSize) - segmentStart) * inverseDirection;
-    float2 slabNear = min(slabA, slabB);
-    float2 slabFar = max(slabA, slabB);
-    float entry = max(0.0, max(slabNear.x, slabNear.y));
-    float exitDistance = min(intervalLength, min(slabFar.x, slabFar.y));
+    float entry = 0.0;
+    float exitDistance = 0.0;
+    ClipSegmentToField(segmentStart, inverseDirection, intervalLength, entry, exitDistance);
     if (exitDistance <= entry)
     {
         transmittance = SegmentTransmission(0.0, intervalLength * cellsPerDistance);
@@ -116,22 +151,11 @@ void TraceLightSegment(
         step.y != 0 ? (boundary.y - segmentStart.y) / direction.y : 1e20);
     float2 stride = abs(inverseDirection);
     float distance = entry;
-    int2 previousCell = int2(floor((float2(texel) + 0.5) * cellsPerPixel));
+    int2 previousCell = CellOfTexel(texel, cellsPerPixel);
 
-    // An isolated source emits only from texels whose centres lie inside
-    // sourceRect: the integer box [ceil(min - 0.5), ceil(max - 0.5)). Once the
-    // ray has left that box it can never re-enter it, so every later texel
-    // adds exactly zero radiance. Stopping there leaves radiance unchanged;
-    // only the transmittance output is then partial, and callers isolating a
-    // source ignore it.
-    float emissionExit = 1e30;
-    if (collectEmission && isolateSource)
-    {
-        float2 emissiveBoxA = (ceil(sourceRect.xy - 0.5) - segmentStart) * inverseDirection;
-        float2 emissiveBoxB = (ceil(sourceRect.zw - 0.5) - segmentStart) * inverseDirection;
-        float2 emissiveBoxFar = max(emissiveBoxA, emissiveBoxB);
-        emissionExit = min(emissiveBoxFar.x, emissiveBoxFar.y);
-    }
+    float emissionExit = collectEmission && isolateSource
+        ? EmissiveBoxExit(segmentStart, inverseDirection, sourceRect)
+        : 1e30;
 
     // DDA visits EVERY crossed base-level texel. A quality step budget must
     // never turn a wall into an averaged mip or jump over it.
@@ -156,7 +180,7 @@ void TraceLightSegment(
         int2 materialPixel = MaterialPixel(texel);
 
         float solid = saturate(_MaterialField.Load(int3(materialPixel, 0)).a);
-        int2 cell = int2(floor((float2(texel) + 0.5) * cellsPerPixel));
+        int2 cell = CellOfTexel(texel, cellsPerPixel);
         bool diagonalOccluded = false;
         CheckDiagonalStepOccluded(previousCell, cell, diagonalOccluded);
         if (diagonalOccluded)

@@ -19,10 +19,16 @@ namespace Kern.Game
         public struct PoolConfig
         {
             [SerializeField]
-            private VfxType _vfxType;
+            private VfxType _vfxType = default;
 
             [SerializeField]
-            private int _initialSize;
+            private int _initialSize = 0;
+
+            public PoolConfig()
+            {
+                _vfxType = default;
+                _initialSize = 0;
+            }
 
             public VfxType VfxType => _vfxType;
 

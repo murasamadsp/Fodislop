@@ -4,13 +4,13 @@
              шейдер блитится в RenderTexture, которая подставляется сюда из кода.
              Именно UI-элемент, а не геометрия в сцене — квад на отдельной камере
              рисовался в дисплей и попадал в игровую камеру, закрывая собой игру.
-             Планета справа рисуется поверх фона, т.к. этот элемент идёт первым
+             Сценка справа рисуется поверх фона, т.к. этот элемент идёт первым
              в дереве. -->
         <ui:Image name="SpaceBgImage" class="mm-space-bg" scale-mode="ScaleAndCrop" />
 
-        <!-- МОНУМЕНТАЛЬНАЯ ПЛАНЕТАРНАЯ СИСТЕМА СПРАВА -->
-        <ui:VisualElement name="MainMenuPlanetContainer" class="mm-planet-system">
-            <ui:Image name="MainMenuPlanetImage" class="mm-planet-body" scale-mode="ScaleToFit" />
+        <!-- СЦЕНКА СПРАВА -->
+        <ui:VisualElement name="MainMenuSceneryContainer" class="mm-scenery-system">
+            <ui:Image name="MainMenuSceneryImage" class="mm-scenery-body" scale-mode="ScaleToFit" />
 
             <!-- Метка станции на орбите. Позиция берётся из 3D-сцены каждый кадр
                  (MenuSceneryController.TryGetStationViewportPosition), поэтому
@@ -26,16 +26,6 @@
                 </ui:VisualElement>
             </ui:VisualElement>
 
-            <!-- Прицел высадки с координатами -->
-            <ui:VisualElement name="TargetReticle" class="is-hidden mm-target-reticle">
-                <ui:VisualElement class="mm-target-cross-v" />
-                <ui:VisualElement class="mm-target-cross-h" />
-                <ui:VisualElement class="mm-target-dot" />
-                <ui:VisualElement class="mm-target-badge">
-                    <ui:Label class="mm-tb-title" text="mainmenu.sector" />
-                    <ui:Label class="mm-tb-coords" text="mainmenu.coords" />
-                </ui:VisualElement>
-            </ui:VisualElement>
         </ui:VisualElement>
 
         <!-- ТЕНЕВОЙ ГРАДИЕНТ СЛЕВА -->
@@ -66,7 +56,7 @@
         <!-- ВЕРХНИЙ ХЕДЕР (64px) -->
         <ui:VisualElement name="MainMenuHeader" class="mm-header">
             <ui:VisualElement name="MainMenuWordmark" class="mm-wordmark">
-                <ui:Image name="MainMenuPlanetIcon" class="mm-wordmark-icon" />
+                <ui:Image name="MainMenuLogoIcon" class="mm-wordmark-icon" />
                 <ui:VisualElement class="mm-brand-text">
                     <ui:Label class="mm-brand-title" text="KERN" />
                     <ui:Label class="mm-brand-sub" text="mainmenu.brand_sub" />
@@ -93,7 +83,7 @@
                 <ui:Label class="mm-eyebrow-text" text="mainmenu.rig_ready" />
             </ui:VisualElement>
             <ui:VisualElement class="mm-heading-group">
-                <ui:Label class="mm-heading-white" text="mainmenu.planet_waiting" />
+                <ui:Label class="mm-heading-white" text="mainmenu.world_waiting" />
                 <ui:Label class="mm-heading-gold" text="mainmenu.below_surface" />
             </ui:VisualElement>
             <ui:Label class="mm-subtitle" text="mainmenu.tagline" />

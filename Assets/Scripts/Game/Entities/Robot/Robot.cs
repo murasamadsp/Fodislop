@@ -68,8 +68,8 @@ namespace Kern.Game
 
         private bool _visualElementsInitialized;
         private bool _hasPendingServerPosition;
-        private ushort _pendingServerX;
-        private ushort _pendingServerY;
+        private ushort _pendingServerX = 0;
+        private ushort _pendingServerY = 0;
         private readonly RobotCuller _culler = new();
         private WorldEntityBatchRenderer _entityBatchRenderer = null!;
         [Inject]

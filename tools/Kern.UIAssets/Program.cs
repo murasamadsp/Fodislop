@@ -12,106 +12,11 @@ internal static class Program
     {
         Directory.CreateDirectory(OutputDir);
 
-        GenerateExactPlanet(1024);
         GenerateBrandLogo(128);
         GenerateCleanSpaceBg(1920, 1080);
         GenerateSidebarIcons();
 
         return 0;
-    }
-
-    private static void GenerateExactPlanet(int size)
-    {
-        using var img = new Image<Rgba32>(size, size);
-        Random random = new Random(999);
-
-        double cx = size * 0.5;
-        double cy = size * 0.5;
-        double radius = size * 0.40;
-        double atmoOuter = size * 0.48;
-
-        double sx = cx - radius * 0.36;
-        double sy = cy - radius * 0.40;
-
-        (byte r, byte g, byte b) cHighlight = (235, 142, 86);
-        (byte r, byte g, byte b) cMid = (195, 96, 48);
-        (byte r, byte g, byte b) cDeep = (96, 32, 14);
-        (byte r, byte g, byte b) cNight = (3, 6, 10);
-        (byte r, byte g, byte b) cAtmo = (112, 229, 221);
-
-        float[,] pGrid = new float[64, 64];
-        for (int y = 0; y < 64; y++)
-        {
-            for (int x = 0; x < 64; x++)
-            {
-                pGrid[y, x] = (float)random.NextDouble();
-            }
-        }
-
-        img.ProcessPixelRows(accessor =>
-        {
-            for (int y = 0; y < accessor.Height; y++)
-            {
-                Span<Rgba32> row = accessor.GetRowSpan(y);
-                for (int x = 0; x < accessor.Width; x++)
-                {
-                    double dx = x - cx;
-                    double dy = y - cy;
-                    double dist = Math.Sqrt(dx * dx + dy * dy);
-
-                    if (dist > radius)
-                    {
-                        if (dist <= atmoOuter)
-                        {
-                            double atmoT = (dist - radius) / (atmoOuter - radius);
-                            byte alpha = (byte)Math.Clamp((int)Math.Round(255.0 * Math.Exp(-atmoT * 4.5) * 0.9), 0, 255);
-                            row[x] = new Rgba32(cAtmo.r, cAtmo.g, cAtmo.b, alpha);
-                        }
-                        continue;
-                    }
-
-                    double distSun = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy)) / (radius * 1.6);
-                    distSun = Math.Min(1.0, distSun);
-
-                    double nx = dx / radius;
-                    double ny = dy / radius;
-                    double nz = Math.Sqrt(Math.Max(0.0, 1.0 - nx * nx - ny * ny));
-                    double uCoord = Math.Atan2(nx, nz) / Math.PI * 0.5 + 0.5;
-                    double vCoord = Math.Asin(Math.Max(-1.0, Math.Min(1.0, ny))) / Math.PI + 0.5;
-
-                    double geo = Noise2D(pGrid, uCoord, vCoord) * 0.18;
-
-                    double t = Math.Clamp(distSun + geo - 0.09, 0.0, 1.0);
-                    int cr, cg, cb;
-                    if (t < 0.46)
-                    {
-                        double k = t / 0.46;
-                        cr = (int)Math.Round(cHighlight.r + (cMid.r - cHighlight.r) * k);
-                        cg = (int)Math.Round(cHighlight.g + (cMid.g - cHighlight.g) * k);
-                        cb = (int)Math.Round(cHighlight.b + (cMid.b - cHighlight.b) * k);
-                    }
-                    else if (t < 0.72)
-                    {
-                        double k = (t - 0.46) / 0.26;
-                        cr = (int)Math.Round(cMid.r + (cDeep.r - cMid.r) * k);
-                        cg = (int)Math.Round(cMid.g + (cDeep.g - cMid.g) * k);
-                        cb = (int)Math.Round(cMid.b + (cDeep.b - cMid.b) * k);
-                    }
-                    else
-                    {
-                        double k = (t - 0.72) / 0.28;
-                        cr = (int)Math.Round(cDeep.r + (cNight.r - cDeep.r) * k);
-                        cg = (int)Math.Round(cDeep.g + (cNight.g - cDeep.g) * k);
-                        cb = (int)Math.Round(cDeep.b + (cNight.b - cDeep.b) * k);
-                    }
-
-                    row[x] = new Rgba32((byte)cr, (byte)cg, (byte)cb, 255);
-                }
-            }
-        });
-
-        img.Save(Path.Combine(OutputDir, "planet_exact.png"));
-        Console.WriteLine("Generated planet_exact.png");
     }
 
     private static void GenerateBrandLogo(int size)

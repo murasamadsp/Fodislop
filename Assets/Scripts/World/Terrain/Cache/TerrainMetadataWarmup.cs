@@ -46,6 +46,9 @@ public sealed class TerrainMetadataWarmup
 
     private void Warm(in TerrainCellSources sources)
     {
+        // Прогрев — это тоже проход: неготовый тип обязан перерешаться, но
+        // один раз, а не на каждой клетке полосы.
+        sources.CellCache.BeginMetadataPass();
         foreach (CellType type in _types)
         {
             if (type == CellType.Unloaded)

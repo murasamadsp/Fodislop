@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Kern.Game.Managers;
 
-// Чистый сервис контейнера (SCENE_STANDARD.md §1): роботы создаются фабрикой
+// Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): роботы создаются фабрикой
 // под Runtime/Robots, сам сервис объекта на сцене не имеет.
 public sealed class RobotManager(
     ISceneObjectFactory sceneObjects,
@@ -16,6 +16,7 @@ public sealed class RobotManager(
 {
     private const string TAG = "[RobotManager]";
     private readonly Dictionary<uint, Robot> _robots = new();
+    private readonly Dictionary<uint, float> _lastSeenAt = new();
     private readonly HashSet<uint> _overwriteWarningsLogged = [];
     private readonly List<uint> _keysToRemove = [];
 
@@ -101,12 +102,14 @@ public sealed class RobotManager(
         var robot = GetOrCreateRobot(botID);
         robot.SetPosition(x, y);
         robot.SetRotation(rotation);
+        _lastSeenAt[botID] = Time.unscaledTime;
     }
 
     public void UpdateRobotMetadata(uint botID, RobotMetadata metadata)
     {
         var robot = GetOrCreateRobot(botID);
         robot.SetMetadata(metadata.PlayerID, metadata.ClanID, metadata.Nickname, metadata.SkinPath, metadata.TailPath);
+        _lastSeenAt[botID] = Time.unscaledTime;
     }
 
     public void SetLocalPlayerBotID(uint botID)
@@ -124,6 +127,7 @@ public sealed class RobotManager(
         {
             Object.Destroy(existing.gameObject);
             _robots.Remove(botID);
+            _lastSeenAt.Remove(botID);
             Debug.Log($"{TAG} Replaced factory bot {botID} with local player robot");
         }
     }
@@ -151,15 +155,43 @@ public sealed class RobotManager(
         foreach (uint key in _keysToRemove)
         {
             _robots.Remove(key);
+            _lastSeenAt.Remove(key);
             cleared++;
         }
 
         Debug.Log($"{TAG} Cleared {cleared} robots, kept {(_robots.ContainsKey(LocalPlayerBotID) ? "local player" : "none")}");
     }
 
+    public void PruneStaleRobots(float timeoutSeconds = 2.5f)
+    {
+        float now = Time.unscaledTime;
+        _keysToRemove.Clear();
+        foreach (var pair in _lastSeenAt)
+        {
+            if (pair.Key == LocalPlayerBotID || now - pair.Value <= timeoutSeconds)
+            {
+                continue;
+            }
+
+            if (_robots.TryGetValue(pair.Key, out Robot? robot) && robot != null)
+            {
+                Object.Destroy(robot.gameObject);
+            }
+
+            _keysToRemove.Add(pair.Key);
+        }
+
+        foreach (uint key in _keysToRemove)
+        {
+            _lastSeenAt.Remove(key);
+            _robots.Remove(key);
+        }
+    }
+
     public void UnregisterRobot(uint botID)
     {
         _robots.Remove(botID);
+        _lastSeenAt.Remove(botID);
         _overwriteWarningsLogged.Remove(botID);
     }
 }

@@ -1,5 +1,8 @@
 <linker>
-  <assembly fullname="Kern.Runtime" preserve="all"/>
+  <assembly fullname="Kern.Core" preserve="all"/>
+  <assembly fullname="Kern.Infrastructure" preserve="all"/>
+  <assembly fullname="Kern.Application" preserve="all"/>
+  <assembly fullname="Kern.Presentation" preserve="all"/>
   <assembly fullname="Assembly-CSharp" preserve="all"/>
   <assembly fullname="VContainer" preserve="all"/>
   <assembly fullname="UniTask" preserve="all"/>

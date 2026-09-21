@@ -2,6 +2,7 @@
 
 using Kern.World.Terrain;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace Kern.Tests.World;
 
@@ -25,13 +26,14 @@ public sealed class TerrainIncrementalScrollDifferentialTests
     private const int StartX = 96;
     private const int StartY = 80;
 
-    private static readonly Vector2IntStep[] _Walk =
+    // Vector2Int, а не собственный record struct: сборке тестов недоступен
+    // System.Runtime.CompilerServices.IsExternalInit, без которого позиционный
+    // record не компилируется.
+    private static readonly Vector2Int[] _Walk =
     [
         new(1, 0), new(0, 1), new(1, 1), new(-1, 0), new(0, -1),
         new(3, 2), new(-2, -3), new(5, 0), new(0, 7), new(-4, 6),
     ];
-
-    public readonly record struct Vector2IntStep(int Dx, int Dy);
 
     [Test]
     public void IncrementalScroll_MatchesFullRebuild()
@@ -49,18 +51,18 @@ public sealed class TerrainIncrementalScrollDifferentialTests
 
         int originX = StartX;
         int originY = StartY;
-        foreach (Vector2IntStep step in _Walk)
+        foreach (Vector2Int step in _Walk)
         {
-            originX += step.Dx;
-            originY += step.Dy;
+            originX += step.x;
+            originY += step.y;
             incrementalCache.ScrollAndFill(
-                step.Dx, step.Dy, world.Storage, world.MapData, world.Textures, world.Atlases);
+                step.x, step.y, world.Storage, world.MapData, world.Textures, world.Atlases);
             incrementalPrecalc.PrecalculateIncremental(
                 incrementalCache,
                 Width,
                 Height,
-                step.Dx,
-                step.Dy,
+                step.x,
+                step.y,
                 TerrainTestWorld.WorldWidth,
                 TerrainTestWorld.WorldHeight);
         }

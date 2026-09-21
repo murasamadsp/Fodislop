@@ -81,6 +81,7 @@ namespace Kern.World.Terrain
         private readonly TerrainMeshManager _meshManager = new();
         private readonly TerrainPresentationWindow _presentation = new();
         private readonly TerrainDiagnosticLog _diag = new();
+        private readonly TerrainStallReport _stall = new();
 
         private MeshFilter? _meshFilter;
         private MeshRenderer? _meshRenderer;
@@ -207,6 +208,7 @@ namespace Kern.World.Terrain
 
             using var terrainLateUpdateMarker = _TerrainLateUpdateMarker.Auto();
             using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
+            long stallStart = TerrainStallReport.Begin();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
                 return;
@@ -229,6 +231,7 @@ namespace Kern.World.Terrain
                 return;
             }
 
+            long planStart = TerrainStallReport.Begin();
             TerrainFramePlan framePlan = _planner.Plan(
                 _mainCamera!,
                 _cellSize,
@@ -245,6 +248,7 @@ namespace Kern.World.Terrain
                 _mapManager,
                 _connectionService,
                 _telemetry);
+            float planMs = TerrainStallReport.ElapsedMs(planStart);
             if (!framePlan.ShouldProcess)
             {
                 return;
@@ -255,6 +259,7 @@ namespace Kern.World.Terrain
                 _meshRenderer.enabled = !BypassTerrainDraw;
             }
 
+            float refreshTextureMs = 0f;
             if (_window.PendingTextureCellTypes.Count > 0 &&
                 !BypassCpuMeshRebuild &&
                 _window.CellsCommitted)
@@ -264,14 +269,27 @@ namespace Kern.World.Terrain
                 // ревизии поле осталось бы с чёрным/старым альбедо (и без
                 // свечения) до первой копки или сдвига региона — светящиеся
                 // кристаллы гасли навсегда.
-                if (_window.RefreshPendingTextureCells(Services))
+                long refreshStart = TerrainStallReport.Begin();
+                if (_window.RefreshPendingTextureCells(
+                    Services,
+                    _window.NeedsRefresh || framePlan.DimensionsChanged))
                 {
                     _terrainContentRevision++;
                 }
+
+                refreshTextureMs = TerrainStallReport.ElapsedMs(refreshStart);
             }
 
+            long dimensionsStart = TerrainStallReport.Begin();
             _window.ApplyDimensions(framePlan.ActiveWindow.Size, framePlan.DimensionsChanged);
             _window.CoalesceDirtyRects();
+            float dimensionsMs = TerrainStallReport.ElapsedMs(dimensionsStart);
+
+            // Снимок до Process: он чистит набор заплаток, а в отчёт нужно
+            // то, чем кадр был занят, а не то, что от него осталось.
+            int dirtyRectCount = _window.Dirty.Rects.Count;
+            long dirtyArea = _window.Dirty.Rects.TotalArea;
+            long processStart = TerrainStallReport.Begin();
             if (!_window.Process(
                 Services,
                 _clientConfigManager,
@@ -285,6 +303,7 @@ namespace Kern.World.Terrain
                 return;
             }
 
+            float processMs = TerrainStallReport.ElapsedMs(processStart);
             float uploadMs = _window.Commit();
             if (uploadMs > 0f)
             {
@@ -312,6 +331,36 @@ namespace Kern.World.Terrain
             PublishLightingUpdate(lightingEngine, framePlan.LightingViewport);
             _lightingViewport = framePlan.LightingViewport;
             lightingEngine.CaptureBudgetViolationIfNeeded();
+
+            TerrainBuildPipeline pipeline = _window.Driver.Pipeline;
+            _stall.Record(
+                stallStart,
+                _telemetry,
+                new TerrainStallFrame(
+                    pipeline.LastBuildScrolled,
+                    pipeline.LastScrollDelta,
+                    _window.Origin,
+                    new Vector2Int(_window.Width, _window.Height),
+                    dirtyRectCount,
+                    dirtyArea,
+                    refreshTextureMs,
+                    processMs,
+                    uploadMs,
+                    pipeline.CellBuilder.LastScrollMs,
+                    pipeline.CellBuilder.LastIndexRemoveMs,
+                    pipeline.CellBuilder.LastWarmupMs,
+                    pipeline.CellBuilder.LastFillMs,
+                    pipeline.CellBuilder.LastFilledCells,
+                    pipeline.CellBuilder.Textures.LastUploadRectCount,
+                    pipeline.CellBuilder.Textures.LastUploadTexels,
+                    pipeline.CellBuilder.LastQuadMs,
+                    pipeline.CellBuilder.LastPackMs,
+                    pipeline.CellBuilder.Textures.LastStageMs,
+                    pipeline.CellBuilder.Textures.LastStageCopyMs,
+                    pipeline.CellBuilder.Textures.LastStageApplyMs,
+                    pipeline.CellBuilder.Textures.LastUploadStrips,
+                    planMs,
+                    dimensionsMs));
         }
 
         private TerrainBuildServices Services =>

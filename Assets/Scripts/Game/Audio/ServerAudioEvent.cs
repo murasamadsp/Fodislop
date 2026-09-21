@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
@@ -19,7 +18,6 @@ using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 
 namespace Kern.Game;
-[SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any dynamic asset load/play errors.")]
 public sealed class ServerAudioEvent : IDisposable
 {
     private readonly SFX? _audioEffectType;

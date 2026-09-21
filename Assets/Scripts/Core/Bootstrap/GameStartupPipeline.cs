@@ -37,7 +37,6 @@ internal sealed class GameStartupReport
 {
     private readonly List<StartupIssue> _issues = [];
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public IReadOnlyList<StartupIssue> Issues => _issues;
 
     public void Critical(string system, string message, Exception? exception = null)

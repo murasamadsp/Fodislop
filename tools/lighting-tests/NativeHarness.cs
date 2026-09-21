@@ -1,6 +1,9 @@
 #nullable enable
 
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Kern.LightingTests;
@@ -12,12 +15,21 @@ internal static class NativeHarness
         "SegmentExtinction", "SegmentTransmission", "Max3", "OutputUv", "MaterialUv",
         "MaterialPixel", "IsSolidOccupancy",
         "SampleOccupancy", "PathLengthInCells", "SampleCellSolid", "CheckCellSolid",
+        "ClipSegmentToField", "EmissiveBoxExit", "CellOfTexel",
         "BuildCellSolidMask", "CheckDiagonalStepOccluded", "DirtySegmentOverlap",
         "CascadeEntryMayChange", "AbsorbedFraction", "CellEmissionWeight", "TraceLightSegment",
         "TraceRadianceSegment", "GatherDynamicSource", "DynamicEmitterPoint", "TraceDynamicPolar",
         "PolarOpticalDepth", "DynamicRadianceFromPolar", "SolveDynamicLighting", "ComposeDynamicLighting",
         "PackRadiance", "UnpackRadiance", "PackInterval", "UnpackTransmittance", "SolveCascade",
         "InterleavedGradientNoise", "SurfaceReflection",
+    ];
+
+    // Функции, без которых прогон transport ничего не проверяет. Список
+    // намеренно короткий: это ядро переноса света, а не всё подряд.
+    private static readonly string[] RequiredTransportFunctions =
+    [
+        "TraceLightSegment", "TraceRadianceSegment", "CheckDiagonalStepOccluded",
+        "CheckCellSolid", "SegmentExtinction", "SegmentTransmission", "CellEmissionWeight",
     ];
 
     public static int RunTransport(string repositoryRoot)
@@ -27,7 +39,7 @@ internal static class NativeHarness
             repositoryRoot);
         string fixtureRoot = Path.Combine(repositoryRoot, "tools/lighting-tests");
         string transportShim = File.ReadAllText(Path.Combine(fixtureRoot, "NativeTransportShim.cpp"));
-        string code = ExtractFunctions(shader, transportShim);
+        string code = ExtractFunctions(shader, transportShim, RequiredTransportFunctions);
         string source = transportShim +
             Environment.NewLine + code +
             Environment.NewLine + File.ReadAllText(Path.Combine(fixtureRoot, "NativeTransportScenario.cpp"));
@@ -144,9 +156,13 @@ internal static class NativeHarness
         return names;
     }
 
-    private static string ExtractFunctions(string shader, string shim)
+    private static string ExtractFunctions(
+        string shader,
+        string shim,
+        IReadOnlyList<string>? required = null)
     {
         var functions = new List<string>();
+        var extracted = new HashSet<string>(StringComparer.Ordinal);
 
         // Скалярные константы шейдера переносятся как есть, а не
         // перечисляются в шиме. Иначе у одного числа появляется второй
@@ -191,6 +207,23 @@ internal static class NativeHarness
             }
 
             functions.Add(shader[match.Index..end]);
+            extracted.Add(name);
+        }
+
+        // Ненайденное имя пропускается молча: часть списка живёт в других
+        // шейдерах, и для них это норма. Но для ядра переноса это означало бы,
+        // что линейка тихо перестала его покрывать — переименовали функцию, а
+        // прогон по-прежнему зелёный. Такое обязано падать.
+        if (required != null)
+        {
+            var missing = required.Where(name => !extracted.Contains(name)).ToArray();
+            if (missing.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "Не извлечены обязательные функции переноса: " +
+                    string.Join(", ", missing) +
+                    ". Переименована функция или сломан разбор — прогон ничего не проверяет.");
+            }
         }
 
         string code = string.Join(Environment.NewLine, functions);

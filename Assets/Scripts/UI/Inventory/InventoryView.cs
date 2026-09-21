@@ -41,7 +41,7 @@ namespace Kern.UI.Inventory
         private VisualElement? _fullSlots;
         private Label? _toggleGlyph;
         private bool _isInventoryOpen;
-        private Label? _capacityLabel;
+        private Label? _capacityLabel = null;
 
         private int _lastSelectedSlot = -1;
         private InventoryTooltipController? _tooltipController;

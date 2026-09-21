@@ -13,7 +13,6 @@ namespace Kern.Rendering.PostProcessing
     public class ColorGradingComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter names stable for existing profiles.
-#pragma warning disable SA1307
         [Tooltip("Exposure compensation in stops. Zero is neutral.")]
         public ClampedFloatParameter exposure = PostProcessDefaults.ColorGradingExposure();
 

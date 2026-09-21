@@ -346,10 +346,6 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "SonarAnalyzer.CSharp",
-        "S3877",
-        Justification = "Persistent map close failures must propagate instead of becoming silent data loss.")]
     public void Dispose()
     {
         _persistenceGate.Run(DisposeCore);

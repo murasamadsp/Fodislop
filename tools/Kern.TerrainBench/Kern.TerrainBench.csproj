@@ -9,7 +9,6 @@
     <TieredPGO>true</TieredPGO>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
-    <NoWarn>$(NoWarn);CS8981;CS0105</NoWarn>
     <!-- Стиль проверяется в Unity и линтером; здесь чужие файлы игры собираются только ради замеров. -->
     <RunAnalyzers>false</RunAnalyzers>
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
@@ -33,11 +32,12 @@
     <Compile Include="../../Assets/Scripts/Core/Interfaces/Contracts/ProjectRuntimeContracts.cs" Link="Game/ProjectRuntimeContracts.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainVertex.cs" Link="Game/TerrainVertex.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainCellGeometry.cs" Link="Game/TerrainCellGeometry.cs" />
-    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainMeshScroller.cs" Link="Game/TerrainMeshScroller.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Gpu/TerrainCellDataPacker.cs" Link="Game/TerrainCellDataPacker.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Gpu/TerrainDirtyRegion.cs" Link="Game/TerrainDirtyRegion.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/DirtyRectSet.cs" Link="Game/DirtyRectSet.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainRingGrid.cs" Link="Game/TerrainRingGrid.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainScrollBands.cs" Link="Game/TerrainScrollBands.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/Cache/CellTypeSpatialIndex.cs" Link="Game/CellTypeSpatialIndex.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainMetadata.cs" Link="Game/TerrainMetadata.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Background/BackgroundFloodFill.cs" Link="Game/BackgroundFloodFill.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/Contracts/ISpatialIndex.cs" Link="Game/ISpatialIndex.cs" />
@@ -49,5 +49,10 @@
     <Compile Include="../../Assets/Scripts/World/Common/Contracts/RenderingConstants.cs" Link="Game/RenderingConstants.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
     <Compile Include="../../Assets/Scripts/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
+    <!-- Каталоги типов: FillQuad опрашивает их на каждый квад. -->
+    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainSheetCatalog.cs" Link="Game/TerrainSheetCatalog.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainReliefRimCatalog.cs" Link="Game/TerrainReliefRimCatalog.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainDecalCatalog.cs" Link="Game/TerrainDecalCatalog.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainAnimationProfile.cs" Link="Game/TerrainAnimationProfile.cs" />
   </ItemGroup>
 </Project>

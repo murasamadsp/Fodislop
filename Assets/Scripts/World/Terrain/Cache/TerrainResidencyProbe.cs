@@ -17,7 +17,31 @@ namespace Kern.World.Terrain;
 /// соседства).
 public static class TerrainResidencyProbe
 {
+    /// <summary>
+    /// Лежит ли окно в памяти. Ничего не заказывает — этим можно щупать
+    /// промежуточные положения окна, не поднимая сетевого трафика.
+    /// </summary>
     public static bool IsWindowResident(
+        IWorldDataStorage? storage,
+        IMapDataProvider? mapData,
+        Vector2Int gridPosition,
+        int width,
+        int height) =>
+        Probe(storage, mapData, null, gridPosition, width, height);
+
+    /// <summary>
+    /// То же самое, но недостающие чанки заказываются у сервера.
+    /// </summary>
+    public static bool IsWindowResident(
+        IWorldDataStorage? storage,
+        IMapDataProvider? mapData,
+        IConnectionService? connectionService,
+        Vector2Int gridPosition,
+        int width,
+        int height) =>
+        Probe(storage, mapData, connectionService, gridPosition, width, height);
+
+    private static bool Probe(
         IWorldDataStorage? storage,
         IMapDataProvider? mapData,
         IConnectionService? connectionService,
@@ -66,9 +90,24 @@ public static class TerrainResidencyProbe
 
         if (missing && connectionService is IWorldRegionRequester requester)
         {
+            // Заказ выравнивается по границам чанков и берётся с запасом в
+            // чанк во все стороны. Причина — не запас как таковой, а
+            // УСТОЙЧИВОСТЬ прямоугольника: пока он совпадает с уже заказанным,
+            // повторный запрос не нужен. Точный по окну прямоугольник менялся
+            // на каждом шаге камеры, каждый шаг порождал новый запрос, а новый
+            // запрос отменяет предыдущий — поток чанков рвался ровно тогда,
+            // когда игрок шёл.
+            int requestMinX = Mathf.Max(0, ((minX / chunkSize) - 1) * chunkSize);
+            int requestMinY = Mathf.Max(0, ((serverMinY / chunkSize) - 1) * chunkSize);
+            int requestMaxX = Mathf.Min(worldWidth - 1, (((maxX / chunkSize) + 2) * chunkSize) - 1);
+            int requestMaxY = Mathf.Min(worldHeight - 1, (((serverMaxY / chunkSize) + 2) * chunkSize) - 1);
             requester.RequestWorldRegion(
                 storage.GetWorldCodeName(),
-                new RectInt(minX, serverMinY, maxX - minX + 1, serverMaxY - serverMinY + 1));
+                new RectInt(
+                    requestMinX,
+                    requestMinY,
+                    requestMaxX - requestMinX + 1,
+                    requestMaxY - requestMinY + 1));
         }
 
         return resident;

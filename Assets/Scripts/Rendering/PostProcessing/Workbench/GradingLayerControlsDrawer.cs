@@ -47,9 +47,6 @@ internal sealed class GradingLayerControlsDrawer
     private ColorGradeLayer? _soloRequested;
     private bool _clearBypassesRequested;
     private string? _invalidNumberId;
-    private string? _status;
-    private bool _statusIsError;
-
     public GradingLayerControlsDrawer(ColorGradeState state, ColorGradeZones zones)
     {
         _state = state;

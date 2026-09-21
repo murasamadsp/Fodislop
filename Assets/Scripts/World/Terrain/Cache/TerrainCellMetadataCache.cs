@@ -32,9 +32,38 @@ public sealed class TerrainCellMetadataCache : ITerrainMetadataLookup
 {
     private readonly CellMetadata[] _metadataLookup = new CellMetadata[65536];
 
+    // Номер прохода, в котором тип разрешался последний раз.
+    //
+    // ЗАЧЕМ. Готовый тип заморожен и отдаётся одним чтением массива, а
+    // НЕготовый перерешается, пока текстура не приедет. Пока это решалось на
+    // каждый вызов, один проход по окну платил за тип столько раз, сколько в
+    // окне его клеток: конфиг мира, линейный поиск по атласам и три запроса к
+    // сервису текстур — около полутора микросекунд, помноженные на тысячи
+    // клеток. На догрузке чанка это давало 8 мс только на заполнение кэша.
+    //
+    // Контракт «перерешать, пока не приедет» при этом сохраняется — он просто
+    // выполняется раз на проход, а не раз на клетку. Проход — это одно
+    // заполнение окна или полосы; следующий кадр начнёт новый.
+    private readonly int[] _resolvedPass = new int[65536];
+    private int _passId;
+
+    /// <summary>Начать проход заполнения: неготовые типы разрешаются заново.</summary>
+    public void BeginPass()
+    {
+        if (++_passId != int.MaxValue)
+        {
+            return;
+        }
+
+        // Переполнение счётчика сделало бы старые отметки «свежими».
+        Array.Clear(_resolvedPass, 0, _resolvedPass.Length);
+        _passId = 1;
+    }
+
     public void Clear()
     {
         Array.Clear(_metadataLookup, 0, _metadataLookup.Length);
+        Array.Clear(_resolvedPass, 0, _resolvedPass.Length);
     }
 
     public void Invalidate(HashSet<CellType> cellTypes)
@@ -45,6 +74,10 @@ public sealed class TerrainCellMetadataCache : ITerrainMetadataLookup
             if ((uint)index < (uint)_metadataLookup.Length)
             {
                 _metadataLookup[index].IsPopulated = false;
+
+                // Тип объявлен устаревшим — отметка прохода снимается, иначе
+                // внутри текущего прохода он отдался бы старым значением.
+                _resolvedPass[index] = 0;
             }
         }
     }
@@ -76,9 +109,14 @@ public sealed class TerrainCellMetadataCache : ITerrainMetadataLookup
         int idx = (int)type;
         if ((uint)idx < (uint)_metadataLookup.Length &&
             _metadataLookup[idx].IsPopulated &&
-            _metadataLookup[idx].IsTextureReady)
+            (_metadataLookup[idx].IsTextureReady || _resolvedPass[idx] == _passId))
         {
             return _metadataLookup[idx];
+        }
+
+        if ((uint)idx < (uint)_resolvedPass.Length)
+        {
+            _resolvedPass[idx] = _passId;
         }
 
         var config = mm.GetCellConfig(type);

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Kern.Core.Interfaces;
+using Kern.World;
 using Kern.World.Terrain;
 using Kern.World.Terrain.Background;
 using MinesServer.Data;
@@ -136,7 +137,7 @@ public sealed class TerrainTestWorld
             {
                 CellType.Rock => CellDistortionType.Cause,
                 CellType.BuildingWall or CellType.BuildingDoor => CellDistortionType.Block,
-                _ => CellDistortionType.None,
+                _ => CellDistortionType.Neutral,
             };
             byte reliefGroup = type switch
             {

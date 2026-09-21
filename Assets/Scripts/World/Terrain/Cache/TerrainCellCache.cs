@@ -21,6 +21,7 @@ public class TerrainCellCache : ICachedCellDataProvider
     private int _cacheWidth;
     private int _cacheHeight;
     private readonly CellTypeSpatialIndex _cellsByType = new();
+    private readonly List<(long Key, CellType Type)> _refreshEntries = [];
     private readonly TerrainCellMetadataCache _metadataCache = new();
 
     private static CachedCellData _UnloadedCellData => new()
@@ -42,9 +43,13 @@ public class TerrainCellCache : ICachedCellDataProvider
         if (_cellCache.Width != _cacheWidth || _cellCache.Height != _cacheHeight)
         {
             _cellCache.EnsureSize(_cacheWidth, _cacheHeight);
+            _cellsByType.EnsureWindow(_cacheWidth, _cacheHeight);
             _cellsByType.Clear();
         }
     }
+
+    /// <summary>Начать проход разрешения метаданных (см. TerrainCellMetadataCache).</summary>
+    public void BeginMetadataPass() => _metadataCache.BeginPass();
 
     public void ClearCaches()
     {
@@ -59,24 +64,25 @@ public class TerrainCellCache : ICachedCellDataProvider
     {
         _metadataCache.Invalidate(cellTypes);
 
-        foreach (CellType cellType in cellTypes)
+        // Один проход по окну вместо прохода на каждый приехавший тип.
+        // Метаданные типа разрешаются по первой его клетке и дальше отдаются
+        // кэшем: внутри прохода тип уже разрешён.
+        _refreshEntries.Clear();
+        _cellsByType.CollectEntries(cellTypes, _refreshEntries);
+        _metadataCache.BeginPass();
+        for (int index = 0; index < _refreshEntries.Count; index++)
         {
-            IReadOnlyCollection<long> cells = _cellsByType.KeysOf(cellType);
-            if (cells.Count == 0)
+            (long key, CellType cellType) = _refreshEntries[index];
+            int x = TerrainCoordinateKey.UnpackX(key) - _cacheMinX;
+            int y = TerrainCoordinateKey.UnpackY(key) - _cacheMinY;
+            if ((uint)x >= (uint)_cacheWidth || (uint)y >= (uint)_cacheHeight)
             {
                 continue;
             }
 
-            CellMetadata metadata = _metadataCache.GetMetadata(cellType, mapManager, textureService, atlases);
-            foreach (long key in cells)
-            {
-                int x = TerrainCoordinateKey.UnpackX(key) - _cacheMinX;
-                int y = TerrainCoordinateKey.UnpackY(key) - _cacheMinY;
-                if ((uint)x < (uint)_cacheWidth && (uint)y < (uint)_cacheHeight)
-                {
-                    _cellCache[x, y] = _metadataCache.CreateCachedData(cellType, metadata);
-                }
-            }
+            CellMetadata metadata = _metadataCache.GetMetadata(
+                cellType, mapManager, textureService, atlases);
+            _cellCache[x, y] = _metadataCache.CreateCachedData(cellType, metadata);
         }
     }
 
@@ -126,6 +132,7 @@ public class TerrainCellCache : ICachedCellDataProvider
         _cacheMinX = minX - 1;
         _cacheMinY = minY - 1;
         _cellsByType.Clear();
+        _metadataCache.BeginPass();
 
         for (int x = 0; x < _cacheWidth; x++)
         {
@@ -140,12 +147,12 @@ public class TerrainCellCache : ICachedCellDataProvider
 
                 if (type == CellType.Unloaded)
                 {
-                    SetCachedData(x, y, _UnloadedCellData, removePrevious: false);
+                    SetCachedData(x, y, _UnloadedCellData);
                     continue;
                 }
 
                 var meta = GetMetadata(type, mm, wtm, atlases);
-                SetCachedData(x, y, CreateCachedData(type, meta), removePrevious: false);
+                SetCachedData(x, y, CreateCachedData(type, meta));
             }
         }
 
@@ -167,6 +174,7 @@ public class TerrainCellCache : ICachedCellDataProvider
             return;
         }
 
+        _metadataCache.BeginPass();
         int startX = Mathf.Clamp(gridMinX - _cacheMinX, 0, _cacheWidth);
         int endX = Mathf.Clamp(gridMinX + width - _cacheMinX, 0, _cacheWidth);
         int startY = Mathf.Clamp(unityMinY - _cacheMinY, 0, _cacheHeight);
@@ -220,7 +228,14 @@ public class TerrainCellCache : ICachedCellDataProvider
             return;
         }
 
-        RemoveScrolledOutCells(dx, dy);
+        _metadataCache.BeginPass();
+
+        // Снимать уехавшие клетки с индекса типов отдельным проходом больше
+        // не нужно. Индекс адресует клетку кольцом по размеру окна, и слот
+        // уехавшей клетки — это ровно слот той, что встала на её место; Set
+        // ниже снимает прежнего жильца сам. Проход же стоил по хеш-операции
+        // на клетку полосы, и на догрузке чанка это были миллисекунды за
+        // работу, которую тут же делали второй раз.
         _cacheMinX += dx;
         _cacheMinY += dy;
 
@@ -316,36 +331,15 @@ public class TerrainCellCache : ICachedCellDataProvider
     public CachedCellData CreateCachedData(CellType type, CellMetadata meta) =>
         _metadataCache.CreateCachedData(type, meta);
 
-    private void SetCachedData(int x, int y, CachedCellData data, bool removePrevious = true)
+    private void SetCachedData(int x, int y, CachedCellData data)
     {
+        // Снимать клетку с прежнего типа отдельным флагом больше не нужно:
+        // индекс адресует слот кольцом и сам видит, кто в слоте был.
         _cellsByType.Set(
             TerrainCoordinateKey.Pack(_cacheMinX + x, _cacheMinY + y),
-            data.Type,
-            removePrevious);
+            data.Type);
         _cellCache[x, y] = data;
     }
 
-    private void RemoveScrolledOutCells(int dx, int dy)
-    {
-        int oldMinX = _cacheMinX;
-        int oldMinY = _cacheMinY;
-        if (dx > 0)
-        {
-            _cellsByType.RemoveRect(oldMinX, oldMinX + dx, oldMinY, oldMinY + _cacheHeight);
-        }
-        else if (dx < 0)
-        {
-            _cellsByType.RemoveRect(oldMinX + _cacheWidth + dx, oldMinX + _cacheWidth, oldMinY, oldMinY + _cacheHeight);
-        }
-
-        if (dy > 0)
-        {
-            _cellsByType.RemoveRect(oldMinX, oldMinX + _cacheWidth, oldMinY, oldMinY + dy);
-        }
-        else if (dy < 0)
-        {
-            _cellsByType.RemoveRect(oldMinX, oldMinX + _cacheWidth, oldMinY + _cacheHeight + dy, oldMinY + _cacheHeight);
-        }
-    }
 
 }

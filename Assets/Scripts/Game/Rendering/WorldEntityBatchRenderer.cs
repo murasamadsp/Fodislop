@@ -56,9 +56,9 @@ namespace Kern.Game
         [Inject]
         private ISharedMaterialCache _sharedMaterials = null!;
         [Inject]
-        private IGameplayCamera? _gameplayCamera;
+        private IGameplayCamera? _gameplayCamera = null;
         [Inject]
-        private LightingGeometryRegistry? _lightingGeometryRegistry;
+        private LightingGeometryRegistry? _lightingGeometryRegistry = null;
 
         // Light-emitting sprites are drawn into the lighting fields from their
         // own mesh; see WorldEntityLightingEmitter. The revision follows only

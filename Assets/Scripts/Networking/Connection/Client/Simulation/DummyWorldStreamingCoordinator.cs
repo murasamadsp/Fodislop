@@ -41,12 +41,38 @@ internal sealed class DummyWorldStreamingCoordinator
         _requestedTerrainRegion = null;
     }
 
+    /// <summary>
+    /// Нужен ли новый запрос региона, или уже идущий его покрывает.
+    /// </summary>
+    ///
+    /// Сравнение на точное равенство здесь было тем, из-за чего поток чанков
+    /// рвался при ходьбе. Запрос региона идёт каждый кадр, пока окно не
+    /// резидентно; окно едет, прямоугольник каждый кадр другой — значит новый
+    /// запрос, а он ОТМЕНЯЕТ предыдущий. Чанки успевали доехать только если
+    /// игрок стоял на месте, а при движении приходили рывками, и каждый рывок
+    /// был провисом в террейне.
+    ///
+    /// Покрытие вместо равенства: пока уже заказанный прямоугольник содержит
+    /// нужный, новый запрос не нужен — данные и так едут. Шагнули за его край
+    /// — тогда заказываем заново.
     public bool ShouldQueueTerrainRegion(string currentWorldCodeName, string targetWorldCodeName, RectInt region)
     {
-        return currentWorldCodeName == targetWorldCodeName &&
-            region.width > 0 && region.height > 0 &&
-            _requestedTerrainRegion != region;
+        if (currentWorldCodeName != targetWorldCodeName || region.width <= 0 || region.height <= 0)
+        {
+            return false;
+        }
+
+        if (_requestedTerrainRegion is not { } requested)
+        {
+            return true;
+        }
+
+        return !Covers(requested, region);
     }
+
+    private static bool Covers(RectInt outer, RectInt inner) =>
+        inner.xMin >= outer.xMin && inner.xMax <= outer.xMax &&
+        inner.yMin >= outer.yMin && inner.yMax <= outer.yMax;
 
     public CancellationTokenSource BeginTerrainRequest(RectInt region)
     {

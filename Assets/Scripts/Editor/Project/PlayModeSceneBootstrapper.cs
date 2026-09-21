@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.IO;
 using Kern.Core;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -24,6 +25,12 @@ public static class PlayModeSceneBootstrapper
     public static void EnsurePlayModeStartScene()
     {
         SceneAsset? bootstrapAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootstrapScenePath);
+        if (bootstrapAsset == null && File.Exists(BootstrapScenePath))
+        {
+            AssetDatabase.ImportAsset(BootstrapScenePath, ImportAssetOptions.ForceUpdate);
+            bootstrapAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootstrapScenePath);
+        }
+
         if (bootstrapAsset != null)
         {
             if (EditorSceneManager.playModeStartScene != bootstrapAsset)
@@ -32,7 +39,7 @@ public static class PlayModeSceneBootstrapper
                 Debug.Log($"[PlayModeSceneBootstrapper] Play mode start scene configured to '{BootstrapScenePath}'.");
             }
         }
-        else
+        else if (!File.Exists(BootstrapScenePath))
         {
             Debug.LogWarning($"[PlayModeSceneBootstrapper] Bootstrap scene not found at '{BootstrapScenePath}'.");
         }

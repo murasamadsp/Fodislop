@@ -1805,13 +1805,13 @@ MonoBehaviour:
   - _managerType: Kern.World.WorldTextureManager, Kern.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: World
     _target: {fileID: 310136117}
-  - _managerType: Kern.Game.Managers.ServerAudioEventManager, Kern.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Kern.Game.Managers.ServerAudioEventManager, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Audio
     _target: {fileID: 881552890}
-  - _managerType: Kern.Game.VfxPool, Kern.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Kern.Game.VfxPool, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1150380009}
-  - _managerType: Kern.Game.WorldEntityBatchRenderer, Kern.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Kern.Game.WorldEntityBatchRenderer, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1880757875}
   - _managerType: Kern.UI.GlobalChatUI, Kern.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
@@ -1832,7 +1832,7 @@ MonoBehaviour:
   - _managerType: Kern.UI.MissionArrowUI, Kern.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 32888240}
-  - _managerType: Kern.Rendering.PostProcessing.PostProcessController, Kern.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Kern.Rendering.PostProcessing.PostProcessController, Kern.Presentation, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 577792951}
   - _managerType: Kern.World.Lighting.LightingEngine, Kern.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
@@ -1841,7 +1841,7 @@ MonoBehaviour:
   - _managerType: Kern.World.SurfaceRenderer, Kern.World, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 801820429}
-  - _managerType: Kern.Player.CameraFollow, Kern.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Kern.Player.CameraFollow, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1403310852}
   - _managerType: Kern.UI.HUD.Player.View.PlayerHUDView, Kern.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null

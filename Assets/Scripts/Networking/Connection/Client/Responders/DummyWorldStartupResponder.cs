@@ -44,10 +44,8 @@ internal sealed class DummyWorldStartupResponder(
         DummyWorldDescriptor world = await worldState.OpenAsync(worldCodeName);
         SendWorldIdentity(worldCodeName, world, playerName, playerBotID);
 
-        // Bots disabled for performance testing.
-        // StartBotSimulation(lifecycleVersion);
-
         playerState.SetPosition(25, 50);
+        StartBotSimulation(lifecycleVersion);
         sendPacket(new ServerPacket(new AutoMineStatePacket(false)));
         sendPacket(new ServerPacket(new DailyBonusStatePacket(false)));
         buffManager.ResetDailyBonus();
@@ -85,6 +83,7 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(new ChatListPacket(
             [("global", "Global", placeholder)])));
         SendTestPacks();
+        missionRunner.StartPersistentMission(playerState.X, playerState.Y);
         SendWorldMusic();
     }
 
@@ -148,6 +147,7 @@ internal sealed class DummyWorldStartupResponder(
                 clock,
                 sendPacket,
                 () => loopAlive(lifecycleVersion),
+                () => (playerState.X, playerState.Y),
                 cancellationToken));
     }
 

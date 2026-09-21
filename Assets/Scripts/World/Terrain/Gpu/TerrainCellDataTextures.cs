@@ -41,13 +41,43 @@ public sealed class TerrainCellDataTextures : IDisposable
     private sealed class Channel<T>(TextureFormat format, string name)
         where T : struct
     {
+        // Одна промежуточная текстура на канал, ПОСТОЯННОГО размера.
+        //
+        // ЗАЧЕМ ИМЕННО ТАК. Загрузить в Texture2D кусок нельзя: Apply()
+        // отправляет текстуру целиком. Поэтому прямоугольник сначала
+        // набивается в маленькую текстуру, а потом переносится на место
+        // командой GPU.
+        //
+        // НИКАКИХ ПРЕДПОЛОЖЕНИЙ О ФОРМЕ. Раньше размер подгонялся под
+        // прямоугольник, и текстура пересоздавалась, как только форма
+        // менялась, — девять штук за кадр, по 30+ мс. Пул под «ожидаемые»
+        // формы это лечил ровно до первого неожиданного прямоугольника, а
+        // прямоугольники приходят с сервера: любой поток изменений мира даёт
+        // любую форму, и тогда пул промахивается каждый кадр.
+        //
+        // Постоянный размер снимает вопрос. Ширина — во всю текстуру, потому
+        // что шире прямоугольник быть не может; высота — фиксированная
+        // полоска. Любой прямоугольник режется на такие полоски по высоте и
+        // грузится за несколько переносов. Текстура создаётся один раз и
+        // живёт, сколько живёт окно.
+        //
+        // Лишняя площадь при этом грузится (полоска 33 текселя шириной
+        // занимает её всю), и это осознанно: замер показал, что загрузка
+        // стоит 0.0-0.1 мс, а создание текстуры — десятки миллисекунд.
+        // Плата за предсказуемость берётся там, где она почти бесплатна.
+        private const int StagingRows = 128;
+
         public Texture2D? Target;
-        public Texture2D? Patch;
+        public Texture2D? Staging;
         public T[] Data = [];
+
+        public static long CopyTicks;
+        public static long ApplyTicks;
 
         public void Allocate(int width, int height)
         {
             Target = Create(width, height, format, name);
+            Staging = Create(width, Math.Min(StagingRows, height), format, name + "Staging");
             Data = new T[width * height];
         }
 
@@ -58,35 +88,44 @@ public sealed class TerrainCellDataTextures : IDisposable
             Target.Apply(false, false);
         }
 
-        public void UploadRect(int x, int y, int width, int height)
-        {
-            int textureWidth = Target!.width;
-            if (Patch == null || Patch.width < width || Patch.height < height)
-            {
-                DestroyTexture(ref Patch);
-                Patch = Create(
-                    Mathf.NextPowerOfTwo(Math.Max(width, 16)),
-                    Mathf.NextPowerOfTwo(Math.Max(height, 16)),
-                    format,
-                    name + "Patch");
-            }
+        /// <summary>Высота полоски, которой режется прямоугольник любой формы.</summary>
+        public int StagingHeight => Staging!.height;
 
-            NativeArray<T> pixels = Patch.GetPixelData<T>(0);
+        /// <summary>Набить полоску прямоугольника и отдать её на GPU.</summary>
+        ///
+        /// Разделено с переносом намеренно. Apply() — это загрузка с
+        /// синхронизацией, CopyTexture — команда GPU; когда они чередуются по
+        /// девяти каналам, кадр платит за девять точек синхронизации вместо
+        /// одной. Сначала набиваются все каналы, потом переносятся все.
+        public void StageStrip(int x, int y, int width, int height)
+        {
+            long copyStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            int textureWidth = Target!.width;
+            NativeArray<T> pixels = Staging!.GetPixelData<T>(0);
             for (int row = 0; row < height; row++)
             {
-                NativeArray<T>.Copy(Data, ((y + row) * textureWidth) + x, pixels, row * Patch.width, width);
+                NativeArray<T>.Copy(Data, ((y + row) * textureWidth) + x, pixels, row * Staging.width, width);
             }
 
-            Patch.Apply(false, false);
-            Graphics.CopyTexture(Patch, 0, 0, 0, 0, width, height, Target, 0, 0, x, y);
+            CopyTicks += System.Diagnostics.Stopwatch.GetTimestamp() - copyStart;
+
+            long applyStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            Staging.Apply(false, false);
+            ApplyTicks += System.Diagnostics.Stopwatch.GetTimestamp() - applyStart;
+        }
+
+        public void CopyStagedStrip(int x, int y, int width, int height)
+        {
+            Graphics.CopyTexture(Staging!, 0, 0, 0, 0, width, height, Target!, 0, 0, x, y);
         }
 
         public void Destroy()
         {
             DestroyTexture(ref Target);
-            DestroyTexture(ref Patch);
+            DestroyTexture(ref Staging);
             Data = [];
         }
+
     }
 
     private readonly Channel<Color32> _color = new(TextureFormat.RGBA32, "TerrainCellColor");
@@ -106,6 +145,49 @@ public sealed class TerrainCellDataTextures : IDisposable
     public int MeshHeight { get; private set; }
 
     public bool IsAllocated => _color.Target != null;
+
+    /// <summary>Чем была последняя выгрузка: сколько прямоугольников и текселей.</summary>
+    ///
+    /// Ноль прямоугольников при ненулевых текселях означает выгрузку целиком.
+    /// Цена выгрузки — самая крупная незакрытая статья в модели стоимости
+    /// пересборки, и без этих двух чисел из лога нельзя отличить «выгрузили
+    /// полосу» от «выгрузили девять текстур целиком».
+    public int LastUploadRectCount { get; private set; }
+
+    public long LastUploadTexels { get; private set; }
+
+    /// <summary>На сколько полосок разошлась последняя выгрузка.</summary>
+    ///
+    /// Прямоугольник любой формы грузится полосками постоянного размера,
+    /// поэтому число полосок — это вся зависимость выгрузки от формы. Растёт
+    /// линейно с высотой изменённой области и ни от чего больше не зависит.
+    public int LastUploadStrips { get; private set; }
+
+    /// <summary>Сколько из выгрузки ушло в набивку и загрузку промежуточных текстур.</summary>
+    public float LastStageMs { get; private set; }
+
+    /// <summary>Из набивки: копирование строк в промежуточную текстуру.</summary>
+    public float LastStageCopyMs { get; private set; }
+
+    /// <summary>Из набивки: загрузка промежуточной текстуры на GPU.</summary>
+    public float LastStageApplyMs { get; private set; }
+
+    private static void ResetStageCounters()
+    {
+        Channel<Color32>.CopyTicks = 0;
+        Channel<Color32>.ApplyTicks = 0;
+        Channel<TerrainHalfTexel>.CopyTicks = 0;
+        Channel<TerrainHalfTexel>.ApplyTicks = 0;
+        Channel<Vector4>.CopyTicks = 0;
+        Channel<Vector4>.ApplyTicks = 0;
+    }
+
+    private static float TicksToMs(long ticks) =>
+        (float)(ticks * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+
+    private static float ElapsedMs(long startTimestamp) =>
+        (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 /
+            System.Diagnostics.Stopwatch.Frequency);
 
     public static int Ring(int value, int size)
     {
@@ -201,6 +283,12 @@ public sealed class TerrainCellDataTextures : IDisposable
             SystemInfo.copyTextureSupport == CopyTextureSupport.None;
         if (full)
         {
+            LastUploadRectCount = 0;
+            LastUploadTexels = (long)MeshWidth * textureHeight;
+            LastUploadStrips = 0;
+            LastStageMs = 0f;
+            LastStageCopyMs = 0f;
+            LastStageApplyMs = 0f;
             _color.UploadAll();
             _meta.UploadAll();
             _atlasRect.UploadAll();
@@ -213,19 +301,55 @@ public sealed class TerrainCellDataTextures : IDisposable
         }
         else
         {
+            LastUploadRectCount = _dirty.Count;
+            LastUploadTexels = _dirty.Area;
+            LastUploadStrips = 0;
+            ResetStageCounters();
+            long stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            int stagingRows = _color.StagingHeight;
             for (int i = 0; i < _dirty.Count; i++)
             {
                 RectInt rect = _dirty[i];
-                _color.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _meta.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _atlasRect.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _tileSize.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _animation.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _world.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _glow.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _geometryX.UploadRect(rect.x, rect.y, rect.width, rect.height);
-                _geometryY.UploadRect(rect.x, rect.y, rect.width, rect.height);
+
+                // Прямоугольник любой формы режется по высоте на полоски
+                // постоянного размера (см. TerrainUploadStrips).
+                int strips = TerrainUploadStrips.Count(rect.height, stagingRows);
+                for (int strip = 0; strip < strips; strip++)
+                {
+                    RectInt band = TerrainUploadStrips.At(rect, stagingRows, strip);
+                    int stripHeight = band.height;
+                    int stripY = band.y;
+                    LastUploadStrips++;
+
+                    _color.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _meta.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _atlasRect.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _tileSize.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _animation.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _world.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _glow.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _geometryX.StageStrip(rect.x, stripY, rect.width, stripHeight);
+                    _geometryY.StageStrip(rect.x, stripY, rect.width, stripHeight);
+
+                    _color.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _meta.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _atlasRect.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _tileSize.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _animation.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _world.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _glow.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _geometryX.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    _geometryY.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                }
             }
+
+            LastStageMs = ElapsedMs(stageStart);
+            LastStageCopyMs = TicksToMs(
+                Channel<Color32>.CopyTicks + Channel<TerrainHalfTexel>.CopyTicks +
+                Channel<Vector4>.CopyTicks);
+            LastStageApplyMs = TicksToMs(
+                Channel<Color32>.ApplyTicks + Channel<TerrainHalfTexel>.ApplyTicks +
+                Channel<Vector4>.ApplyTicks);
         }
 
         _dirty.Clear();

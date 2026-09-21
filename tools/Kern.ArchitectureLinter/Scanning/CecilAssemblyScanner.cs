@@ -68,7 +68,6 @@ public static class CecilAssemblyScanner
                 var resolved = baseType.Resolve();
                 baseType = resolved?.BaseType;
             }
-#pragma warning disable CA1031 // Do not catch general exception types — Resolve() may throw on missing Unity assemblies
             catch (System.Exception)
             {
                 break;

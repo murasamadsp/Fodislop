@@ -1,6 +1,5 @@
 #nullable enable
 
-using System.Diagnostics;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
@@ -17,7 +16,7 @@ public sealed class TerrainDiagnosticLog
 {
     private int _logged;
 
-    [Conditional("KERN_TERRAIN_DIAG")]
+    [System.Diagnostics.Conditional("KERN_TERRAIN_DIAG")]
     public void Once(int bit, string message)
     {
         if ((_logged & bit) != 0)

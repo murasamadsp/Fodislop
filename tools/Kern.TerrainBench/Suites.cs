@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using Kern.World;
 using Kern.World.Terrain;
 using Kern.World.Terrain.Background;
 using MinesServer.Data;
@@ -32,6 +33,8 @@ public static class Suites
         Masks(runner, width, height);
         Distortion(runner, width, height);
         FloodFillEquivalence(runner, width, height);
+        CellTypeIndex(runner, width, height);
+        QuadCatalogs(runner, width, height);
         Spatial(runner, width, height);
         SessionPipeline(runner, width, height);
     }
@@ -106,10 +109,9 @@ public static class Suites
             fill.ComputeScrolled(dx, dy, provider);
             stage = Lap(stageTotals, 3, stage);
 
-            TerrainMeshScroller.GetBandExtents(width, dx, out int bandXStart, out int bandXLength);
-            TerrainMeshScroller.GetBandExtents(height, dy, out int bandYStart, out int bandYLength);
-            PackRect(texels, vertices, region, bandXStart, bandXStart + bandXLength, 0, height, minX, minY, width, height);
-            PackRect(texels, vertices, region, 0, width, bandYStart, bandYStart + bandYLength, minX, minY, width, height);
+            TerrainScrollBands bands = TerrainScrollBands.Resolve(width, height, dx, dy, neighbourMargin: 1);
+            PackRect(texels, vertices, region, bands.ColumnBand.xMin, bands.ColumnBand.xMax, bands.ColumnBand.yMin, bands.ColumnBand.yMax, minX, minY, width, height);
+            PackRect(texels, vertices, region, bands.RowBand.xMin, bands.RowBand.xMax, bands.RowBand.yMin, bands.RowBand.yMax, minX, minY, width, height);
             stage = Lap(stageTotals, 4, stage);
             uploadedTexels += CopyDirty(texels, region, width, height);
             Lap(stageTotals, 5, stage);
@@ -267,28 +269,80 @@ public static class Suites
     }
 
     // ── Сдвиг окна камеры ────────────────────────────────────────────────
+    // Плоский сдвиг буфера, каким террейн двигал вершины до кольцевой сетки.
+    // Жил в TerrainMeshScroller, из игры удалён: кольцевая сетка двигает окно
+    // за O(1) сменой двух индексов, копировать нечего. Оставлен здесь, чтобы
+    // строка «старый» в сравнении продолжала мерить то же, что и раньше.
+    private static void LegacyBufferScroll<T>(
+        T[] buffer, int width, int height, int elementsPerCell, int dx, int dy)
+    {
+        if (dx == 0 && dy == 0)
+        {
+            return;
+        }
+
+        int keptWidth = width - Math.Abs(dx);
+        int keptHeight = height - Math.Abs(dy);
+        if (keptWidth <= 0 || keptHeight <= 0)
+        {
+            return;
+        }
+
+        int sourceY = dy > 0 ? dy : 0;
+        int targetY = dy > 0 ? 0 : -dy;
+        int runLength = keptHeight * elementsPerCell;
+        if (dx >= 0)
+        {
+            for (int x = 0; x < keptWidth; x++)
+            {
+                CopyColumn(buffer, x, x + dx, height, elementsPerCell, sourceY, targetY, runLength);
+            }
+        }
+        else
+        {
+            int firstTargetX = -dx;
+            for (int x = firstTargetX + keptWidth - 1; x >= firstTargetX; x--)
+            {
+                CopyColumn(buffer, x, x + dx, height, elementsPerCell, sourceY, targetY, runLength);
+            }
+        }
+    }
+
+    private static void CopyColumn<T>(
+        T[] buffer, int targetX, int sourceX, int height, int elementsPerCell,
+        int sourceY, int targetY, int runLength)
+    {
+        int sourceOffset = ((sourceX * height) + sourceY) * elementsPerCell;
+        int targetOffset = ((targetX * height) + targetY) * elementsPerCell;
+        Array.Copy(buffer, sourceOffset, buffer, targetOffset, runLength);
+    }
+
     private static void Scroll(BenchRunner runner, int width, int height)
     {
         runner.Suite = "scroll";
         TerrainVertex[] vertices = SyntheticVertices(width, height);
-        int[] atlases = new int[width * height];
-        bool[] doors = new bool[width * height];
+        var atlasGrid = new TerrainRingGrid<int>();
+        var doorGrid = new TerrainRingGrid<bool>();
+        atlasGrid.EnsureSize(width, height);
+        doorGrid.EnsureSize(width, height);
 
         foreach ((int dx, int dy, string label) in new[] { (1, 0, "x"), (0, 1, "y"), (1, 1, "диагональ"), (-3, 2, "рывок -3,+2") })
         {
             runner.Run($"старый: буфер вершин + позиции, {label}", () =>
             {
-                TerrainMeshScroller.Scroll(vertices, width, height, 8, dx, dy);
+                LegacyBufferScroll(vertices, width, height, 8, dx, dy);
                 ShiftPositionsOld(vertices, width, height, 8, 1f, dx, dy);
             });
             runner.Run($"новый: атласы и двери, {label}", () =>
             {
-                TerrainMeshScroller.Scroll(atlases, width, height, 1, dx, dy);
-                TerrainMeshScroller.Scroll(doors, width, height, 1, dx, dy);
+                atlasGrid.Scroll(dx, dy);
+                doorGrid.Scroll(dx, dy);
             });
         }
 
-        TerrainMeshScroller.GetBandExtents(width, 1, out int bandStart, out int bandLength);
+        RectInt packBand = TerrainScrollBands.Resolve(width, height, 1, 0, neighbourMargin: 1).ColumnBand;
+        int bandStart = packBand.xMin;
+        int bandLength = packBand.width;
         var texels = new TexelArrays(width, height);
         runner.Run($"новый: упаковка полосы {bandLength}×{height}", () =>
         {
@@ -472,6 +526,26 @@ public static class Suites
         var ring = new TerrainRingGrid<CachedCellData>();
         ring.EnsureSize(width + 2, height + 2);
         runner.Run("TerrainRingGrid сдвиг x", () => ring.Scroll(1, 0));
+
+        // FillQuad адресует кольцевые сетки девять раз на квад: четыре узла
+        // искажения, три маски, атласы и флаг двери. Каждый индекс — два
+        // целочисленных деления по размеру окна.
+        var nodes = new TerrainRingGrid<int>();
+        nodes.EnsureSize(width + 1, height + 1);
+        runner.Run("девять чтений по кольцевому адресу на клетку", () =>
+        {
+            int sink = 0;
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    sink += nodes[x, y] + nodes[x + 1, y] + nodes[x, y + 1] + nodes[x + 1, y + 1];
+                    sink += nodes[x, y] + nodes[x, y] + nodes[x, y] + nodes[x, y] + nodes[x, y];
+                }
+            }
+
+            GC.KeepAlive(sink);
+        });
         runner.Metric("размер CachedCellData", Marshal.SizeOf<CachedCellData>(), "Б");
         runner.Metric("кэш клеток целиком", Marshal.SizeOf<CachedCellData>() * (width + 2) * (height + 2) / 1048576.0, "МБ");
     }
@@ -490,6 +564,9 @@ public static class Suites
         runner.Run("ComputeScrolled +29,+29", () => fill.ComputeScrolled(29, 29, provider));
         runner.Run("UpdateLocalRegion 3×3", () => fill.UpdateLocalRegion(width / 2, height / 2, 3, 3, provider));
         runner.Run("UpdateLocalRegion 16×16", () => fill.UpdateLocalRegion(width / 3, height / 3, 16, 16, provider));
+        // Приход чанков сливается в один прямоугольник во всё окно: заплатка
+        // тогда идёт последовательно там, где полный путь идёт параллельно.
+        runner.Run("UpdateLocalRegion во всё окно", () => fill.UpdateLocalRegion(0, 0, width, height, provider));
     }
 
     // ── Маски клеток (настоящий TerrainCellMaskCalculator) ───────────────
@@ -503,6 +580,7 @@ public static class Suites
         runner.Run("PrecalculateFull", () => masks.PrecalculateFull(cache, width, height));
         runner.Run("PrecalculateIncremental +1,0", () => masks.PrecalculateIncremental(cache, width, height, 1, 0));
         runner.Run("PrecalculateRegion 5×5", () => masks.PrecalculateRegion(cache, width, height, width / 2, height / 2, 5, 5));
+        runner.Run("PrecalculateRegion во всё окно", () => masks.PrecalculateRegion(cache, width, height, 0, 0, width, height));
     }
 
     // ── Искажение сетки (настоящий TerrainVertexDistortionCalculator) ─────
@@ -516,6 +594,178 @@ public static class Suites
         runner.Run("PrecalculateFull", () => distortion.PrecalculateFull(cache, width, height, 10016, 40000));
         runner.Run("PrecalculateIncremental +1,0", () => distortion.PrecalculateIncremental(cache, width, height, 1, 0, 10016, 40000));
         runner.Run("PrecalculateRegion 5×5", () => distortion.PrecalculateRegion(cache, width, height, width / 2, height / 2, 5, 5, 10016, 40000));
+        runner.Run("PrecalculateRegion во всё окно", () => distortion.PrecalculateRegion(cache, width, height, 0, 0, width, height, 10016, 40000));
+    }
+
+    // ── Каталоги типов, которые FillQuad опрашивает на каждый квад ───────
+    //
+    // Все эти ответы зависят ТОЛЬКО от типа клетки, но спрашиваются на каждой
+    // клетке и на каждом из двух слоёв. Замер показывает цену одного прохода
+    // по окну и цену того же прохода через таблицу, разрешённую по типу.
+    private static void QuadCatalogs(BenchRunner runner, int width, int height)
+    {
+        runner.Suite = "quad-catalogs";
+        var random = new Random(Seed);
+        var types = new CellType[width * height];
+        for (int i = 0; i < types.Length; i++)
+        {
+            types[i] = (CellType)(1 + random.Next(60));
+        }
+
+        runner.Run("каталоги на клетку, оба слоя", () =>
+        {
+            int sink = 0;
+            for (int i = 0; i < types.Length; i++)
+            {
+                CellType type = types[i];
+                for (int layer = 0; layer < 2; layer++)
+                {
+                    sink += MapCellConfigCatalog.IsRoundableLoose(type) ? 1 : 0;
+                    sink += MapCellConfigCatalog.IsRoad(type) ? 1 : 0;
+                    sink += MapCellConfigCatalog.IsBuildingOrArtificialBlock(type) ? 1 : 0;
+                    sink += TerrainSheetCatalog.IsContinuousSheet(type) ? 1 : 0;
+                    sink += TerrainReliefRimCatalog.ParticipatesInRim(type) ? 1 : 0;
+                    sink += TerrainDecalCatalog.IsGroundSurface(type) ? 1 : 0;
+                    sink += (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
+                }
+            }
+
+            GC.KeepAlive(sink);
+        });
+
+        var roundable = new bool[65536];
+        var road = new bool[65536];
+        var artificial = new bool[65536];
+        var sheet = new bool[65536];
+        var rim = new bool[65536];
+        var ground = new bool[65536];
+        var profile = new int[65536];
+        for (int value = 0; value < 65536; value++)
+        {
+            var type = (CellType)value;
+            roundable[value] = MapCellConfigCatalog.IsRoundableLoose(type);
+            road[value] = MapCellConfigCatalog.IsRoad(type);
+            artificial[value] = MapCellConfigCatalog.IsBuildingOrArtificialBlock(type);
+            sheet[value] = TerrainSheetCatalog.IsContinuousSheet(type);
+            rim[value] = TerrainReliefRimCatalog.ParticipatesInRim(type);
+            ground[value] = TerrainDecalCatalog.IsGroundSurface(type);
+            profile[value] = (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
+        }
+
+        runner.Run("та же выборка из таблицы по типу", () =>
+        {
+            int sink = 0;
+            for (int i = 0; i < types.Length; i++)
+            {
+                int type = (int)types[i];
+                for (int layer = 0; layer < 2; layer++)
+                {
+                    sink += roundable[type] ? 1 : 0;
+                    sink += road[type] ? 1 : 0;
+                    sink += artificial[type] ? 1 : 0;
+                    sink += sheet[type] ? 1 : 0;
+                    sink += rim[type] ? 1 : 0;
+                    sink += ground[type] ? 1 : 0;
+                    sink += profile[type];
+                }
+            }
+
+            GC.KeepAlive(sink);
+        });
+    }
+
+    // ── Индекс типов клеток (настоящий CellTypeSpatialIndex) ─────────────
+    //
+    // Заплатка зовёт Set на ЗАПОЛНЕННОМ индексе, где тип почти всегда тот же;
+    // полная сборка — после Clear, на пустом. Контрольный замер рядом показывает
+    // цену того же прохода через словарь: ради неё обратная сторона индекса и
+    // лежит плотным массивом по кольцевому адресу.
+    private static void CellTypeIndex(BenchRunner runner, int width, int height)
+    {
+        runner.Suite = "cell-type-index";
+        var random = new Random(Seed);
+        var types = new CellType[width * height];
+        for (int i = 0; i < types.Length; i++)
+        {
+            types[i] = (CellType)(1 + random.Next(24));
+        }
+
+        var index = new CellTypeSpatialIndex();
+        index.EnsureWindow(width, height);
+        void Fill()
+        {
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    index.Set(
+                        TerrainCoordinateKey.Pack(5000 + x, 7000 + y),
+                        types[(x * height) + y]);
+                }
+            }
+        }
+
+        runner.Run("Set во всё окно после Clear (полная сборка)", Fill, index.Clear);
+        Fill();
+        runner.Run("Set во всё окно поверх заполненного (заплатка)", Fill);
+        // Обратная сторона сделки: запись стала двумя записями в массив, а
+        // вопрос «какие клетки этих типов» — проходом по окну. Проход платится
+        // по приходу текстуры, запись — тысячами в каждом кадре.
+        var wanted = new HashSet<CellType> { (CellType)3, (CellType)17, (CellType)42 };
+        var collected = new List<(long Key, CellType Type)>(4096);
+        runner.Run("проход по окну за клетками трёх типов", () =>
+        {
+            collected.Clear();
+            index.CollectEntries(wanted, collected);
+        });
+
+        var alternate = new CellType[types.Length];
+        for (int i = 0; i < types.Length; i++)
+        {
+            alternate[i] = (CellType)(1 + ((int)types[i] % 24));
+        }
+
+        bool flip = false;
+        runner.Run("Set во всё окно со сменой типа каждой клетки", () =>
+        {
+            CellType[] source = flip ? types : alternate;
+            flip = !flip;
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    index.Set(TerrainCoordinateKey.Pack(5000 + x, 7000 + y), source[(x * height) + y]);
+                }
+            }
+        });
+
+        Fill();
+        var probe = new Dictionary<long, CellType>(width * height);
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                probe[TerrainCoordinateKey.Pack(5000 + x, 7000 + y)] = types[(x * height) + y];
+            }
+        }
+
+        runner.Run("контроль: один поиск по обратному словарю на клетку", () =>
+        {
+            int hits = 0;
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    if (probe.TryGetValue(TerrainCoordinateKey.Pack(5000 + x, 7000 + y), out CellType t) &&
+                        t == types[(x * height) + y])
+                    {
+                        hits++;
+                    }
+                }
+            }
+
+            GC.KeepAlive(hits);
+        });
     }
 
     // ── Пространственный индекс сущностей (настоящий SpatialShardGrid) ────

@@ -6,7 +6,7 @@
 наведения порядка, и в макете такое уже ломало вид. Значит несовпавшее
 обязано быть названо, иначе оно просто останется незамеченным.
 
-Печатает docs/design-debt-uss.md. Слой main game не считается: у него свой
+Печатает docs/design/design-debt-uss.md. Слой main game не считается: у него свой
 счётчик в scripts/check-architecture.js и свой заход.
 """
 
@@ -19,7 +19,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 REPO = ROOT.parent.parent
 PALETTE = REPO / "Assets" / "Resources" / "Styles" / "token-palette.json"
 STYLES = REPO / "Assets" / "Resources" / "Styles"
-OUT = REPO / "docs" / "design-debt-uss.md"
+OUT = REPO / "docs" / "design" / "design-debt-uss.md"
 
 # Общий слой: всё, что не main game и не печатается генератором.
 SHARED = ["Theme.uss", "SciFi.uss", "Animations.uss", "Panel.uss",

@@ -94,6 +94,24 @@ public sealed class TerrainFramePlanner
             requestedWindow.Size.x,
             requestedWindow.Size.y);
 
+        // Запрошенное место ещё не приехало — значит едем настолько, насколько
+        // приехало, а не стоим и не прыгаем потом целиком.
+        if (!isRequestedResident && committedOrigin.x != int.MinValue && !dimensionsChanged)
+        {
+            Vector2Int reachable = TerrainWindowAdvance.Resolve(
+                committedOrigin,
+                requestedWindow.Origin,
+                requestedWindow.Size.x,
+                requestedWindow.Size.y,
+                origin => TerrainResidencyProbe.IsWindowResident(
+                    storage, mapData, origin, requestedWindow.Size.x, requestedWindow.Size.y));
+            if (reachable != committedOrigin)
+            {
+                requestedWindow = new StreamingWindow(reachable, requestedWindow.Size);
+                isRequestedResident = true;
+            }
+        }
+
         return _viewport.SelectFramePlan(
             requestedWindow,
             committedWindow,

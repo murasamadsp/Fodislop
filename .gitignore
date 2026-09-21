@@ -248,6 +248,10 @@ ClientBin/
 *.publishsettings
 orleans.codegen.cs
 
+# Local agent worktrees and profiling captures
+/.kilo/worktrees/
+/ProfilerCaptures/
+
 # Including strong name files can present a security risk
 # (https://github.com/github/gitignore/pull/2483#issue-259490424)
 #*.snk
@@ -546,20 +550,3 @@ ArtCaptures/
 # Temporary Unity test runner scenes
 /[Aa]ssets/InitTestScene*.unity
 /[Aa]ssets/InitTestScene*.unity.meta
-
-# Диагностический снимок планеты: результат запуска инструмента, а не исходник.
-# preview_planet.py перезаписывает его на каждом прогоне.
-/planet_preview.png
-
-# Запечённые карты планеты.
-#
-# Детерминированный вывод scripts/generate_planet_maps.py: в 8K это ~150 МБ, а
-# мелкое зерно в них — шум, который не сжимается, поэтому каждая перепечка
-# осела бы в истории целиком и навсегда. Версионируется генератор, а не его
-# результат. Запекается через меню Kern > Planet > Bake Maps.
-#
-# Файлы .meta НЕ игнорируются намеренно: в них GUID, по которым
-# PlanetSurface.mat ссылается на текстуры, и без них ссылки повиснут.
-/[Aa]ssets/Textures/UI/planet_albedo.png
-/[Aa]ssets/Textures/UI/planet_normal.png
-/[Aa]ssets/Textures/UI/planet_packed.png

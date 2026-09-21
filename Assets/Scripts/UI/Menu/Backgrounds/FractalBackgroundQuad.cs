@@ -8,7 +8,7 @@ namespace Kern.UI.Backgrounds
     [AddComponentMenu("Kern/UI/Backgrounds/Fractal Background Quad")]
     public sealed class FractalBackgroundQuad : MonoBehaviour
     {
-        [SerializeField] private Material? _material;
+        [SerializeField] private Material? _material = null;
         [SerializeField] private float _speed = 1.0f;
 
         private Mesh? _mesh;

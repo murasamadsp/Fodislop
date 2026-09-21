@@ -18,7 +18,7 @@
 // This file is the entry point for the lighting compute shader.
 // All stage implementations are in separate .hlsl files included below.
 //
-// Architecture documentation: LIGHTING_ARCHITECTURE.md
+// Architecture documentation: docs/architecture/LIGHTING_ARCHITECTURE.md
 //
 // Stage dependency flow:
 //
@@ -37,7 +37,7 @@
 // ============================================================================
 //
 // All variables used by lighting stages are declared here before includes.
-// Each stage accesses only its declared inputs/outputs (see LIGHTING_ARCHITECTURE.md).
+// Each stage accesses only its declared inputs/outputs (see docs/architecture/LIGHTING_ARCHITECTURE.md).
 
 // ============================================================================
 // Field Textures

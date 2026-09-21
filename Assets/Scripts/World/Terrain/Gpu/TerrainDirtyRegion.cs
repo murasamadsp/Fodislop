@@ -77,11 +77,6 @@ public sealed class TerrainDirtyRegion
         MarkRect(ringX, ringY, width, height, TerrainCellDataPacker.LayersPerCell);
     }
 
-    public void MarkRect(int ringX, int ringY, int width, int height)
-    {
-        MarkRect(ringX, ringY, width, height, 1);
-    }
-
     private void MarkRect(int ringX, int ringY, int width, int height, int layersPerCell)
     {
         if (IsAll || width <= 0 || height <= 0 || _cellWidth <= 0 || _cellHeight <= 0)

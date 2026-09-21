@@ -41,5 +41,6 @@ public interface IRobotService
     void SetLocalPlayerBotID(uint botID);
     uint LocalPlayerBotID { get; }
     void ClearAllRobots();
+    void PruneStaleRobots(float timeoutSeconds = 2.5f);
     int RobotCount { get; }
 }

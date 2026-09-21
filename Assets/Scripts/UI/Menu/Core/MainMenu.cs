@@ -201,7 +201,9 @@ namespace Kern.UI
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            throw new TimeoutException("Main menu scenery did not become ready within 3 seconds.");
+            throw new TimeoutException(
+                "Сценка главного меню не готова за 3 секунды. " +
+                $"Разметка построена={_built}; {_sceneryPresenter.DescribeReadiness()}.");
         }
 
         private void BindUIElements(VisualElement tree)

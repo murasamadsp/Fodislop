@@ -234,15 +234,25 @@ public sealed class TerrainBuildPipeline : IDisposable
     }
 
     /// <summary>Перечитать клетки типов, у которых только что приехала текстура.</summary>
+    /// <param name="rebuildCells">
+    /// Перечитать тексели клеток этих типов. Ложь, когда кадр всё равно
+    /// собирает окно целиком: полная сборка перечитает те же клетки сама, а
+    /// перечитывание до неё — это проход по окну в никуда. Метаданные при этом
+    /// обновляются всегда: по ним и будет собирать полная сборка.
+    /// </param>
     public void RefreshTextureCells(
         in TerrainBuildContext context,
         HashSet<CellType> cellTypes,
         int minX,
-        int minY)
+        int minY,
+        bool rebuildCells)
     {
         _cellCache.RefreshTextureMetadata(
             cellTypes, context.MapData, context.TextureService, context.Atlases);
-        _cellBuilder.BuildTextureCells(cellTypes, CreateSources(context), minX, minY);
+        if (rebuildCells)
+        {
+            _cellBuilder.BuildTextureCells(cellTypes, CreateSources(context), minX, minY);
+        }
     }
 
     /// <summary>

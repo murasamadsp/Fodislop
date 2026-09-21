@@ -13,7 +13,7 @@ using BuildingType = MinesServer.Data.PackType;
 
 namespace Kern.Game.Managers;
 
-// Чистый сервис контейнера (SCENE_STANDARD.md §1): здания создаются фабрикой
+// Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): здания создаются фабрикой
 // под Runtime/Buildings, сам сервис объекта на сцене не имеет.
 public sealed class BuildingManager(
     IMapDataProvider mapDataProvider,

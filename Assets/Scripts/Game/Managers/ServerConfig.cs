@@ -6,7 +6,7 @@ using Kern.Core.Interfaces;
 
 namespace Kern.Game.Managers;
 
-// Чистый сервис контейнера: ни рендера, ни transform (SCENE_STANDARD.md §1).
+// Чистый сервис контейнера: ни рендера, ни transform (docs/architecture/SCENE_STANDARD.md §1).
 public sealed class ServerConfig : IServerConfig
 {
     public bool IsInitialized => true;

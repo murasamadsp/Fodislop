@@ -44,23 +44,6 @@ internal static class MenuSceneryProjection
         return TryProject(viewpoint, point, out viewportPosition);
     }
 
-    public static bool TryGetSurfaceViewportPosition(
-        MenuSceneryViewpoint viewpoint,
-        Transform? planet,
-        Vector3 localSurfaceDirection,
-        out Vector2 viewportPosition)
-    {
-        viewportPosition = default;
-        if (planet == null)
-        {
-            return false;
-        }
-
-        float radius = 0.5f * planet.lossyScale.x;
-        Vector3 point = planet.position + (localSurfaceDirection.normalized * radius);
-        return TryProject(viewpoint, point, out viewportPosition);
-    }
-
     private static bool TryProject(
         MenuSceneryViewpoint viewpoint,
         Vector3 worldPosition,

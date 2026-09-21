@@ -42,13 +42,10 @@ public sealed class SceneTransitionTicket : IDisposable
 
     public SceneTransitionPhase Phase { get; private set; } = SceneTransitionPhase.Created;
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public bool IsAttached => Phase >= SceneTransitionPhase.Attached && Phase != SceneTransitionPhase.Failed;
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public bool IsStartupReady => Phase >= SceneTransitionPhase.StartupReady && Phase != SceneTransitionPhase.Failed;
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public bool IsPresentationReady => Phase == SceneTransitionPhase.PresentationReady;
 
     internal event Action<SceneTransitionStatus>? Changed;
@@ -131,7 +128,6 @@ public sealed class SceneTransitionTicket : IDisposable
 
     public UniTask WaitForActivationAsync() => AwaitPhaseAsync(_activationRequested.Task);
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public UniTask WaitForStartupAsync() => AwaitPhaseAsync(_startupReady.Task);
 
     public UniTask WaitForPresentationAsync() => AwaitPhaseAsync(_presentationReady.Task);

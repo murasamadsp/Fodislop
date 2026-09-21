@@ -149,9 +149,10 @@ public sealed class TerrainBuildDriver : IDisposable
         in TerrainBuildContext context,
         HashSet<CellType> cellTypes,
         int minX,
-        int minY)
+        int minY,
+        bool rebuildCells)
     {
-        _pipeline.RefreshTextureCells(context, cellTypes, minX, minY);
+        _pipeline.RefreshTextureCells(context, cellTypes, minX, minY, rebuildCells);
         _materials.BindAtlasTextures(context.Atlases, context.TextureService);
         if (_pipeline.CellBuilder.DoorsTouched)
         {

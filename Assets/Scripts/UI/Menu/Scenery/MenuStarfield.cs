@@ -31,7 +31,7 @@ namespace Kern.UI
         private static readonly int _ParallaxOffsetID = Shader.PropertyToID("_ParallaxOffset");
 
         [SerializeField]
-        private Material? _starfieldMaterial;
+        private Material? _starfieldMaterial = null;
         private Material? _runtimeMaterial;
         private Material? _runtimeMaterialSource;
 
