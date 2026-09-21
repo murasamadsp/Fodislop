@@ -158,11 +158,6 @@ internal static class TerrainQuadBuilder
         quad[2].Position = new Vector3(lx + cellSize, ly + cellSize, zOffset) + off11;
         quad[3].Position = new Vector3(lx, ly + cellSize, zOffset) + off01;
 
-        Vector2 uv0 = new Vector2(0, 0);
-        Vector2 uv1 = new Vector2(1, 0);
-        Vector2 uv2 = new Vector2(1, 1);
-        Vector2 uv3 = new Vector2(0, 1);
-
         int descriptor = isSameCell ? precalc.CellTilingDescriptors[x, y] : 0;
         int cornerSideMask = precalc.CellCornerVariants[x, y];
         bool useNeighborVariants =
@@ -173,61 +168,19 @@ internal static class TerrainQuadBuilder
 
         if (useNeighborVariants)
         {
-            bool hasLeft = (cornerSideMask & 1) != 0;
-            bool hasRight = (cornerSideMask & 2) != 0;
-            bool hasTop = (cornerSideMask & 4) != 0;
-            bool hasBottom = (cornerSideMask & 8) != 0;
-            int cornerCount =
-                (hasLeft ? 1 : 0) +
-                (hasRight ? 1 : 0) +
-                (hasTop ? 1 : 0) +
-                (hasBottom ? 1 : 0);
-            int column = RenderingConstants.BUILDING_WALL_VARIANT_BASE_TILE +
-                Math.Min(cornerCount, 2);
-            byte transforms = (byte)(descriptor & 0xE0);
-
-            if ((cornerCount == 1 && hasRight) ||
-                (cornerCount == 1 && hasBottom))
-            {
-                transforms ^= 0x40;
-            }
-
-            if (cornerCount >= 2 && !hasLeft && !hasRight)
-            {
-                transforms ^= 0x80;
-            }
-
-            descriptor = transforms | (column & 0x1F);
+            descriptor = ResolveBuildingWallVariant(descriptor, cornerSideMask);
         }
 
+        var uvs = TerrainQuadUvs.Canonical;
         if ((hasTileGroup || useNeighborVariants) && descriptor != 0)
         {
-            if ((descriptor & 0x40) != 0)
-            {
-                (uv0.x, uv1.x) = (uv1.x, uv0.x);
-                (uv3.x, uv2.x) = (uv2.x, uv3.x);
-            }
-
-            if ((descriptor & 0x20) != 0)
-            {
-                (uv0.y, uv3.y) = (uv3.y, uv0.y);
-                (uv1.y, uv2.y) = (uv2.y, uv1.y);
-            }
-
-            if ((descriptor & 0x80) != 0)
-            {
-                Vector2 t = uv0;
-                uv0 = uv1;
-                uv1 = uv2;
-                uv2 = uv3;
-                uv3 = t;
-            }
+            uvs = uvs.Transform(descriptor);
         }
 
-        quad[0].UV0 = uv0;
-        quad[1].UV0 = uv1;
-        quad[2].UV0 = uv2;
-        quad[3].UV0 = uv3;
+        quad[0].UV0 = uvs.C0;
+        quad[1].UV0 = uvs.C1;
+        quad[2].UV0 = uvs.C2;
+        quad[3].UV0 = uvs.C3;
 
         // Текстуры нет — клетка рисуется цветом миникарты и непрозрачной.
         // Это не фолбек, а диагностический вид: так видно, какого типа клетки
@@ -242,24 +195,8 @@ internal static class TerrainQuadBuilder
 
         TerrainAnimationSettings animationSettings =
             TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
-        float animOffset = animationSettings.PaletteIndex;
-
-        if (hasAtlasRect && animationSettings.Profile == TerrainAnimationProfile.Default &&
-            animType == CellAnimationType.Blinking)
-        {
-            uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
-            seed = (seed ^ (seed >> 13)) * 1274126177;
-            seed = seed ^ (seed >> 16);
-            animOffset = (seed % 6283) / 1000f;
-        }
-        else if (hasAtlasRect &&
-            animationSettings.Profile == TerrainAnimationProfile.FacetedCrystal)
-        {
-            uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
-            seed = (seed ^ (seed >> 13)) * 1274126177;
-            seed ^= seed >> 16;
-            animOffset = (seed & 0xFFFF) / 65536f;
-        }
+        float animOffset = ResolveAnimationOffset(
+            animationSettings, animType, hasAtlasRect, gridX, serverY);
 
         // Любой непустой блок переднего плана — физическая масса: свет обязан
         // поглощаться всеми блоками одинаково, без зависимости от уникальных
@@ -359,6 +296,88 @@ internal static class TerrainQuadBuilder
         }
 
         return new TerrainQuadResult(atlasIndex, isDoor);
+    }
+
+    /// <summary>
+    /// Вариант стены здания по соседним углам.
+    /// </summary>
+    ///
+    /// Стена выбирает колонку тайла по числу примыкающих углов, а отражения
+    /// берёт из собственного дескриптора автотайлинга. Одиночный угол справа
+    /// или снизу — это тот же тайл, отражённый по горизонтали; два угла по
+    /// вертикали — повёрнутый.
+    private static int ResolveBuildingWallVariant(int descriptor, int cornerSideMask)
+    {
+        bool hasLeft = (cornerSideMask & 1) != 0;
+        bool hasRight = (cornerSideMask & 2) != 0;
+        bool hasTop = (cornerSideMask & 4) != 0;
+        bool hasBottom = (cornerSideMask & 8) != 0;
+        int cornerCount =
+            (hasLeft ? 1 : 0) +
+            (hasRight ? 1 : 0) +
+            (hasTop ? 1 : 0) +
+            (hasBottom ? 1 : 0);
+        int column = RenderingConstants.BUILDING_WALL_VARIANT_BASE_TILE +
+            Math.Min(cornerCount, 2);
+        byte transforms = (byte)(descriptor & 0xE0);
+
+        if ((cornerCount == 1 && hasRight) ||
+            (cornerCount == 1 && hasBottom))
+        {
+            transforms ^= 0x40;
+        }
+
+        if (cornerCount >= 2 && !hasLeft && !hasRight)
+        {
+            transforms ^= 0x80;
+        }
+
+        return transforms | (column & 0x1F);
+    }
+
+    /// <summary>
+    /// Фаза анимации клетки: константа профиля или разброс по её координате.
+    /// </summary>
+    ///
+    /// Разброс нужен, чтобы соседние клетки одного типа не мигали и не
+    /// переливались в такт. Он детерминирован от мировой координаты, поэтому
+    /// одна и та же клетка всегда получает одну и ту же фазу — при сдвиге
+    /// окна и при пересборке она не перескакивает.
+    ///
+    /// Без текстуры разброса нет: клетка рисуется плоским цветом миникарты, и
+    /// анимировать в ней нечего.
+    private static float ResolveAnimationOffset(
+        TerrainAnimationSettings animationSettings,
+        CellAnimationType animType,
+        bool hasAtlasRect,
+        int gridX,
+        int serverY)
+    {
+        if (!hasAtlasRect)
+        {
+            return animationSettings.PaletteIndex;
+        }
+
+        if (animationSettings.Profile == TerrainAnimationProfile.Default &&
+            animType == CellAnimationType.Blinking)
+        {
+            uint seed = HashCell(gridX, serverY);
+            return (seed % 6283) / 1000f;
+        }
+
+        if (animationSettings.Profile == TerrainAnimationProfile.FacetedCrystal)
+        {
+            return (HashCell(gridX, serverY) & 0xFFFF) / 65536f;
+        }
+
+        return animationSettings.PaletteIndex;
+    }
+
+    private static uint HashCell(int gridX, int serverY)
+    {
+        uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
+        seed = (seed ^ (seed >> 13)) * 1274126177;
+        return seed ^ (seed >> 16);
     }
 
     private static CellRenderProperties GetRenderProperties(
