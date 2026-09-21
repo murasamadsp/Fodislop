@@ -18,7 +18,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
 {
     private WorldLayer<CellType>? _cellLayer;
     private string? _mapFilePath;
-    private readonly SemaphoreSlim _persistenceGate = new(1, 1);
+    private readonly MapPersistenceGate _persistenceGate = new();
     private readonly IAsyncOperationSupervisor _operations;
 
     private const string MapExtension = ".map";
@@ -297,88 +297,33 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     /// </param>
     public void Flush(bool durable)
     {
-        _persistenceGate.Wait();
-        try
-        {
-            FlushCore(durable);
-        }
-        finally
-        {
-            _persistenceGate.Release();
-        }
+        _persistenceGate.Run(() => FlushCore(durable));
     }
 
-    public async UniTask FlushAsync(
+    public UniTask FlushAsync(
         bool durable,
         CancellationToken cancellationToken = default)
     {
-        await AcquireGateOnMainThreadAsync(cancellationToken);
-        bool releasedInPool = false;
-        try
-        {
-            if (_cellLayer == null || !_isInitialized || IsDisposed)
+        return _persistenceGate.RunAsync(
+            () =>
             {
-                return;
-            }
-
-            // Снимок снимается на главном потоке, там же, где меняется кэш.
-            // При отказе записи WorldLayer.WriteSnapshot сам возвращает
-            // отметки грязных чанков.
-            WorldLayer<CellType> layer = _cellLayer;
-            var snapshot = layer.TakeDirtySnapshot();
-            string mapFilePath = MapFilePath;
-            string backupMapFilePath = BackupMapFilePath;
-            Exception? failure = null;
-            await UniTask.RunOnThreadPool(
-                () =>
+                if (_cellLayer == null || !_isInitialized || IsDisposed)
                 {
-                    try
-                    {
-                        MapStorageDiskWriter.WriteSnapshot(
-                            layer,
-                            snapshot,
-                            durable,
-                            mapFilePath,
-                            backupMapFilePath);
-                    }
-                    catch (Exception exception)
-                    {
-                        failure = exception;
-                    }
-                    finally
-                    {
-                        releasedInPool = true;
-                        _persistenceGate.Release();
-                    }
-                },
-                configureAwait: false);
+                    return null;
+                }
 
-            await UniTask.SwitchToMainThread();
-            if (failure != null)
-            {
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
-            }
-        }
-        finally
-        {
-            if (!releasedInPool)
-            {
-                _persistenceGate.Release();
-            }
-        }
-    }
-
-    // Семафор записи берётся только синхронно на главном потоке, а асинхронная
-    // запись отпускает его в пуле потоков, не возвращаясь на главный. Иначе
-    // синхронный Flush на выходе из игры блокировал главный поток в ожидании
-    // семафора, который держала запись, ждущая этот же главный поток.
-    private async UniTask AcquireGateOnMainThreadAsync(CancellationToken cancellationToken)
-    {
-        await UniTask.SwitchToMainThread(cancellationToken);
-        while (!_persistenceGate.Wait(0))
-        {
-            await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
-        }
+                WorldLayer<CellType> layer = _cellLayer;
+                var snapshot = layer.TakeDirtySnapshot();
+                string mapFilePath = MapFilePath;
+                string backupMapFilePath = BackupMapFilePath;
+                return () => MapStorageDiskWriter.WriteSnapshot(
+                    layer,
+                    snapshot,
+                    durable,
+                    mapFilePath,
+                    backupMapFilePath);
+            },
+            cancellationToken);
     }
 
     private void FlushCore(bool durable)
@@ -407,73 +352,38 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         Justification = "Persistent map close failures must propagate instead of becoming silent data loss.")]
     public void Dispose()
     {
-        _persistenceGate.Wait();
-        try
-        {
-            DisposeCore();
-        }
-        finally
-        {
-            _persistenceGate.Release();
-        }
+        _persistenceGate.Run(DisposeCore);
     }
 
-    public async UniTask DisposeAsync(CancellationToken cancellationToken = default)
+    public UniTask DisposeAsync(CancellationToken cancellationToken = default)
     {
-        await AcquireGateOnMainThreadAsync(cancellationToken);
-        bool releasedInPool = false;
-        try
-        {
-            // Тот же снимок, что во FlushAsync: WorldLayer.Dispose иначе
-            // перебирал бы грязные чанки в пуле потоков. Снимок снимается на
-            // главном потоке, в пул уходят только его запись и закрытие файла.
-            WorldLayer<CellType>? layer = _isInitialized && !IsDisposed ? _cellLayer : null;
-            var snapshot = layer?.TakeDirtySnapshot();
-            string? mapFilePath = layer != null ? MapFilePath : null;
-            string? backupMapFilePath = layer != null ? BackupMapFilePath : null;
-            Exception? failure = null;
-            await UniTask.RunOnThreadPool(
-                () =>
+        return _persistenceGate.RunAsync(
+            () =>
+            {
+                // Тот же снимок, что во FlushAsync: WorldLayer.Dispose иначе
+                // перебирал бы грязные чанки в пуле потоков. Снимок снимается
+                // на главном потоке, в пул уходят только его запись и закрытие
+                // файла.
+                WorldLayer<CellType>? layer = _isInitialized && !IsDisposed ? _cellLayer : null;
+                var snapshot = layer?.TakeDirtySnapshot();
+                string? mapFilePath = layer != null ? MapFilePath : null;
+                string? backupMapFilePath = layer != null ? BackupMapFilePath : null;
+                return () =>
                 {
-                    try
+                    if (layer != null && snapshot != null)
                     {
-                        if (layer != null && snapshot != null)
-                        {
-                            MapStorageDiskWriter.WriteSnapshot(
-                                layer,
-                                snapshot,
-                                durable: true,
-                                mapFilePath: mapFilePath!,
-                                backupMapFilePath: backupMapFilePath!);
-                        }
+                        MapStorageDiskWriter.WriteSnapshot(
+                            layer,
+                            snapshot,
+                            durable: true,
+                            mapFilePath: mapFilePath!,
+                            backupMapFilePath: backupMapFilePath!);
+                    }
 
-                        DisposeCore();
-                    }
-                    catch (Exception exception)
-                    {
-                        failure = exception;
-                    }
-                    finally
-                    {
-                        releasedInPool = true;
-                        _persistenceGate.Release();
-                    }
-                },
-                configureAwait: false);
-
-            await UniTask.SwitchToMainThread();
-            if (failure != null)
-            {
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
-            }
-        }
-        finally
-        {
-            if (!releasedInPool)
-            {
-                _persistenceGate.Release();
-            }
-        }
+                    DisposeCore();
+                };
+            },
+            cancellationToken);
     }
 
     private void DisposeCore()

@@ -23,10 +23,9 @@ namespace Kern.Rendering.PostProcessing
         private readonly int _kernelComposite;
         private readonly int _kernelBakeGradeLut;
 
-        // Размер обязан совпадать с BakedGradeLutSize в PostProcess.compute.
-        public const int BakedGradeLutSize = 33;
-        private RenderTexture? _bakedGradeLut;
-        private readonly BakedGradeLutCache _gradeLutCache = new();
+        // Совместимость имени: размер читает ещё и исполнитель прохода.
+        public const int BakedGradeLutSize = BakedGradeLutTarget.Size;
+        private readonly BakedGradeLutTarget _gradeLut = new();
         // Размеры берутся из списков имён: две константы, обязанные совпадать,
         // разъезжались бы молча.
         private readonly TextureHandle[] _bloomDownTextures = new TextureHandle[BloomDownNames.Length];
@@ -330,8 +329,8 @@ namespace Kern.Rendering.PostProcessing
                 passData.KernelUpsample = _kernelUpsample;
                 passData.KernelComposite = _kernelComposite;
                 passData.KernelBakeGradeLut = _kernelBakeGradeLut;
-                passData.BakedGradeLut = _displayPass ? null : EnsureBakedGradeLut();
-                passData.GradeLutCache = _displayPass ? null : _gradeLutCache;
+                passData.BakedGradeLut = _displayPass ? null : _gradeLut.Ensure();
+                passData.GradeLutCache = _displayPass ? null : _gradeLut.Cache;
 
                 passData.ColorTexture = activeColor;
                 passData.IntermediateTexture = intermediateTexture;
@@ -427,47 +426,6 @@ namespace Kern.Rendering.PostProcessing
         // обязаны согласовываться с самим снимком, и держать их врозь значило
         // держать три копии одного знания.
 
-        private RenderTexture EnsureBakedGradeLut()
-        {
-            if (_bakedGradeLut != null && _bakedGradeLut.IsCreated())
-            {
-                return _bakedGradeLut;
-            }
-
-            ReleaseBakedGradeLut();
-            _bakedGradeLut = new RenderTexture(
-                BakedGradeLutSize,
-                BakedGradeLutSize,
-                0,
-                RenderTextureFormat.ARGBHalf,
-                RenderTextureReadWrite.Linear)
-            {
-                name = "_PPBakedGradeLut",
-                dimension = TextureDimension.Tex3D,
-                volumeDepth = BakedGradeLutSize,
-                enableRandomWrite = true,
-                useMipMap = false,
-                autoGenerateMips = false,
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp,
-            };
-            _bakedGradeLut.Create();
-            return _bakedGradeLut;
-        }
-
-        private void ReleaseBakedGradeLut()
-        {
-            _gradeLutCache.Invalidate();
-            if (_bakedGradeLut == null)
-            {
-                return;
-            }
-
-            _bakedGradeLut.Release();
-            CoreUtils.Destroy(_bakedGradeLut);
-            _bakedGradeLut = null;
-        }
-
         private void EnsureHistoryTexture(RenderTextureDescriptor descriptor)
         {
             if (_historyTexture != null &&
@@ -490,7 +448,7 @@ namespace Kern.Rendering.PostProcessing
 
         public void Dispose()
         {
-            ReleaseBakedGradeLut();
+            _gradeLut.Release();
             _historyTexture?.Release();
             _historyTexture = null;
             _historyValid = false;

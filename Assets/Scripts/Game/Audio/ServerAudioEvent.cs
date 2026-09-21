@@ -251,40 +251,6 @@ public sealed class ServerAudioEvent : IDisposable
         ReleaseSlot();
     }
 
-    private static readonly Dictionary<SFX, string> _SfxEventNameCache = new();
-
-    private static string GetSfxEventName(SFX sfx)
-    {
-        if (_SfxEventNameCache.TryGetValue(sfx, out var cachedName))
-        {
-            return cachedName;
-        }
-
-        var name = sfx.ToString();
-        var sb = new System.Text.StringBuilder("sfx/");
-        for (int i = 0; i < name.Length; i++)
-        {
-            char c = name[i];
-            if (char.IsUpper(c))
-            {
-                if (i > 0)
-                {
-                    sb.Append('_');
-                }
-
-                sb.Append(char.ToLowerInvariant(c));
-            }
-            else
-            {
-                sb.Append(c);
-            }
-        }
-
-        var result = sb.ToString();
-        _SfxEventNameCache[sfx] = result;
-        return result;
-    }
-
     private void SetupSlotPosition()
     {
         Vector3 pos;
@@ -331,7 +297,7 @@ public sealed class ServerAudioEvent : IDisposable
 
     private void PlayAudio(SFX effectType)
     {
-        string eventName = GetSfxEventName(effectType);
+        string eventName = SfxEventNames.Get(effectType);
         _audioSystem.PlayAt(eventName, _intendedWorldPosition);
     }
 
@@ -349,60 +315,41 @@ public sealed class ServerAudioEvent : IDisposable
     {
         try
         {
-            var filename = $"VFX/{_visualEffectName.ToLowerInvariant()}";
-            var animData = await _assetLoader.GetAnimatedSpritesAsync(filename, token);
+            ServerAudioVisual visual =
+                await new ServerAudioVisualLoader(_assetLoader).LoadAsync(_visualEffectName, token);
             if (token.IsCancellationRequested)
             {
                 return;
             }
 
-            if (animData.Frames != null && animData.Frames.Length > 0)
+            if (visual.Frames != null)
             {
-                _animationFrames = animData.Frames;
+                _animationFrames = visual.Frames;
                 _currentFrame = 0;
-                _frameDuration = animData.FrameDuration / Mathf.Max(0.01f, _speed);
+                _frameDuration = visual.FrameDuration / Mathf.Max(0.01f, _speed);
                 _isAnimated = true;
                 _slot?.SetSprite(_animationFrames[0]);
                 _slot?.SetEnabled(true);
-
                 _maxLifetime = (_animationFrames.Length * _frameDuration) + 0.5f;
                 return;
             }
 
-            var texture = await _assetLoader.GetTextureAsync(filename, token);
-            if (token.IsCancellationRequested)
+            if (visual.StaticSprite != null)
             {
-                return;
-            }
-
-            if (texture != null)
-            {
-                _ownedStaticSprite = Sprite.Create(
-                    texture,
-                    new Rect(0, 0, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f),
-                    RenderingConstants.PIXELS_PER_UNIT);
+                _ownedStaticSprite = visual.StaticSprite;
                 _slot?.SetSprite(_ownedStaticSprite);
                 _slot?.SetEnabled(true);
-
                 _maxLifetime = 1f;
                 return;
             }
 
-            var bytes = await _assetLoader.GetAssetBytesAsync(filename, token, timeoutSeconds: 10);
-            if (token.IsCancellationRequested)
+            if (visual.EffectBytes != null)
             {
+                await TryLoadEffekseerAsync(visual.EffectBytes, token);
                 return;
             }
 
-            if (bytes != null && bytes.Length > 0)
-            {
-                await TryLoadEffekseerAsync(bytes, token);
-            }
-            else
-            {
-                MarkVisualCompleted();
-            }
+            MarkVisualCompleted();
         }
         catch (OperationCanceledException)
         {

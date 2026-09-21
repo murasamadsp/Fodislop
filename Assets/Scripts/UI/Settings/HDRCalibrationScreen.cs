@@ -7,6 +7,7 @@ using Kern.Core.Interfaces;
 using Kern.Core.Localization;
 using Kern.Rendering;
 using Kern.Rendering.PostProcessing;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Kern.UI;
@@ -55,8 +56,20 @@ internal sealed class HDRCalibrationScreen
 
     public void Open()
     {
-        if (_overlay != null || _doc == null || _doc.rootVisualElement == null)
+        // Экран уже открыт — повторный вызов ничего не значит и молчит.
+        if (_overlay != null)
         {
+            return;
+        }
+
+        if (_doc == null || _doc.rootVisualElement == null)
+        {
+            // А вот это сбой: калибровку попросили, а показать её негде.
+            // Молча выйти значило бы оставить человека без единственного
+            // способа настроить яркость и без следа в консоли.
+            Debug.LogError(
+                "[HDRCalibration] Calibration was requested before the UI panel was ready; " +
+                "the screen cannot be shown.");
             return;
         }
 

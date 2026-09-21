@@ -244,6 +244,14 @@ internal static class PauseMenuUIFactory
     {
         if (doc == null || doc.rootVisualElement == null)
         {
+            // Молчание в этом окне означает откат, поэтому и здесь оно обязано
+            // означать откат. Просто выйти значило бы оставить изменение
+            // применённым без единственного окна, которым его отменяют — а
+            // применено оно как раз тогда, когда экран мог стать нечитаемым.
+            Debug.LogError(
+                "[PauseMenu] The timed confirmation has nowhere to appear; " +
+                "reverting the change instead of leaving it applied.");
+            onRevert();
             return;
         }
 

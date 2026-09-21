@@ -135,6 +135,10 @@ namespace Kern.UI
 
         private void OnRootGeometryChanged(GeometryChangedEvent _)
         {
+            // Событие геометрии приходит на каждую перекладку корня, и после
+            // первой удачной сборки выходить отсюда — норма, а не сбой. Пока
+            // панель не готова, попытка просто повторится со следующим
+            // событием: подписка снимается только в Dispose.
             if (_initialized || _doc == null || _doc.rootVisualElement == null)
             {
                 return;
