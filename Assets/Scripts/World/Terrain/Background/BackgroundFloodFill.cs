@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using Kern.World.Terrain;
+using UnityEngine;
 
 namespace Kern.World.Terrain.Background;
 public sealed class BackgroundFloodFill
@@ -130,24 +131,28 @@ public sealed class BackgroundFloodFill
         var frontier = _fbpwFrontier;
         frontier.Clear();
 
-        // Кайма по x во всю высоту, кайма по y только на оставшейся ширине:
-        // угол иначе был бы посеян дважды и попал бы в волну двумя записями.
-        int columnStart = dx > 0 ? w - dx : 0;
-        int columnCount = Math.Abs(dx);
-        if (columnCount > 0)
+        // Полосы считает TerrainScrollBands: кайма по x во всю высоту, кайма
+        // по y только на оставшейся ширине. Угол иначе был бы посеян дважды
+        // и попал бы в волну двумя записями — это не лишняя работа, а другой
+        // результат заливки.
+        //
+        // Кайма нулевая: сеется ровно то, что вошло. Клетки старой границы
+        // пересевать не нужно — их значение уже разрешено, и ниже они входят
+        // в волну как источники.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(w, h, dx, dy);
+        RectInt column = bands.ColumnBand;
+        RectInt row = bands.RowBand;
+
+        if (column.width > 0)
         {
-            CacheRegion(columnStart, 0, columnCount, h, cellCache);
-            SeedBorderRegion(columnStart, columnCount, 0, h, frontier);
+            CacheRegion(column.xMin, column.yMin, column.width, column.height, cellCache);
+            SeedBorderRegion(column.xMin, column.width, column.yMin, column.height, frontier);
         }
 
-        int rowStart = dy > 0 ? h - dy : 0;
-        int rowCount = Math.Abs(dy);
-        int remainingStart = dx > 0 ? 0 : columnCount;
-        int remainingCount = w - columnCount;
-        if (rowCount > 0 && remainingCount > 0)
+        if (row.width > 0 && row.height > 0)
         {
-            CacheRegion(remainingStart, rowStart, remainingCount, rowCount, cellCache);
-            SeedBorderRegion(remainingStart, remainingCount, rowStart, rowCount, frontier);
+            CacheRegion(row.xMin, row.yMin, row.width, row.height, cellCache);
+            SeedBorderRegion(row.xMin, row.width, row.yMin, row.height, frontier);
         }
 
         // Линия уже разрешённой внутренности вплотную к кайме — тоже
@@ -156,16 +161,14 @@ public sealed class BackgroundFloodFill
         // а внутренность источником не была. Волна тогда не доходила вовсе,
         // и кайма целиком уходила в Empty — на каждом сдвиге по полосе,
         // пока фон не становился пустым по всему экрану.
-        if (columnCount > 0)
+        if (column.width > 0)
         {
-            int insideColumn = dx > 0 ? columnStart - 1 : columnCount;
-            SeedResolvedColumn(insideColumn, 0, h, frontier);
+            SeedResolvedColumn(dx > 0 ? column.xMin - 1 : column.xMax, 0, h, frontier);
         }
 
-        if (rowCount > 0 && remainingCount > 0)
+        if (row.width > 0 && row.height > 0)
         {
-            int insideRow = dy > 0 ? rowStart - 1 : rowCount;
-            SeedResolvedRow(insideRow, remainingStart, remainingCount, frontier);
+            SeedResolvedRow(dy > 0 ? row.yMin - 1 : row.yMax, row.xMin, row.width, frontier);
         }
 
         // Волна заливает только неразрешённые клетки каймы. Раньше она
@@ -173,14 +176,14 @@ public sealed class BackgroundFloodFill
         // внутренность при этом перещёлкивалась на ничьих ~10% клеток.
         FBPWPropagate(frontier, onlyUnresolved: true);
 
-        if (columnCount > 0)
+        if (column.width > 0)
         {
-            ReplaceUnloadedWithEmpty(columnStart, columnCount, 0, h);
+            ReplaceUnloadedWithEmpty(column.xMin, column.width, column.yMin, column.height);
         }
 
-        if (rowCount > 0)
+        if (row.width > 0 && row.height > 0)
         {
-            ReplaceUnloadedWithEmpty(0, w, rowStart, rowCount);
+            ReplaceUnloadedWithEmpty(row.xMin, row.width, row.yMin, row.height);
         }
     }
 

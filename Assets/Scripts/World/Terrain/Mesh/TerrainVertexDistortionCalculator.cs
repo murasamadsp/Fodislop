@@ -84,78 +84,32 @@ public sealed class TerrainVertexDistortionCalculator
     {
         EnsureCapacity(meshWidth, meshHeight);
 
+        // Сетка узлов на единицу больше сетки клеток: у окна w×h ровно
+        // (w+1)×(h+1) углов.
         int gw = meshWidth + 1;
         int gh = meshHeight + 1;
 
         GridVertexOffsets.Scroll(dx, dy);
 
-        int vxStart = 0;
-        int vxLen = 0;
-        int vyStart = 0;
-        int vyLen = 0;
+        // Кайма в один узел: узел смещается по четырём клеткам вокруг себя, и
+        // у узла на старой границе клетка снаружи только что появилась.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(
+            gw, gh, dx, dy, neighbourMargin: 1);
+        CalculateBand(cellCache, bands.ColumnBand, worldWidth, worldHeight);
+        CalculateBand(cellCache, bands.RowBand, worldWidth, worldHeight);
+    }
 
-        if (dx > 0)
+    private void CalculateBand(
+        TerrainCellCache cellCache,
+        RectInt band,
+        int worldWidth,
+        int worldHeight)
+    {
+        for (int x = band.xMin; x < band.xMax; x++)
         {
-            vxStart = Mathf.Max(0, gw - dx - 1);
-            vxLen = gw - vxStart;
-        }
-        else if (dx < 0)
-        {
-            vxStart = 0;
-            vxLen = Mathf.Min(gw, -dx + 1);
-        }
-
-        if (dy > 0)
-        {
-            vyStart = Mathf.Max(0, gh - dy - 1);
-            vyLen = gh - vyStart;
-        }
-        else if (dy < 0)
-        {
-            vyStart = 0;
-            vyLen = Mathf.Min(gh, -dy + 1);
-        }
-
-        if (vxLen > 0 || vyLen > 0)
-        {
-            if (vxLen > 0)
+            for (int y = band.yMin; y < band.yMax; y++)
             {
-                for (int x = vxStart; x < vxStart + vxLen; x++)
-                {
-                    for (int y = 0; y < gh; y++)
-                    {
-                        CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
-                    }
-                }
-            }
-
-            if (vyLen > 0 && vxLen < gw)
-            {
-                int xStart = 0;
-                int xEnd = gw;
-
-                if (vxLen > 0)
-                {
-                    if (dx > 0)
-                    {
-                        xEnd = vxStart;
-                    }
-                    else
-                    {
-                        xStart = vxLen;
-                    }
-                }
-
-                if (xStart < xEnd)
-                {
-                    for (int y = vyStart; y < vyStart + vyLen; y++)
-                    {
-                        for (int x = xStart; x < xEnd; x++)
-                        {
-                            CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
-                        }
-                    }
-                }
+                CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
             }
         }
     }

@@ -65,73 +65,21 @@ public sealed class TerrainCellMaskCalculator
         CellReliefMasks.Scroll(dx, dy);
         CellSolidBoundaryMasks.Scroll(dx, dy);
 
-        int cxStart = 0;
-        int cxLen = 0;
-        int cyStart = 0;
-        int cyLen = 0;
+        // Кайма в одну клетку: маска клетки описывает её восемь соседей, и у
+        // клетки на старой границе сосед снаружи только что появился.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(
+            meshWidth, meshHeight, dx, dy, neighbourMargin: 1);
+        CalculateBand(cellCache, bands.ColumnBand);
+        CalculateBand(cellCache, bands.RowBand);
+    }
 
-        if (dx > 0)
+    private void CalculateBand(TerrainCellCache cellCache, RectInt band)
+    {
+        for (int x = band.xMin; x < band.xMax; x++)
         {
-            cxStart = Mathf.Max(0, meshWidth - dx - 1);
-            cxLen = meshWidth - cxStart;
-        }
-        else if (dx < 0)
-        {
-            cxStart = 0;
-            cxLen = Mathf.Min(meshWidth, -dx + 1);
-        }
-
-        if (dy > 0)
-        {
-            cyStart = Mathf.Max(0, meshHeight - dy - 1);
-            cyLen = meshHeight - cyStart;
-        }
-        else if (dy < 0)
-        {
-            cyStart = 0;
-            cyLen = Mathf.Min(meshHeight, -dy + 1);
-        }
-
-        if (cxLen > 0 || cyLen > 0)
-        {
-            if (cxLen > 0)
+            for (int y = band.yMin; y < band.yMax; y++)
             {
-                for (int x = cxStart; x < cxStart + cxLen; x++)
-                {
-                    for (int y = 0; y < meshHeight; y++)
-                    {
-                        CalculateCellNode(cellCache, x, y);
-                    }
-                }
-            }
-
-            if (cyLen > 0 && cxLen < meshWidth)
-            {
-                int xStart = 0;
-                int xEnd = meshWidth;
-
-                if (cxLen > 0)
-                {
-                    if (dx > 0)
-                    {
-                        xEnd = cxStart;
-                    }
-                    else
-                    {
-                        xStart = cxLen;
-                    }
-                }
-
-                if (xStart < xEnd)
-                {
-                    for (int y = cyStart; y < cyStart + cyLen; y++)
-                    {
-                        for (int x = xStart; x < xEnd; x++)
-                        {
-                            CalculateCellNode(cellCache, x, y);
-                        }
-                    }
-                }
+                CalculateCellNode(cellCache, x, y);
             }
         }
     }

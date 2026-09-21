@@ -248,45 +248,24 @@ public class TerrainCellCache : ICachedCellDataProvider
             SetCachedData(cx, cy, CreateCachedData(type, meta));
         }
 
-        if (dx > 0)
+        // Кайма нулевая: клетка кэша читается сама по себе, соседей здесь
+        // никто не смотрит. Полоса по y берёт только ту ширину, которую не
+        // накрыла полоса по x, — раньше угол заполнялся дважды.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(
+            _cacheWidth, _cacheHeight, dx, dy);
+        for (int x = bands.ColumnBand.xMin; x < bands.ColumnBand.xMax; x++)
         {
-            for (int x = _cacheWidth - dx; x < _cacheWidth; x++)
+            for (int y = bands.ColumnBand.yMin; y < bands.ColumnBand.yMax; y++)
             {
-                for (int y = 0; y < _cacheHeight; y++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
-            }
-        }
-        else if (dx < 0)
-        {
-            for (int x = 0; x < -dx; x++)
-            {
-                for (int y = 0; y < _cacheHeight; y++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
+                FillCell(x, y, ref lastChunkIndex, ref currentChunk);
             }
         }
 
-        if (dy > 0)
+        for (int x = bands.RowBand.xMin; x < bands.RowBand.xMax; x++)
         {
-            for (int y = _cacheHeight - dy; y < _cacheHeight; y++)
+            for (int y = bands.RowBand.yMin; y < bands.RowBand.yMax; y++)
             {
-                for (int x = 0; x < _cacheWidth; x++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
-            }
-        }
-        else if (dy < 0)
-        {
-            for (int y = 0; y < -dy; y++)
-            {
-                for (int x = 0; x < _cacheWidth; x++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
+                FillCell(x, y, ref lastChunkIndex, ref currentChunk);
             }
         }
 

@@ -134,25 +134,12 @@ public sealed class TerrainCellBuilder : IDisposable
             _textureIndex.RemoveScrolledOutCells(minX, minY, dx, dy, _width, _height);
         }
 
-        TerrainMeshScroller.GetBandExtents(_width, dx, out int bandXStart, out int bandXLength);
-        TerrainMeshScroller.GetBandExtents(_height, dy, out int bandYStart, out int bandYLength);
-
-        if (bandXLength > 0)
-        {
-            FillRect(bandXStart, bandXStart + bandXLength, 0, _height, minX, minY, sources);
-        }
-
-        if (bandYLength > 0 && bandXLength < _width)
-        {
-            // Полоса по y берёт только ширину, не покрытую полосой по x:
-            // угол иначе был бы собран дважды.
-            int remainingStart = dx > 0 ? 0 : bandXLength;
-            int remainingEnd = dx > 0 ? bandXStart : _width;
-            if (remainingStart < remainingEnd)
-            {
-                FillRect(remainingStart, remainingEnd, bandYStart, bandYStart + bandYLength, minX, minY, sources);
-            }
-        }
+        // Кайма в одну клетку: тексель клетки несёт маски соседства, и у
+        // клетки на старой границе сосед снаружи только что появился.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(
+            _width, _height, dx, dy, neighbourMargin: 1);
+        FillBand(bands.ColumnBand, minX, minY, sources);
+        FillBand(bands.RowBand, minX, minY, sources);
     }
 
     public void BuildRegion(
@@ -340,6 +327,9 @@ public sealed class TerrainCellBuilder : IDisposable
 
     private bool CanBuild(TerrainCellSources sources) =>
         _textures.IsAllocated && sources.Atlases != null && sources.Atlases.Count > 0;
+
+    private void FillBand(RectInt band, int minX, int minY, TerrainCellSources sources) =>
+        FillRect(band.xMin, band.xMax, band.yMin, band.yMax, minX, minY, sources);
 
     private void FillRect(int startX, int endX, int startY, int endY, int minX, int minY, TerrainCellSources sources)
     {
