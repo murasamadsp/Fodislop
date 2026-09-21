@@ -66,18 +66,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             #define EPS 0.0001
 
-            struct Attributes
-            {
-                float4 positionOS   : POSITION;
-                float2 uv           : TEXCOORD0;
-                float4 color        : COLOR;
-                float4 subAtlasRect : TEXCOORD1;
-                float4 tileSizeUV   : TEXCOORD2;
-                float4 worldPosAttr : TEXCOORD3;
-                float4 animData     : TEXCOORD4;
-                float4 packedData   : TEXCOORD5;
-                float4 glowAttr     : TEXCOORD6;
-            };
+            TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
+            TEXTURE2D(_PrismaticFlowMap);
+            SAMPLER(sampler_PrismaticFlowMap);
+            TEXTURE2D(_FlowMap);
+            SAMPLER(sampler_FlowMap);
+
+            #include "Assets/Shaders/TerrainMaterialCBuffer.hlsl"
+            #include "Assets/Shaders/TerrainPassCommon.hlsl"
 
             struct Varyings
             {
@@ -96,60 +93,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 nointerpolation float4 geometryCornersX : TEXCOORD10;
                 nointerpolation float4 geometryCornersY : TEXCOORD11;
             };
-
-            TEXTURE2D(_BaseMap);
-            SAMPLER(sampler_BaseMap);
-            TEXTURE2D(_PrismaticFlowMap);
-            SAMPLER(sampler_PrismaticFlowMap);
-            TEXTURE2D(_FlowMap);
-            SAMPLER(sampler_FlowMap);
-
-            // ВСЁ, ЧТО ЗАВИСИТ ОТ МАТЕРИАЛА, ОБЯЗАНО ЛЕЖАТЬ ЗДЕСЬ.
-            //
-            // SRP Batcher склеивает вызовы отрисовки только у шейдеров, где ни
-            // одно свойство материала не объявлено снаружи UnityPerMaterial.
-            // `_BaseMap_TexelSize` Unity заводит сам под текстуру _BaseMap, то
-            // есть это свойство материала; стоя снаружи, оно ломало совместимость
-            // целиком, и батчер молча выключался на всём террейне — счётчик
-            // пакетов показывал ноль при трёх сотнях смен материала.
-            CBUFFER_START(UnityPerMaterial)
-                float4 _ShimmerColor;
-                float4 _FlowScale;
-                float _ShimmerSpeedScale;
-                float _PulseSpeedScale;
-                float4 _DebugColor;
-                float _DebugMode;
-                float4 _BaseMap_TexelSize;
-                float4 _FlowMap_TexelSize;
-                float4 _TerrainDecalAtlas_TexelSize;
-                float _TerrainAtlasIndex;
-                float4 _TerrainAtlas0_TexelSize;
-                float4 _TerrainAtlas1_TexelSize;
-                float4 _TerrainAtlas2_TexelSize;
-                float4 _TerrainAtlas3_TexelSize;
-                float4 _TerrainAtlas4_TexelSize;
-                float4 _TerrainAtlas5_TexelSize;
-                float4 _TerrainAtlas6_TexelSize;
-                float4 _TerrainAtlas7_TexelSize;
-            CBUFFER_END
-
-            float4 GetAtlasTexelSize(int slot)
-            {
-            #if defined(KERN_TERRAIN_CELLS)
-                return TerrainAtlasTexelSize(
-                    slot,
-                    _TerrainAtlas0_TexelSize,
-                    _TerrainAtlas1_TexelSize,
-                    _TerrainAtlas2_TexelSize,
-                    _TerrainAtlas3_TexelSize,
-                    _TerrainAtlas4_TexelSize,
-                    _TerrainAtlas5_TexelSize,
-                    _TerrainAtlas6_TexelSize,
-                    _TerrainAtlas7_TexelSize);
-            #else
-                return _BaseMap_TexelSize;
-            #endif
-            }
 
             half4 SampleAtlasColor(int slot, float2 uv)
             {
@@ -182,60 +125,18 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             }
 
 
-            float3 SampleFlowMap(float2 worldPos)
-            {
-                return SAMPLE_TEXTURE2D(
-                    _FlowMap,
-                    sampler_FlowMap,
-                    worldPos / _FlowScale.xy).rgb;
-            }
-
-            Varyings vert (Attributes input)
+            Varyings vert (TerrainVertexInput input)
             {
                 Varyings output;
             #if defined(KERN_TERRAIN_CELLS)
-                TerrainCellVertex cell = LoadTerrainCellVertex(input.positionOS.xyz, input.uv);
-                output.positionCS = cell.atlasIndex >= 0.0
-                    ? TransformObjectToHClip(cell.positionOS)
-                    : TerrainCulledPosition();
-                output.atlasIndex = cell.atlasIndex;
-                output.uv = cell.uv;
-                output.color = cell.color;
-                output.subAtlasRect = cell.subAtlasRect;
-                output.tileSizeUV = cell.tileSizeUV;
-                output.worldPos = cell.worldPos;
+                TERRAIN_RESOLVE_CELL_VERTEX(input, output)
                 output.worldPosition = TransformObjectToWorld(cell.positionOS);
-                output.glowData = cell.glowData;
-                output.geometryCornersX = cell.geometryCornersX;
-                output.geometryCornersY = cell.geometryCornersY;
-                output.animData = cell.animData;
-                output.packedData = cell.packedData;
-                output.isForeground = cell.layer > 0.5 ? 1.0 : 0.0;
+                return output;
+            #else
+                TERRAIN_RESOLVE_ATTRIBUTE_VERTEX(input, output)
+                output.worldPosition = TransformObjectToWorld(input.positionOS.xyz);
                 return output;
             #endif
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
-                output.uv = input.uv;
-                output.color = input.color;
-                output.subAtlasRect = input.subAtlasRect;
-                output.tileSizeUV = input.tileSizeUV;
-                output.worldPos = input.worldPosAttr;
-                output.worldPosition = TransformObjectToWorld(input.positionOS.xyz);
-                output.glowData = input.glowAttr;
-                output.animData = input.animData;
-                output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
-                output.packedData = input.packedData;
-                // Канонические углы клетки, а не нули. Этот путь вершин несёт
-                // уже смещённый полигон в POSITION, поэтому вырезание по
-                // геометрии ему не нужно (applyGeometry здесь ноль), но кайма
-                // нормирует выборку по размаху этих углов. При нулях размах
-                // нулевой, зажимается в 0.0001, и клеточная координата
-                // становится (1,1) на каждом фрагменте: оверлей дверей
-                // рисовался плоским прямоугольником в 1/8 яркости.
-                output.geometryCornersX = float4(0.0, 1.0, 1.0, 0.0);
-                output.geometryCornersY = float4(0.0, 0.0, 1.0, 1.0);
-                output.atlasIndex = 0.0;
-
-                return output;
             }
 
             half4 frag (Varyings input) : SV_Target
@@ -328,7 +229,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
                 int atlasSlot = (int)round(input.atlasIndex);
-                float4 atlasTexelSize = GetAtlasTexelSize(atlasSlot);
+                float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(atlasSlot);
 
                 TerrainTileUvResult tileUV = ResolveTerrainTileUV(
                     input.uv,
@@ -347,20 +248,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 }
 
                 int animType = (int)(input.animData.x + 0.5);
-                float3 flowSample = 0.0;
-                if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
-                {
-                    flowSample = SAMPLE_TEXTURE2D(_PrismaticFlowMap, sampler_PrismaticFlowMap,
-                        PrismaticCrystalFlowUV(input.worldPos.xy, input.packedData.yz)).rgb;
-                }
-                else if (TerrainAnimationUsesFlowMap(animType, animationProfile))
-                {
-                    // Geometric quad coordinates stay continuous when atlas
-                    // UVs are rotated or mirrored by terrain autotiling.
-                    float2 flowPosition = input.worldPos.xy +
-                        input.packedData.yz * float2(1.0, -1.0);
-                    flowSample = SampleFlowMap(flowPosition);
-                }
+                float3 flowSample = TerrainResolveFlowSample(
+                    animationProfile, animType, input.worldPos, input.packedData, _FlowScale);
 
                 float2 finalUV = AnimateTerrainSampleUV(
                     tileUV.finalUV,
@@ -385,7 +274,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     finalRGB,
                     texColor.rgb,
                     input.uv,
-                    input.worldPos.xy + input.packedData.yz * float2(1.0, -1.0),
+                    TerrainAnimationWorldPosition(input.worldPos, input.packedData),
                     animType,
                     animationProfile,
                     input.animData.y,
@@ -451,69 +340,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             TEXTURE2D(_FlowMap);
             SAMPLER(sampler_FlowMap);
 
-            // Тот же UnityPerMaterial, что и в пассе Universal2D, слово в слово.
-            //
-            // SRP Batcher требует, чтобы КАЖДЫЙ пасс шейдера объявлял этот
-            // блок и объявлял его одинаково. Пасс без блока делает несовместимым
-            // весь шейдер целиком, а не только себя, — и батчер выключался на
-            // террейне даже после того, как `_BaseMap_TexelSize` переехал
-            // внутрь. Здесь ни одно из этих свойств не читается; блок стоит
-            // ради совпадения раскладки, и убирать его как «мёртвый» нельзя.
-            CBUFFER_START(UnityPerMaterial)
-                float4 _ShimmerColor;
-                float4 _FlowScale;
-                float _ShimmerSpeedScale;
-                float _PulseSpeedScale;
-                float4 _DebugColor;
-                float _DebugMode;
-                float4 _BaseMap_TexelSize;
-                float4 _FlowMap_TexelSize;
-                float4 _TerrainDecalAtlas_TexelSize;
-                float _TerrainAtlasIndex;
-                float4 _TerrainAtlas0_TexelSize;
-                float4 _TerrainAtlas1_TexelSize;
-                float4 _TerrainAtlas2_TexelSize;
-                float4 _TerrainAtlas3_TexelSize;
-                float4 _TerrainAtlas4_TexelSize;
-                float4 _TerrainAtlas5_TexelSize;
-                float4 _TerrainAtlas6_TexelSize;
-                float4 _TerrainAtlas7_TexelSize;
-            CBUFFER_END
-
             // Альбедо поля — из атласа тем же UV-конвейером, что видимый пасс.
             TEXTURE2D(_BaseMap);
 
-            float4 GetFieldAtlasTexelSize(int slot)
-            {
-            #if defined(KERN_TERRAIN_CELLS)
-                return TerrainAtlasTexelSize(
-                    slot,
-                    _TerrainAtlas0_TexelSize,
-                    _TerrainAtlas1_TexelSize,
-                    _TerrainAtlas2_TexelSize,
-                    _TerrainAtlas3_TexelSize,
-                    _TerrainAtlas4_TexelSize,
-                    _TerrainAtlas5_TexelSize,
-                    _TerrainAtlas6_TexelSize,
-                    _TerrainAtlas7_TexelSize);
-            #else
-                return _BaseMap_TexelSize;
-            #endif
-            }
+            #include "Assets/Shaders/TerrainMaterialCBuffer.hlsl"
+            #include "Assets/Shaders/TerrainPassCommon.hlsl"
 
-            struct MaterialFieldAttributes
-            {
-                float4 positionOS   : POSITION;
-                float2 uv           : TEXCOORD0;
-                float4 color        : COLOR;
-                float4 subAtlasRect : TEXCOORD1;
-                float4 tileSizeUV   : TEXCOORD2;
-                float4 worldPosAttr : TEXCOORD3;
-                float4 animData     : TEXCOORD4;
-                float4 packedData   : TEXCOORD5;
-                float4 glowAttr     : TEXCOORD6;
-            };
-
+            // Свой набор TEXCOORD: полю материалов не нужна мировая позиция —
+            // свет оно не считает, оно его кормит.
             struct MaterialFieldVaryings
             {
                 float4 positionCS   : SV_POSITION;
@@ -537,48 +371,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 half4 emission : SV_Target1;
             };
 
-            MaterialFieldVaryings MaterialFieldVert(MaterialFieldAttributes input)
+            MaterialFieldVaryings MaterialFieldVert(TerrainVertexInput input)
             {
                 MaterialFieldVaryings output;
             #if defined(KERN_TERRAIN_CELLS)
-                TerrainCellVertex cell = LoadTerrainCellVertex(input.positionOS.xyz, input.uv);
-                output.positionCS = cell.atlasIndex >= 0.0
-                    ? TransformObjectToHClip(cell.positionOS)
-                    : TerrainCulledPosition();
-                output.uv = cell.uv;
-                output.color = cell.color;
-                output.worldPos = cell.worldPos;
-                output.animData = cell.animData;
-                output.packedData = cell.packedData;
-                output.glowData = cell.glowData;
-                output.geometryCornersX = cell.geometryCornersX;
-                output.geometryCornersY = cell.geometryCornersY;
-                output.isForeground = cell.layer > 0.5 ? 1.0 : 0.0;
-                output.subAtlasRect = cell.subAtlasRect;
-                output.tileSizeUV = cell.tileSizeUV;
-                output.atlasIndex = cell.atlasIndex;
-                return output;
+                TERRAIN_RESOLVE_CELL_VERTEX(input, output)
+            #else
+                TERRAIN_RESOLVE_ATTRIBUTE_VERTEX(input, output)
             #endif
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
-                output.uv = input.uv;
-                output.color = input.color;
-                output.worldPos = input.worldPosAttr;
-                output.animData = input.animData;
-                output.packedData = input.packedData;
-                // Канонические углы клетки, а не нули. Этот путь вершин несёт
-                // уже смещённый полигон в POSITION, поэтому вырезание по
-                // геометрии ему не нужно (applyGeometry здесь ноль), но кайма
-                // нормирует выборку по размаху этих углов. При нулях размах
-                // нулевой, зажимается в 0.0001, и клеточная координата
-                // становится (1,1) на каждом фрагменте: оверлей дверей
-                // рисовался плоским прямоугольником в 1/8 яркости.
-                output.geometryCornersX = float4(0.0, 1.0, 1.0, 0.0);
-                output.geometryCornersY = float4(0.0, 0.0, 1.0, 1.0);
-                output.glowData = input.glowAttr;
-                output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
-                output.subAtlasRect = input.subAtlasRect;
-                output.tileSizeUV = input.tileSizeUV;
-                output.atlasIndex = 0.0;
                 return output;
             }
 
@@ -641,26 +441,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 float isForeground = input.isForeground;
                 int albedoAtlasSlot = (int)round(input.atlasIndex);
-                float4 atlasTexelSize = GetFieldAtlasTexelSize(albedoAtlasSlot);
+                float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(albedoAtlasSlot);
                 int albedoAnimationType = (int)(input.animData.x + 0.5);
                 int albedoAnimationProfile = surface.animationProfile;
-                float3 flowSample = 0.0;
-                if (albedoAnimationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
-                {
-                    flowSample = SAMPLE_TEXTURE2D(_PrismaticFlowMap, sampler_PrismaticFlowMap,
-                        PrismaticCrystalFlowUV(input.worldPos.xy, input.packedData.yz)).rgb;
-                }
-                else if (TerrainAnimationUsesFlowMap(
+                float3 flowSample = TerrainResolveFlowSample(
+                    albedoAnimationProfile,
                     albedoAnimationType,
-                    albedoAnimationProfile))
-                {
-                    float2 flowPosition = input.worldPos.xy +
-                        input.packedData.yz * float2(1.0, -1.0);
-                    flowSample = SAMPLE_TEXTURE2D(
-                        _FlowMap,
-                        sampler_FlowMap,
-                        flowPosition / _FlowScale.xy).rgb;
-                }
+                    input.worldPos,
+                    input.packedData,
+                    _FlowScale);
 
                 half4 albedoTexel = SampleFieldAlbedoTexel(
                     input.uv,
@@ -712,7 +501,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     surfaceAlbedo,
                     surfaceAlbedo,
                     input.uv,
-                    input.worldPos.xy + input.packedData.yz * float2(1.0, -1.0),
+                    TerrainAnimationWorldPosition(input.worldPos, input.packedData),
                     albedoAnimationType,
                     albedoAnimationProfile,
                     input.animData.y,
