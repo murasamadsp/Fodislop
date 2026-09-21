@@ -80,6 +80,7 @@ namespace Kern.World.Terrain
         private readonly TerrainFramePlanner _planner = new();
         private readonly TerrainMeshManager _meshManager = new();
         private readonly TerrainPresentationWindow _presentation = new();
+        private readonly TerrainDiagnosticLog _diag = new();
 
         private MeshFilter? _meshFilter;
         private MeshRenderer? _meshRenderer;
@@ -89,7 +90,6 @@ namespace Kern.World.Terrain
         private RectInt _lightingViewport;
         private bool _fatalBuildError;
         private ulong _terrainContentRevision = 1;
-        private int _diagLogged;
 
         public bool BypassCpuMeshRebuild
         {
@@ -217,7 +217,7 @@ namespace Kern.World.Terrain
                 return;
             }
 
-            LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
+            _diag.Once(1 << 1, "[TerrainDiag] gate passed: storage ready");
             if (!TryResolveCamera())
             {
                 return;
@@ -291,14 +291,20 @@ namespace Kern.World.Terrain
                 _telemetry.TerrainGpuUploadTimeMs = uploadMs;
             }
 
-            _presentation.Update(
-                _planner.Policy,
-                framePlan.CameraViewport,
-                _window.Origin,
-                _window.Width,
-                _window.Height,
-                _cellSize,
-                _window.CellsCommitted && _window.HasOrigin ? _meshFilter : null);
+            // Меш показа ставится только по собранному окну: до первой
+            // выгрузки текселей его размеры не с чем согласовывать.
+            if (_window.CellsCommitted && _window.HasOrigin &&
+                _window.Width > 0 && _window.Height > 0)
+            {
+                _presentation.Update(
+                    _planner.Policy,
+                    framePlan.CameraViewport,
+                    _window.Origin,
+                    _window.Width,
+                    _window.Height,
+                    _cellSize,
+                    _meshFilter);
+            }
 
             // Terrain cache и lighting cache имеют разные окна жизни. Terrain
             // может сдвинуться на выровненную границу, пока камера всё ещё
@@ -350,6 +356,9 @@ namespace Kern.World.Terrain
         {
             if (failure == null)
             {
+                // Не отказ, а «ещё нечем»: атласы не приехали. Кадр пропущен,
+                // террейн жив и попробует снова.
+                _diag.Once(1 << 6, "[TerrainDiag] BAIL: build sources not ready");
                 return;
             }
 
@@ -384,21 +393,9 @@ namespace Kern.World.Terrain
             }
         }
 
-        [System.Diagnostics.Conditional("KERN_TERRAIN_DIAG")]
-        private void LogDiag(int bit, string message)
-        {
-            if ((_diagLogged & bit) != 0)
-            {
-                return;
-            }
-
-            _diagLogged |= bit;
-            Debug.Log(message);
-        }
-
         private void OnTextureLoaded(string filename, Texture2D texture)
         {
-            LogDiag(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
+            _diag.Once(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
 
             if (TerrainCellTextureName.TryParseCellType(filename, out CellType cellType))
             {
@@ -442,11 +439,11 @@ namespace Kern.World.Terrain
 
             if (_mainCamera == null)
             {
-                LogDiag(1 << 2, "[TerrainDiag] camera NULL");
+                _diag.Once(1 << 2, "[TerrainDiag] camera NULL");
                 return false;
             }
 
-            LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
+            _diag.Once(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             return true;
         }
 
