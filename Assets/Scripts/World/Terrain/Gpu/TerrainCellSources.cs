@@ -15,7 +15,6 @@ public readonly record struct TerrainCellSources(
     int WorldWidth,
     int WorldHeight,
     IReadOnlyList<IAtlasDescriptor> Atlases,
-    bool UseColorLod,
     IMapDataProvider MapData,
     ITextureService TextureService)
 {

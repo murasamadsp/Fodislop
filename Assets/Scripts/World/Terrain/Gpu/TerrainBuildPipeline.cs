@@ -79,7 +79,6 @@ public sealed class TerrainBuildPipeline : IDisposable
             context.MapData.WorldWidth,
             context.MapData.WorldHeight,
             context.Atlases,
-            false,
             context.MapData,
             context.TextureService);
 

@@ -94,7 +94,6 @@ public sealed class TerrainTestWorld
             WorldWidth,
             WorldHeight,
             _atlases,
-            false,
             _mapData,
             _textures);
     }

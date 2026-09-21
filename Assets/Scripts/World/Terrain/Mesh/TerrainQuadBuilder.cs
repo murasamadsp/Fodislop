@@ -32,28 +32,36 @@ internal static class TerrainQuadBuilder
             CellType.BuildingCorner;
     }
 
-    public static int FillQuadData(
-        TerrainVertex[] vertexBuffer,
-        bool[] foregroundOverlayFlags,
-        float cellSize,
-        int x,
-        int y,
-        int gridX,
-        int unityY,
-        TerrainCellCache cellCache,
-        TerrainPrecalculator precalc,
-        BackgroundFloodFill bgFloodFill,
-        int worldWidth,
-        int worldHeight,
-        bool isBackground,
-        int vIdx,
-        IReadOnlyList<IAtlasDescriptor> atlases,
-        bool useColorLod,
-        ITerrainMetadataLookup metadataLookup)
+    /// <summary>
+    /// Собрать квад одного слоя клетки в четыре вершины.
+    /// </summary>
+    ///
+    /// Слой решает почти всё: фон берёт тип из карты заливки и остаётся
+    /// прямоугольным, передний план берёт тип клетки и несёт смещённую
+    /// геометрию, свет и кайму. Поэтому слой — это перечисление, а не булево
+    /// «isBackground» с индексом вершины, по которому раньше приходилось
+    /// угадывать, в какую половину буфера пишут.
+    public static TerrainQuadResult FillQuad(
+        in TerrainCellSources sources,
+        in TerrainQuadSite site,
+        TerrainQuadLayer layer,
+        Span<TerrainVertex> quad)
     {
+        TerrainCellCache cellCache = sources.CellCache;
+        TerrainPrecalculator precalc = sources.Precalc;
+        IReadOnlyList<IAtlasDescriptor> atlases = sources.Atlases;
+        int worldWidth = sources.WorldWidth;
+        int worldHeight = sources.WorldHeight;
+        int x = site.LocalX;
+        int y = site.LocalY;
+        int gridX = site.GridX;
+        int unityY = site.UnityY;
+        float cellSize = site.CellSize;
+        bool isBackground = layer == TerrainQuadLayer.Background;
+
         if (unityY < 0 || unityY >= worldHeight || gridX < 0 || gridX >= worldWidth)
         {
-            return -1;
+            return TerrainQuadResult.None;
         }
 
         int cx = x + 1;
@@ -63,17 +71,14 @@ internal static class TerrainQuadBuilder
         CachedCellData ccd = cellCache.GetCellData(cx, cy);
         CellType cellFgType = ccd.Type;
 
-        if (!isBackground)
-        {
-            foregroundOverlayFlags[vIdx / 8] = cellFgType == CellType.BuildingDoor;
-        }
+        bool isDoor = !isBackground && cellFgType == CellType.BuildingDoor;
 
         if (ccd.State != TerrainCellState.Loaded)
         {
-            return -1;
+            return TerrainQuadResult.NoAtlas(isDoor);
         }
 
-        CellType backgroundType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
+        CellType backgroundType = isBackground ? sources.FloodFill.Buffer[x, y] : cellFgType;
         if (isBackground && IsBuildingBlock(cellFgType) && (ccd.Properties & CellConfigProperties.Passable) != 0)
         {
             backgroundType = CellType.Road;
@@ -93,7 +98,7 @@ internal static class TerrainQuadBuilder
         if (!TerrainCellLayers.TryGetType(
             cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
         {
-            return -1;
+            return TerrainQuadResult.NoAtlas(isDoor);
         }
 
         bool isSameCell = !isBackground || cellType == cellFgType;
@@ -148,10 +153,10 @@ internal static class TerrainQuadBuilder
             off01);
         float anchorFlag = geometry.IsAnchored ? 1f : 0f;
 
-        vertexBuffer[vIdx + 0].Position = new Vector3(lx, ly, zOffset) + off00;
-        vertexBuffer[vIdx + 1].Position = new Vector3(lx + cellSize, ly, zOffset) + off10;
-        vertexBuffer[vIdx + 2].Position = new Vector3(lx + cellSize, ly + cellSize, zOffset) + off11;
-        vertexBuffer[vIdx + 3].Position = new Vector3(lx, ly + cellSize, zOffset) + off01;
+        quad[0].Position = new Vector3(lx, ly, zOffset) + off00;
+        quad[1].Position = new Vector3(lx + cellSize, ly, zOffset) + off10;
+        quad[2].Position = new Vector3(lx + cellSize, ly + cellSize, zOffset) + off11;
+        quad[3].Position = new Vector3(lx, ly + cellSize, zOffset) + off01;
 
         Vector2 uv0 = new Vector2(0, 0);
         Vector2 uv1 = new Vector2(1, 0);
@@ -219,16 +224,19 @@ internal static class TerrainQuadBuilder
             }
         }
 
-        vertexBuffer[vIdx + 0].UV0 = uv0;
-        vertexBuffer[vIdx + 1].UV0 = uv1;
-        vertexBuffer[vIdx + 2].UV0 = uv2;
-        vertexBuffer[vIdx + 3].UV0 = uv3;
+        quad[0].UV0 = uv0;
+        quad[1].UV0 = uv1;
+        quad[2].UV0 = uv2;
+        quad[3].UV0 = uv3;
 
-        bool useFallback = useColorLod || atlasRect.z < 0.0001f;
-        Color color = useFallback ? (Color)minimapColor : Color.white;
-
-        if (atlasRect.z < 0.0001f)
+        // Текстуры нет — клетка рисуется цветом миникарты и непрозрачной.
+        // Это не фолбек, а диагностический вид: так видно, какого типа клетки
+        // сервер не отдал, вместо тихой дыры в кадре.
+        bool hasAtlasRect = atlasRect.z >= 0.0001f;
+        Color color = Color.white;
+        if (!hasAtlasRect)
         {
+            color = (Color)minimapColor;
             color.a = 1f;
         }
 
@@ -236,7 +244,7 @@ internal static class TerrainQuadBuilder
             TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
         float animOffset = animationSettings.PaletteIndex;
 
-        if (!useFallback && animationSettings.Profile == TerrainAnimationProfile.Default &&
+        if (hasAtlasRect && animationSettings.Profile == TerrainAnimationProfile.Default &&
             animType == CellAnimationType.Blinking)
         {
             uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
@@ -244,7 +252,7 @@ internal static class TerrainQuadBuilder
             seed = seed ^ (seed >> 16);
             animOffset = (seed % 6283) / 1000f;
         }
-        else if (!useFallback &&
+        else if (hasAtlasRect &&
             animationSettings.Profile == TerrainAnimationProfile.FacetedCrystal)
         {
             uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
@@ -339,7 +347,7 @@ internal static class TerrainQuadBuilder
 
         for (int i = 0; i < 4; i++)
         {
-            ref TerrainVertex vertex = ref vertexBuffer[vIdx + i];
+            ref TerrainVertex vertex = ref quad[i];
             vertex.Color = color;
             vertex.UV1 = atlasRect;
             vertex.UV2 = tileSizeVec;
@@ -350,7 +358,7 @@ internal static class TerrainQuadBuilder
             vertex.UV6 = glowVec;
         }
 
-        return atlasIndex;
+        return new TerrainQuadResult(atlasIndex, isDoor);
     }
 
     private static CellRenderProperties GetRenderProperties(

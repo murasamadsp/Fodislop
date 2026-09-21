@@ -13,10 +13,16 @@ namespace Kern.World.Terrain;
 
 public sealed class TerrainCellBuilder : IDisposable
 {
+    // Восемь вершин: фон занимает 0..3, передний план 4..7. Один буфер на
+    // клетку, потому что решение «закрывает ли передний план фон целиком»
+    // смотрит на оба слоя сразу.
     private sealed class Scratch
     {
         public readonly TerrainVertex[] Vertices = new TerrainVertex[8];
-        public readonly bool[] Door = new bool[1];
+
+        public Span<TerrainVertex> Background => Vertices.AsSpan(0, 4);
+
+        public Span<TerrainVertex> Foreground => Vertices.AsSpan(4, 4);
     }
 
     private readonly TerrainCellDataTextures _textures = new();
@@ -255,11 +261,11 @@ public sealed class TerrainCellBuilder : IDisposable
                 continue;
             }
 
-            TerrainQuadBuilder.FillQuadData(
-                _mainScratch.Vertices, _mainScratch.Door, _cellSize,
-                x, y, minX + x, minY + y, sources.CellCache, sources.Precalc, sources.FloodFill,
-                sources.WorldWidth, sources.WorldHeight, false, 4, sources.Atlases, sources.UseColorLod,
-                sources.MetadataLookup);
+            TerrainQuadBuilder.FillQuad(
+                sources,
+                new TerrainQuadSite(x, y, minX + x, minY + y, _cellSize),
+                TerrainQuadLayer.Foreground,
+                _mainScratch.Foreground);
 
             int baseVertex = vertices.Count;
             for (int corner = 4; corner < 8; corner++)
@@ -361,25 +367,21 @@ public sealed class TerrainCellBuilder : IDisposable
         int gridX = minX + x;
         int unityY = minY + y;
         int quad = (x * _height) + y;
-        scratch.Door[0] = false;
+        var site = new TerrainQuadSite(x, y, gridX, unityY, _cellSize);
 
-        int background = TerrainQuadBuilder.FillQuadData(
-            scratch.Vertices, scratch.Door, _cellSize,
-            x, y, gridX, unityY, sources.CellCache, sources.Precalc, sources.FloodFill,
-            sources.WorldWidth, sources.WorldHeight, true, 0, sources.Atlases, sources.UseColorLod,
-            sources.MetadataLookup);
-        int foreground = TerrainQuadBuilder.FillQuadData(
-            scratch.Vertices, scratch.Door, _cellSize,
-            x, y, gridX, unityY, sources.CellCache, sources.Precalc, sources.FloodFill,
-            sources.WorldWidth, sources.WorldHeight, false, 4, sources.Atlases, sources.UseColorLod,
-            sources.MetadataLookup);
+        int background = TerrainQuadBuilder
+            .FillQuad(sources, site, TerrainQuadLayer.Background, scratch.Background)
+            .AtlasIndex;
+        TerrainQuadResult foregroundQuad = TerrainQuadBuilder.FillQuad(
+            sources, site, TerrainQuadLayer.Foreground, scratch.Foreground);
+        int foreground = foregroundQuad.AtlasIndex;
 
-        if (foreground >= 0 && scratch.Vertices[4].UV5x != 0)
+        if (foregroundQuad.HasAtlas && scratch.Vertices[4].UV5x != 0)
         {
             Interlocked.Increment(ref _lastFullBuildAnchoredForegroundCellCount);
         }
 
-        bool door = scratch.Door[0];
+        bool door = foregroundQuad.IsDoor;
         bool doorsChanged = door || _doorFlags[x, y];
 
         _foregroundAtlases[x, y] = foreground;
