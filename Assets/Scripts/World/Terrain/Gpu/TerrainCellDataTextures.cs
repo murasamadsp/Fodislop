@@ -160,6 +160,25 @@ public sealed class TerrainCellDataTextures : IDisposable
         _geometryY.Data[index] = texels.GeometryY;
     }
 
+    // Снимок текселя из управляемых массивов. Это ровно то, что уходит на
+    // GPU в Apply(): ни одного преобразования между этим чтением и загрузкой
+    // нет. Нужен тестам сборки как сравнимый результат.
+    internal TerrainCellTexels GetCell(int ringX, int ringY, int layer)
+    {
+        int row = (ringY * TerrainCellDataPacker.LayersPerCell) + layer;
+        int index = (row * MeshWidth) + ringX;
+        return new TerrainCellTexels(
+            _color.Data[index],
+            _meta.Data[index],
+            _atlasRect.Data[index],
+            _tileSize.Data[index],
+            _animation.Data[index],
+            _world.Data[index],
+            _glow.Data[index],
+            _geometryX.Data[index],
+            _geometryY.Data[index]);
+    }
+
     public void Apply()
     {
         if (!IsAllocated)

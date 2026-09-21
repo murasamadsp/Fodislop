@@ -49,8 +49,7 @@ internal static class TerrainQuadBuilder
         int vIdx,
         IReadOnlyList<IAtlasDescriptor> atlases,
         bool useColorLod,
-        MapManager mapManager,
-        ITextureService textureManager)
+        ITerrainMetadataLookup metadataLookup)
     {
         if (unityY < 0 || unityY >= worldHeight || gridX < 0 || gridX >= worldWidth)
         {
@@ -103,10 +102,7 @@ internal static class TerrainQuadBuilder
             isSameCell,
             in ccd,
             cellType,
-            cellCache,
-            mapManager,
-            textureManager,
-            atlases);
+            metadataLookup);
 
         Vector4 atlasRect = renderProps.AtlasRect;
         float uvTileSize = renderProps.UVTileSize;
@@ -361,10 +357,7 @@ internal static class TerrainQuadBuilder
         bool isSameCell,
         in CachedCellData ccd,
         CellType cellType,
-        TerrainCellCache cellCache,
-        MapManager mapManager,
-        ITextureService textureManager,
-        IReadOnlyList<IAtlasDescriptor> atlases)
+        ITerrainMetadataLookup metadataLookup)
     {
         if (isSameCell)
         {
@@ -381,7 +374,14 @@ internal static class TerrainQuadBuilder
                 ccd.AtlasIndex);
         }
 
-        CellMetadata meta = cellCache.GetMetadata(cellType, mapManager, textureManager, atlases);
+        // Без фолбеков: промах означает, что прогрев не покрыл тип. Тихая
+        // подстановка пустой метаданности нарисовала бы правдоподобную
+        // подделку вместо того, чтобы показать дефект.
+        if (!metadataLookup.TryGet(cellType, out CellMetadata meta))
+        {
+            throw new InvalidOperationException(
+                $"Terrain metadata for cell type '{cellType}' was not warmed before the build.");
+        }
 
         return new CellRenderProperties(
             meta.AtlasRect,

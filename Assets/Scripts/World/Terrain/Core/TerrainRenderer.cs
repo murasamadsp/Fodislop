@@ -21,7 +21,7 @@ namespace Kern.World.Terrain
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [DefaultExecutionOrder(100)]
-    public class TerrainRenderer : MonoBehaviour, ICachedCellDataProvider
+    public class TerrainRenderer : MonoBehaviour
     {
         private const int PresentationMarginCells = 4;
 
@@ -133,12 +133,6 @@ namespace Kern.World.Terrain
         private static readonly RebuildLedger.Entry _RebuildRefresh = RebuildLedger.Register("Террейн · полная: флаг обновления");
         private static readonly RebuildLedger.Entry _RebuildPatch = RebuildLedger.Register("Террейн · частичная: изменённые клетки");
 
-
-        public CachedCellInfo GetCell(int x, int y)
-        {
-            var c = _cellCache.GetCellData(x, y);
-            return new CachedCellInfo { Type = c.Type, Properties = c.Properties };
-        }
 
         public bool BypassCpuMeshRebuild
         {
@@ -1081,11 +1075,11 @@ namespace Kern.World.Terrain
                     // платила по площади за то, что сдвинулось на кайму.
                     if (canScrollCache)
                     {
-                        _backgroundFloodFill.ComputeScrolled(cacheDeltaX, cacheDeltaY, this);
+                        _backgroundFloodFill.ComputeScrolled(cacheDeltaX, cacheDeltaY, _cellCache);
                     }
                     else
                     {
-                        _backgroundFloodFill.ComputeFull(this);
+                        _backgroundFloodFill.ComputeFull(_cellCache);
                     }
                 }
 
@@ -1203,7 +1197,7 @@ namespace Kern.World.Terrain
 
                 _cellCache.UpdateRegion(dirtyMinX, dirtyMinY, countX, countY, _storage, _mapManager, textureService, atlases);
                 _precalc.PrecalculateRegion(_cellCache, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight);
-                _backgroundFloodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, this);
+                _backgroundFloodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, _cellCache);
                 _cellBuilder.BuildRegion(sources, minX, minY, localStartX, localStartY, countX, countY);
                 doorsTouched |= _cellBuilder.DoorsTouched;
             }

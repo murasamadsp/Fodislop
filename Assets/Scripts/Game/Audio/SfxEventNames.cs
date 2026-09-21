@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.Text;
+using MinesServer.Data;
 using MinesServer.Networking.Shared.Packets;
 
 namespace Kern.Game;

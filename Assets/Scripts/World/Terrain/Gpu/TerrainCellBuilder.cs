@@ -26,6 +26,7 @@ public sealed class TerrainCellBuilder : IDisposable
     private readonly HashSet<int> _doorQuads = [];
     private int[] _doorQuadScratch = [];
     private readonly TerrainCellTextureIndex _textureIndex = new();
+    private readonly TerrainMetadataWarmup _warmup = new();
     private bool _trackDoorQuads;
     private bool _trackTextureIndex;
     private int _width;
@@ -79,6 +80,10 @@ public sealed class TerrainCellBuilder : IDisposable
         _trackDoorQuads = false;
         _trackTextureIndex = false;
         _textures.MarkAllDirty();
+
+        // Типы разрешаются здесь и последовательно: FillCell ниже идёт из
+        // рабочих потоков и имеет право только читать.
+        _warmup.WarmRect(sources, 0, _width, 0, _height);
         Parallel.For(
             0,
             _width,
@@ -183,6 +188,7 @@ public sealed class TerrainCellBuilder : IDisposable
             return;
         }
 
+        _warmup.WarmRect(sources, 0, _width, 0, _height);
         _textureIndex.CollectRefreshQuads(cellTypes, minX, minY, _width, _height);
         List<int> refreshQuads = _textureIndex.TextureRefreshQuads;
         bool trackTextureIndex = _trackTextureIndex;
@@ -194,7 +200,7 @@ public sealed class TerrainCellBuilder : IDisposable
                 int quad = refreshQuads[index];
                 int x = quad / _height;
                 int y = quad % _height;
-                FillCell(x, y, minX, minY, sources, _mainScratch);
+                _doorsTouched |= FillCell(x, y, minX, minY, sources, _mainScratch);
             }
         }
         finally
@@ -266,7 +272,7 @@ public sealed class TerrainCellBuilder : IDisposable
                 _mainScratch.Vertices, _mainScratch.Door, _cellSize,
                 x, y, minX + x, minY + y, sources.CellCache, sources.Precalc, sources.FloodFill,
                 sources.WorldWidth, sources.WorldHeight, false, 4, sources.Atlases, sources.UseColorLod,
-                sources.MapManager, sources.TextureService);
+                sources.MetadataLookup);
 
             int baseVertex = vertices.Count;
             for (int corner = 4; corner < 8; corner++)
@@ -342,11 +348,12 @@ public sealed class TerrainCellBuilder : IDisposable
             return;
         }
 
+        _warmup.WarmRect(sources, startX, endX, startY, endY);
         for (int x = startX; x < endX; x++)
         {
             for (int y = startY; y < endY; y++)
             {
-                FillCell(x, y, minX, minY, sources, _mainScratch);
+                _doorsTouched |= FillCell(x, y, minX, minY, sources, _mainScratch);
             }
         }
 
@@ -357,7 +364,9 @@ public sealed class TerrainCellBuilder : IDisposable
             endY - startY);
     }
 
-    private void FillCell(int x, int y, int minX, int minY, TerrainCellSources sources, Scratch scratch)
+    // Возвращает признак «двери задеты» вместо записи в общее поле: полная
+    // сборка зовёт FillCell из Parallel.For, и такая запись была гонкой.
+    private bool FillCell(int x, int y, int minX, int minY, TerrainCellSources sources, Scratch scratch)
     {
         int gridX = minX + x;
         int unityY = minY + y;
@@ -368,12 +377,12 @@ public sealed class TerrainCellBuilder : IDisposable
             scratch.Vertices, scratch.Door, _cellSize,
             x, y, gridX, unityY, sources.CellCache, sources.Precalc, sources.FloodFill,
             sources.WorldWidth, sources.WorldHeight, true, 0, sources.Atlases, sources.UseColorLod,
-            sources.MapManager, sources.TextureService);
+            sources.MetadataLookup);
         int foreground = TerrainQuadBuilder.FillQuadData(
             scratch.Vertices, scratch.Door, _cellSize,
             x, y, gridX, unityY, sources.CellCache, sources.Precalc, sources.FloodFill,
             sources.WorldWidth, sources.WorldHeight, false, 4, sources.Atlases, sources.UseColorLod,
-            sources.MapManager, sources.TextureService);
+            sources.MetadataLookup);
 
         if (foreground >= 0 && scratch.Vertices[4].UV5x != 0)
         {
@@ -381,10 +390,7 @@ public sealed class TerrainCellBuilder : IDisposable
         }
 
         bool door = scratch.Door[0];
-        if (door || _doorFlags[x, y])
-        {
-            _doorsTouched = true;
-        }
+        bool doorsChanged = door || _doorFlags[x, y];
 
         _foregroundAtlases[x, y] = foreground;
         _doorFlags[x, y] = door;
@@ -424,6 +430,7 @@ public sealed class TerrainCellBuilder : IDisposable
         _textures.SetCell(
             ringX, ringY, TerrainCellDataPacker.ForegroundLayer,
             TerrainCellDataPacker.PackQuad(scratch.Vertices.AsSpan(4, 4), foreground));
+        return doorsChanged;
     }
 
     private void ScrollDoorQuads(int dx, int dy)

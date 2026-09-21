@@ -10,6 +10,5 @@
     <PackageReference Include="NUnit" Version="3.14.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
     <Compile Include="../../Assets/Scripts/Rendering/Settings/HDROutputController.cs" Link="HDROutputController.cs" />
-    <Compile Include="../../Assets/Scripts/Tests/Editor/Core/HDROutputControllerTests.cs" Link="HDROutputControllerTests.cs" />
   </ItemGroup>
 </Project>

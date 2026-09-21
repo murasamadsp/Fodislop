@@ -16,5 +16,10 @@ public readonly record struct TerrainCellSources(
     int WorldHeight,
     IReadOnlyList<IAtlasDescriptor> Atlases,
     bool UseColorLod,
-    MapManager MapManager,
-    ITextureService TextureService);
+    IMapDataProvider MapData,
+    ITextureService TextureService)
+{
+    // Только чтение уже разрешённых типов. Сборка клетки не имеет права
+    // разрешать тип сама: см. TerrainMetadataWarmup.
+    public ITerrainMetadataLookup MetadataLookup => CellCache.MetadataLookup;
+}

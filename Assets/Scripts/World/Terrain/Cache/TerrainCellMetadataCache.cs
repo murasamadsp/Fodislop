@@ -11,9 +11,24 @@ using UnityEngine;
 namespace Kern.World.Terrain;
 
 /// <summary>
+/// Читающая часть кэша метаданных: ровно то, что нужно сборке клетки.
+/// Реализация не аллоцирует, не трогает Unity-API и не меняет состояние,
+/// поэтому её можно звать из рабочих потоков <c>Parallel.For</c>.
+/// </summary>
+public interface ITerrainMetadataLookup
+{
+    bool TryGet(CellType type, out CellMetadata metadata);
+}
+
+/// <summary>
 /// Resolves, creates, and caches immutable CellMetadata and CachedCellData templates for cell types.
 /// </summary>
-public sealed class TerrainCellMetadataCache
+///
+/// Разрешение типа (<see cref="GetMetadata"/>) обязано идти с главного потока:
+/// оно читает конфиг мира, пишет в общий массив и дозаказывает недостающую
+/// текстуру через <see cref="ITextureService.RequestTexture"/>. Сборка клетки
+/// пользуется только <see cref="TryGet"/>.
+public sealed class TerrainCellMetadataCache : ITerrainMetadataLookup
 {
     private readonly CellMetadata[] _metadataLookup = new CellMetadata[65536];
 
@@ -34,14 +49,34 @@ public sealed class TerrainCellMetadataCache
         }
     }
 
-    public CellMetadata GetMetadata(
-        CellType type,
-        MapManager mm,
-        ITextureService wtm,
-        IReadOnlyList<IAtlasDescriptor> atlases)
+    // Чистое чтение уже разрешённого типа. Промах — не повод что-то
+    // досчитывать: значит, прогрев не покрыл тип, и это дефект вызывающего.
+    public bool TryGet(CellType type, out CellMetadata metadata)
     {
         int idx = (int)type;
         if ((uint)idx < (uint)_metadataLookup.Length && _metadataLookup[idx].IsPopulated)
+        {
+            metadata = _metadataLookup[idx];
+            return true;
+        }
+
+        metadata = default;
+        return false;
+    }
+
+    public CellMetadata GetMetadata(
+        CellType type,
+        IMapDataProvider mm,
+        ITextureService wtm,
+        IReadOnlyList<IAtlasDescriptor> atlases)
+    {
+        // Готовый тип заморожен: его rect и анимация больше не меняются.
+        // Неготовый перерешается, пока текстура не приедет, — иначе запись
+        // в кэш навсегда закрепила бы состояние «текстуры нет».
+        int idx = (int)type;
+        if ((uint)idx < (uint)_metadataLookup.Length &&
+            _metadataLookup[idx].IsPopulated &&
+            _metadataLookup[idx].IsTextureReady)
         {
             return _metadataLookup[idx];
         }
@@ -89,7 +124,9 @@ public sealed class TerrainCellMetadataCache
             IsPopulated = true,
         };
 
-        if (meta.IsTextureReady && (uint)idx < (uint)_metadataLookup.Length)
+        // Кладётся и неготовый тип: сборка клетки читает только этот массив
+        // и не имеет права разрешать тип сама.
+        if ((uint)idx < (uint)_metadataLookup.Length)
         {
             _metadataLookup[idx] = meta;
         }

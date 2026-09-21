@@ -5,11 +5,15 @@ using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.World;
+using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
-public class TerrainCellCache
+// Реализует ICachedCellDataProvider сам: заливке фона нужен тип и свойства
+// клетки, и брать их больше неоткуда. Раньше переходником служил
+// TerrainRenderer — MonoBehaviour в роли адаптера над собственным полем.
+public class TerrainCellCache : ICachedCellDataProvider
 {
     private readonly TerrainRingGrid<CachedCellData> _cellCache = new();
     private int _cacheMinX = int.MinValue;
@@ -51,7 +55,7 @@ public class TerrainCellCache
 
     public void RefreshTextureMetadata(
         HashSet<CellType> cellTypes,
-        MapManager mapManager,
+        IMapDataProvider mapManager,
         ITextureService textureService,
         IReadOnlyList<IAtlasDescriptor> atlases)
     {
@@ -77,6 +81,12 @@ public class TerrainCellCache
         }
     }
 
+    public CachedCellInfo GetCell(int x, int y)
+    {
+        CachedCellData data = GetCellData(x, y);
+        return new CachedCellInfo { Type = data.Type, Properties = data.Properties };
+    }
+
     public CachedCellData GetCellData(int x, int y)
     {
         if (x < 0 || x >= _cacheWidth || y < 0 || y >= _cacheHeight)
@@ -89,7 +99,7 @@ public class TerrainCellCache
         return _cellCache[x, y];
     }
 
-    public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
+    public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
     {
         if (wtm == null)
         {
@@ -144,7 +154,7 @@ public class TerrainCellCache
         wtm.RequestTexture(CellType.Empty);
     }
 
-    public void UpdateRegion(int gridMinX, int unityMinY, int width, int height, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
+    public void UpdateRegion(int gridMinX, int unityMinY, int width, int height, IWorldDataStorage mapStorage, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
     {
         if (wtm == null || atlases == null || mm == null || mapStorage == null || !mapStorage.IsReady)
         {
@@ -187,7 +197,7 @@ public class TerrainCellCache
         }
     }
 
-    public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
+    public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
     {
         if (wtm == null)
         {
@@ -318,8 +328,13 @@ public class TerrainCellCache
         return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
     }
 
-    public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases) =>
+    // Разрешение типа: главный поток. Пишет в кэш и дозаказывает текстуру.
+    public CellMetadata GetMetadata(CellType type, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases) =>
         _metadataCache.GetMetadata(type, mm, wtm, atlases);
+
+    // Чтение уже разрешённого типа: этим и только этим пользуется сборка
+    // клетки, в том числе из рабочих потоков.
+    public ITerrainMetadataLookup MetadataLookup => _metadataCache;
 
     public CachedCellData CreateCachedData(CellType type, CellMetadata meta) =>
         _metadataCache.CreateCachedData(type, meta);
