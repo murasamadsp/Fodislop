@@ -5,12 +5,18 @@ using MinesServer.Data;
 
 namespace Kern.World.Terrain;
 
+/// <summary>
+/// Какие клетки окна надо перечитать, когда приехала текстура типа.
+/// </summary>
+///
+/// Слоя два, и у каждого свой тип в одной и той же клетке: фон берёт тип из
+/// карты заливки, передний план — из карты мира. Текстура приезжает для типа,
+/// поэтому оба индекса спрашиваются отдельно, а результат склеивается: квад
+/// перечитывается один раз, даже если оба его слоя одного типа.
 internal sealed class TerrainCellTextureIndex
 {
-    private readonly Dictionary<CellType, HashSet<long>> _backgroundQuadsByType = [];
-    private readonly Dictionary<CellType, HashSet<long>> _foregroundQuadsByType = [];
-    private readonly Dictionary<long, CellType> _backgroundTypeByCoordinate = [];
-    private readonly Dictionary<long, CellType> _foregroundTypeByCoordinate = [];
+    private readonly CellTypeSpatialIndex _background = new();
+    private readonly CellTypeSpatialIndex _foreground = new();
     private readonly List<int> _textureRefreshQuads = [];
     private readonly HashSet<long> _textureRefreshMarks = [];
     private int _textureRefreshWindowX;
@@ -20,45 +26,40 @@ internal sealed class TerrainCellTextureIndex
 
     public void Clear()
     {
-        _backgroundQuadsByType.Clear();
-        _foregroundQuadsByType.Clear();
-        _backgroundTypeByCoordinate.Clear();
-        _foregroundTypeByCoordinate.Clear();
+        _background.Clear();
+        _foreground.Clear();
         _textureRefreshQuads.Clear();
         _textureRefreshMarks.Clear();
     }
 
     public void Rebuild(TerrainCellSources sources, int minX, int minY, int width, int height)
     {
-        _backgroundQuadsByType.Clear();
-        _foregroundQuadsByType.Clear();
-        _backgroundTypeByCoordinate.Clear();
-        _foregroundTypeByCoordinate.Clear();
+        _background.Clear();
+        _foreground.Clear();
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                UpdateTextureIndex(
-                    _backgroundQuadsByType,
-                    PackCoordinate(minX + x, minY + y),
+                UpdateCell(
+                    minX + x,
+                    minY + y,
                     sources.FloodFill.Buffer[x, y],
-                    _backgroundTypeByCoordinate);
-                UpdateTextureIndex(
-                    _foregroundQuadsByType,
-                    PackCoordinate(minX + x, minY + y),
-                    sources.CellCache.GetCellData(x + 1, y + 1).Type,
-                    _foregroundTypeByCoordinate);
+                    sources.CellCache.GetCellData(x + 1, y + 1).Type);
             }
         }
     }
 
     public void UpdateCell(int gridX, int unityY, CellType backgroundType, CellType foregroundType)
     {
-        long key = PackCoordinate(gridX, unityY);
-        UpdateTextureIndex(_backgroundQuadsByType, key, backgroundType, _backgroundTypeByCoordinate);
-        UpdateTextureIndex(_foregroundQuadsByType, key, foregroundType, _foregroundTypeByCoordinate);
+        long key = TerrainCoordinateKey.Pack(gridX, unityY);
+        _background.Set(key, backgroundType);
+        _foreground.Set(key, foregroundType);
     }
 
+    /// <summary>
+    /// Собрать квады окна, задетые перечисленными типами. Список отсортирован:
+    /// сборка идёт по нему подряд и метит соседние клетки одним прямоугольником.
+    /// </summary>
     public void CollectRefreshQuads(HashSet<CellType> cellTypes, int minX, int minY, int width, int height)
     {
         _textureRefreshQuads.Clear();
@@ -67,8 +68,8 @@ internal sealed class TerrainCellTextureIndex
         _textureRefreshWindowY = minY;
         foreach (CellType cellType in cellTypes)
         {
-            AddTextureRefreshQuads(_backgroundQuadsByType, cellType, width, height);
-            AddTextureRefreshQuads(_foregroundQuadsByType, cellType, width, height);
+            AddTextureRefreshQuads(_background, cellType, width, height);
+            AddTextureRefreshQuads(_foreground, cellType, width, height);
         }
 
         _textureRefreshQuads.Sort();
@@ -80,112 +81,51 @@ internal sealed class TerrainCellTextureIndex
         int oldMinY = minY - dy;
         if (dx > 0)
         {
-            RemoveTextureIndexRect(oldMinX, oldMinX + dx, oldMinY, oldMinY + height);
+            RemoveRect(oldMinX, oldMinX + dx, oldMinY, oldMinY + height);
         }
         else if (dx < 0)
         {
-            RemoveTextureIndexRect(minX + width, oldMinX + width, oldMinY, oldMinY + height);
+            RemoveRect(minX + width, oldMinX + width, oldMinY, oldMinY + height);
         }
 
         if (dy > 0)
         {
-            RemoveTextureIndexRect(minX, minX + width, oldMinY, oldMinY + dy);
+            RemoveRect(minX, minX + width, oldMinY, oldMinY + dy);
         }
         else if (dy < 0)
         {
-            RemoveTextureIndexRect(minX, minX + width, minY + height, oldMinY + height);
+            RemoveRect(minX, minX + width, minY + height, oldMinY + height);
         }
     }
 
+    private void RemoveRect(int startX, int endX, int startY, int endY)
+    {
+        _background.RemoveRect(startX, endX, startY, endY);
+        _foreground.RemoveRect(startX, endX, startY, endY);
+    }
+
     private void AddTextureRefreshQuads(
-        Dictionary<CellType, HashSet<long>> quadsByType,
+        CellTypeSpatialIndex index,
         CellType cellType,
         int width,
         int height)
     {
-        if (!quadsByType.TryGetValue(cellType, out HashSet<long>? quads))
+        foreach (long key in index.KeysOf(cellType))
         {
-            return;
-        }
-
-        foreach (long key in quads)
-        {
-            int worldX = UnpackX(key);
-            int worldY = UnpackY(key);
+            int worldX = TerrainCoordinateKey.UnpackX(key);
+            int worldY = TerrainCoordinateKey.UnpackY(key);
             if ((uint)(worldX - _textureRefreshWindowX) >= (uint)width ||
                 (uint)(worldY - _textureRefreshWindowY) >= (uint)height)
             {
                 continue;
             }
 
-            int quad = ((worldX - _textureRefreshWindowX) * height) + (worldY - _textureRefreshWindowY);
+            int quad = ((worldX - _textureRefreshWindowX) * height) +
+                (worldY - _textureRefreshWindowY);
             if (_textureRefreshMarks.Add(key))
             {
                 _textureRefreshQuads.Add(quad);
             }
         }
     }
-
-    private void RemoveTextureIndexRect(int startX, int endX, int startY, int endY)
-    {
-        for (int x = startX; x < endX; x++)
-        {
-            for (int y = startY; y < endY; y++)
-            {
-                long key = PackCoordinate(x, y);
-                RemoveTextureIndexKey(_backgroundQuadsByType, _backgroundTypeByCoordinate, key);
-                RemoveTextureIndexKey(_foregroundQuadsByType, _foregroundTypeByCoordinate, key);
-            }
-        }
-    }
-
-    private static void UpdateTextureIndex(
-        Dictionary<CellType, HashSet<long>> quadsByType,
-        long key,
-        CellType type,
-        Dictionary<long, CellType> typeByCoordinate)
-    {
-        if (typeByCoordinate.Remove(key, out CellType previousType) &&
-            quadsByType.TryGetValue(previousType, out HashSet<long>? previousQuads))
-        {
-            previousQuads.Remove(key);
-            if (previousQuads.Count == 0)
-            {
-                quadsByType.Remove(previousType);
-            }
-        }
-
-        if (!quadsByType.TryGetValue(type, out HashSet<long>? currentQuads))
-        {
-            currentQuads = [];
-            quadsByType.Add(type, currentQuads);
-        }
-
-        currentQuads.Add(key);
-        typeByCoordinate[key] = type;
-    }
-
-    private static void RemoveTextureIndexKey(
-        Dictionary<CellType, HashSet<long>> quadsByType,
-        Dictionary<long, CellType> typeByCoordinate,
-        long key)
-    {
-        if (!typeByCoordinate.Remove(key, out CellType previousType) ||
-            !quadsByType.TryGetValue(previousType, out HashSet<long>? previousQuads))
-        {
-            return;
-        }
-
-        previousQuads.Remove(key);
-        if (previousQuads.Count == 0)
-        {
-            quadsByType.Remove(previousType);
-        }
-    }
-
-    public static long PackCoordinate(int x, int y) => ((long)x << 32) | (uint)y;
-
-    public static int UnpackX(long key) => (int)(key >> 32);
-
-    public static int UnpackY(long key) => (int)key;
 }

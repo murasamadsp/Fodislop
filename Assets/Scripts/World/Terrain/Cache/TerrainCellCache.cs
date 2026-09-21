@@ -20,8 +20,7 @@ public class TerrainCellCache : ICachedCellDataProvider
     private int _cacheMinY = int.MinValue;
     private int _cacheWidth;
     private int _cacheHeight;
-    private readonly Dictionary<CellType, HashSet<long>> _cellsByType = [];
-    private readonly Dictionary<long, CellType> _cellTypeByCoordinate = [];
+    private readonly CellTypeSpatialIndex _cellsByType = new();
     private readonly TerrainCellMetadataCache _metadataCache = new();
 
     private static CachedCellData _UnloadedCellData => new()
@@ -44,7 +43,6 @@ public class TerrainCellCache : ICachedCellDataProvider
         {
             _cellCache.EnsureSize(_cacheWidth, _cacheHeight);
             _cellsByType.Clear();
-            _cellTypeByCoordinate.Clear();
         }
     }
 
@@ -63,7 +61,8 @@ public class TerrainCellCache : ICachedCellDataProvider
 
         foreach (CellType cellType in cellTypes)
         {
-            if (!_cellsByType.TryGetValue(cellType, out HashSet<long>? cells))
+            IReadOnlyCollection<long> cells = _cellsByType.KeysOf(cellType);
+            if (cells.Count == 0)
             {
                 continue;
             }
@@ -71,8 +70,8 @@ public class TerrainCellCache : ICachedCellDataProvider
             CellMetadata metadata = _metadataCache.GetMetadata(cellType, mapManager, textureService, atlases);
             foreach (long key in cells)
             {
-                int x = UnpackX(key) - _cacheMinX;
-                int y = UnpackY(key) - _cacheMinY;
+                int x = TerrainCoordinateKey.UnpackX(key) - _cacheMinX;
+                int y = TerrainCoordinateKey.UnpackY(key) - _cacheMinY;
                 if ((uint)x < (uint)_cacheWidth && (uint)y < (uint)_cacheHeight)
                 {
                     _cellCache[x, y] = _metadataCache.CreateCachedData(cellType, metadata);
@@ -127,7 +126,6 @@ public class TerrainCellCache : ICachedCellDataProvider
         _cacheMinX = minX - 1;
         _cacheMinY = minY - 1;
         _cellsByType.Clear();
-        _cellTypeByCoordinate.Clear();
 
         for (int x = 0; x < _cacheWidth; x++)
         {
@@ -320,25 +318,10 @@ public class TerrainCellCache : ICachedCellDataProvider
 
     private void SetCachedData(int x, int y, CachedCellData data, bool removePrevious = true)
     {
-        long key = PackCoordinate(_cacheMinX + x, _cacheMinY + y);
-        if (removePrevious)
-        {
-            RemoveCellIndexKey(key);
-        }
-        if (data.Type == CellType.Unloaded)
-        {
-            _cellCache[x, y] = data;
-            return;
-        }
-
-        if (!_cellsByType.TryGetValue(data.Type, out HashSet<long>? cells))
-        {
-            cells = [];
-            _cellsByType.Add(data.Type, cells);
-        }
-
-        cells.Add(key);
-        _cellTypeByCoordinate[key] = data.Type;
+        _cellsByType.Set(
+            TerrainCoordinateKey.Pack(_cacheMinX + x, _cacheMinY + y),
+            data.Type,
+            removePrevious);
         _cellCache[x, y] = data;
     }
 
@@ -348,53 +331,21 @@ public class TerrainCellCache : ICachedCellDataProvider
         int oldMinY = _cacheMinY;
         if (dx > 0)
         {
-            RemoveCellIndexRect(oldMinX, oldMinX + dx, oldMinY, oldMinY + _cacheHeight);
+            _cellsByType.RemoveRect(oldMinX, oldMinX + dx, oldMinY, oldMinY + _cacheHeight);
         }
         else if (dx < 0)
         {
-            RemoveCellIndexRect(oldMinX + _cacheWidth + dx, oldMinX + _cacheWidth, oldMinY, oldMinY + _cacheHeight);
+            _cellsByType.RemoveRect(oldMinX + _cacheWidth + dx, oldMinX + _cacheWidth, oldMinY, oldMinY + _cacheHeight);
         }
 
         if (dy > 0)
         {
-            RemoveCellIndexRect(oldMinX, oldMinX + _cacheWidth, oldMinY, oldMinY + dy);
+            _cellsByType.RemoveRect(oldMinX, oldMinX + _cacheWidth, oldMinY, oldMinY + dy);
         }
         else if (dy < 0)
         {
-            RemoveCellIndexRect(oldMinX, oldMinX + _cacheWidth, oldMinY + _cacheHeight + dy, oldMinY + _cacheHeight);
+            _cellsByType.RemoveRect(oldMinX, oldMinX + _cacheWidth, oldMinY + _cacheHeight + dy, oldMinY + _cacheHeight);
         }
     }
-
-    private void RemoveCellIndexRect(int startX, int endX, int startY, int endY)
-    {
-        for (int x = startX; x < endX; x++)
-        {
-            for (int y = startY; y < endY; y++)
-            {
-                RemoveCellIndexKey(PackCoordinate(x, y));
-            }
-        }
-    }
-
-    private void RemoveCellIndexKey(long key)
-    {
-        if (!_cellTypeByCoordinate.Remove(key, out CellType previousType) ||
-            !_cellsByType.TryGetValue(previousType, out HashSet<long>? cells))
-        {
-            return;
-        }
-
-        cells.Remove(key);
-        if (cells.Count == 0)
-        {
-            _cellsByType.Remove(previousType);
-        }
-    }
-
-    private static long PackCoordinate(int x, int y) => ((long)x << 32) | (uint)y;
-
-    private static int UnpackX(long key) => (int)(key >> 32);
-
-    private static int UnpackY(long key) => (int)key;
 
 }
