@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Interfaces.Diagnostics;
 using Kern.World.Terrain.Background;

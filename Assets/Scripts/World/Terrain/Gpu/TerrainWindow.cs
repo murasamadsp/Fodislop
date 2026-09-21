@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using Kern.Core.Interfaces;
+using Kern.Core.Interfaces.Diagnostics;
+using Kern.Core.Lifecycle;
 using MinesServer.Data;
 using UnityEngine;
 

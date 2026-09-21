@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
 using UnityEngine;
 
 namespace Kern.World.Terrain;

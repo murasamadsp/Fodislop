@@ -1,5 +1,6 @@
 #nullable enable
 
+using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Interfaces.Diagnostics;
 using Kern.World.Streaming;
