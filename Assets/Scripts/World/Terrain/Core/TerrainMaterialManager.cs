@@ -89,6 +89,20 @@ public sealed class TerrainMaterialManager
             return false;
         }
 
+        // Слотов атласа в шейдере ровно восемь, и девятый не даёт ни ошибки,
+        // ни чёрного: TerrainSampleAtlas на неизвестном слоте уходит в
+        // `default` и читает нулевой атлас чужим прямоугольником — клетка
+        // получает правдоподобный, но не свой рисунок.
+        //
+        // Проверка стоит ДО обеих веток. Раньше она была только в ветке полной
+        // пересборки, а набор атласов растёт добавлением в конец — то есть до
+        // неё дело не доходило никогда, и девятый атлас проезжал молча.
+        if (atlases.Count > _TerrainAtlasPropertyIDs.Length)
+        {
+            throw new InvalidOperationException(
+                $"Terrain cell material holds {_TerrainAtlasPropertyIDs.Length} atlases, got {atlases.Count}.");
+        }
+
         IClientConfigManager cfgManager = clientConfigManager ??
             throw new InvalidOperationException(
                 "TerrainRenderer requires IClientConfigManager injection.");
@@ -125,12 +139,6 @@ public sealed class TerrainMaterialManager
         for (int i = 0; i < atlases.Count; i++)
         {
             CreateAtlasMaterials(i, clientConfig);
-        }
-
-        if (atlases.Count > _TerrainAtlasPropertyIDs.Length)
-        {
-            throw new InvalidOperationException(
-                $"Terrain cell material holds {_TerrainAtlasPropertyIDs.Length} atlases, got {atlases.Count}.");
         }
 
         // Один материал на все атласы рисует меш идентификаторов: при
