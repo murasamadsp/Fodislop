@@ -12,13 +12,8 @@ internal sealed class IndirectLightingSolver
     private static readonly ProfilerMarker _compositeMarker =
         new("Kern.Lighting.Composite.Record.CPU");
 
-    // Bounce gather radius in cells: BounceCache marches 16 steps of 0.25
-    // cells, so incident light for a bounce texel can come from up to 4 cells
-    // away. The partial rect must cover that reach, not just the dynamic rect.
-    private const float BounceGatherCells = 4f;
-
     // Composite reads the 1-cell SurfaceReflection neighborhood around each
-    // pixel on top of the bounce-filtered taps.
+    // pixel of the composite.
     private const float CompositeNeighborCells = 1f;
 
     private const int PartialSlackTexels = 2;
@@ -28,81 +23,6 @@ internal sealed class IndirectLightingSolver
     public IndirectLightingSolver(LightingResourceManager resources)
     {
         _resources = resources;
-    }
-
-    public void RecordBounce(
-        CommandBuffer commandBuffer,
-        RectInt? fieldDirtyRect,
-        Vector4 worldRect,
-        float cellSize,
-        IFrameTelemetry telemetry)
-    {
-        long bounceStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        ComputeShader compute = _resources.LightingCompute!;
-        int kernel = _resources.SolveDiffuseBounceKernel;
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            kernel,
-            LightingComputeBinder.DirectInputID,
-            _resources.DirectTexture!);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            kernel,
-            LightingComputeBinder.StaticDirectInputID,
-            _resources.StaticDirectTexture!);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            kernel,
-            LightingComputeBinder.BounceTextureID,
-            _resources.BounceTexture!);
-        commandBuffer.SetComputeBufferParam(
-            compute,
-            kernel,
-            LightingComputeBinder.BounceTapsID,
-            _resources.BounceTaps!);
-        int bounceWidth = _resources.BounceWidth;
-        int bounceHeight = _resources.BounceHeight;
-        if (TryGetBounceRect(fieldDirtyRect, worldRect, cellSize, out RectInt bounceRect))
-        {
-            commandBuffer.SetComputeIntParams(
-                compute,
-                LightingComputeBinder.BounceDispatchOriginID,
-                bounceRect.x,
-                bounceRect.y);
-            commandBuffer.SetComputeIntParams(
-                compute,
-                LightingComputeBinder.BounceDispatchSizeID,
-                bounceRect.width,
-                bounceRect.height);
-            telemetry.LightingBounceDispatchPixels += (long)bounceRect.width * bounceRect.height;
-            commandBuffer.DispatchCompute(
-                compute,
-                kernel,
-                LightingComputeBinder.DispatchGroups(bounceRect.width),
-                LightingComputeBinder.DispatchGroups(bounceRect.height),
-                1);
-            telemetry.LightingBounceTimeMs = ElapsedMs(bounceStart);
-            return;
-        }
-
-        commandBuffer.SetComputeIntParams(
-            compute,
-            LightingComputeBinder.BounceDispatchOriginID,
-            0,
-            0);
-        commandBuffer.SetComputeIntParams(
-            compute,
-            LightingComputeBinder.BounceDispatchSizeID,
-            bounceWidth,
-            bounceHeight);
-        telemetry.LightingBounceDispatchPixels += (long)bounceWidth * bounceHeight;
-        commandBuffer.DispatchCompute(
-            compute,
-            kernel,
-            LightingComputeBinder.DispatchGroups(bounceWidth),
-            LightingComputeBinder.DispatchGroups(bounceHeight),
-            1);
-        telemetry.LightingBounceTimeMs = ElapsedMs(bounceStart);
     }
 
     public void RecordComposite(
@@ -130,18 +50,8 @@ internal sealed class IndirectLightingSolver
         commandBuffer.SetComputeTextureParam(
             compute,
             kernel,
-            LightingComputeBinder.BounceInputID,
-            _resources.BounceTexture!);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            kernel,
             LightingComputeBinder.ResultID,
             _resources.LightmapTexture!);
-        commandBuffer.SetComputeBufferParam(
-            compute,
-            kernel,
-            LightingComputeBinder.BounceFilterWeightsID,
-            _resources.BounceFilterWeights!);
         int fieldWidth = _resources.FieldWidth;
         int fieldHeight = _resources.FieldHeight;
         if (TryGetFieldRect(fieldDirtyRect, worldRect, cellSize, out RectInt compositeRect))
@@ -229,40 +139,6 @@ internal sealed class IndirectLightingSolver
         return true;
     }
 
-    private bool TryGetBounceRect(
-        RectInt? fieldDirtyRect,
-        Vector4 worldRect,
-        float cellSize,
-        out RectInt bounceRect)
-    {
-        bounceRect = default;
-        if (!TryGetFieldRect(fieldDirtyRect, worldRect, cellSize, out RectInt expanded))
-        {
-            return false;
-        }
-
-        int fieldWidth = _resources.FieldWidth;
-        int fieldHeight = _resources.FieldHeight;
-        int bounceWidth = _resources.BounceWidth;
-        int bounceHeight = _resources.BounceHeight;
-        if (fieldWidth <= 0 || fieldHeight <= 0 || bounceWidth <= 0 || bounceHeight <= 0)
-        {
-            return false;
-        }
-
-        int minX = Mathf.Max(0, Mathf.FloorToInt(expanded.xMin * (float)bounceWidth / fieldWidth) - 1);
-        int minY = Mathf.Max(0, Mathf.FloorToInt(expanded.yMin * (float)bounceHeight / fieldHeight) - 1);
-        int maxX = Mathf.Min(bounceWidth, Mathf.CeilToInt(expanded.xMax * (float)bounceWidth / fieldWidth) + 1);
-        int maxY = Mathf.Min(bounceHeight, Mathf.CeilToInt(expanded.yMax * (float)bounceHeight / fieldHeight) + 1);
-        if (maxX <= minX || maxY <= minY)
-        {
-            return false;
-        }
-
-        bounceRect = new RectInt(minX, minY, maxX - minX, maxY - minY);
-        return true;
-    }
-
     private int ResolveFieldMargin(Vector4 worldRect, float cellSize)
     {
         float pixelsPerCell = 1f;
@@ -271,7 +147,7 @@ internal sealed class IndirectLightingSolver
             pixelsPerCell = _resources.FieldWidth * cellSize / worldRect.z;
         }
 
-        return Mathf.CeilToInt((BounceGatherCells + CompositeNeighborCells) * Mathf.Max(1f, pixelsPerCell)) +
+        return Mathf.CeilToInt(CompositeNeighborCells * Mathf.Max(1f, pixelsPerCell)) +
             PartialSlackTexels;
     }
 }

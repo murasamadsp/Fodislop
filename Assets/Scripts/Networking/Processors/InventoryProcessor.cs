@@ -13,7 +13,7 @@ public sealed class InventoryProcessor(IInventoryState model) :
     IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>,
     IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>
 {
-    private const int TotalSlots = 60;
+    private const int TotalSlots = 63;
 
     public void Process(InventoryPacket packet)
     {
@@ -33,8 +33,9 @@ public sealed class InventoryProcessor(IInventoryState model) :
             }
             else
             {
-                existing.Quantity = (int)quantity;
-                model.SetSlot(i, existing);
+                ItemData updated = existing.Clone();
+                updated.Quantity = (int)quantity;
+                model.SetSlot(i, updated);
             }
 
             remaining.Remove(existing.ItemType);
@@ -80,9 +81,10 @@ public sealed class InventoryProcessor(IInventoryState model) :
             return;
         }
 
-        item.Name = packet.Name;
-        item.Description = packet.Description;
-        model.SetSlot(slot, item);
+        ItemData updated = item.Clone();
+        updated.Name = packet.Name;
+        updated.Description = packet.Description;
+        model.SetSlot(slot, updated);
     }
 
     public void Process(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket packet) =>

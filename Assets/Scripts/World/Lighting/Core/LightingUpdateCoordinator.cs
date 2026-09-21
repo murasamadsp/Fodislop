@@ -200,7 +200,7 @@ internal sealed class LightingUpdateCoordinator
             _telemetry.LightingGeometryChangeCount++;
         }
         if (!_state.FieldDirty && !regionChanged && !dynamicLightsDirty && !geometryChanged &&
-            !_state.CompositeDirty && !_state.BounceDirty)
+            !_state.CompositeDirty)
         {
             return;
         }
@@ -240,7 +240,7 @@ internal sealed class LightingUpdateCoordinator
                     out dynamicLightsChanged);
 
                 if (!rebuildFields && !dynamicLightsChanged &&
-                    !_state.CompositeDirty && !_state.BounceDirty)
+                    !_state.CompositeDirty)
                 {
                     commandBuffer.EndSample("Kern.RadianceCascades");
                     RememberDynamicLightState();
@@ -316,12 +316,11 @@ internal sealed class LightingUpdateCoordinator
                     _state.SolveCount,
                     invalidations,
                     reason,
-                    _executedStages.ToArray(),
+                    _executedStages,
                     Array.Empty<string>());
                 _state.SolveCount++;
                 _state.FieldDirty = false;
                 _state.CompositeDirty = false;
-                _state.BounceDirty = false;
                 _state.LastTerrainContentRevision = terrainRenderer.TerrainContentRevision;
                 _state.LastContributorGeometryRevision = contributorGeometryRevision;
                 _state.CompleteActiveRegionInvalidation();
@@ -398,7 +397,6 @@ internal sealed class LightingUpdateCoordinator
                 dynamicRadianceChanged,
                 dynamicLightCount == 0 &&
                     (dynamicLightsChanged || staticRadianceChanged || _state.HasDynamicRadianceState),
-                _state.BounceDirty,
                 _state.CompositeDirty,
                 qualityMode,
                 debugView),
@@ -408,7 +406,6 @@ internal sealed class LightingUpdateCoordinator
         _executedStages.Clear();
         _executedStages.AddRange(result.ExecutedStages);
         return result.Invalidations |
-            (_state.BounceDirty ? LightingInvalidationFlags.BounceDirty : LightingInvalidationFlags.None) |
             (_state.CompositeDirty ? LightingInvalidationFlags.CompositeDirty : LightingInvalidationFlags.None);
     }
 
@@ -422,7 +419,6 @@ internal sealed class LightingUpdateCoordinator
     {
         _state.FieldDirty = true;
         _state.CompositeDirty = true;
-        _state.BounceDirty = true;
         _state.HasRenderedLightState = false;
         _state.HasStaticRadianceState = false;
         _state.HasDynamicRadianceState = false;

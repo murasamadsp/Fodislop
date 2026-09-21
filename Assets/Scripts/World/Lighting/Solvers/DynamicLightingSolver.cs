@@ -188,7 +188,7 @@ internal sealed class DynamicLightingSolver
         {
             ClearDynamicDirect(commandBuffer);
             // Full clear with a static re-solve following: the frame takes
-            // the full bounce/composite path, so no partial rect applies.
+            // the full composite path, so no partial rect applies.
             dynamicDirtyUnion = default;
         }
         else
@@ -214,7 +214,7 @@ internal sealed class DynamicLightingSolver
                 ClearDynamicDirect(commandBuffer, clearRect);
             }
 
-            // Bounce and composite must refresh both where the dynamic light was and
+            // Composite must refresh both where the dynamic light was and
             // where it is: the cleared old area changed just as much as the
             // newly lit one. clearRect already is that union.
             dynamicDirtyUnion = clearRect;

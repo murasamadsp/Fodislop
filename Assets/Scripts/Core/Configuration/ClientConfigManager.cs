@@ -196,7 +196,7 @@ namespace Kern.Core
         public void Save()
         {
             _Validator.Validate(Config);
-            _Repository.Save(Config);
+            _Repository.Save(Config, _Repository.BackupPath);
             Debug.Log($"[ClientConfigManager] Saved config directly to {_Repository.ConfigPath}");
         }
 

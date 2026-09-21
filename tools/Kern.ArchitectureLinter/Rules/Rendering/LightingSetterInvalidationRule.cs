@@ -23,7 +23,7 @@ public sealed class LightingSetterInvalidationRule : IRule
 
     private static readonly Regex SetterPattern = new(@"^\s*public\s+void\s+(Set[A-Za-z0-9_]+)\s*\(", RegexOptions.Multiline);
     private static readonly Regex DirtyFlagPattern = new(
-        @"(?:_ambientOcclusionDirty|_bounceDirty|_compositeDirty|_fieldDirty|CompositeDirty|FieldDirty|BounceDirty|AmbientOcclusionDirty|MarkDirty|_nextDynamicLightingUpdateTime|_hasStaticRadianceState|HasRenderedLightState|HasStaticRadianceState|HasDynamicRadianceState)\s*=",
+        @"(?:_ambientOcclusionDirty|_compositeDirty|_fieldDirty|CompositeDirty|FieldDirty|AmbientOcclusionDirty|MarkDirty|_nextDynamicLightingUpdateTime|_hasStaticRadianceState|HasRenderedLightState|HasStaticRadianceState|HasDynamicRadianceState)\s*=",
         RegexOptions.IgnoreCase);
 
     public Task<IReadOnlyList<RuleViolation>> EvaluateAsync(

@@ -64,7 +64,6 @@ public static class LightingFrameDumper
         public float cascadeTraceTimeMs;
         public float cascadeMergeTimeMs;
         public float dynamicLightingTimeMs;
-        public float bounceTimeMs;
         public float compositeTimeMs;
         public int ddaSegments;
         public long ddaTexelVisits;
@@ -73,7 +72,6 @@ public static class LightingFrameDumper
         public int dynamicTraceCount;
         public long dynamicDispatchPixels;
         public long dynamicComposePixels;
-        public long bounceDispatchPixels;
         public long compositeDispatchPixels;
         public long polarRayWorkUnits;
         public long estimatedCascadeRayWorkUnits;
@@ -186,7 +184,6 @@ public static class LightingFrameDumper
             cascadeTraceTimeMs = telemetry.LightingCascadeTraceTimeMs,
             cascadeMergeTimeMs = telemetry.LightingCascadeMergeTimeMs,
             dynamicLightingTimeMs = telemetry.LightingDynamicLightingTimeMs,
-            bounceTimeMs = telemetry.LightingBounceTimeMs,
             compositeTimeMs = telemetry.LightingCompositeTimeMs,
             ddaSegments = telemetry.LightingDdaSegments,
             ddaTexelVisits = telemetry.LightingDdaTexelVisits,
@@ -195,7 +192,6 @@ public static class LightingFrameDumper
             dynamicTraceCount = telemetry.LightingDynamicTraceCount,
             dynamicDispatchPixels = telemetry.LightingDynamicDispatchPixels,
             dynamicComposePixels = telemetry.LightingDynamicComposePixels,
-            bounceDispatchPixels = telemetry.LightingBounceDispatchPixels,
             compositeDispatchPixels = telemetry.LightingCompositeDispatchPixels,
             polarRayWorkUnits = telemetry.LightingPolarRayWorkUnits,
             estimatedCascadeRayWorkUnits = telemetry.LightingEstimatedCascadeRayWorkUnits > 0
@@ -256,7 +252,6 @@ public static class LightingFrameDumper
         SaveRenderTexture(resources.Geometry.AmbientOcclusion, Path.Combine(dir, "AmbientOcclusionField.png"));
         SaveRenderTexture(resources.Direct.Static, Path.Combine(dir, "StaticDirect.png"));
         SaveRenderTexture(resources.Direct.Dynamic, Path.Combine(dir, "DynamicDirect.png"));
-        SaveRenderTexture(resources.Bounce.Texture, Path.Combine(dir, "Bounce.png"));
         SaveRenderTexture(resources.Output.Lightmap, Path.Combine(dir, "FinalLightmap.png"));
 
         Debug.Log($"[LightingFrameDumper] Lighting frame dumped successfully to: {dir}");

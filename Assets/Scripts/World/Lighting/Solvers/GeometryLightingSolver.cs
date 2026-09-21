@@ -77,11 +77,7 @@ internal sealed class GeometryLightingSolver
     {
         ComputeShader compute = _resources.LightingCompute!;
         RenderTexture cellSolidMask = _resources.CellSolidMask!;
-        ComputeBuffer bounceTaps = _resources.BounceTaps!;
-        ComputeBuffer bounceFilterWeights = _resources.BounceFilterWeights!;
         int buildMaskKernel = _resources.BuildCellSolidMaskKernel;
-        int buildTapsKernel = _resources.BuildBounceTapsKernel;
-        int buildFilterKernel = _resources.BuildBounceFilterKernel;
 
         commandBuffer.SetComputeIntParams(
             compute,
@@ -108,36 +104,6 @@ internal sealed class GeometryLightingSolver
             _resources.ResolveTransmissionDebugKernel,
             LightingComputeBinder.CellSolidMaskID,
             cellSolidMask);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            buildTapsKernel,
-            LightingComputeBinder.CellSolidMaskID,
-            cellSolidMask);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            buildFilterKernel,
-            LightingComputeBinder.CellSolidMaskID,
-            cellSolidMask);
-        commandBuffer.SetComputeBufferParam(
-            compute,
-            buildTapsKernel,
-            LightingComputeBinder.BounceTapsID,
-            bounceTaps);
-        commandBuffer.SetComputeBufferParam(
-            compute,
-            _resources.SolveDiffuseBounceKernel,
-            LightingComputeBinder.BounceTapsID,
-            bounceTaps);
-        commandBuffer.SetComputeBufferParam(
-            compute,
-            buildFilterKernel,
-            LightingComputeBinder.BounceFilterWeightsID,
-            bounceFilterWeights);
-        commandBuffer.SetComputeBufferParam(
-            compute,
-            _resources.CompositeLightingKernel,
-            LightingComputeBinder.BounceFilterWeightsID,
-            bounceFilterWeights);
 
         if (!materialFieldRebuilt && _resources.GeometryCachesValid)
         {
@@ -146,8 +112,6 @@ internal sealed class GeometryLightingSolver
 
         commandBuffer.BeginSample("Kern.Lighting.GeometryCaches");
         BindFieldTextures(commandBuffer, compute, buildMaskKernel);
-        BindFieldTextures(commandBuffer, compute, buildTapsKernel);
-        BindFieldTextures(commandBuffer, compute, buildFilterKernel);
         commandBuffer.SetComputeTextureParam(
             compute,
             buildMaskKernel,
@@ -160,21 +124,6 @@ internal sealed class GeometryLightingSolver
             LightingComputeBinder.DispatchGroups(_resources.CellGridWidth),
             LightingComputeBinder.DispatchGroups(_resources.CellGridHeight),
             1);
-        if (LightingConfigHolder.BounceEnabled)
-        {
-            commandBuffer.DispatchCompute(
-                compute,
-                buildTapsKernel,
-                LightingComputeBinder.DispatchGroups(_resources.BounceWidth),
-                LightingComputeBinder.DispatchGroups(_resources.BounceHeight),
-                1);
-            commandBuffer.DispatchCompute(
-                compute,
-                buildFilterKernel,
-                LightingComputeBinder.DispatchGroups(_resources.FieldWidth),
-                LightingComputeBinder.DispatchGroups(_resources.FieldHeight),
-                1);
-        }
 
         commandBuffer.EndSample("Kern.Lighting.GeometryCaches");
         _resources.GeometryCachesValid = true;

@@ -3,8 +3,8 @@
 using System;
 using Kern.Core;
 using Kern.Core.Interfaces;
-using Kern.World;
 using Kern.UI.HUD.Player.Model;
+using Kern.World;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
@@ -13,24 +13,56 @@ namespace Kern.UI
 {
     public class MissionArrowUI : MonoBehaviour
     {
-        [Inject]
-        private UIDocument _doc = null!;
-        private VisualElement? _arrow;
-        private Camera? _camera;
+        // Кольцо виртуальное: сама окружность не рисуется, это только линия,
+        // по которой ставится указатель.
+        //
+        // Радиус — доля МЕНЬШЕЙ стороны вьюпорта, а не расстояние в мире.
+        // Раньше он задавался в пикселях сетки и прогонялся через камеру, и
+        // кольцо вело себя как объект террейна: росло и сжималось с зумом,
+        // держалось за мировые единицы. Это указатель интерфейса, у него на
+        // экране всегда одно место и один размер при любом зуме.
+        //
+        // Меньшая сторона, а не большая: иначе на широком экране кольцо
+        // вылезало бы за верх и низ кадра.
+        private const float RingRadiusViewportFraction = 0.34f;
+
+        // Доля половины кадра, на которой шейдер ставит указатель. Остаток
+        // кадра — запас на размытие краёв дуги, поэтому элемент шире кольца.
+        private const float ShaderRingRadius = 0.74f;
+
+        // Указатель гаснет, когда цель прямо под игроком: пеленг там не
+        // определён, а дуга без направления только мешает.
+        private const float CenterFadeUnits = 0.6f;
+        private const float FullOpacityUnits = 2.2f;
+
+        // Размер и положение теперь меняются только со сменой размера
+        // вьюпорта, но писать стили каждый кадр всё равно нельзя: запись
+        // держит панель в состоянии style-dirty. Ниже полпикселя разницы не
+        // видно, поэтому такая запись пропускается.
+        private const float PositionWriteEpsilon = 0.5f;
+
+        [Inject] private UIDocument _doc = null!;
+        [Inject] private PlayerStatsModel _playerStats = null!;
+        [Inject] private MapManager _mapManager = null!;
+        [Inject] private ILocalPlayerState _localPlayerState = null!;
+
+        private MissionRingVisual? _ring;
+        private VisualElement? _layoutRoot;
         private ushort? _targetX;
         private ushort? _targetY;
         private bool _initialized;
-        [Inject]
-        private PlayerStatsModel _playerStats = null!;
+        private bool _layoutSubscriptionActive;
 
-        private const float PositionWriteEpsilon = 0.5f;
-        private float _lastAppliedLeft = float.NaN;
-        private float _lastAppliedTop = float.NaN;
-        private float _lastAppliedRotate = float.NaN;
-        [Inject]
-        private MapManager _mapManager = null!;
-        [Inject]
-        private IGameplayCamera _gameplayCamera = null!;
+        // Флаг, а не NaN-часовой. Сравнение с NaN ложно в обе стороны, поэтому
+        // условие `Abs(value - NaN) > epsilon` не выполняется никогда: с NaN в
+        // качестве начального значения первая запись стиля не происходила
+        // вовсе, и кольцо оставалось в месте, которое ему выдала раскладка, —
+        // в левом верхнем углу HUD и размером с текстуру. Тем же флагом
+        // пользуется WorldLabels.
+        private bool _hasAppliedLayout;
+        private float _lastAppliedLeft;
+        private float _lastAppliedTop;
+        private float _lastAppliedSize;
 
         protected void Start()
         {
@@ -48,194 +80,287 @@ namespace Kern.UI
                 return;
             }
 
-            // [Inject]-метод гарантирует зависимости и панель UIDocument к
+            // [Inject]-поля гарантируют зависимости и панель UIDocument к
             // моменту вызова; null здесь — дефект проводки, а не гонка.
-            // Молчаливый пропуск оставил бы стрелку миссии вечно невидимой
+            // Молчаливый пропуск оставил бы кольцо миссии вечно невидимым
             // без ошибки.
-            if (_doc == null || _doc.rootVisualElement == null || _playerStats == null || _mapManager == null)
+            if (_doc == null || _doc.rootVisualElement == null || _playerStats == null ||
+                _mapManager == null || _localPlayerState == null)
             {
                 throw new InvalidOperationException(
                     "[MissionArrowUI] Required injection missing: " +
-                    $"{(_doc == null ? "UIDocument" : _playerStats == null ? "IPlayerStats" : _mapManager == null ? "IMapDataProvider" : "UIDocument root")}. " +
+                    $"{(_doc == null ? "UIDocument" : _playerStats == null ? "PlayerStatsModel" : _mapManager == null ? "MapManager" : _localPlayerState == null ? "ILocalPlayerState" : "UIDocument root")}. " +
                     "MissionArrowUI must be registered in the Game scope before Start.");
             }
 
-            _camera = _gameplayCamera.Camera;
-
-            _arrow = new VisualElement();
-            _arrow.name = "MissionArrow";
-            _arrow.AddToClassList("mission-arrow");
-
-            // Видимость — рантайм-состояние. Вставляем в индекс 0: метка не должна
-            // перекрывать текст UI (раньше добавлялась последней — рисовалась поверх).
-            UIState.Hide(_arrow);
-            // _doc is guarded by the throw above; the compiler cannot narrow it
-            // across the conditional 'missing' expression, so null-forgive here.
-            _doc!.rootVisualElement.Insert(0, _arrow);
-
-            PlayerStatsModel stats = _playerStats;
-            if (stats != null)
+            VisualElement root = _doc.rootVisualElement;
+            VisualElement? layoutRoot = root.Q("PlayerHUDRoot");
+            if (layoutRoot == null)
             {
-                stats.OnMissionArrowChanged += OnArrowChanged;
-                if (stats.MissionArrowX.HasValue && stats.MissionArrowY.HasValue)
+                if (!_layoutSubscriptionActive)
                 {
-                    _targetX = stats.MissionArrowX;
-                    _targetY = stats.MissionArrowY;
-                    UIState.Show(_arrow);
+                    root.RegisterCallback<GeometryChangedEvent>(OnRootGeometryChanged, TrickleDown.TrickleDown);
+                    _layoutSubscriptionActive = true;
                 }
+
+                return;
             }
 
+            _layoutRoot = layoutRoot;
+
+            if (_layoutSubscriptionActive)
+            {
+                root.UnregisterCallback<GeometryChangedEvent>(
+                    OnRootGeometryChanged,
+                    TrickleDown.TrickleDown);
+                _layoutSubscriptionActive = false;
+            }
+
+            _ring = new MissionRingVisual
+            {
+                name = "MissionRing",
+                pickingMode = PickingMode.Ignore,
+            };
+            _ring.AddToClassList("mission-ring");
+
+            _layoutRoot.Insert(0, _ring);
+            UIState.Hide(_ring);
+
+            _playerStats.OnMissionChanged += OnMissionChanged;
+            _playerStats.OnMissionArrowChanged += OnMissionArrowChanged;
+            _targetX = _playerStats.MissionArrowX;
+            _targetY = _playerStats.MissionArrowY;
             _initialized = true;
+        }
+
+        private void OnRootGeometryChanged(GeometryChangedEvent _)
+        {
+            if (_initialized || _doc == null || _doc.rootVisualElement == null)
+            {
+                return;
+            }
+
+            TryInitialize();
         }
 
         protected void OnDestroy()
         {
+            if (_layoutSubscriptionActive && _doc != null && _doc.rootVisualElement != null)
+            {
+                _doc.rootVisualElement.UnregisterCallback<GeometryChangedEvent>(
+                    OnRootGeometryChanged,
+                    TrickleDown.TrickleDown);
+                _layoutSubscriptionActive = false;
+            }
+
             if (_playerStats != null)
             {
-                _playerStats.OnMissionArrowChanged -= OnArrowChanged;
+                _playerStats.OnMissionChanged -= OnMissionChanged;
+                _playerStats.OnMissionArrowChanged -= OnMissionArrowChanged;
             }
 
-            _arrow?.RemoveFromHierarchy();
-            _arrow = null;
+            _ring?.RemoveFromHierarchy();
+            _ring?.Dispose();
+            _ring = null;
+            _layoutRoot = null;
         }
 
-        private void OnArrowChanged()
+        private void OnMissionChanged()
         {
-            if (!isActiveAndEnabled || !_initialized || _arrow == null || _playerStats == null)
+            if (!_initialized || _playerStats == null)
             {
                 return;
             }
 
-            PlayerStatsModel stats = _playerStats;
-            if (!stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
+            if (!_playerStats.IsMissionActive)
             {
-                if (!_targetX.HasValue && !_targetY.HasValue &&
-                    UIState.IsHidden(_arrow))
-                {
-                    return;
-                }
-
-                _targetX = null;
-                _targetY = null;
-
-                if (_arrow != null)
-                {
-                    UIState.Hide(_arrow);
-                }
-
-                return;
+                UIState.Hide(_ring);
             }
+        }
 
-            if (_targetX == stats.MissionArrowX && _targetY == stats.MissionArrowY &&
-                !UIState.IsHidden(_arrow))
+        private void OnMissionArrowChanged()
+        {
+            if (!_initialized || _playerStats == null)
             {
                 return;
             }
 
-            _targetX = stats.MissionArrowX;
-            _targetY = stats.MissionArrowY;
-            _lastAppliedLeft = float.NaN;
-            _lastAppliedTop = float.NaN;
-            _lastAppliedRotate = float.NaN;
-            if (_arrow != null)
+            _targetX = _playerStats.MissionArrowX;
+            _targetY = _playerStats.MissionArrowY;
+
+            if (!_targetX.HasValue || !_targetY.HasValue)
             {
-                UIState.Show(_arrow);
+                UIState.Hide(_ring);
             }
         }
 
         protected void LateUpdate()
         {
-            if (!_targetX.HasValue || !_targetY.HasValue || _camera == null)
+            if (!_initialized || _ring == null || _layoutRoot == null ||
+                _doc == null || _doc.rootVisualElement == null)
             {
                 return;
             }
 
-            var worldPos = CoordinateUtils.ServerToUnityPos(
+            if (!_playerStats.IsMissionActive || !_targetX.HasValue || !_targetY.HasValue)
+            {
+                UIState.Hide(_ring);
+                return;
+            }
+
+            // Мир нужен ровно для одного — направления на цель. Положение и
+            // размер кольца мир не спрашивают вовсе: это элемент экрана.
+            //
+            // Центр — центр вьюпорта. CameraFollow специально смещает игрока
+            // относительно экрана, оставляя место под левую панель; если
+            // центрировать кольцо по player.transform, оно уезжает вместе
+            // с этим смещением.
+            ILocalPlayer? player = _localPlayerState.Current;
+            if (player == null || !player.isActiveAndEnabled || !player.IsGameplayVisible)
+            {
+                UIState.Hide(_ring);
+                return;
+            }
+
+            Vector3 playerWorld = player.transform.position;
+            Vector3 targetWorld = CoordinateUtils.ServerToUnityPos(
                 _targetX.Value,
                 _targetY.Value,
                 _mapManager.WorldHeight);
-            var screenPos = _camera.WorldToScreenPoint(worldPos);
 
-            if (_doc == null || _doc.rootVisualElement == null || _doc.rootVisualElement.panel == null || _arrow == null)
+            Vector2 toTarget = new(targetWorld.x - playerWorld.x, targetWorld.y - playerWorld.y);
+            float distance = toTarget.magnitude;
+            float opacity = Mathf.InverseLerp(CenterFadeUnits, FullOpacityUnits, distance);
+            if (opacity <= 0.001f)
             {
-                // Per-frame: панель или стрелка могут отсутствовать в этом кадре —
-                // на следующем кадре обновление повторится.
+                UIState.Hide(_ring);
                 return;
             }
 
-            if (screenPos.z < 0f)
-            {
-                if (!UIState.IsHidden(_arrow))
-                {
-                    UIState.Hide(_arrow);
-                }
+            // Размер кольца — доля вьюпорта, и больше ничья. Ни камеры, ни
+            // мировых единиц, ни зума в этой формуле нет.
+            float viewportWidth = _layoutRoot.resolvedStyle.width;
+            float viewportHeight = _layoutRoot.resolvedStyle.height;
 
+            // До первой раскладки размеры приходят нулями или NaN. Сравнение с
+            // NaN ложно в обе стороны, поэтому условие пишется через «годен»,
+            // а не через «негоден»: иначе кадр с NaN проскочил бы проверку и
+            // ушёл в стили.
+            bool viewportResolved = viewportWidth > 1f && viewportHeight > 1f;
+            if (!viewportResolved)
+            {
+                UIState.Hide(_ring);
                 return;
             }
 
-            if (UIState.IsHidden(_arrow))
+            float ringPanelRadius =
+                Mathf.Min(viewportWidth, viewportHeight) * RingRadiusViewportFraction;
+            Vector2 centerLocal = new(viewportWidth * 0.5f, viewportHeight * 0.5f);
+
+            // Элемент шире виртуального кольца ровно во столько, во сколько
+            // кадр шейдера шире окружности, по которой он ставит указатель.
+            float elementSize = ringPanelRadius * 2f / ShaderRingRadius;
+            float left = centerLocal.x - (elementSize * 0.5f);
+            float top = centerLocal.y - (elementSize * 0.5f);
+
+            if (!_hasAppliedLayout || Mathf.Abs(left - _lastAppliedLeft) > PositionWriteEpsilon)
             {
-                UIState.Show(_arrow);
+                _ring.style.left = left;
+                _lastAppliedLeft = left;
             }
 
-            var panelPos = RuntimePanelUtils.ScreenToPanel(
-                _doc.rootVisualElement.panel,
-                screenPos);
-
-            float halfW = _doc.rootVisualElement.resolvedStyle.width / 2f;
-            float halfH = _doc.rootVisualElement.resolvedStyle.height / 2f;
-
-            float posX = panelPos.x - (_arrow.resolvedStyle.width / 2f);
-            float posY = panelPos.y - (_arrow.resolvedStyle.height / 2f);
-
-            float maxX = _doc.rootVisualElement.resolvedStyle.width - _arrow.resolvedStyle.width;
-            float maxY = _doc.rootVisualElement.resolvedStyle.height - _arrow.resolvedStyle.height;
-
-            bool offScreen = posX < 0 || posX > maxX || posY < 0 || posY > maxY;
-
-            float targetLeft;
-            float targetTop;
-            float targetRotate;
-            if (offScreen)
+            if (!_hasAppliedLayout || Mathf.Abs(top - _lastAppliedTop) > PositionWriteEpsilon)
             {
-                var dir = new Vector2(panelPos.x - halfW, panelPos.y - halfH);
-                if (dir.magnitude < 0.001f)
+                _ring.style.top = top;
+                _lastAppliedTop = top;
+            }
+
+            if (!_hasAppliedLayout || Mathf.Abs(elementSize - _lastAppliedSize) > PositionWriteEpsilon)
+            {
+                _ring.style.width = elementSize;
+                _ring.style.height = elementSize;
+                _lastAppliedSize = elementSize;
+            }
+
+            _hasAppliedLayout = true;
+
+            // Пеленг — прямое мировое направление на цель, без разворотов.
+            //
+            // Шейдер считает угол в координатах СВОЕГО кадра (uv 0..1, ось Y
+            // вверх), а не в координатах панели, и UI Toolkit показывает эту
+            // текстуру той же стороной вверх. Поэтому переводить направление
+            // в систему панели с Y вниз здесь нечего: прежний минус у y был
+            // отражением по вертикали, а добавленный к нему пол-оборота
+            // превращал отражение по вертикали в отражение по горизонтали —
+            // указатель оставался развёрнутым, только уже по другой оси.
+            float bearing = Mathf.Atan2(toTarget.y, toTarget.x);
+
+            UIState.Show(_ring);
+            _ring.Render(Mathf.Clamp01(opacity), bearing);
+        }
+
+        private sealed class MissionRingVisual : VisualElement, IDisposable
+        {
+            // Полградуса пеленга на кольце радиусом в сотню пикселей — это
+            // меньше пикселя дуги, перерисовывать ради такого нечего.
+            private const float BearingEpsilonDegrees = 0.5f;
+            private const float OpacityEpsilon = 0.004f;
+
+            private readonly Material _material;
+            private readonly int _opacityId = Shader.PropertyToID("_MissionOpacity");
+            private readonly int _angleId = Shader.PropertyToID("_MissionAngle");
+
+            private float _lastOpacity = float.NaN;
+            private float _lastBearing = float.NaN;
+
+            public MissionRingVisual()
+            {
+                Shader? shader = Shader.Find(ProjectRuntimeContracts.ShaderNames.MissionVirtualRing);
+                if (shader == null || !shader.isSupported)
                 {
-                    dir = Vector2.up;
+                    throw new InvalidOperationException(
+                        $"[MissionArrowUI] Required shader '{ProjectRuntimeContracts.ShaderNames.MissionVirtualRing}' is unavailable.");
                 }
 
-                dir.Normalize();
+                _material = new Material(shader)
+                {
+                    hideFlags = HideFlags.HideAndDontSave,
+                };
 
-                const float margin = 40f;
-                targetLeft = Mathf.Clamp(panelPos.x, margin, _doc.rootVisualElement.resolvedStyle.width - margin) - (_arrow.resolvedStyle.width / 2f);
-                targetTop = Mathf.Clamp(panelPos.y, margin, _doc.rootVisualElement.resolvedStyle.height - margin) - (_arrow.resolvedStyle.height / 2f);
-
-                float targetAngle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-                targetRotate = targetAngle - 45f;
-            }
-            else
-            {
-                targetLeft = posX;
-                targetTop = posY;
-                targetRotate = 45f;
-            }
-
-            if (Mathf.Abs(targetLeft - _lastAppliedLeft) > PositionWriteEpsilon)
-            {
-                _arrow.style.left = targetLeft;
-                _lastAppliedLeft = targetLeft;
+                // Материал уходит прямо в стиль элемента. Ни RenderTexture,
+                // ни Image здесь больше нет: кадр фиксированной стороны
+                // растягивался на элемент фильтрацией и давал мыло, а так
+                // дуга считается в разрешении самой панели.
+                //
+                // Геометрию элементу даёт фон: у прозрачного фона UI Toolkit
+                // не выдаёт ни одного треугольника, и рисовать шейдеру было
+                // бы нечего. Цвет фона задан в .mission-ring, шейдер берёт
+                // из него только альфу (прозрачность элемента).
+                style.unityMaterial = _material;
             }
 
-            if (Mathf.Abs(targetTop - _lastAppliedTop) > PositionWriteEpsilon)
+            public void Render(float opacity, float bearing)
             {
-                _arrow.style.top = targetTop;
-                _lastAppliedTop = targetTop;
+                // Указатель неподвижен: пока пеленг и прозрачность те же,
+                // новых чисел материалу давать нечего. Запись идёт только на
+                // смену состояния, а не каждый кадр.
+                if (Mathf.Abs(opacity - _lastOpacity) <= OpacityEpsilon &&
+                    Mathf.Abs(Mathf.DeltaAngle(bearing * Mathf.Rad2Deg, _lastBearing * Mathf.Rad2Deg)) <= BearingEpsilonDegrees)
+                {
+                    return;
+                }
+
+                _lastOpacity = opacity;
+                _lastBearing = bearing;
+                _material.SetFloat(_opacityId, opacity);
+                _material.SetFloat(_angleId, bearing);
+                MarkDirtyRepaint();
             }
 
-            if (Mathf.Abs(targetRotate - _lastAppliedRotate) > 0.5f)
+            public void Dispose()
             {
-                _arrow.style.rotate = new Rotate(Angle.Degrees(targetRotate));
-                _lastAppliedRotate = targetRotate;
+                style.unityMaterial = StyleKeyword.Null;
+                UnityEngine.Object.Destroy(_material);
             }
         }
     }

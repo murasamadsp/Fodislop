@@ -11,6 +11,13 @@ export DOTNET_CLI_HOME="$LINT_DOTNET_HOME"
 echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
+# Линтер запускается с --no-build, иначе каждый коммит пересобирал бы его
+# заново. Значит собрать его обязан сам хук: без этого правка правила молча
+# не доезжает до проверки, и коммит проверяется вчерашним набором правил.
+# Сборка инкрементальная — когда исходники не менялись, она почти бесплатна.
+echo "--- Step 0: Building the architecture linter ---"
+dotnet build tools/Kern.ArchitectureLinter --nologo --verbosity quiet
+
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
 dotnet run --project tools/Kern.ArchitectureLinter --no-build --no-restore
 

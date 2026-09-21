@@ -12,7 +12,4 @@ public enum LightingQualityMode
 
     [Kern.Core.SettingLabel("settings.lighting.per_pixel_bilinear")]
     PerPixelBilinearFix = 3,
-
-    [Kern.Core.SettingLabel("settings.lighting.per_pixel_bilinear_bounce")]
-    PerPixelBilinearFixBounce = 4,
 }

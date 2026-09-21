@@ -2,6 +2,7 @@
 
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using Kern.Core;
 using Kern.Core.Lifecycle;
 using Kern.Persistence;
@@ -102,6 +103,30 @@ public sealed class InstallUpgradeTests
     }
 
     [Test]
+    public void PreviousConfigVersion_MigratesReliefRimAndKeepsBackup()
+    {
+        string previousJson = OldVersionConfig(
+            schemaVersion: ClientConfig.CurrentSchemaVersion - 1,
+            PixelSamplingMode.SmoothFiltered);
+        previousJson = Regex.Replace(
+            previousJson,
+            @"^\s*""EnableReliefRim""\s*:\s*true,\r?\n",
+            string.Empty,
+            RegexOptions.Multiline);
+        Assert.That(previousJson, Does.Not.Contain("EnableReliefRim"));
+        File.WriteAllText(ConfigPath, previousJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 1));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Terrain.EnableReliefRim, Is.True);
+        Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Custom));
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(previousJson));
+    }
+
+    [Test]
     public void OldMapVersion_DropsAndRegenerates()
     {
         WriteMap(formatVersion: 0);
@@ -169,7 +194,8 @@ public sealed class InstallUpgradeTests
         new ClientConfigLoader(new ClientConfigRepository(ConfigPath), _profile).LoadOrCreate();
 
     // Файл чужой версии: те же секции, что пишет текущий клиент, но с чужим
-    // номером схемы. Содержимое не переносится — только номер для проверки сброса.
+// номером схемы. Для старых неподдерживаемых версий содержимое не переносится;
+// отдельный тест выше проверяет единственную поддерживаемую миграцию.
     private string OldVersionConfig(int schemaVersion, PixelSamplingMode pixelSampling)
     {
         ClientConfig config = ClientConfigDefaults.Create(_profile);

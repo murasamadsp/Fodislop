@@ -5,7 +5,7 @@
 //
 // READS: _MaterialField, _EmissionField
 // WRITES: ничего
-// MUST NOT: знать о каскадах, источниках, bounce
+// MUST NOT: знать о каскадах и источниках
 
 float Max3(float3 value)
 {

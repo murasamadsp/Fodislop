@@ -21,7 +21,7 @@ public static class LightingQualityResolver
         // The lock's real purpose is to keep Ultra from quietly running the
         // cheaper per-block path, which is the enum's zero value and so the
         // one any older serialized settings deserialize to. Ultra is authored
-        // with diffuse bounce ("ULTRA (4 cascades, 1 diffuse bounce)").
+        // ("ULTRA (4 cascades)").
         if (requested == LightingQualityMode.Off)
         {
             return LightingQualityMode.Off;
@@ -30,7 +30,7 @@ public static class LightingQualityResolver
         if (preset == GraphicsPreset.Ultra)
         {
             return requested is LightingQualityMode.PerBlock or LightingQualityMode.PerPixel
-                ? LightingQualityMode.PerPixelBilinearFixBounce
+                ? LightingQualityMode.PerPixelBilinearFix
                 : requested;
         }
 

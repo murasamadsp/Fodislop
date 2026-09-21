@@ -8,6 +8,7 @@ using Kern.Core.Interfaces;
 using Kern.Core.Localization;
 using Kern.Core.Models;
 using Kern.Networking;
+using Kern.Networking.Processors;
 using Kern.Player.Logic;
 using Kern.UI.HUD.Player.Model;
 using Kern.UI.Programmator;
@@ -70,6 +71,8 @@ namespace Kern.UI.HUD.Player.View
         private IAssetLoader _assetLoader = null!;
         [Inject]
         private INetworkService _networkService = null!;
+        [Inject]
+        private ProgrammatorProcessor _programmatorProtocol = null!;
         [Inject]
         private ILocalizationService _loc = null!;
         [Inject]
@@ -216,7 +219,8 @@ namespace Kern.UI.HUD.Player.View
                 _loc,
                 _programmatorData,
                 _uiInput,
-                _programmatorTextures);
+                _programmatorTextures,
+                _programmatorProtocol);
             _programmatorGrid?.Initialize();
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);

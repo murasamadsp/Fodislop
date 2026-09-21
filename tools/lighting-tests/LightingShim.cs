@@ -102,7 +102,6 @@ namespace Kern.World.Lighting.Quality
         Off = 1,
         PerPixel = 2,
         PerPixelBilinearFix = 3,
-        PerPixelBilinearFixBounce = 4,
     }
 }
 
@@ -114,7 +113,6 @@ namespace Kern.World.Lighting
         None = 0,
         StaticRC = 1 << 0,
         DynamicLights = 1 << 1,
-        DiffuseBounce = 1 << 2,
         VisibilityAwareMerge = 1 << 3,
         WallAwareUpsample = 1 << 4,
     }
@@ -124,11 +122,9 @@ namespace Kern.World.Lighting
         public static LightingFeatureFlags EnabledFeatures { get; set; } = LightingFeatureFlags.StaticRC;
         public const float AmbientIntensity = 0f;
         public const float EmissionScale = 16f;
-        public const float BounceStrength = 1f;
         public const float MaximumLightMultiplier = 1f;
         public const float EmptyExtinctionMultiplier = 0.2f;
         public const float SolidExtinctionMultiplier = 1f;
-        public static bool BounceEnabled => true;
         public static UnityEngine.Color AmbientColor => UnityEngine.Color.white;
         public static UnityEngine.Color EmptyExtinctionRGB => UnityEngine.Color.white;
         public static UnityEngine.Color SolidExtinctionRGB => UnityEngine.Color.white;

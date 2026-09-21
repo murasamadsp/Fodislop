@@ -7,16 +7,20 @@ namespace Kern.Core;
 
 // Путь конфига на старте: чистая установка или обычный запуск.
 //
-// Легаси запрещено: никаких пошаговых миграций старых схем, никаких
-// LegacySchema-классов, никаких бэкапов версий. Файл чужой версии —
-// это чужой файл: сбрасывается на дефолты и перезаписывается.
+// Поддерживаются только явно описанные миграции формата. Сейчас это переход
+// schema 31 -> 32 для добавления TerrainSettings.EnableReliefRim. Любая более
+// старая или неизвестная схема сбрасывается на дефолты и перезаписывается;
+// произвольного переноса полей между форматами нет.
 // Сверка стандартных пресетов — текущее поведение, не миграция:
 // выполняется при каждой загрузке.
 //
-// Отделён от ClientConfigManager, чтобы установку и сброс можно было
+// Отделён от ClientConfigManager, чтобы установку, миграцию и сброс можно было
 // проверить на временной папке, без MonoBehaviour и persistentDataPath.
 internal sealed class ClientConfigLoader
 {
+    private const int ReliefRimSourceSchemaVersion = 31;
+    private const int ReliefRimSchemaVersion = 32;
+
     private readonly ClientConfigRepository _repository;
     private readonly ClientConfigValidator _validator;
     private readonly GraphicsQualityProfile _graphicsQualityProfile;
@@ -33,6 +37,7 @@ internal sealed class ClientConfigLoader
     {
         CreatedDefaults,
         Loaded,
+        Migrated,
         ResetToDefaults,
     }
 
@@ -46,17 +51,26 @@ internal sealed class ClientConfigLoader
         {
             ClientConfig defaults = ClientConfigDefaults.Create(_graphicsQualityProfile);
             _validator.Validate(defaults);
-            _repository.Save(defaults);
+            _repository.Save(defaults, _repository.BackupPath);
             return new Result(defaults, Outcome.CreatedDefaults, ClientConfig.CurrentSchemaVersion);
         }
 
         ClientConfigRepository.LoadedConfig loaded = _repository.Load();
         int sourceSchemaVersion = loaded.Config.SchemaVersion;
+        if (sourceSchemaVersion == ReliefRimSourceSchemaVersion &&
+            ClientConfig.CurrentSchemaVersion == ReliefRimSchemaVersion)
+        {
+            MigrateSchema31To32(loaded.Config);
+            _validator.Validate(loaded.Config);
+            _repository.Save(loaded.Config, _repository.BackupPath);
+            return new Result(loaded.Config, Outcome.Migrated, sourceSchemaVersion);
+        }
+
         if (sourceSchemaVersion != ClientConfig.CurrentSchemaVersion)
         {
             ClientConfig defaults = ClientConfigDefaults.Create(_graphicsQualityProfile);
             _validator.Validate(defaults);
-            _repository.Save(defaults);
+            _repository.Save(defaults, _repository.BackupPath);
             return new Result(defaults, Outcome.ResetToDefaults, sourceSchemaVersion);
         }
 
@@ -68,10 +82,19 @@ internal sealed class ClientConfigLoader
         if (loaded.Config.GraphicsPreset != presetBefore ||
             loaded.Config.GraphicsQualitySettings != qualityBefore)
         {
-            _repository.Save(loaded.Config);
+            _repository.Save(loaded.Config, _repository.BackupPath);
         }
 
         return new Result(loaded.Config, Outcome.Loaded, sourceSchemaVersion);
+    }
+
+    private static void MigrateSchema31To32(ClientConfig config)
+    {
+        // Schema 31 predates TerrainSettings.EnableReliefRim. The field was
+        // introduced enabled, so migration must make that intent explicit
+        // instead of accepting JsonUtility's CLR default for a missing bool.
+        config.Terrain.EnableReliefRim = true;
+        config.SchemaVersion = ReliefRimSchemaVersion;
     }
 
     private void ReconcileStandardPreset(ClientConfig config)

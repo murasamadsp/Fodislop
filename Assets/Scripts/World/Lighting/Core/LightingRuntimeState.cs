@@ -9,7 +9,6 @@ internal sealed class LightingRuntimeState
 {
     public bool FieldDirty { get; set; } = true;
     public bool CompositeDirty { get; set; } = true;
-    public bool BounceDirty { get; set; } = true;
     public bool HasRenderedLightState { get; set; }
     public bool HasStaticRadianceState { get; set; }
     public bool HasDynamicRadianceState { get; set; }

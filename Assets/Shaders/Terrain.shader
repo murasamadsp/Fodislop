@@ -224,8 +224,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.animData = input.animData;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.packedData = input.packedData;
-                output.geometryCornersX = 0.0;
-                output.geometryCornersY = 0.0;
+                // Канонические углы клетки, а не нули. Этот путь вершин несёт
+                // уже смещённый полигон в POSITION, поэтому вырезание по
+                // геометрии ему не нужно (applyGeometry здесь ноль), но кайма
+                // нормирует выборку по размаху этих углов. При нулях размах
+                // нулевой, зажимается в 0.0001, и клеточная координата
+                // становится (1,1) на каждом фрагменте: оверлей дверей
+                // рисовался плоским прямоугольником в 1/8 яркости.
+                output.geometryCornersX = float4(0.0, 1.0, 1.0, 0.0);
+                output.geometryCornersY = float4(0.0, 0.0, 1.0, 1.0);
                 output.atlasIndex = 0.0;
 
                 return output;
@@ -248,12 +255,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         1.0);
                 }
 
-                // Cell geometry is a binary 32x32 silhouette. Alpha-zero
-                // blending is not equivalent here: the rasterizer/MSAA
-                // coverage can still soften a primitive edge before blending.
-                // Reject the quantized cell fragment before atlas sampling.
-                if (input.worldPos.w > 1.5) return half4(0.0, 0.0, 0.0, 0.0);
-                int animationProfile = (int)(input.animData.w + 0.5);
+                TerrainSurfaceInputs surface = BuildTerrainSurfaceInputs(
+                    input.packedData,
+                    input.uv,
+                    input.geometryCornersX,
+                    input.geometryCornersY,
+                    input.glowData,
+                    input.animData.w);
+                int animationProfile = surface.animationProfile;
                 float applyGeometry = 0.0;
             #if defined(KERN_TERRAIN_CELLS)
                 // Geometry belongs to the foreground layer.  Keep the
@@ -261,22 +270,21 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // by a displaced foreground silhouette.
                 applyGeometry = input.isForeground;
             #endif
-                float2 contourUV = input.packedData.x > 0.5
-                    ? input.packedData.yz
-                    : input.uv;
                 float cellCoverage = EvaluateTerrainCellCoverage(
-                    input.packedData.yz,
-                    contourUV,
-                    input.geometryCornersX,
-                    input.geometryCornersY,
-                    input.packedData.x,
-                    input.glowData.z,
-                    input.glowData.y,
+                    surface,
                     TerrainContourAntialiasScale(animationProfile),
                     applyGeometry);
-            #if defined(KERN_TERRAIN_CELLS)
-                clip(cellCoverage - 0.5);
-            #endif
+
+                // Отладка идёт ДО вырезания, а не после.
+                //
+                // Пока clip стоял первым, вид «Силуэт клетки» не мог показать
+                // вырезанный пиксель: его уже не существовало, и до сравнения
+                // доживали только те фрагменты, у которых покрытие и так выше
+                // половины. Вид заливал кадр бирюзой всегда, независимо от
+                // того, работает силуэт или нет, — то есть был не видом, а
+                // заливкой. Остальные виды рисуются теперь во весь несущий
+                // прямоугольник клетки, и это верно: они показывают термы
+                // клетки, а не её видимую форму.
                 if (KernTerrainDebugActive())
                 {
                     float debugOcclusion = 1.0;
@@ -292,16 +300,17 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 #endif
                     return half4(
                         KernTerrainDebugColor(
-                            input.packedData.yz,
-                            input.glowData.z,
-                            input.glowData.y,
+                            surface,
                             cellCoverage,
-                            input.packedData.x,
                             debugForeground,
                             input.worldPos.z,
                             debugOcclusion),
                         1.0);
                 }
+
+            #if defined(KERN_TERRAIN_CELLS)
+                clip(cellCoverage - 0.5);
+            #endif
 
                 if (input.subAtlasRect.z < 0.0001)
                 {
@@ -368,7 +377,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                float3 finalRGB = texColor.rgb;
+                // Кайма умножает сырой тексель, до цветовой анимации и до
+                // декалей, как в оригинале: анимация кристалла подмешивает
+                // блик, и затемнение после неё гасило бы и его.
+                float3 finalRGB = texColor.rgb * TerrainReliefRim(surface);
                 finalRGB = AnimateTerrainColor(
                     finalRGB,
                     texColor.rgb,
@@ -553,8 +565,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.worldPos = input.worldPosAttr;
                 output.animData = input.animData;
                 output.packedData = input.packedData;
-                output.geometryCornersX = 0.0;
-                output.geometryCornersY = 0.0;
+                // Канонические углы клетки, а не нули. Этот путь вершин несёт
+                // уже смещённый полигон в POSITION, поэтому вырезание по
+                // геометрии ему не нужно (applyGeometry здесь ноль), но кайма
+                // нормирует выборку по размаху этих углов. При нулях размах
+                // нулевой, зажимается в 0.0001, и клеточная координата
+                // становится (1,1) на каждом фрагменте: оверлей дверей
+                // рисовался плоским прямоугольником в 1/8 яркости.
+                output.geometryCornersX = float4(0.0, 1.0, 1.0, 0.0);
+                output.geometryCornersY = float4(0.0, 0.0, 1.0, 1.0);
                 output.glowData = input.glowAttr;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 output.subAtlasRect = input.subAtlasRect;
@@ -608,11 +627,23 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             MaterialFieldOutput MaterialFieldFrag(MaterialFieldVaryings input)
             {
                 MaterialFieldOutput output;
+
+                // Тот же разбор вершины, что и в экранном проходе: поле
+                // материалов обязано нести ровно то альбедо, которое видно,
+                // иначе свет отскакивает от цвета, которого в кадре нет.
+                TerrainSurfaceInputs surface = BuildTerrainSurfaceInputs(
+                    input.packedData,
+                    input.uv,
+                    input.geometryCornersX,
+                    input.geometryCornersY,
+                    input.glowData,
+                    input.animData.w);
+
                 float isForeground = input.isForeground;
                 int albedoAtlasSlot = (int)round(input.atlasIndex);
                 float4 atlasTexelSize = GetFieldAtlasTexelSize(albedoAtlasSlot);
                 int albedoAnimationType = (int)(input.animData.x + 0.5);
-                int albedoAnimationProfile = (int)(input.animData.w + 0.5);
+                int albedoAnimationProfile = surface.animationProfile;
                 float3 flowSample = 0.0;
                 if (albedoAnimationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
                 {
@@ -645,10 +676,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 // Без фолбеков: нет текселя — нет альбедо. Плоский цвет
                 // миникарты сюда больше не попадает ни в каком виде.
-                float2 contourUV = input.packedData.x > 0.5
-                    ? input.packedData.yz
-                    : input.uv;
-                float3 surfaceAlbedo = albedoTexel.a >= 0.05 ? albedoTexel.rgb : 0.0;
+                float3 surfaceAlbedo = albedoTexel.a >= 0.05
+                    ? albedoTexel.rgb * TerrainReliefRim(surface)
+                    : 0.0;
                 uint lightingFlags = KernTerrainLightingFlags(input.glowData.y);
                 float emissionStrength = KernTerrainEmissionStrength(
                     input.glowData.y,
@@ -662,16 +692,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #if defined(KERN_TERRAIN_CELLS)
                 applyGeometry = input.isForeground;
             #endif
-                int animationProfile = (int)(input.animData.w + 0.5);
                 float cellCoverage = EvaluateTerrainCellCoverage(
-                    input.packedData.yz,
-                    contourUV,
-                    input.geometryCornersX,
-                    input.geometryCornersY,
-                    input.packedData.x,
-                    input.glowData.z,
-                    input.glowData.y,
-                    TerrainContourAntialiasScale(animationProfile),
+                    surface,
+                    TerrainContourAntialiasScale(albedoAnimationProfile),
                     applyGeometry);
             #if defined(KERN_TERRAIN_CELLS)
                 clip(cellCoverage - 0.5);
@@ -704,11 +727,13 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.uv,
                     input.glowData.w);
 
-                float surface = step(0.05, input.color.a) * isForeground;
-                output.material = half4(surfaceAlbedo * surface, occupancy);
+                // Маска присутствия материала в поле: прозрачные и фоновые
+                // фрагменты не вносят в поле ни альбедо, ни свечения.
+                float materialMask = step(0.05, input.color.a) * isForeground;
+                output.material = half4(surfaceAlbedo * materialMask, occupancy);
                 output.emission = half4(
-                    surfaceAlbedo * emissionStrength * surface * cellCoverage,
-                    emissionStrength * surface * cellCoverage);
+                    surfaceAlbedo * emissionStrength * materialMask * cellCoverage,
+                    emissionStrength * materialMask * cellCoverage);
                 return output;
             }
             ENDHLSL

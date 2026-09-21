@@ -22,7 +22,8 @@ namespace Kern.Game;
 [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any dynamic asset load/play errors.")]
 public sealed class ServerAudioEvent : IDisposable
 {
-    private readonly SFX _effectType;
+    private readonly SFX? _audioEffectType;
+    private readonly string _visualEffectName;
     private readonly ushort _sourceX;
     private readonly ushort _sourceY;
     private readonly ushort _targetBotID;
@@ -71,11 +72,69 @@ public sealed class ServerAudioEvent : IDisposable
         MapManager mapManager,
         IVfxService vfxPool,
         IAsyncOperationSupervisor operations)
+        : this(
+            packet.EffectType,
+            packet.EffectType.ToString(),
+            packet.TargetBotId,
+            packet.X,
+            packet.Y,
+            packet.Parameters,
+            slot,
+            robotService,
+            audioSystem,
+            assetLoader,
+            mapManager,
+            vfxPool,
+            operations)
     {
-        _effectType = packet.EffectType;
-        _sourceX = packet.X;
-        _sourceY = packet.Y;
-        _targetBotID = packet.TargetBotId;
+    }
+
+    public ServerAudioEvent(
+        VFXPacket packet,
+        IVfxSlot? slot,
+        IRobotService robotService,
+        IAudioSystem audioSystem,
+        IAssetLoader assetLoader,
+        MapManager mapManager,
+        IVfxService vfxPool,
+        IAsyncOperationSupervisor operations)
+        : this(
+            null,
+            packet.EffectType.ToString(),
+            packet.TargetBotId,
+            packet.X,
+            packet.Y,
+            packet.Parameters,
+            slot,
+            robotService,
+            audioSystem,
+            assetLoader,
+            mapManager,
+            vfxPool,
+            operations)
+    {
+    }
+
+    private ServerAudioEvent(
+        SFX? audioEffectType,
+        string visualEffectName,
+        ushort targetBotId,
+        ushort sourceX,
+        ushort sourceY,
+        IReadOnlyList<StringPairPacket> parameters,
+        IVfxSlot? slot,
+        IRobotService robotService,
+        IAudioSystem audioSystem,
+        IAssetLoader assetLoader,
+        MapManager mapManager,
+        IVfxService vfxPool,
+        IAsyncOperationSupervisor operations)
+    {
+        _audioEffectType = audioEffectType;
+        _visualEffectName = visualEffectName;
+        _sourceX = sourceX;
+        _sourceY = sourceY;
+        _targetBotID = targetBotId;
         _slot = slot;
         _robotService = robotService;
         _audioSystem = audioSystem;
@@ -88,9 +147,12 @@ public sealed class ServerAudioEvent : IDisposable
             _gameObject = slot.GameObject;
         }
 
-        _parsedParams = ServerAudioParameters.Parse(packet.Parameters);
+        _parsedParams = ServerAudioParameters.Parse(parameters);
         SetupSlotPosition();
-        PlayAudio();
+        if (_audioEffectType is SFX effectType)
+        {
+            PlayAudio(effectType);
+        }
 
         if (slot != null)
         {
@@ -267,9 +329,9 @@ public sealed class ServerAudioEvent : IDisposable
         _slot?.SetSprite(null);
     }
 
-    private void PlayAudio()
+    private void PlayAudio(SFX effectType)
     {
-        string eventName = GetSfxEventName(_effectType);
+        string eventName = GetSfxEventName(effectType);
         _audioSystem.PlayAt(eventName, _intendedWorldPosition);
     }
 
@@ -287,7 +349,7 @@ public sealed class ServerAudioEvent : IDisposable
     {
         try
         {
-            var filename = $"VFX/{_effectType.ToString().ToLowerInvariant()}";
+            var filename = $"VFX/{_visualEffectName.ToLowerInvariant()}";
             var animData = await _assetLoader.GetAnimatedSpritesAsync(filename, token);
             if (token.IsCancellationRequested)
             {
@@ -361,7 +423,7 @@ public sealed class ServerAudioEvent : IDisposable
         {
             var effectAsset = await RuntimeEffekseerLoader.LoadEffectAsync(
                 bytes,
-                _effectType.ToString(),
+                _visualEffectName,
                 _assetLoader,
                 texturePathMapper: path =>
                 {

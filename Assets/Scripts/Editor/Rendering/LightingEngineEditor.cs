@@ -26,7 +26,6 @@ namespace Kern.Editor
                 "These are the values currently sent to the compute shader. Derived values are read-only.",
                 MessageType.Info);
             EditorGUILayout.Vector2IntField("_FieldSize", new(engine.FieldWidth, engine.FieldHeight));
-            EditorGUILayout.Vector2IntField("_BounceSize", new(engine.BounceWidth, engine.BounceHeight));
             EditorGUILayout.FloatField("Requested pixels/cell", engine.RequestedPixelsPerCell);
             EditorGUILayout.FloatField("Effective pixels/cell", engine.EffectivePixelsPerCell);
             EditorGUILayout.Toggle("Texture dimension limited", engine.TextureDimensionLimited);
@@ -35,7 +34,6 @@ namespace Kern.Editor
             EditorGUILayout.ColorField(new GUIContent("_AmbientColor"), engine.ComputeAmbientColor, true, true, true);
             EditorGUILayout.ColorField(new GUIContent("_EmptyExtinctionRGB"), engine.ComputeEmptyExtinction, true, true, true);
             EditorGUILayout.ColorField(new GUIContent("_SolidExtinctionRGB"), engine.ComputeSolidExtinction, true, true, true);
-            EditorGUILayout.FloatField("_BounceStrength", engine.BounceStrength);
             EditorGUILayout.FloatField("_EmissionScale", engine.EmissionScale);
             EditorGUILayout.FloatField("_MaximumLightMultiplier", engine.MaximumLightMultiplier);
             EditorGUILayout.FloatField("_CellSize", engine.CellSize);
@@ -43,7 +41,6 @@ namespace Kern.Editor
             EditorGUILayout.EnumPopup("_DebugView", engine.ActiveDebugView);
             EditorGUILayout.IntField("_MaterialYFlip", engine.MaterialYFlip);
             EditorGUILayout.IntField("_MaximumIntervalSteps", engine.MaximumIntervalSteps);
-            EditorGUILayout.IntField("_EnableDiffuseBounce", engine.DiffuseBounceEnabled ? 1 : 0);
             EditorGUILayout.IntField("Cascade count", engine.CascadeCount);
             foreach (string summary in engine.GetCascadeUniformSummaries())
             {

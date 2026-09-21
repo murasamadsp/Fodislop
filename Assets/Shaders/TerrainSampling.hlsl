@@ -75,10 +75,16 @@ TerrainTileUvResult ResolveTerrainTileUV(
         return res;
     }
 
-    // w целиком занят: значение больше 1.5 — чужой маркер, по которому
-    // Terrain.shader отбрасывает фрагмент, а TerrainCellBuilder — вершину.
-    // Признак листа живёт в z, над колонкой тайлгруппы: та занимает биты
-    // 0-4 (descriptor & 0x1F), бит 5 свободен.
+    // Раскладка упакованных каналов клетки:
+    //   w — бит 0: автотайлинг по соседям. Биты выше свободны.
+    //   z — биты 0-4: колонка тайлгруппы (descriptor & 0x1F);
+    //       бит 5: сплошной лист.
+    //
+    // В w когда-то читали значение больше 1.5 как «выбросить квад», но
+    // писателя у него не было ни в одном коммите, и канал только выглядел
+    // занятым. Читателей сняли; выбрасывание квада выражено там, где оно
+    // и принимается, — atlasIndex < 0 в LoadTerrainCellVertex и
+    // TerrainCellLayers.TryGetType.
     bool isTiling = fmod(worldPos.w, 2.0) > 0.5;
     int packedColumn = (int)(worldPos.z + 0.5);
     bool isContinuousSheet = (packedColumn & 32) != 0;

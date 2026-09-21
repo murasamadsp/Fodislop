@@ -96,8 +96,6 @@ internal sealed class LightingFrameExecutor
             _resources.LightingCompute!,
             _resources.FieldWidth,
             _resources.FieldHeight,
-            _resources.BounceWidth,
-            _resources.BounceHeight,
             worldRect,
             cellSize,
             quality,
@@ -106,7 +104,6 @@ internal sealed class LightingFrameExecutor
             emissionField,
             _resources.SolveCascadeKernel,
             _resources.ResolveDirectKernel,
-            _resources.SolveDiffuseBounceKernel,
             _resources.CompositeLightingKernel,
             _resources.CellGridWidth,
             _resources.CellGridHeight);
@@ -185,16 +182,14 @@ internal sealed class LightingFrameExecutor
             _executedStages.Add("DynamicLighting");
         }
 
-        // Dynamic-only frames keep every input except the dynamic tiles: bounce
-        // and composite refresh the dynamic union plus gather margin instead of
+        // Dynamic-only frames keep every input except the dynamic tiles:
+        // composite refreshes the dynamic union plus gather margin instead of
         // the whole field. Any static, geometry or debug-view change keeps
         // the full path, so debug views stay bit-identical.
         //
         // CompositeDirty is intentionally NOT a full-path trigger: it is set
         // on every dynamic light move by LightingEngine.SetDynamicLight, which is
-        // exactly the dynamic-only case this path exists for. BounceDirty is
-        // only set by config/debug/reset/geometry paths, which force the full
-        // path through the other conditions anyway.
+        // exactly the dynamic-only case this path exists for.
         //
         // Removing the last source also goes partial: its previous union is
         // retained below, and the cleared area is exactly that union. Any
@@ -207,7 +202,6 @@ internal sealed class LightingFrameExecutor
         RectInt? partialRect = null;
         if (!staticRadianceChanged &&
             !request.RebuildFields &&
-            !request.BounceDirty &&
             request.DebugView == LightingEngine.DebugView.FinalLighting)
         {
             if (dynamicRadianceNeeded &&
@@ -222,27 +216,6 @@ internal sealed class LightingFrameExecutor
                 partialRect = _lastDynamicUnion;
                 _lastDynamicUnion = null;
             }
-        }
-
-        bool bounceRequired = request.BounceDirty ||
-            request.DynamicLightsChanged ||
-            request.DynamicRadianceChanged ||
-            staticRadianceChanged;
-        bool bounceRequested = request.Quality == LightingQualityMode.PerPixelBilinearFixBounce ||
-            request.DebugView == LightingEngine.DebugView.DiffuseBounce;
-        if (bounceRequested &&
-            LightingConfigHolder.BounceEnabled &&
-            LightingConfigHolder.BounceStrength > 0f &&
-            LightingConfigHolder.EnabledFeatures.HasFlag(LightingFeatureFlags.DiffuseBounce) &&
-            bounceRequired)
-        {
-            _indirectSolver.RecordBounce(
-                commandBuffer,
-                partialRect,
-                request.WorldRect,
-                request.CellSize,
-                _telemetry);
-            _executedStages.Add("DiffuseBounce");
         }
 
         if (request.DynamicLightsChanged ||

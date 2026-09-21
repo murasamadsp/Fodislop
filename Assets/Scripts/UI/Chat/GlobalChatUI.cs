@@ -54,6 +54,7 @@ namespace Kern.UI
         {
             _chatEvents = chatEvents;
             _chatEvents.MessageReceived += AddMessage;
+            _chatEvents.HistoryReceived += AddHistory;
             _chatEvents.MuteReceived += ApplyMute;
         }
 
@@ -132,6 +133,7 @@ namespace Kern.UI
             if (_chatEvents != null)
             {
                 _chatEvents.MessageReceived -= AddMessage;
+                _chatEvents.HistoryReceived -= AddHistory;
                 _chatEvents.MuteReceived -= ApplyMute;
             }
 
@@ -248,8 +250,7 @@ namespace Kern.UI
 
             _view.BindActions(
                 OnSendClicked,
-                () => SelectChannel(ChatChannel.Global),
-                () => SelectChannel(ChatChannel.Local));
+                () => SelectChannel(ChatChannel.Global));
 
             _colorController = new ChatColorController(_networkService, _view.ColorButton, _view.ColorGrid);
             SelectChannel(ChatChannel.Global);
@@ -344,6 +345,29 @@ namespace Kern.UI
             AppendMessage(ChatChannel.Global, ChatMessageFormatter.FormatGlobal(msg, DateTime.Now));
         }
 
+        private void AddHistory(ChatMessageListPacket packet)
+        {
+            ChatChannel channel;
+            if (string.Equals(packet.Tag, "global", StringComparison.OrdinalIgnoreCase))
+            {
+                channel = ChatChannel.Global;
+            }
+            else if (string.Equals(packet.Tag, "local", StringComparison.OrdinalIgnoreCase))
+            {
+                channel = ChatChannel.Local;
+            }
+            else
+            {
+                Debug.LogWarning($"[GlobalChatUI] Ignoring history for unsupported channel '{packet.Tag}'.");
+                return;
+            }
+
+            foreach (ChatMessagePacket message in packet.Messages)
+            {
+                AppendMessage(channel, ChatMessageFormatter.FormatGlobal(message, DateTime.Now));
+            }
+        }
+
         // Локальные сообщения в окне не показываются и потому здесь не
         // выписываются вовсе. Локальный чат — это облако над роботом, а не строка
         // в журнале; пока он был и там, и там, сообщение появлялось дважды, причём
@@ -397,7 +421,6 @@ namespace Kern.UI
                 _activeChannel,
                 _view?.ChatHeader,
                 _view?.GlobalChannelButton,
-                _view?.LocalChannelButton,
                 _view?.ColorButton,
                 _loc);
 

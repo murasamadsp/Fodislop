@@ -21,7 +21,6 @@ public interface IFrameTelemetry
     float LightingCascadeTraceTimeMs { get; set; }
     float LightingCascadeMergeTimeMs { get; set; }
     float LightingDynamicLightingTimeMs { get; set; }
-    float LightingBounceTimeMs { get; set; }
     float LightingCompositeTimeMs { get; set; }
     int LightingCommandBufferBytes { get; set; }
     int ActiveDynamicLights { get; set; }
@@ -45,7 +44,6 @@ public interface IFrameTelemetry
     int LightingDynamicTraceCount { get; set; }
     long LightingDynamicDispatchPixels { get; set; }
     long LightingDynamicComposePixels { get; set; }
-    long LightingBounceDispatchPixels { get; set; }
     long LightingCompositeDispatchPixels { get; set; }
     long LightingPolarRayWorkUnits { get; set; }
     long LightingEstimatedCascadeRayWorkUnits { get; set; }
@@ -66,7 +64,7 @@ public interface IFrameTelemetry
     int StreamingDeltaY { get; set; }
 
     // DDA segments marched this frame across all transport stages
-    // (cascade trace, dynamic light polar, bounce cache). A segment is one TraceLightSegment call.
+    // (cascade trace, dynamic light polar). A segment is one TraceLightSegment call.
     int LightingDdaSegments { get; set; }
 
     // Total texel visits inside DDA loops this frame. Each crossed texel counts as one.
@@ -97,7 +95,6 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
     public float LightingCascadeTraceTimeMs { get; set; }
     public float LightingCascadeMergeTimeMs { get; set; }
     public float LightingDynamicLightingTimeMs { get; set; }
-    public float LightingBounceTimeMs { get; set; }
     public float LightingCompositeTimeMs { get; set; }
     public int LightingCommandBufferBytes { get; set; }
     public int ActiveDynamicLights { get; set; }
@@ -137,7 +134,6 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
     public int LightingDynamicTraceCount { get; set; }
     public long LightingDynamicDispatchPixels { get; set; }
     public long LightingDynamicComposePixels { get; set; }
-    public long LightingBounceDispatchPixels { get; set; }
     public long LightingCompositeDispatchPixels { get; set; }
     public long LightingPolarRayWorkUnits { get; set; }
     public long LightingEstimatedCascadeRayWorkUnits { get; set; }
@@ -289,14 +285,12 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
         LightingCascadeTraceTimeMs = 0f;
         LightingCascadeMergeTimeMs = 0f;
         LightingDynamicLightingTimeMs = 0f;
-        LightingBounceTimeMs = 0f;
         LightingCompositeTimeMs = 0f;
         LightingDdaSegments = 0;
         LightingDdaTexelVisits = 0L;
         LightingCascadeMergeSamples = 0;
         LightingDynamicDispatchPixels = 0;
         LightingDynamicComposePixels = 0;
-        LightingBounceDispatchPixels = 0;
         LightingCompositeDispatchPixels = 0;
         LightingPolarRayWorkUnits = 0;
         LightingRegionChangeCount = 0;

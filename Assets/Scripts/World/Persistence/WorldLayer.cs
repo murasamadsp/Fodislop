@@ -628,6 +628,62 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         _cache.CompleteDirtySnapshot(EnumerateSnapshotIndices(snapshot));
     }
 
+    internal void CreateDurableBackup(string backupPath)
+    {
+        if (string.IsNullOrWhiteSpace(backupPath))
+        {
+            throw new ArgumentException("Backup path is required.", nameof(backupPath));
+        }
+
+        lock (_ioLock)
+        {
+            if (_fileStream == null || _disposed)
+            {
+                throw new ObjectDisposedException(nameof(WorldLayer<T>));
+            }
+
+            string? directory = Path.GetDirectoryName(backupPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            string temporaryPath = backupPath + ".tmp";
+            long originalPosition = _fileStream.Position;
+            try
+            {
+                _fileStream.Flush();
+                _fileStream.Seek(0, SeekOrigin.Begin);
+                using (var backup = new FileStream(
+                           temporaryPath,
+                           FileMode.Create,
+                           FileAccess.Write,
+                           FileShare.None))
+                {
+                    _fileStream.CopyTo(backup);
+                    backup.Flush(flushToDisk: true);
+                }
+
+                if (File.Exists(backupPath))
+                {
+                    File.Replace(temporaryPath, backupPath, null);
+                }
+                else
+                {
+                    File.Move(temporaryPath, backupPath);
+                }
+            }
+            finally
+            {
+                _fileStream.Seek(originalPosition, SeekOrigin.Begin);
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+    }
+
     private static IEnumerable<int> EnumerateSnapshotIndices(
         IEnumerable<(int Index, T[] Chunk)> snapshot)
     {

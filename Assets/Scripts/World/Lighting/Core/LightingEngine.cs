@@ -28,7 +28,6 @@ namespace Kern.World.Lighting
             Transmission = 4,
             StaticDirect = 5,
             DynamicDirect = 6,
-            DiffuseBounce = 7,
             Exposure = 8,
 
             AmbientOcclusion = 9,
@@ -111,8 +110,6 @@ namespace Kern.World.Lighting
         private List<CascadeLayout> _cascades => _resources.Cascades;
         private int _fieldWidth => _resources.FieldWidth;
         private int _fieldHeight => _resources.FieldHeight;
-        private int _bounceWidth => _resources.BounceWidth;
-        private int _bounceHeight => _resources.BounceHeight;
         private int _atlasEntryCount => _resources.AtlasEntryCount;
 
         // Для интеграционных тестов жизненного цикла GPU-ресурсов.
@@ -156,9 +153,6 @@ namespace Kern.World.Lighting
 
         public DebugView ActiveDebugView => _debugView;
 
-        public bool DiffuseBounceEnabled =>
-            LightingConfigHolder.BounceEnabled && LightingConfigHolder.BounceStrength > 0f;
-
         public float AmbientIntensity => LightingConfigHolder.AmbientIntensity;
 
         public Color AmbientColor => LightingConfigHolder.AmbientColor;
@@ -172,8 +166,6 @@ namespace Kern.World.Lighting
         public float EmptyExtinctionMultiplier => LightingConfigHolder.EmptyExtinctionMultiplier;
 
         public float SolidExtinctionMultiplier => LightingConfigHolder.SolidExtinctionMultiplier;
-
-        public float BounceStrength => LightingConfigHolder.BounceStrength;
 
         public float MaximumLightMultiplier => LightingConfigHolder.MaximumLightMultiplier;
 
@@ -214,9 +206,7 @@ namespace Kern.World.Lighting
 
         public bool CascadeBudgetLimited => _runtimeState.CascadeBudgetLimited;
 
-        public int BounceWidth => _bounceWidth;
 
-        public int BounceHeight => _bounceHeight;
 
         public int CascadeCount => _cascades.Count;
 
@@ -284,9 +274,13 @@ namespace Kern.World.Lighting
 
             _budgetViolationCaptured = true;
             Debug.LogWarning(
-                $"[Lighting] Budget violation captured: " +
+                $"[Lighting] Budget diagnostic captured: " +
                 $"estimatedStaticRayWork={estimatedRayWork}, " +
                 $"limit={LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits}, " +
+                $"staticRayBudgetViolation={staticRayBudgetViolation}, " +
+                $"measuredBudgetViolation={measuredBudgetViolation}, " +
+                $"repeatedStaticSolve={repeatedStaticSolve}, " +
+                $"repeatedTerrainFullRebuild={repeatedTerrainFullRebuild}, " +
                 $"staticSolves={_telemetry.LightingStaticSolveCount}, " +
                 $"terrainFullPopulates={_telemetry.TerrainFullPopulateCount}.");
             try
@@ -306,7 +300,7 @@ namespace Kern.World.Lighting
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"[Lighting] Budget violation capture failed: {exception.Message}");
+                Debug.LogWarning($"[Lighting] Budget diagnostic capture failed: {exception.Message}");
             }
         }
 
@@ -487,7 +481,6 @@ namespace Kern.World.Lighting
                 _clientConfig.Config.GraphicsPreset,
                 _clientConfig.Config.GraphicsQualitySettings);
             _runtimeState.FieldDirty = true;
-            _runtimeState.BounceDirty = true;
             _runtimeState.CompositeDirty = true;
             _runtimeState.HasStaticRadianceState = false;
             _runtimeState.HasDynamicRadianceState = false;
@@ -509,7 +502,6 @@ namespace Kern.World.Lighting
             _runtimeState.HasStaticRadianceState = false;
             _runtimeState.HasDynamicRadianceState = false;
             _runtimeState.CompositeDirty = true;
-            _runtimeState.BounceDirty = true;
             Debug.Log($"[LightingEngine] SetDebugView: {debugView}");
         }
 
@@ -529,7 +521,6 @@ namespace Kern.World.Lighting
             _runtimeState.HasStaticRadianceState = false;
             _runtimeState.HasDynamicRadianceState = false;
             _runtimeState.CompositeDirty = true;
-            _runtimeState.BounceDirty = true;
         }
 
 
@@ -540,7 +531,6 @@ namespace Kern.World.Lighting
                 _clientConfig.Config.GraphicsQualitySettings);
             _runtimeState.FieldDirty = true;
             _runtimeState.CompositeDirty = true;
-            _runtimeState.BounceDirty = true;
             _runtimeState.HasRenderedLightState = false;
             _runtimeState.HasStaticRadianceState = false;
             _runtimeState.HasDynamicRadianceState = false;
@@ -631,7 +621,6 @@ namespace Kern.World.Lighting
             _runtimeState.LastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
             _runtimeState.FieldDirty = true;
             _runtimeState.CompositeDirty = true;
-            _runtimeState.BounceDirty = true;
             _runtimeState.HasRenderedLightState = false;
             _runtimeState.HasStaticRadianceState = false;
             _runtimeState.HasDynamicRadianceState = false;

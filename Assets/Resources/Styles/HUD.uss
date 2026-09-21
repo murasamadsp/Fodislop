@@ -893,16 +893,24 @@
     -unity-text-align: middle-center;
 }
 
-/* ─── Указатель миссии ─── */
+/* ─── Кольцо навигации миссии ─── */
 
-.mission-arrow {
+.mission-ring-overlay {
     position: absolute;
-    width: var(--space-10);
-    height: var(--space-10);
-    border-top-width: var(--space-2);
-    border-right-width: var(--space-2);
-    border-bottom-width: 0;
-    border-left-width: 0;
-    border-top-color: var(--accent-gold);
-    border-right-color: var(--accent-gold);
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+/* Размер и положение задаются кодом: кольцо стоит в центре вьюпорта, а его
+   радиус — доля меньшей стороны экрана.
+
+   Фон непрозрачный не ради цвета: элемент без фона не даёт UI Toolkit ни
+   одного треугольника, и собственному материалу нечего было бы закрашивать.
+   Шейдер кольца перекрывает RGB целиком и берёт отсюда только альфу — она
+   служит ему прозрачностью элемента. */
+.mission-ring {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 1);
 }

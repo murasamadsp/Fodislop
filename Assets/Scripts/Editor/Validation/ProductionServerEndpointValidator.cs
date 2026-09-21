@@ -20,10 +20,19 @@ public sealed class ProductionServerEndpointValidator : IPreprocessBuildWithRepo
             return;
         }
 
+        if ((report.summary.options & BuildOptions.Development) != 0)
+        {
+            return;
+        }
+
         string host = ProjectRuntimeContracts.ClientConfiguration.DefaultServerHost.Trim();
         int port = ProjectRuntimeContracts.ClientConfiguration.DefaultServerPort;
 
-        if (ProjectRuntimeContracts.ClientConfiguration.DefaultUseDummyConnection)
+        // Read through the runtime conversion so the endpoint check remains
+        // reachable while the local dummy default is still enabled.
+        bool useDummyConnection = Convert.ToBoolean(
+            ProjectRuntimeContracts.ClientConfiguration.DefaultUseDummyConnection);
+        if (useDummyConnection)
         {
             throw new BuildFailedException(
                 "Alpha release build requires the real server transport. " +

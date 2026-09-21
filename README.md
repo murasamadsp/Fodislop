@@ -9,7 +9,7 @@ git clone https://github.com/MinesReborn/Kern.git
 ```
 
 Открой через **Unity Hub** → `Open` → выбери папку. Unity сам подтянет зависимости. Открой `Assets/Scenes/Bootstrap.unity` и жми **Play**: Bootstrap (build index 0) грузит `MainMenu`, а тот — `MainGame` аддитивно.
-реальное подключение через Darkar25 `TcpConnection` (MinesServerNetworking) к `ServerHost:ServerPort` (по умолчанию `127.0.0.1:7777`).
+реальное подключение через Darkar25 `TcpConnection` (MinesServerNetworking) к `ServerHost:ServerPort`. Production endpoint должен быть задан до альфа-сборки; release-гейт отклоняет localhost и dummy transport.
 
 ## Технологии
 

@@ -80,6 +80,7 @@ namespace Kern.Networking.Connection
         private float _reconnectCountdown;
         private string _reconnectStatus = string.Empty;
         private bool _tearingDown;
+        private bool _returningToMenu;
         private bool _restartWorldOnConnect;
 
         // НУЖЕН: сохраняет причину серверного дисконнекта — используется при реконнекте
@@ -297,6 +298,7 @@ namespace Kern.Networking.Connection
             _disconnectReason = reason;
             Disconnect();
             OnDisconnectReason?.Invoke(reason);
+            ReturnToMainMenuAfterDisconnect();
         }
 
         public void HandleServerReconnect()
@@ -350,16 +352,29 @@ namespace Kern.Networking.Connection
             _reconnectStatus = string.Empty;
             OnReconnectHidden?.Invoke();
 
-            int version = _useOldClient ? 0 : 1;
+            int version = _useOldClient ? 0 : ProjectRuntimeContracts.Networking.ClientVersion;
             string token = _tokens.Load();
             Debug.Log($"[Auth] Sending ClientHello with token: {(string.IsNullOrEmpty(token) ? "EMPTY" : "PRESENT")}");
             Connection?.SendAsync(new ClientPacket(
                 (uint)DateTimeOffset.UtcNow.Ticks,
-                new ClientHelloPacket(version, "Windows", 10, "fingerprint", token)));
+                new ClientHelloPacket(
+                    version,
+                    GetClientOperatingSystem(),
+                    Environment.OSVersion.Version.Major,
+                    SystemInfo.deviceUniqueIdentifier,
+                    token)));
             Connection?.SendAsync(new ClientPacket(
                 (uint)DateTimeOffset.UtcNow.Ticks,
                 new OpenHelpClickPacket()));
         }
+
+        private static string GetClientOperatingSystem() =>
+            Application.platform switch
+            {
+                RuntimePlatform.OSXPlayer or RuntimePlatform.OSXEditor => "macOS",
+                RuntimePlatform.WindowsPlayer or RuntimePlatform.WindowsEditor => "Windows",
+                _ => Application.platform.ToString(),
+            };
 
         private void OnDisconnected()
         {
@@ -380,6 +395,43 @@ namespace Kern.Networking.Connection
                 _reconnectCountdown = _reconnectBackoff.CurrentDelay;
                 _reconnectStatus = _loc.Get("network.reconnect.retry", Mathf.CeilToInt(_reconnectCountdown));
                 OnReconnectStatusChanged?.Invoke(_reconnectStatus);
+                return;
+            }
+
+            Connection = null;
+            _disconnectReason = _loc.Get("network.error.connection_lost");
+            OnDisconnectReason?.Invoke(_disconnectReason);
+            ReturnToMainMenuAfterDisconnect();
+        }
+
+        private void ReturnToMainMenuAfterDisconnect()
+        {
+            if (_returningToMenu || string.Equals(
+                    _sceneNavigator.CurrentSceneName,
+                    ProjectRuntimeContracts.SceneNames.MainMenu,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _returningToMenu = true;
+            _operations.Run("connection_lost_to_main_menu", ReturnToMainMenuAfterDisconnectAsync);
+        }
+
+        private async UniTask ReturnToMainMenuAfterDisconnectAsync(CancellationToken supervisorToken)
+        {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                destroyCancellationToken);
+            try
+            {
+                await _sceneNavigator.TransitionAsync(
+                    ProjectRuntimeContracts.SceneNames.MainMenu,
+                    linkedCancellation.Token);
+            }
+            finally
+            {
+                _returningToMenu = false;
             }
         }
 

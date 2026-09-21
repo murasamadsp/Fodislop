@@ -152,14 +152,6 @@ int main() {
         for(int y=0;y<24;y++)for(int x=0;x<24;x++) {
             float light=direct(x,y);_StaticDirectInput.data[y*24+x]={light,light,light,0};
         }
-        _BounceSize={12,12}; _BounceTexture.reset(12,12);
-        _BounceTaps.assign(12*12*16,float4{});
-        for(int y=0;y<12;y++)for(int x=0;x<12;x++) BuildBounceTaps(uint3{(uint)x,(uint)y,0});
-        for(int y=0;y<12;y++)for(int x=0;x<12;x++) SolveDiffuseBounce(uint3{(uint)x,(uint)y,0});
-        _BounceInput=_BounceTexture;
-        _BounceFilterWeights.assign(24*24*4,float4{});
-        for(int y=0;y<24;y++)for(int x=0;x<24;x++) BuildBounceFilter(uint3{(uint)x,(uint)y,0});
-        near(SampleBounceFiltered(int2{8,12},float2{8.5f/24,12.5f/24}).x,0,1e-6f,"bounce does not cross the wall");
         near(blocked,0,1e-6f,"full cascade wall occlusion");
         std::cout<<"Cascade fixture: open="<<open<<", solid1600="<<blocked<<"\n";
         _SolidExtinctionRGB={0,0,0,0}; solveField();

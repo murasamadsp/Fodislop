@@ -2,6 +2,7 @@
 
 using System;
 using Kern.Core.Localization;
+using Kern.Networking.Processors;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -20,6 +21,7 @@ public sealed class ProgrammatorGrid : IDisposable
         private readonly ProgrammatorData _data;
         private readonly UIInputManager _uiInput;
         private readonly IProgrammatorTextureCatalog _textures;
+        private readonly ProgrammatorProcessor _protocol;
 
         private ProgrammatorGridUIFactory? _view;
         private ProgrammatorSelectionModel? _selection;
@@ -36,13 +38,16 @@ public sealed class ProgrammatorGrid : IDisposable
             ILocalizationService loc,
             ProgrammatorData data,
             UIInputManager uiInput,
-            IProgrammatorTextureCatalog textures)
+            IProgrammatorTextureCatalog textures,
+            ProgrammatorProcessor protocol)
         {
             _doc = doc ?? throw new ArgumentNullException(nameof(doc));
             _loc = loc ?? throw new ArgumentNullException(nameof(loc));
             _data = data ?? throw new ArgumentNullException(nameof(data));
             _uiInput = uiInput ?? throw new ArgumentNullException(nameof(uiInput));
             _textures = textures ?? throw new ArgumentNullException(nameof(textures));
+            _protocol = protocol ?? throw new ArgumentNullException(nameof(protocol));
+            _protocol.OpenRequested += Show;
         }
 
         public void Initialize()
@@ -78,7 +83,13 @@ public sealed class ProgrammatorGrid : IDisposable
             var view = new ProgrammatorGridUIFactory(_doc, _loc, _data, _textures);
             var selection = new ProgrammatorSelectionModel(view.SetSelectionBorder, _data);
             var radial = new ProgrammatorRadialController(_doc, view.UpdateCell, _loc, _data, _textures);
-            var programs = new ProgrammatorProgramStore(view, selection, radial, _loc, _data);
+            var programs = new ProgrammatorProgramStore(
+                view,
+                selection,
+                radial,
+                _loc,
+                _data,
+                _protocol);
             radial.OnLastCellPlaced = programs.AdvancePageIfAtEnd;
             var clipboard = new ProgrammatorClipboardController(selection, view.UpdateCell, _data);
 
@@ -305,9 +316,11 @@ public sealed class ProgrammatorGrid : IDisposable
             }
 
             _uiInput.IsProgrammatorOpen = false;
+            _protocol.OpenRequested -= Show;
 
             // Фабрика зарегистрирована в реестре локализации — снимаем её,
             // чтобы смена языка не долетала до мёртвого попапа.
+            _programs?.Dispose();
             _view?.Dispose();
             _view = null;
         }

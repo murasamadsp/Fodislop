@@ -5,7 +5,7 @@
 //
 // READS: _MaterialField
 // WRITES: _CellSolidMaskOutput
-// MUST NOT: знать о каскадах, источниках, bounce
+// MUST NOT: знать о каскадах и источниках
 
 
 [numthreads(8, 8, 1)]

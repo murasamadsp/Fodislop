@@ -57,13 +57,22 @@ namespace Kern
 
         protected void Start()
         {
-            if (_operations == null)
-            {
-                throw new InvalidOperationException(
-                    "ClientAssetLoader requires IAsyncOperationSupervisor before startup.");
-            }
+            TryStartBatchLoop();
+        }
 
-            if (_batchLoopStarted)
+        protected void Update()
+        {
+            // Authored Bootstrap components can receive VContainer injection
+            // after Unity invokes Start because this component has an early
+            // execution order. Retry only the one-time startup until the
+            // dependency is available; asset requests remain unavailable until
+            // the supervised loop has actually started.
+            TryStartBatchLoop();
+        }
+
+        private void TryStartBatchLoop()
+        {
+            if (_batchLoopStarted || _operations == null)
             {
                 return;
             }

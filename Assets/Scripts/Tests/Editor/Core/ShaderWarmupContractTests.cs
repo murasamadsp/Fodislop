@@ -22,6 +22,7 @@ public sealed class ShaderWarmupContractTests
         ProjectRuntimeContracts.ShaderNames.Starfield,
         ProjectRuntimeContracts.ShaderNames.MenuLineUnlit,
         ProjectRuntimeContracts.ShaderNames.UnpremultiplyAlpha,
+        ProjectRuntimeContracts.ShaderNames.MissionVirtualRing,
     ];
 
     private static readonly string[] _RequiredLightingKernels =
@@ -34,11 +35,8 @@ public sealed class ShaderWarmupContractTests
         "ClearDynamicDirect",
         "ResolveDirect",
         "ResolveTransmissionDebug",
-        "SolveDiffuseBounce",
         "CompositeLighting",
         "BuildCellSolidMask",
-        "BuildBounceTaps",
-        "BuildBounceFilter",
     ];
 
     [Test]

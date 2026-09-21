@@ -23,7 +23,7 @@ void emit(const char* label,int index,float3 v) { std::printf("%s %d %a %a %a\n"
 int main() {
     std::mt19937 rng(424242);
     std::uniform_real_distribution<float> unit(0.f,1.f);
-    long dynamicReads=0,bounceReads=0,filterReads=0,cacheReads=0;
+    long dynamicReads=0,filterReads=0;
     for(int scene=0;scene<8;scene++) {
         int scale=(scene%2)?4:2, w=20, h=12;
         _FieldSize={w*scale,h*scale}; _WorldRect={0,0,(float)w,(float)h}; _CellSize=1;
@@ -65,20 +65,6 @@ int main() {
         dynamicReads+=textureReads;
         for(int p=0;p<pixels;p++) emit("dynamic",p,_DirectTexture.data[p].xyz);
         _DirectInput=_DirectTexture;
-        _BounceSize={(_FieldSize.x+1)/2,(_FieldSize.y+1)/2}; _BounceTexture.reset(_BounceSize.x,_BounceSize.y);
-#ifdef CACHED
-        textureReads=0;
-        _BounceTaps.assign(_BounceSize.x*_BounceSize.y*16,float4{});
-        for(int y=0;y<_BounceSize.y;y++)for(int x=0;x<_BounceSize.x;x++)BuildBounceTaps(uint3{(uint)x,(uint)y,0});
-        _BounceFilterWeights.assign(pixels*4,float4{});
-        for(int y=0;y<_FieldSize.y;y++)for(int x=0;x<_FieldSize.x;x++)BuildBounceFilter(uint3{(uint)x,(uint)y,0});
-        cacheReads+=textureReads;
-#endif
-        textureReads=0;
-        for(int y=0;y<_BounceSize.y;y++)for(int x=0;x<_BounceSize.x;x++)SolveDiffuseBounce(uint3{(uint)x,(uint)y,0});
-        bounceReads+=textureReads;
-        for(int p=0;p<_BounceSize.x*_BounceSize.y;p++) emit("bounce",p,_BounceTexture.data[p].xyz);
-        _BounceInput=_BounceTexture;
         textureReads=0;
         for(int y=0;y<_FieldSize.y;y++)for(int x=0;x<_FieldSize.x;x++) {
             float2 uv=(make_float2(make_int2(x,y))+.5f)/make_float2(_FieldSize);
@@ -90,5 +76,5 @@ int main() {
         }
         filterReads+=textureReads;
     }
-    std::fprintf(stderr,"reads: dynamic=%ld bounce=%ld filter=%ld cacheBuild=%ld\n",dynamicReads,bounceReads,filterReads,cacheReads);
+    std::fprintf(stderr,"reads: dynamic=%ld filter=%ld\n",dynamicReads,filterReads);
 }

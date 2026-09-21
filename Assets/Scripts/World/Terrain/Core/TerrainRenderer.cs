@@ -72,6 +72,9 @@ namespace Kern.World.Terrain
         private Camera? _mainCamera;
 
         private readonly TerrainCellCache _cellCache = new();
+        private static readonly int _reliefRimEnabledID =
+            Shader.PropertyToID("_TerrainReliefRimEnabled");
+
         private readonly TerrainPrecalculator _precalc = new();
         private readonly TerrainCellBuilder _cellBuilder = new();
         private readonly BackgroundFloodFill _backgroundFloodFill = new();
@@ -181,9 +184,16 @@ namespace Kern.World.Terrain
                 _needsRefresh = true;
             }
 
+            // Кайма живёт глобалью шейдера: маска и транспорт от тумблера не
+            // зависят, выключенная кайма просто перестаёт умножать кадр.
+            bool enableReliefRim = config.Terrain.EnableReliefRim;
+            Shader.SetGlobalFloat(_reliefRimEnabledID, enableReliefRim ? 1f : 0f);
+
             _materialManager.ApplyClientConfig(config);
             _terrainContentRevision++;
-            Debug.Log($"[TerrainRenderer] ApplyClientConfig: distortion={enableDistortion}");
+            Debug.Log(
+                $"[TerrainRenderer] ApplyClientConfig: distortion={enableDistortion}, " +
+                $"reliefRim={enableReliefRim}");
         }
 
         private void HandleCellChanged(int serverX, int serverY)

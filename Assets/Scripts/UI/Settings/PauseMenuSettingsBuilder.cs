@@ -174,8 +174,6 @@ internal sealed class PauseMenuSettingsBuilder
                 $"Quality={_lightingEngine.ActiveGraphicsPreset}\n" +
                 $"Config={_lightingEngine.RuntimeConfigFilePath}\n" +
                 $"Debug={_lightingEngine.ActiveDebugView}\n" +
-                $"DiffuseBounce={(_lightingEngine.DiffuseBounceEnabled ? 1 : 0)} " +
-                $"strength={_lightingEngine.BounceStrength:F3}\n" +
                 $"Ambient={_lightingEngine.AmbientIntensity:F3} " +
                 $"Emission={_lightingEngine.EmissionScale:F3}\n" +
                 $"EmptyExtinction={_lightingEngine.EmptyExtinctionMultiplier:F3} " +

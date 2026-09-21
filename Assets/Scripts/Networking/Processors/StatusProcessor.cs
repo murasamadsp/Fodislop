@@ -16,7 +16,8 @@ public sealed class StatusProcessor(
     IPlayerStats stats,
     NetworkStatusModel statusModel,
     INetworkService networkService,
-    ILocalizationService? loc = null) :
+    ILocalizationService? loc = null,
+    IConnectionService? connection = null) :
     IPacketProcessor<OnlinePacket>,
     IPacketProcessor<PingPacket>,
     IPacketProcessor<OutdatedClientPacket>,
@@ -53,6 +54,7 @@ public sealed class StatusProcessor(
             ? loc.Get("network.error.outdated", packet.Name, description, packet.UpdateURL)
             : $"Версия: {packet.Name}\n{description}\nСкачать: {packet.UpdateURL}";
         Debug.LogWarning($"[StatusProcessor] Клиент устарел: {detail}");
+        connection?.HandleServerDisconnect(detail);
         if (!string.IsNullOrWhiteSpace(packet.UpdateURL))
         {
             Application.OpenURL(packet.UpdateURL);

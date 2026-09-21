@@ -191,6 +191,7 @@ public sealed class GamePresentationStartup
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.Terrain);
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.WorldSurface);
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.WorldEntity);
+        ValidateShader(report, ProjectRuntimeContracts.ShaderNames.MissionVirtualRing);
 
         var lightingCompute = Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute);
         if (lightingCompute == null)

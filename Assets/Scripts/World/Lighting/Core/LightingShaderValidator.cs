@@ -19,11 +19,8 @@ internal static class LightingShaderValidator
         int ClearDynamicDirectKernel,
         int ResolveDirectKernel,
         int ResolveTransmissionDebugKernel,
-        int SolveDiffuseBounceKernel,
         int CompositeLightingKernel,
-        int BuildCellSolidMaskKernel,
-        int BuildBounceTapsKernel,
-        int BuildBounceFilterKernel);
+        int BuildCellSolidMaskKernel);
 
     public static LoadedLightingCompute LoadComputeShader()
     {
@@ -45,11 +42,8 @@ internal static class LightingShaderValidator
         int clearDynamicDirectKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ClearDynamicDirect);
         int resolveDirectKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ResolveDirect);
         int resolveTransmissionDebugKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.ResolveTransmissionDebug);
-        int solveDiffuseBounceKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.SolveDiffuseBounce);
         int compositeLightingKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.CompositeLighting);
         int buildCellSolidMaskKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.BuildCellSolidMask);
-        int buildBounceTapsKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.BuildBounceTaps);
-        int buildBounceFilterKernel = FindAndValidateKernel(compute, ProjectRuntimeContracts.ComputeKernelNames.BuildBounceFilter);
 
         return new LoadedLightingCompute(
             compute,
@@ -61,11 +55,8 @@ internal static class LightingShaderValidator
             clearDynamicDirectKernel,
             resolveDirectKernel,
             resolveTransmissionDebugKernel,
-            solveDiffuseBounceKernel,
             compositeLightingKernel,
-            buildCellSolidMaskKernel,
-            buildBounceTapsKernel,
-            buildBounceFilterKernel);
+            buildCellSolidMaskKernel);
     }
 
     private static int FindAndValidateKernel(ComputeShader compute, string kernelName)

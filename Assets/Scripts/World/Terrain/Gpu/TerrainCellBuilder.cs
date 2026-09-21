@@ -314,7 +314,7 @@ public sealed class TerrainCellBuilder : IDisposable
         const int RoundableFlag = 2;
         bool hasTexture = vertex.UV1z != 0 && Mathf.HalfToFloat(vertex.UV1z) > 0.0001f;
         bool roundable = (Mathf.RoundToInt(vertex.UV6.z) & RoundableFlag) != 0;
-        if (!hasTexture || roundable || vertex.Color.a < 255 || vertex.UV3.w > 1.5f)
+        if (!hasTexture || roundable || vertex.Color.a < 255)
         {
             return false;
         }

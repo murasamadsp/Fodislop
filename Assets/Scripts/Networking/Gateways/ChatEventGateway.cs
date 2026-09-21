@@ -9,10 +9,13 @@ namespace Kern.Networking;
 public sealed class ChatEventGateway
 {
     public event Action<ChatMessagePacket>? MessageReceived;
+    public event Action<ChatMessageListPacket>? HistoryReceived;
     public event Action<ChatMutePacket>? MuteReceived;
     public event Action<LocalChatMessagePacket>? LocalMessageReceived;
 
     public void Publish(ChatMessagePacket packet) => MessageReceived?.Invoke(packet);
+
+    public void Publish(ChatMessageListPacket packet) => HistoryReceived?.Invoke(packet);
 
     public void Publish(ChatMutePacket packet) => MuteReceived?.Invoke(packet);
 

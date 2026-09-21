@@ -29,27 +29,20 @@ internal static class LightingComputeBinder
     public static readonly int DirectTextureID = Shader.PropertyToID("_DirectTexture");
     public static readonly int DirectInputID = Shader.PropertyToID("_DirectInput");
     public static readonly int StaticDirectInputID = Shader.PropertyToID("_StaticDirectInput");
-    public static readonly int BounceTextureID = Shader.PropertyToID("_BounceTexture");
-    public static readonly int BounceInputID = Shader.PropertyToID("_BounceInput");
     public static readonly int ResultID = Shader.PropertyToID("_Result");
     public static readonly int FieldSizeID = Shader.PropertyToID("_FieldSize");
-    public static readonly int BounceSizeID = Shader.PropertyToID("_BounceSize");
-    public static readonly int BounceDispatchOriginID = Shader.PropertyToID("_BounceDispatchOrigin");
-    public static readonly int BounceDispatchSizeID = Shader.PropertyToID("_BounceDispatchSize");
     public static readonly int CompositeDispatchOriginID = Shader.PropertyToID("_CompositeDispatchOrigin");
     public static readonly int CompositeDispatchSizeID = Shader.PropertyToID("_CompositeDispatchSize");
     public static readonly int WorldRectID = Shader.PropertyToID("_WorldRect");
     public static readonly int AmbientColorID = Shader.PropertyToID("_AmbientColor");
     public static readonly int EmptyExtinctionRGBID = Shader.PropertyToID("_EmptyExtinctionRGB");
     public static readonly int SolidExtinctionRGBID = Shader.PropertyToID("_SolidExtinctionRGB");
-    public static readonly int BounceStrengthID = Shader.PropertyToID("_BounceStrength");
     public static readonly int EmissionScaleID = Shader.PropertyToID("_EmissionScale");
     public static readonly int MaximumLightMultiplierID = Shader.PropertyToID("_MaximumLightMultiplier");
     public static readonly int CellSizeID = Shader.PropertyToID("_CellSize");
     public static readonly int TransmittanceDebugDistanceCellsID = Shader.PropertyToID("_TransmittanceDebugDistanceCells");
     public static readonly int DebugViewID = Shader.PropertyToID("_DebugView");
     public static readonly int MaterialYFlipID = Shader.PropertyToID("_MaterialYFlip");
-    public static readonly int EnableDiffuseBounceID = Shader.PropertyToID("_EnableDiffuseBounce");
     public static readonly int EnableBilinearFixID = Shader.PropertyToID("_EnableBilinearFix");
     public static readonly int CascadeOffsetID = Shader.PropertyToID("_CascadeOffset");
     public static readonly int CascadeProbeSizeID = Shader.PropertyToID("_CascadeProbeSize");
@@ -103,8 +96,6 @@ internal static class LightingComputeBinder
     public static readonly int CellGridSizeID = Shader.PropertyToID("_CellGridSize");
     public static readonly int CellSolidMaskID = Shader.PropertyToID("_CellSolidMask");
     public static readonly int CellSolidMaskOutputID = Shader.PropertyToID("_CellSolidMaskOutput");
-    public static readonly int BounceTapsID = Shader.PropertyToID("_BounceTaps");
-    public static readonly int BounceFilterWeightsID = Shader.PropertyToID("_BounceFilterWeights");
     public static readonly int LightingCountersID = Shader.PropertyToID("_LightingCounters");
     public static readonly int LightingCountersEnabledID = Shader.PropertyToID("_LightingCountersEnabled");
 
@@ -176,8 +167,6 @@ internal static class LightingComputeBinder
         ComputeShader compute,
         int fieldWidth,
         int fieldHeight,
-        int bounceWidth,
-        int bounceHeight,
         Vector4 worldRect,
         float cellSize,
         LightingQualityMode qualityMode,
@@ -186,13 +175,11 @@ internal static class LightingComputeBinder
         RenderTexture emissionField,
         int solveCascadeKernel,
         int resolveDirectKernel,
-        int solveDiffuseBounceKernel,
         int compositeLightingKernel,
         int cellGridWidth = 0,
         int cellGridHeight = 0)
     {
         commandBuffer.SetComputeIntParams(compute, FieldSizeID, fieldWidth, fieldHeight);
-        commandBuffer.SetComputeIntParams(compute, BounceSizeID, bounceWidth, bounceHeight);
         if (cellGridWidth > 0 && cellGridHeight > 0)
         {
             commandBuffer.SetComputeIntParams(compute, CellGridSizeID, cellGridWidth, cellGridHeight);
@@ -203,7 +190,6 @@ internal static class LightingComputeBinder
             AmbientColorID,
             LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity);
         BindExtinction(commandBuffer, compute);
-        commandBuffer.SetComputeFloatParam(compute, BounceStrengthID, LightingConfigHolder.BounceStrength);
         commandBuffer.SetComputeFloatParam(compute, EmissionScaleID, LightingConfigHolder.EmissionScale);
         commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierID, LightingConfigHolder.MaximumLightMultiplier);
         commandBuffer.SetComputeIntParam(compute, LightingCountersEnabledID, 0);
@@ -217,12 +203,8 @@ internal static class LightingComputeBinder
             compute,
             MaterialYFlipID,
             SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
-        bool bilinearFix = qualityMode is LightingQualityMode.PerPixelBilinearFix or LightingQualityMode.PerPixelBilinearFixBounce;
+        bool bilinearFix = qualityMode == LightingQualityMode.PerPixelBilinearFix;
         commandBuffer.SetComputeIntParam(compute, EnableBilinearFixID, bilinearFix ? 1 : 0);
-        commandBuffer.SetComputeIntParam(
-            compute,
-            EnableDiffuseBounceID,
-            (qualityMode == LightingQualityMode.PerPixelBilinearFixBounce && LightingConfigHolder.BounceEnabled) ? 1 : 0);
         commandBuffer.SetComputeIntParam(
             compute,
             BlockAveragedID,
@@ -230,7 +212,6 @@ internal static class LightingComputeBinder
 
         BindFieldTextures(commandBuffer, compute, solveCascadeKernel, materialField, emissionField);
         BindFieldTextures(commandBuffer, compute, resolveDirectKernel, materialField, emissionField);
-        BindFieldTextures(commandBuffer, compute, solveDiffuseBounceKernel, materialField, emissionField);
         BindFieldTextures(commandBuffer, compute, compositeLightingKernel, materialField, emissionField);
     }
 

@@ -12,6 +12,7 @@
 int _TerrainDebugView;
 
 static const int KERN_TERRAIN_DEBUG_OFF = 0;
+static const int KERN_TERRAIN_DEBUG_RELIEF_RIM = 1;
 static const int KERN_TERRAIN_DEBUG_FOREIGN_SIDES = 2;
 static const int KERN_TERRAIN_DEBUG_COVERAGE = 3;
 static const int KERN_TERRAIN_DEBUG_LAYER = 4;
@@ -27,7 +28,7 @@ static const int KERN_TERRAIN_DEBUG_AMBIENT_OCCLUSION = 9;
 // номер проваливался в последнюю ветку и заливал мир её цветом.
 bool KernTerrainDebugActive()
 {
-    return _TerrainDebugView >= KERN_TERRAIN_DEBUG_FOREIGN_SIDES &&
+    return _TerrainDebugView > KERN_TERRAIN_DEBUG_OFF &&
         _TerrainDebugView <= KERN_TERRAIN_DEBUG_AMBIENT_OCCLUSION;
 }
 
@@ -53,16 +54,38 @@ float3 KernTerrainForeignSideColor(float packedContour)
         left);
 }
 
+// Вид получает тот же разбор вершины, что и кадр. Раньше он собирал термы
+// сам и показывал четвёртое мнение о том, что такое координата клетки: кайму
+// он считал по UV тайла, тогда как кадр считал по клеточной координате, и
+// подтвердить видом было нельзя ничего.
 float3 KernTerrainDebugColor(
-    float2 cellLocal,
-    float packedContour,
-    float packedLightingFlags,
+    TerrainSurfaceInputs surface,
     float coverage,
-    float anchored,
     float isForeground,
     float packedColumn,
     float ambientOcclusion)
 {
+    float2 cellLocal = surface.cellSample;
+    float packedContour = surface.packedContour;
+    float anchored = surface.anchored;
+    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_RELIEF_RIM)
+    {
+        // Выключенная кайма красится отдельно. Иначе вид заливает мир
+        // зелёным, и «кайма выключена» неотличимо от «кайма посчитана и
+        // никого не трогает» — ровно та неоднозначность, из-за которой
+        // белый кадр однажды уже нельзя было прочитать.
+        if (_TerrainReliefRimEnabled < 0.5)
+        {
+            return float3(0.35, 0.25, 0.55);
+        }
+
+        // Зелёное — кайма не трогает пиксель, красное — гасит до предела.
+        // Та же структура, что у кадра: выбрать «не ту» координату здесь
+        // больше нечем.
+        float rim = TerrainReliefRim(surface);
+        return float3(1.0 - rim, rim, 0.35);
+    }
+
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_FOREIGN_SIDES)
     {
         return KernTerrainForeignSideColor(packedContour);

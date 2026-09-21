@@ -15,7 +15,6 @@ public enum LightingInvalidationFlags
     DynamicLightsChanged = 1 << 4,
     StaticRadianceChanged = 1 << 5,
     DynamicRadianceChanged = 1 << 6,
-    BounceDirty = 1 << 7,
     CompositeDirty = 1 << 8,
     All = ~0,
 }

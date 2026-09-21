@@ -47,6 +47,13 @@ public static class ProjectRuntimeContracts
         public const string VKBackendURL = "";
     }
 
+    public static class Networking
+    {
+        // Must stay aligned with the server's accepted ClientHello protocol
+        // version. A development-only old-client path may still send 0.
+        public const int ClientVersion = 1;
+    }
+
     public static class Chat
     {
         public const int MaximumGlobalChatLength = 256;
@@ -81,6 +88,11 @@ public static class ProjectRuntimeContracts
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";
         public const string PostProcessCompute = "Shaders/PostProcessing/PostProcess";
         public const string ScopesCompute = "Shaders/PostProcessing/Scopes";
+
+        // Трасса состояний графического конвейера. Ассет проекта, а не файл в
+        // persistentDataPath: из persistentDataPath в билд не попадает ничего,
+        // а ассет едет со сборкой сам и приезжает к игроку.
+        public const string GraphicsStateCollection = "Rendering/GraphicsStates";
         public const string GatewayUxml = "UI/Gateway";
         public const string MainMenuUxml = "UI/MainMenu";
         public const string AssetLoadingIndicatorUxml = "UI/AssetLoadingIndicator";
@@ -127,6 +139,7 @@ public static class ProjectRuntimeContracts
         public const string Starfield = "Kern/UI/Starfield";
         public const string MenuLineUnlit = "Kern/UI/MenuLineUnlit";
         public const string UnpremultiplyAlpha = "Kern/UI/UnpremultiplyAlpha";
+        public const string MissionVirtualRing = "Kern/UI/MissionVirtualRing";
     }
 
     public static class ShaderPassNames
@@ -144,11 +157,8 @@ public static class ProjectRuntimeContracts
         public const string ClearDynamicDirect = "ClearDynamicDirect";
         public const string ResolveDirect = "ResolveDirect";
         public const string ResolveTransmissionDebug = "ResolveTransmissionDebug";
-        public const string SolveDiffuseBounce = "SolveDiffuseBounce";
         public const string CompositeLighting = "CompositeLighting";
         public const string BuildCellSolidMask = "BuildCellSolidMask";
-        public const string BuildBounceTaps = "BuildBounceTaps";
-        public const string BuildBounceFilter = "BuildBounceFilter";
     }
 
     public static class RequiredLayers

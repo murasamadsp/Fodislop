@@ -6,7 +6,7 @@
 // READS: _MaterialField, _DynamicLights, _DynamicPolarInput
 // WRITES: _DynamicPolar
 // MAY: вызывать DDA (TraceDynamicPolar, GatherDynamicSource)
-// MUST NOT: трогать каскады, bounce
+// MUST NOT: трогать каскады
 
 // Point `pointIndex` of the dynamic light's emission grid, over the texels whose centres
 // lie inside its square and inside the field — the texels TraceLightSegment

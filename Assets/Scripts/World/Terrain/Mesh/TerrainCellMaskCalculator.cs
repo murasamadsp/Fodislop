@@ -252,7 +252,8 @@ public sealed class TerrainCellMaskCalculator
     }
 
     // Рельефная маска: бит стоит там, где сосед принадлежит ТОЙ ЖЕ рельефной
-    // группе. Ноль у клетки без рельефа (группа 0) — у неё нет и каймы.
+    // группе. Группа 0 — такая же группа, как остальные: две клетки без
+    // рельефа считают друг друга своими, и шва между ними нет.
     //
     // Сравнение именно на равенство, а не «сосед не ниже». Кайма рисуется по
     // сторонам, где сосед чужой, и порядковое сравнение делало её
@@ -267,11 +268,6 @@ public sealed class TerrainCellMaskCalculator
         CachedCellData bottom,
         CachedCellData right)
     {
-        if (data.ReliefGroup == 0)
-        {
-            return 0;
-        }
-
         byte rm = 0;
         if (top.ReliefGroup == data.ReliefGroup)
         {

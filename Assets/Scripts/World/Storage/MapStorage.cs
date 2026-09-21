@@ -326,13 +326,20 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             // отметки грязных чанков.
             WorldLayer<CellType> layer = _cellLayer;
             var snapshot = layer.TakeDirtySnapshot();
+            string mapFilePath = MapFilePath;
+            string backupMapFilePath = BackupMapFilePath;
             Exception? failure = null;
             await UniTask.RunOnThreadPool(
                 () =>
                 {
                     try
                     {
-                        MapStorageDiskWriter.WriteSnapshot(layer, snapshot, durable, MapFilePath);
+                        MapStorageDiskWriter.WriteSnapshot(
+                            layer,
+                            snapshot,
+                            durable,
+                            mapFilePath,
+                            backupMapFilePath);
                     }
                     catch (Exception exception)
                     {
@@ -385,7 +392,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         var snapshot = layer.TakeDirtySnapshot();
         try
         {
-            MapStorageDiskWriter.WriteSnapshot(layer, snapshot, durable, MapFilePath);
+            MapStorageDiskWriter.WriteSnapshot(layer, snapshot, durable, MapFilePath, BackupMapFilePath);
         }
         catch
         {
@@ -422,6 +429,8 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             // главном потоке, в пул уходят только его запись и закрытие файла.
             WorldLayer<CellType>? layer = _isInitialized && !IsDisposed ? _cellLayer : null;
             var snapshot = layer?.TakeDirtySnapshot();
+            string? mapFilePath = layer != null ? MapFilePath : null;
+            string? backupMapFilePath = layer != null ? BackupMapFilePath : null;
             Exception? failure = null;
             await UniTask.RunOnThreadPool(
                 () =>
@@ -430,7 +439,12 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                     {
                         if (layer != null && snapshot != null)
                         {
-                            MapStorageDiskWriter.WriteSnapshot(layer, snapshot, durable: true, MapFilePath);
+                            MapStorageDiskWriter.WriteSnapshot(
+                                layer,
+                                snapshot,
+                                durable: true,
+                                mapFilePath: mapFilePath!,
+                                backupMapFilePath: backupMapFilePath!);
                         }
 
                         DisposeCore();

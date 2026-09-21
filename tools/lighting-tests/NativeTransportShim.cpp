@@ -94,16 +94,14 @@ struct Texture {
              +(at(b.x,b.y+1)*(1-f.x)+at(b.x+1,b.y+1)*f.x)*f.y;
     }
 };
-Texture _MaterialField, _EmissionField, _DirectInput, _StaticDirectInput, _BounceInput, _BounceTexture;
-int2 _BounceSize;
-int2 _BounceDispatchOrigin, _BounceDispatchSize, _CompositeDispatchOrigin, _CompositeDispatchSize;
+Texture _MaterialField, _EmissionField, _DirectInput, _StaticDirectInput;
+int2 _CompositeDispatchOrigin, _CompositeDispatchSize;
 Texture _Result,_DirectTexture;
 struct DynamicLight { float4 positionRadius,colorIntensity; };
 std::vector<DynamicLight> _DynamicLights;
 int _DynamicLightCount=0;
 float4 _AmbientColor={.25f,.25f,.25f,0};
-int _DebugView=0,_EnableDiffuseBounce=1,_EnableBilinearFix=1;
-float _BounceStrength=1;
+int _DebugView=0,_EnableBilinearFix=1;
 int sampler_LinearClamp=0, _MaterialYFlip=0;
 int2 _FieldSize;
 float4 _WorldRect, _EmptyExtinctionRGB, _SolidExtinctionRGB;
@@ -126,7 +124,6 @@ int _DynamicPolarPoint=0;
 Texture _DynamicPolar,_DynamicPolarInput;
 Texture _CellSolidMask,_CellSolidMaskOutput;
 int2 _CellGridSize;
-std::vector<float4> _BounceTaps,_BounceFilterWeights;
 bool sameAtlas(const std::vector<uint3>& left,const std::vector<uint3>& right) {
     if(left.size()!=right.size()) return false;
     for(size_t i=0;i<left.size();++i)

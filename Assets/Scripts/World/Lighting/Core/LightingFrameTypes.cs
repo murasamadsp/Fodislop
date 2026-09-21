@@ -19,7 +19,6 @@ internal readonly record struct LightingFrameRequest(
     bool AllowStaticDependencyMask,
     bool DynamicRadianceChanged,
     bool ClearDynamicRadiance,
-    bool BounceDirty,
     bool CompositeDirty,
     LightingQualityMode Quality,
     LightingEngine.DebugView DebugView);

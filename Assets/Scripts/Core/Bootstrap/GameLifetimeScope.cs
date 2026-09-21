@@ -177,6 +177,8 @@ namespace Kern.Core
             builder.Register<StatusProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<MapRegionProcessor>(Lifetime.Singleton);
             builder.Register<AudioPacketProcessor>(Lifetime.Singleton);
+            builder.Register<VfxPacketProcessor>(Lifetime.Singleton);
+            builder.RegisterEntryPoint<ProgrammatorProcessor>().AsSelf();
             builder.Register<PlayerInfoProcessor>(Lifetime.Singleton);
             builder.Register<ChatProcessor>(Lifetime.Singleton);
             builder.Register<MissionProcessor>(Lifetime.Singleton);

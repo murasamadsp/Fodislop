@@ -1,10 +1,12 @@
 #nullable enable
 
+using System;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Game.Managers;
 using Kern.Networking;
 using Kern.Player.Logic;
+using Kern.World;
 using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -71,13 +73,32 @@ namespace Kern.Player
 
                 Vector3 worldPos = _mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, -_mainCamera.transform.position.z));
 
-                int unityX = Mathf.FloorToInt(worldPos.x);
-                int unityY = Mathf.FloorToInt(worldPos.y);
+                if (_mapManager.WorldWidth <= 0 || _mapManager.WorldHeight <= 0)
+                {
+                    return;
+                }
 
-                ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
-                ushort serverY = (ushort)Mathf.Clamp(_mapManager.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
+                Vector2Int serverPosition;
+                try
+                {
+                    serverPosition = CoordinateUtils.UnityToServerPos(worldPos, _mapManager.WorldHeight);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    return;
+                }
 
-                _networkService.SendAction(new ClickCellPacket(serverX, serverY));
+                if (!PlayerMovementController.IsWithinWorldBounds(
+                        serverPosition,
+                        _mapManager.WorldWidth,
+                        _mapManager.WorldHeight))
+                {
+                    return;
+                }
+
+                _networkService.SendAction(new ClickCellPacket(
+                    (ushort)serverPosition.x,
+                    (ushort)serverPosition.y));
             }
         }
 

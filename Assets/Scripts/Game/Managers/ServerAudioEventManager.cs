@@ -16,7 +16,7 @@ using VContainer;
 
 namespace Kern.Game.Managers
 {
-    public class ServerAudioEventManager : MonoBehaviour, IServerAudioService
+    public class ServerAudioEventManager : MonoBehaviour, IServerAudioService, IServerVfxService
     {
         private const string TAG = "[ServerAudioEventManager]";
 
@@ -52,6 +52,28 @@ namespace Kern.Game.Managers
             }
 
             var vfxType = MapAudioToVFX(packet.EffectType);
+            IVfxSlot? slot = _vfxService.Acquire(vfxType);
+
+            var effect = new ServerAudioEvent(
+                packet,
+                slot,
+                _robotService,
+                _audioSystem,
+                _assetLoader,
+                _mapManager,
+                _vfxPool,
+                _operations);
+            _activeEffects.Add(effect);
+        }
+
+        public void PlayEffect(VFXPacket packet)
+        {
+            VfxType vfxType = packet.EffectType switch
+            {
+                global::MinesServer.Data.VFX.Bz => VfxType.Bz,
+                global::MinesServer.Data.VFX.Death => VfxType.Death,
+                _ => VfxType.Custom,
+            };
             IVfxSlot? slot = _vfxService.Acquire(vfxType);
 
             var effect = new ServerAudioEvent(

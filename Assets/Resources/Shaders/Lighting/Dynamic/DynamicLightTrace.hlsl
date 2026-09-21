@@ -6,7 +6,7 @@
 //
 // READS: _DynamicPolar, _DynamicLights
 // WRITES: _DynamicTiles, _DirectTexture
-// MUST NOT: трогать каскады, bounce
+// MUST NOT: трогать каскады
 
 [numthreads(8, 8, 1)]
 void SolveDynamicLighting(uint3 dispatchId : SV_DispatchThreadID)

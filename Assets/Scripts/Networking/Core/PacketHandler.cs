@@ -32,6 +32,7 @@ public sealed class PacketHandler(
     ChatProcessor chat,
     StatusProcessor status,
     AudioPacketProcessor audio,
+    VfxPacketProcessor vfx,
     InventoryProcessor inventory,
     ClanProcessor clan,
     MissionProcessor mission,
@@ -49,6 +50,7 @@ public sealed class PacketHandler(
     private readonly ChatProcessor _chat = chat;
     private readonly StatusProcessor _status = status;
     private readonly AudioPacketProcessor _audio = audio;
+    private readonly VfxPacketProcessor _vfx = vfx;
     private readonly InventoryProcessor _inventory = inventory;
     private readonly ClanProcessor _clan = clan;
     private readonly MissionProcessor _mission = mission;
@@ -122,6 +124,7 @@ public sealed class PacketHandler(
         On<PingPacket>(_status.Process);
         On<OutdatedClientPacket>(_status.Process);
         On<AudioPacket>(_audio.Process);
+        On<VFXPacket>(_vfx.Process);
         On<InventoryPacket>(_inventory.Process);
         On<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(_inventory.Process);
         On<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(_inventory.Process);

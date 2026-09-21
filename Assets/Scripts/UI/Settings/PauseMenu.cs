@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Localization;
-using Kern.Networking;
 using Kern.Networking.Connection;
 using Kern.Player;
 using Kern.Player.Logic;
@@ -66,9 +65,6 @@ namespace Kern.UI
         private IInputBlocker _inputBlocker = null!;
         [Inject]
         private UIInputManager _uiInput = null!;
-        [Inject]
-        private WindowCommandStream _windowCommands = null!;
-
         private PauseMenuSettingsBuilder? _settingsBuilder;
         private PauseMenuTabRouter? _tabRouter;
 
@@ -84,11 +80,6 @@ namespace Kern.UI
         {
             if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             {
-                if (!_isOpen && _windowCommands.HasOpenWindows)
-                {
-                    return;
-                }
-
                 // Escape в открытом чате принадлежит чату, даже если его
                 // Update в этом кадре ещё не выполнялся.
                 if (!_isOpen && (_uiInput.IsChatFocused || _uiInput.IsEscapeConsumedThisFrame))

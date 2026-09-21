@@ -15,12 +15,7 @@ public sealed class ChatProcessor(ChatEventGateway events) :
     IPacketProcessor<ChatListPacket>
 {
     public void Process(ChatMessageListPacket packet)
-    {
-        foreach (var msg in packet.Messages)
-        {
-            events.Publish(msg);
-        }
-    }
+        => events.Publish(packet);
 
     public void Process(LocalChatMessagePacket packet) => events.Publish(packet);
 

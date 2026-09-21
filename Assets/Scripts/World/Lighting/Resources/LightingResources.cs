@@ -41,15 +41,6 @@ public sealed class LightingResources
         public ComputeBuffer? DynamicLightsBuffer { get; internal set; }
     }
 
-    public sealed class BounceResources
-    {
-        public RenderTexture? Texture { get; internal set; }
-        public ComputeBuffer? Taps { get; internal set; }
-        public ComputeBuffer? FilterWeights { get; internal set; }
-        public int Width { get; internal set; }
-        public int Height { get; internal set; }
-    }
-
     public sealed class OutputResources
     {
         public RenderTexture? Lightmap { get; internal set; }
@@ -58,7 +49,6 @@ public sealed class LightingResources
     public GeometryResources Geometry { get; } = new();
     public CascadeResources Cascade { get; } = new();
     public DirectResources Direct { get; } = new();
-    public BounceResources Bounce { get; } = new();
     public OutputResources Output { get; } = new();
 
     public ComputeShader? Compute { get; internal set; }
@@ -93,11 +83,6 @@ public sealed class LightingResources
         Direct.Dynamic = null;
         Direct.DynamicLightsBuffer = null;
 
-        Bounce.Texture = null;
-        Bounce.Taps = null;
-        Bounce.FilterWeights = null;
-        Bounce.Width = 0;
-        Bounce.Height = 0;
 
         Output.Lightmap = null;
         Compute = null;

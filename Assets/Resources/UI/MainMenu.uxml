@@ -230,28 +230,6 @@
                                     </ui:VisualElement>
                                 </ui:Button>
 
-                                <ui:Button name="ServerItemTartarus" class="mm-server-card">
-                                    <ui:VisualElement class="mm-sc-left">
-                                        <ui:Label class="mm-sc-title" text="mainmenu.server_eu_east" />
-                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_eu_east_desc" />
-                                    </ui:VisualElement>
-                                    <ui:VisualElement class="mm-sc-right">
-                                        <ui:Label class="mm-sc-ping" text="mainmenu.server_eu_east_ping" />
-                                        <ui:Label class="mm-sc-online" text="mainmenu.server_eu_east_online" />
-                                    </ui:VisualElement>
-                                </ui:Button>
-
-                                <ui:Button name="ServerItemCyber" class="mm-server-card">
-                                    <ui:VisualElement class="mm-sc-left">
-                                        <ui:Label class="mm-sc-title" text="mainmenu.server_asia" />
-                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_asia_desc" />
-                                    </ui:VisualElement>
-                                    <ui:VisualElement class="mm-sc-right">
-                                        <ui:Label class="mm-sc-ping mm-sc-ping--yellow" text="mainmenu.server_asia_ping" />
-                                        <ui:Label class="mm-sc-online" text="mainmenu.server_asia_online" />
-                                    </ui:VisualElement>
-                                </ui:Button>
-
                                 <ui:Button name="ServerItemDummy" class="mm-server-card">
                                     <ui:VisualElement class="mm-sc-left">
                                         <ui:Label class="mm-sc-title" text="DUMMY OFFLINE" />
@@ -262,12 +240,7 @@
                                         <ui:Label class="mm-sc-online" text="LOCAL" />
                                     </ui:VisualElement>
                                 </ui:Button>
-                            </ui:VisualElement>
 
-                            <ui:VisualElement class="mm-card-box mm-ip-connect-box">
-                                <ui:Label class="mm-card-tag" text="IP:" />
-                                <ui:TextField name="DirectServerIpInput" value="127.0.0.1:7777" class="mm-flex-1" />
-                                <ui:Button name="DirectConnectButton" class="mm-btn-outline fit-wrap" text="mainmenu.server_direct_connect" />
                             </ui:VisualElement>
                         </ui:VisualElement>
 

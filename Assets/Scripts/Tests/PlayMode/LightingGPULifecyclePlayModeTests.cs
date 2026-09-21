@@ -30,7 +30,6 @@ public sealed class LightingGPULifecyclePlayModeTests
         "_StaticEmissionField",
         "_RadianceDirect",
         "_RadianceDirectStatic",
-        "_RadianceBounce",
         "_WorldLightTexture",
         "_LightingCellSolidMask",
     ];

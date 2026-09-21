@@ -232,10 +232,16 @@ public sealed class LightingCostWindow : ToolWindow
             foreach (var rec in recent)
             {
                 GUILayout.Label($"Кадр #{rec.FrameIndex}: {rec.Reason}", WrappedLabelStyle);
-                GUILayout.Label($"  Запущено: {string.Join(", ", rec.ExecutedPasses)}", MutedLabelStyle);
-                if (rec.SkippedPasses.Length > 0)
+                // Значимая длина — в счётчике: массив записи переиспользуется и
+                // в хвосте держит пустые строки прошлой записи.
+                GUILayout.Label(
+                    $"  Запущено: {string.Join(", ", rec.ExecutedPasses, 0, rec.ExecutedCount)}",
+                    MutedLabelStyle);
+                if (rec.SkippedCount > 0)
                 {
-                    GUILayout.Label($"  Пропущено: {string.Join(", ", rec.SkippedPasses)}", MutedLabelStyle);
+                    GUILayout.Label(
+                        $"  Пропущено: {string.Join(", ", rec.SkippedPasses, 0, rec.SkippedCount)}",
+                        MutedLabelStyle);
                 }
                 GUILayout.Space(2f);
             }

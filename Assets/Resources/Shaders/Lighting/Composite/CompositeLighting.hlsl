@@ -3,16 +3,16 @@
 
 // CompositeLighting: финальная сборка изображения.
 //
-// READS: _DirectInput, _StaticDirectInput, _BounceInput, _MaterialField, _EmissionField, _BounceFilterWeights
+// READS: _DirectInput, _StaticDirectInput, _MaterialField, _EmissionField
 // WRITES: _Result
 // MUST NOT: вызывать DDA, трогать каскады, источники
 
 float3 SurfaceReflection(float2 position, float3 albedo)
 {
     float2 uv = OutputUv(position);
-    float3 incident = (_DebugView == 7) ? 0.0 :
-        (_DirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb +
-         _StaticDirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb);
+    float3 incident =
+        _DirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb +
+        _StaticDirectInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
     float2 pixelsPerCell = float2(_FieldSize) * _CellSize / _WorldRect.zw;
     int2 pixel = int2(floor(position));
     static const int2 offsets[4] =
@@ -46,13 +46,9 @@ float3 SurfaceReflection(float2 position, float3 albedo)
                 continue;
             }
 
-            float2 neighborUv = OutputUv(float2(neighbor) + 0.5);
-            float3 directLight = (_DebugView == 7) ? 0.0 :
-                (_DirectInput.Load(int3(neighbor, 0)).rgb +
-                 _StaticDirectInput.Load(int3(neighbor, 0)).rgb);
-            float3 bounceLight = (_EnableDiffuseBounce != 0 || _DebugView == 7) ?
-                _BounceInput.SampleLevel(sampler_LinearClamp, neighborUv, 0).rgb : 0.0;
-            float3 light = directLight + bounceLight;
+            float3 light =
+                _DirectInput.Load(int3(neighbor, 0)).rgb +
+                _StaticDirectInput.Load(int3(neighbor, 0)).rgb;
 
             // Incident light reaches the exposed face through half an air cell.
             // Surface reflection is presentation only; it is never transmitted
@@ -163,13 +159,6 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     }
 
     float solid = saturate(material.a);
-    // The bounce term reaches the image only when bounce is on, or in its own
-    // debug view. Otherwise it was evaluated per pixel and then discarded.
-    float3 bounce = 0.0;
-    if (_EnableDiffuseBounce != 0 || _DebugView == 7)
-    {
-        bounce = (1.0 - solid) * SampleBounceFiltered(pixel, uv);
-    }
 
     float3 surfaceRefl = 0.0;
     if (solid > 0.0)
@@ -177,15 +166,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         surfaceRefl = solid * SurfaceReflection(float2(pixel) + 0.5, material.rgb);
     }
 
-    if (_DebugView == 7) // DiffuseBounce
-    {
-        _Result[pixel] = float4(bounce + surfaceRefl, 1.0);
-        return;
-    }
-
-    float3 bounceTerm = _EnableDiffuseBounce != 0 ? bounce : 0.0;
-
-    float3 directAndBounce = bounceTerm + combinedDirect.rgb + surfaceRefl;
+    float3 directAndSurface = combinedDirect.rgb + surfaceRefl;
     float3 ambient = _AmbientColor.rgb;
 
     if (_DebugView == 8) // Exposure (false-color zebras)
@@ -195,7 +176,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         // Красный — только то что сгорит и после тонмаппа (выше потолка
         // _MaximumLightMultiplier, +3 стопа), жёлтое — рабочий HDR-запас.
         float ceiling = max(_MaximumLightMultiplier, 1.0);
-        float3 result = ambient + directAndBounce;
+        float3 result = ambient + directAndSurface;
         float peak = Max3(result);
         float stops = log2(max(peak, 1e-4));
         float ceilingStops = log2(ceiling);
@@ -228,7 +209,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    float3 output = max(directAndBounce, 0.0);
+    float3 output = max(directAndSurface, 0.0);
     _Result[pixel] = float4(ambient + output, 1.0);
 }
 

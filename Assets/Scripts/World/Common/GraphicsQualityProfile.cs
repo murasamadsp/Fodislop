@@ -106,11 +106,11 @@ namespace Kern.Rendering
             }
 
             if (context == nameof(GraphicsPreset.Ultra) &&
-                settings.LightingQuality is not (LightingQualityMode.PerPixel or LightingQualityMode.PerPixelBilinearFixBounce))
+                settings.LightingQuality is not (LightingQualityMode.PerPixel or LightingQualityMode.PerPixelBilinearFix))
             {
                 throw new InvalidOperationException(
                     $"Graphics quality settings '{context}' must use {nameof(LightingQualityMode.PerPixel)} " +
-                    $"or {nameof(LightingQualityMode.PerPixelBilinearFixBounce)} lighting - Ultra is locked to per-pixel tiers.");
+                    $"or {nameof(LightingQualityMode.PerPixelBilinearFix)} lighting - Ultra is locked to per-pixel tiers.");
             }
         }
     }

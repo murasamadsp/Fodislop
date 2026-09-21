@@ -11,7 +11,6 @@ internal static class ChatChannelPresenter
         ChatChannel activeChannel,
         Label? header,
         Button? globalButton,
-        Button? localButton,
         Button? colorButton,
         ILocalizationService? loc)
     {
@@ -22,7 +21,6 @@ internal static class ChatChannelPresenter
         }
 
         globalButton?.EnableInClassList("gchat-channel-button--active", !local);
-        localButton?.EnableInClassList("gchat-channel-button--active", local);
         if (colorButton != null)
         {
             colorButton.style.display = local ? DisplayStyle.None : DisplayStyle.Flex;

@@ -6,7 +6,7 @@
 // READS: _MaterialField, _CellSolidMask, _EmissionField, _MaterialYFlip, _FieldSize, _WorldRect, _CellSize, _CellGridSize
 // WRITES: ничего (out-параметры)
 // MAY: маршировать геометрию
-// MUST NOT: знать о каскадах, источниках, bounce, dynamic lights
+// MUST NOT: знать о каскадах, источниках, dynamic lights
 
 // COST: 1 bilinear texture sample
 // Reference rule, evaluated once per cell by BuildCellSolidMask.

@@ -4,6 +4,7 @@ using System;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.GUI;
+using MinesServer.Networking.Server.Packets.Mission;
 
 using UnityEngine;
 
@@ -47,6 +48,13 @@ internal sealed class DummyWindowResponder(
                 sendPacket(DummyWindowBuilder.BuildOpenUrlPacket("https://vk.ru/mines4reborn"));
                 break;
             case "test_mission_arrow":
+                sendPacket(new ServerPacket(new MissionInitPacket(
+                    string.Empty,
+                    0,
+                    0,
+                    "Тестовая миссия",
+                    "Проверка центрального информационного кольца")));
+                sendPacket(new ServerPacket(new MissionProgressPacket(0, 10)));
                 sendPacket(DummyWindowBuilder.BuildTestMissionArrowPacket(playerX, playerY));
                 break;
             default:

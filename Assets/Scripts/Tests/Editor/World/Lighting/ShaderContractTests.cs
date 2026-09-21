@@ -24,7 +24,6 @@ public sealed class ShaderContractTests
         {
             Path.Combine(_shaderDirectory, "Cascades/CascadeResolve.hlsl"),
             Path.Combine(_shaderDirectory, "Dynamic/DynamicLightTrace.hlsl"),
-            Path.Combine(_shaderDirectory, "Bounce/BounceSolve.hlsl"),
             Path.Combine(_shaderDirectory, "Composite/CompositeLighting.hlsl"),
         };
 
@@ -39,7 +38,7 @@ public sealed class ShaderContractTests
                 match.Success,
                 Is.False,
                 $"CRITICAL ARCHITECTURE VIOLATION: Forbidden DDA call '{match.Value}' found in '{Path.GetFileName(file)}'. " +
-                $"DDA traversal is strictly prohibited outside CascadeTrace, DynamicPolar, and BounceCache.");
+                $"DDA traversal is strictly prohibited outside CascadeTrace and DynamicPolar.");
         }
     }
 
@@ -69,13 +68,8 @@ public sealed class ShaderContractTests
             "_DirectTexture",
             "_DirectInput",
             "_StaticDirectInput",
-            "_BounceTexture",
-            "_BounceInput",
             "_Result",
             "_FieldSize",
-            "_BounceSize",
-            "_BounceDispatchOrigin",
-            "_BounceDispatchSize",
             "_CompositeDispatchOrigin",
             "_CompositeDispatchSize",
             "_WorldRect",

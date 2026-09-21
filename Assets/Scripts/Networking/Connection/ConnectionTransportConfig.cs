@@ -24,35 +24,6 @@ public static class ConnectionTransportConfig
             : ConnectionTransportKind.Tcp;
     }
 
-    public static bool TryParseEndpoint(string? value, out string host, out int port)
-    {
-        host = DefaultServerHost;
-        port = DefaultServerPort;
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return true;
-        }
-
-        string candidate = value.Trim();
-        if (!candidate.Contains(':'))
-        {
-            host = candidate;
-            return true;
-        }
-
-        if (!Uri.TryCreate($"tcp://{candidate}", UriKind.Absolute, out Uri? endpoint) ||
-            string.IsNullOrWhiteSpace(endpoint.Host) ||
-            endpoint.Port <= 0 ||
-            endpoint.Port > 65535)
-        {
-            return false;
-        }
-
-        host = endpoint.Host;
-        port = endpoint.Port;
-        return true;
-    }
-
     public static bool TryResolveEndpoint(
         string? host,
         int port,

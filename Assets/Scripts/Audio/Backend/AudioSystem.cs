@@ -22,6 +22,7 @@ namespace Kern.Audio.Backend
         private FmodAudioBackend _backend = null!;
         private bool _configApplied;
         private bool _configWaitLogged;
+        private bool _bankWaitStarted;
         private bool _pausedInBackground;
 
         [Inject]
@@ -44,17 +45,29 @@ namespace Kern.Audio.Backend
 
         private void Start()
         {
-            _operations.Run(
-                "wait_audio_banks",
-                cancellationToken => _backend.WaitUntilReadyAsync(this, cancellationToken));
+            TryStartBankWait();
         }
 
         private void Update()
         {
+            TryStartBankWait();
             if (!_configApplied)
             {
                 TryApplySavedBusVolumes();
             }
+        }
+
+        private void TryStartBankWait()
+        {
+            if (_bankWaitStarted || _operations == null || _backend == null)
+            {
+                return;
+            }
+
+            _bankWaitStarted = true;
+            _operations.Run(
+                "wait_audio_banks",
+                cancellationToken => _backend.WaitUntilReadyAsync(this, cancellationToken));
         }
 
         private void OnEnable()

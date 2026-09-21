@@ -10,7 +10,6 @@ public static class LightingPerformanceBudget
     public const float CascadeTraceMaxMs = 1.0f;
     public const float CascadeMergeMaxMs = 0.25f;
     public const float DynamicLightingMaxMs = 0.7f;
-    public const float BounceMaxMs = 0.5f;
     public const float CompositeMaxMs = 0.15f;
     // Preserve the configured spatial quality and up to 64 angular directions
     // on the normal lighting region. This remains below the previous
@@ -38,12 +37,6 @@ public static class LightingPerformanceBudget
         if (telemetry.LightingDynamicLightingTimeMs > DynamicLightingMaxMs * MaxAllowedRegressionFactor)
         {
             violationReport = $"DynamicLighting ({telemetry.LightingDynamicLightingTimeMs:F2} ms) exceeded budget ({DynamicLightingMaxMs:F2} ms)";
-            return false;
-        }
-
-        if (telemetry.LightingBounceTimeMs > BounceMaxMs * MaxAllowedRegressionFactor)
-        {
-            violationReport = $"Bounce ({telemetry.LightingBounceTimeMs:F2} ms) exceeded budget ({BounceMaxMs:F2} ms)";
             return false;
         }
 

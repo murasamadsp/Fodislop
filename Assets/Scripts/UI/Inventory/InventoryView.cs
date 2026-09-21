@@ -21,8 +21,6 @@ namespace Kern.UI.Inventory
     public class InventoryView : MonoBehaviour, ILocalizableUI
     {
 
-        private const int SHORTLISTSIZE = 4;
-
         private const int ROWCOUNT = 4;
 
         [Inject]
@@ -37,7 +35,6 @@ namespace Kern.UI.Inventory
         private UIInputManager _uiInput = null!;
 
         private readonly Dictionary<int, List<VisualElement>> _slotElements = new();
-        private readonly List<int> _occupiedSlots = new();
         private VisualElement? _hotbarContainer;
         private Button? _inventoryButton;
         private VisualElement? _hotbarSlots;
@@ -332,15 +329,6 @@ namespace Kern.UI.Inventory
 
         private void RefreshSlot(int slotIndex)
         {
-            bool occupied = _model?.GetSlot(slotIndex) != null;
-            if (occupied != _occupiedSlots.Contains(slotIndex))
-            {
-                // Предмет появился или кончился: состав сетки изменился, и
-                // обновлением одной ячейки тут не обойтись.
-                RebuildSlots();
-                return;
-            }
-
             if (!_slotElements.ContainsKey(slotIndex))
             {
                 return;
@@ -379,29 +367,18 @@ namespace Kern.UI.Inventory
 
         private void RebuildSlots()
         {
-            _occupiedSlots.Clear();
-            for (int i = 0; i < InventoryModel.TOTALSLOTS; i++)
-            {
-                if (_model?.GetSlot(i) != null)
-                {
-                    _occupiedSlots.Add(i);
-                }
-            }
-
-            FillSlots(_hotbarSlots, "Hotbar", Math.Min(_occupiedSlots.Count, SHORTLISTSIZE));
-            FillSlots(_fullSlots, "Inv", _occupiedSlots.Count);
+            FillSlots(_hotbarSlots, "Hotbar", 0, InventoryModel.HOTBAR_SIZE);
+            FillSlots(_fullSlots, "Inv", InventoryModel.HOTBAR_SIZE, InventoryModel.INVENTORY_SIZE);
 
             if (_inventoryButton != null)
             {
-                _inventoryButton.style.display = _occupiedSlots.Count > SHORTLISTSIZE
-                    ? DisplayStyle.Flex
-                    : DisplayStyle.None;
+                _inventoryButton.style.display = DisplayStyle.Flex;
             }
 
             ApplyInventoryMode();
         }
 
-        private void FillSlots(VisualElement? container, string prefix, int count)
+        private void FillSlots(VisualElement? container, string prefix, int startSlot, int count)
         {
             if (container == null)
             {
@@ -418,10 +395,8 @@ namespace Kern.UI.Inventory
             container.Clear();
 
             // Четыре строки, столбцы прирастают влево — как FixedRowCount = 4 со
-            // StartAxis = Vertical в старом клиенте. Столбец здесь настоящий
-            // контейнер, а не результат переноса: перенос раскладывал клетки
-            // лесенкой, потому что высота в точности равна четырём клеткам и на
-            // границе он то влезал, то нет.
+            // StartAxis = Vertical в старом клиенте. Все слоты создаются, включая
+            // пустые: индекс ячейки обязан совпадать с индексом серверного слота.
             VisualElement? column = null;
             for (int i = 0; i < count; i++)
             {
@@ -432,7 +407,7 @@ namespace Kern.UI.Inventory
                     container.Add(column);
                 }
 
-                int slotIndex = _occupiedSlots[i];
+                int slotIndex = startSlot + i;
                 column!.Add(CreateCell(slotIndex, $"{prefix}_{slotIndex}"));
             }
         }

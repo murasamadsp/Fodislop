@@ -100,6 +100,12 @@ namespace Kern.Player.Input
 
         private void ReadInput()
         {
+            if (_inputBlocker != null && _inputBlocker.IsInputBlocked)
+            {
+                _moveInput = Vector2.zero;
+                return;
+            }
+
             if (_moveActionReference != null && _moveActionReference.action != null)
             {
                 _moveInput = _moveActionReference.action.ReadValue<Vector2>();

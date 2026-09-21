@@ -17,8 +17,7 @@ internal static class NativeHarness
         "TraceRadianceSegment", "GatherDynamicSource", "DynamicEmitterPoint", "TraceDynamicPolar",
         "PolarOpticalDepth", "DynamicRadianceFromPolar", "SolveDynamicLighting", "ComposeDynamicLighting",
         "PackRadiance", "UnpackRadiance", "PackInterval", "UnpackTransmittance", "SolveCascade",
-        "InterleavedGradientNoise", "BuildBounceTaps", "SolveDiffuseBounce", "BuildBounceFilter",
-        "SampleBounceFiltered", "SurfaceReflection",
+        "InterleavedGradientNoise", "SurfaceReflection",
     ];
 
     public static int RunTransport(string repositoryRoot)
@@ -26,9 +25,10 @@ internal static class NativeHarness
         string shader = ExpandIncludes(
             Path.Combine(repositoryRoot, "Assets/Resources/Shaders/Lighting/WorldLighting.compute"),
             repositoryRoot);
-        string code = ExtractFunctions(shader);
         string fixtureRoot = Path.Combine(repositoryRoot, "tools/lighting-tests");
-        string source = File.ReadAllText(Path.Combine(fixtureRoot, "NativeTransportShim.cpp")) +
+        string transportShim = File.ReadAllText(Path.Combine(fixtureRoot, "NativeTransportShim.cpp"));
+        string code = ExtractFunctions(shader, transportShim);
+        string source = transportShim +
             Environment.NewLine + code +
             Environment.NewLine + File.ReadAllText(Path.Combine(fixtureRoot, "NativeTransportScenario.cpp"));
         return CompileAndRun(source, "lighting-transport", TimeSpan.FromSeconds(90));
@@ -97,7 +97,7 @@ internal static class NativeHarness
             ? shaderPath
             : Path.Combine(repositoryRoot, shaderPath);
         string shader = ExpandIncludes(resolvedPath, repositoryRoot);
-        string code = ExtractFunctions(shader);
+        string code = ExtractFunctions(shader, shim);
         string prefix = shader.Contains("void BuildCellSolidMask(", StringComparison.Ordinal)
             ? "#define CACHED\n"
             : string.Empty;
@@ -127,9 +127,49 @@ internal static class NativeHarness
             RegexOptions.CultureInvariant);
     }
 
-    private static string ExtractFunctions(string shader)
+    private const string ConstantPattern =
+        @"^static const (?:float|int|uint) (\w+) = [^;]+;";
+
+    private static HashSet<string> DeclaredConstantNames(string source)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in Regex.Matches(
+            source,
+            @"static const (?:float|int|uint) (\w+)\s*=",
+            RegexOptions.Multiline | RegexOptions.CultureInvariant))
+        {
+            names.Add(match.Groups[1].Value);
+        }
+
+        return names;
+    }
+
+    private static string ExtractFunctions(string shader, string shim)
     {
         var functions = new List<string>();
+
+        // Скалярные константы шейдера переносятся как есть, а не
+        // перечисляются в шиме. Иначе у одного числа появляется второй
+        // источник правды, и линейка начинает проверять не то, что
+        // компилируется в игре: дальность отскока задаётся в HLSL, а
+        // проверялась бы по копии в C++.
+        // Уже объявленные в шиме пропускаются: часть констант он объявляет
+        // сам, и перенос из шейдера дал бы переопределение. Повторы внутри
+        // самого шейдера тоже отбрасываются — раскрытие include текстовое и
+        // охранников препроцессора не соблюдает, поэтому общий заголовок,
+        // включённый двумя файлами, приходит дважды.
+        HashSet<string> declaredConstants = DeclaredConstantNames(shim);
+        foreach (Match constant in Regex.Matches(
+            shader,
+            ConstantPattern,
+            RegexOptions.Multiline | RegexOptions.CultureInvariant))
+        {
+            if (declaredConstants.Add(constant.Groups[1].Value))
+            {
+                functions.Add(constant.Value);
+            }
+        }
+
         foreach (string name in FunctionNames)
         {
             Match match = Regex.Match(
@@ -157,8 +197,7 @@ internal static class NativeHarness
         code = Regex.Replace(code, @"\bout (float[234]?|bool) (\w+)", "$1& $2");
         code = Regex.Replace(code, @"\[(?:loop|unroll)\]", string.Empty);
         code = code.Replace(" : SV_DispatchThreadID", String.Empty, StringComparison.Ordinal);
-        code = code.Replace("(uint2)_BounceSize", "__builtin_convertvector(_BounceSize, uint2)", StringComparison.Ordinal)
-            .Replace("(uint2)_FieldSize", "__builtin_convertvector(_FieldSize, uint2)", StringComparison.Ordinal)
+        code = code.Replace("(uint2)_FieldSize", "__builtin_convertvector(_FieldSize, uint2)", StringComparison.Ordinal)
             .Replace("(uint2)_CellGridSize", "__builtin_convertvector(_CellGridSize, uint2)", StringComparison.Ordinal);
         return Regex.Replace(code, @"\b(float[234]|int[23]|uint[23])\(", "make_$1(");
     }

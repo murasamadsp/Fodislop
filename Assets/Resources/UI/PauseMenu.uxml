@@ -76,9 +76,6 @@
                             <ui:VisualElement name="AdvancedGroupExtinction" class="pause-subsection">
                                 <ui:Label class="pause-subsection-title" text="settings.lighting.absorption" />
                             </ui:VisualElement>
-                            <ui:VisualElement name="AdvancedGroupBounce" class="pause-subsection">
-                                <ui:Label class="pause-subsection-title" text="settings.lighting.bounce" />
-                            </ui:VisualElement>
                             <ui:VisualElement name="AdvancedGroupBounds" class="pause-subsection">
                                 <ui:Label class="pause-subsection-title" text="settings.lighting.bounds" />
                             </ui:VisualElement>

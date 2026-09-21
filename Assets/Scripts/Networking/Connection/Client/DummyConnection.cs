@@ -14,6 +14,7 @@ using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Client.Packets.Movement;
+using MinesServer.Networking.Client.Packets.Programmator;
 using MinesServer.Networking.Client.Packets.Utilities;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -30,6 +31,7 @@ using MinesServer.Networking.Server.Packets.Mission;
 using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
+using MinesServer.Networking.Server.Packets.Programmator;
 using MinesServer.Networking.Shared;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
@@ -44,6 +46,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     private readonly DummyConnectionSession _session = new();
     private readonly DummyScenarioController _scenario;
     private readonly IDummyClock _clock;
+    private readonly DummyProgrammatorResponder _programmatorResponder;
 
     public void RequestWorldRegion(string worldCodeName, RectInt serverRegion)
     {
@@ -86,6 +89,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         _operations = operations;
         _debugSettings = debugSettings;
         _scenario = new DummyScenarioController(scenarioSettings);
+        _programmatorResponder = new DummyProgrammatorResponder(SendPacket);
         _worldState = new DummyWorldSimulationState(operations, worldMaps);
         _authSession = new DummyAuthSession(tokenStore, clock);
         _missionRunner = new DummyMissionRunner(SendPacket);
@@ -352,7 +356,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
                 // и запоминает его, чтобы авто-вход работал и дальше.
                 string resolvedToken = _authSession.ResolveToken(receivedToken);
 
-                if (clientHello.ClientVersion < 1)
+                if (clientHello.ClientVersion < global::Kern.Core.ProjectRuntimeContracts.Networking.ClientVersion)
                 {
                     // Причина передаётся ключом словаря: StatusProcessor и
                     // ReconnectUI резолвят его через HasKey, если он попадёт
@@ -383,6 +387,9 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             case OpenHelpClickPacket:
                 break;
             case OpenSettingsClickPacket:
+                break;
+            case OpenProgramListClickPacket:
+                SendPacket(new ServerPacket(new OpenProgrammatorPacket()));
                 break;
             case ChangeChatColorPacket colorChange:
                 _chatResponder.ChangeColor(colorChange);
@@ -426,6 +433,29 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
                     elementClick,
                     _playerState.X,
                     _playerState.Y);
+                break;
+            case SaveProgramPacket saveProgram:
+                _programmatorResponder.Save(saveProgram);
+                break;
+            case StartProgramPacket:
+                _programmatorResponder.Start();
+                break;
+            case PauseProgramPacket:
+                _programmatorResponder.Pause();
+                break;
+            case StopProgramPacket:
+                _programmatorResponder.Stop();
+                break;
+            case ProgramStepInPacket:
+            case ProgramStepOutPacket:
+            case ProgramStepOverPacket:
+                _programmatorResponder.Step();
+                break;
+            case DeleteProgramClickPacket:
+                _programmatorResponder.Delete();
+                break;
+            case QueryProgramMemoryPacket queryMemory:
+                _programmatorResponder.QueryMemory(queryMemory);
                 break;
             default:
                 break;

@@ -27,6 +27,8 @@ internal sealed class ClientConfigRepository
 
     public string ConfigPath => _configPath;
 
+    public string BackupPath => _configPath + ".backup";
+
     public bool Exists => File.Exists(_configPath);
 
     public readonly record struct LoadedConfig(ClientConfig Config, string Json);

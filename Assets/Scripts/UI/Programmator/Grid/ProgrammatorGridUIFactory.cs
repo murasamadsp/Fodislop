@@ -34,6 +34,7 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     private Button? _nextBtn;
     private Button? _runBtn;
     private Button? _stopBtn;
+    private Label? _programError;
     private VisualElement? _panel;
     private VisualElement? _programListPanel;
     private ScrollView? _listScroll;
@@ -64,6 +65,28 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     public VisualElement CreateDialog => _createDialog!;
     public Button RunBtn => _runBtn!;
     public Button StopBtn => _stopBtn!;
+
+    public void ShowProtocolError(string message)
+    {
+        if (_programError == null)
+        {
+            return;
+        }
+
+        _programError.text = message;
+        Kern.UI.UIState.Show(_programError);
+    }
+
+    public void ClearProtocolError()
+    {
+        if (_programError == null)
+        {
+            return;
+        }
+
+        _programError.text = string.Empty;
+        Kern.UI.UIState.Hide(_programError);
+    }
 
     public void Build(
         ProgrammatorSelectionModel selection,
@@ -151,6 +174,9 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
             throw new InvalidOperationException("[Programmator] StopButton is missing from Programmator.uxml.");
         _stopBtn.clicked += programs.StopProgram;
         _stopBtn.SetEnabled(false);
+        _programError = tree.Q<Label>("ProgramError") ??
+            throw new InvalidOperationException("[Programmator] ProgramError is missing from Programmator.uxml.");
+        Kern.UI.UIState.Hide(_programError);
 
         Button closeBtn = tree.Q<Button>("ProgrammatorCloseButton") ??
             throw new InvalidOperationException("[Programmator] ProgrammatorCloseButton is missing from Programmator.uxml.");

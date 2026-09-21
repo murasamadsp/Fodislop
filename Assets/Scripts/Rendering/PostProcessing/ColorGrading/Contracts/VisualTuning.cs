@@ -134,10 +134,9 @@ namespace Kern.World.Lighting
         None = 0,
         StaticRC = 1 << 0,
         DynamicLights = 1 << 1,
-        DiffuseBounce = 1 << 2,
         VisibilityAwareMerge = 1 << 3,
         WallAwareUpsample = 1 << 4,
-        All = StaticRC | DynamicLights | DiffuseBounce | VisibilityAwareMerge | WallAwareUpsample,
+        All = StaticRC | DynamicLights | VisibilityAwareMerge | WallAwareUpsample,
     }
 
     public static class LightingConfigHolder
@@ -145,7 +144,6 @@ namespace Kern.World.Lighting
         public static LightingFeatureFlags EnabledFeatures { get; set; } =
             LightingFeatureFlags.StaticRC |
             LightingFeatureFlags.DynamicLights |
-            LightingFeatureFlags.DiffuseBounce |
             LightingFeatureFlags.VisibilityAwareMerge |
             LightingFeatureFlags.WallAwareUpsample;
 
@@ -196,9 +194,6 @@ namespace Kern.World.Lighting
         public static readonly Color SolidExtinctionRGB = Color.white;
         public const float EmptyExtinctionMultiplier = 0.20f;
         public const float SolidExtinctionMultiplier = 1.0f;
-        // false выключает отскок целиком: проход не считается, в свет не входит.
-        public static bool BounceEnabled => (EnabledFeatures & LightingFeatureFlags.DiffuseBounce) != 0;
-        public const float BounceStrength = 1.0f;
 
         // Стеля exposure-зебры (вид 9): всё выше — згорить і після тонмаппа.
         // Шкала в стопах від білого: 8.0 = +3 стопи. Контент HDR by design
@@ -241,11 +236,18 @@ namespace Kern.World.Terrain
         private static readonly int _AmbientOcclusionFloorID =
             Shader.PropertyToID("_TerrainAmbientOcclusionFloor");
 
+        // Кайма включена по умолчанию. Публикуется на старте, потому что
+        // глобаль живёт в нативной части: до первого ApplyClientConfig она
+        // была бы нулём, и кайма молча не рисовалась бы.
+        private static readonly int _ReliefRimEnabledID =
+            Shader.PropertyToID("_TerrainReliefRimEnabled");
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void ApplyShaderGlobals()
         {
             Shader.SetGlobalFloat(_AmbientOcclusionStrengthID, AmbientOcclusionStrength);
             Shader.SetGlobalFloat(_AmbientOcclusionFloorID, AmbientOcclusionFloor);
+            Shader.SetGlobalFloat(_ReliefRimEnabledID, 1f);
         }
     }
 }

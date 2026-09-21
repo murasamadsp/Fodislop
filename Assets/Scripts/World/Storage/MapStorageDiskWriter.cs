@@ -76,10 +76,16 @@ internal static class MapStorageDiskWriter
         WorldLayer<CellType> layer,
         List<(int Index, CellType[] Chunk)> snapshot,
         bool durable,
-        string mapFilePath)
+        string mapFilePath,
+        string backupMapFilePath)
     {
         try
         {
+            if (durable && snapshot.Count > 0)
+            {
+                layer.CreateDurableBackup(backupMapFilePath);
+            }
+
             layer.WriteSnapshot(snapshot, flushToDisk: durable);
         }
         catch (Exception ex) when (

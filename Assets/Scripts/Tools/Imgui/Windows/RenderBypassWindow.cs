@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using Kern.Core.Interfaces;
 using Kern.Rendering.PostProcessing;
 using Kern.World.Lighting;
@@ -149,6 +150,20 @@ public sealed class RenderBypassWindow : ToolWindow
             "внутри массивов породы разъезжаются, и порода читается цельным " +
             "камнем, а не плиткой. Силуэт построек не трогается в обоих случаях.",
             MutedLabelStyle);
+
+        bool rim = _clientConfig.Config.Terrain.EnableReliefRim;
+        if (DrawSwitch(rim, "Кайма рельефа", ToolTheme.Success) != rim)
+        {
+            bool next = !rim;
+            _clientConfig.UpdateSection(config => config.Terrain, terrain => terrain.EnableReliefRim = next);
+            _terrainRenderer.ApplyClientConfig();
+        }
+
+        GUILayout.Label(
+            "Затемнение к границам, за которыми лежит чужая рельефная семья. " +
+            "Выключение не убирает ни маску, ни транспорт — шейдер просто " +
+            "перестаёт на неё умножать.",
+            MutedLabelStyle);
     }
 
     // A/B для замера цены слоя: рендереры включаются и выключаются каждый
@@ -167,20 +182,32 @@ public sealed class RenderBypassWindow : ToolWindow
         }
     }
 
-    private static void SetRenderersEnabled(Component? owner, bool enabled)
+    // Перегрузка со списком, а не с массивом. Обход вызывается на каждом
+    // кадре отрисовки окна и по разу на слой, а возвращающая массив
+    // перегрузка выдаёт новый массив на каждый вызов — мусор ровно там, где
+    // человек смотрит на стоимость кадра.
+    private readonly List<Renderer> _rendererScratch = new();
+
+    private void SetRenderersEnabled(Component? owner, bool enabled)
     {
         if (owner == null)
         {
             return;
         }
 
-        foreach (Renderer renderer in owner.GetComponentsInChildren<Renderer>(includeInactive: true))
+        owner.GetComponentsInChildren(includeInactive: true, _rendererScratch);
+        for (int i = 0; i < _rendererScratch.Count; i++)
         {
+            Renderer renderer = _rendererScratch[i];
             if (renderer.enabled != enabled)
             {
                 renderer.enabled = enabled;
             }
         }
+
+        // Список держит ссылки на рендереры до следующего вызова; по слою в
+        // кадре этого достаточно, чтобы уничтоженные объекты не залёживались.
+        _rendererScratch.Clear();
     }
 
     private void DrawBypassWarning()

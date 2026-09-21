@@ -6,11 +6,8 @@
 #pragma kernel ComposeDynamicLighting
 #pragma kernel TraceDynamicPolar
 #pragma kernel ClearDynamicDirect
-#pragma kernel SolveDiffuseBounce
 #pragma kernel CompositeLighting
 #pragma kernel BuildCellSolidMask
-#pragma kernel BuildBounceTaps
-#pragma kernel BuildBounceFilter
 
 #pragma target 5.0
 
@@ -28,9 +25,6 @@
 //   GeometryCache → Cascades → CascadeResolve → Composite
 //       ↓              ↓                         ↑
 //       └─────────────→ DynamicLight →──────────┘
-//       ↓
-//       └─────────────→ Bounce →────────────────┘
-//                      ↑
 //
 // ============================================================================
 // Types & Constants
@@ -67,8 +61,6 @@ Texture2D<float4> _DirectInput;
 // made walking cost a full cascade solve per frame.
 Texture2D<float4> _StaticDirectInput;
 
-RWTexture2D<float4> _BounceTexture;
-Texture2D<float4> _BounceInput;
 RWTexture2D<float4> _Result;
 
 // ============================================================================
@@ -83,8 +75,6 @@ RWTexture2D<float4> _Result;
 Texture2D<float4> _CellSolidMask;
 RWTexture2D<float4> _CellSolidMaskOutput;
 
-RWStructuredBuffer<float4> _BounceTaps;
-RWStructuredBuffer<float4> _BounceFilterWeights;
 RWStructuredBuffer<uint> _LightingCounters;
 int _LightingCountersEnabled;
 StructuredBuffer<int4> _DirtyRegions;
@@ -121,9 +111,6 @@ Texture2D<float4> _DynamicPolarInput;
 // ============================================================================
 
 int2 _FieldSize;
-int2 _BounceSize;
-int2 _BounceDispatchOrigin;
-int2 _BounceDispatchSize;
 int2 _CompositeDispatchOrigin;
 int2 _CompositeDispatchSize;
 int2 _CellGridSize;
@@ -131,14 +118,12 @@ float4 _WorldRect;
 float4 _AmbientColor;
 float4 _EmptyExtinctionRGB;
 float4 _SolidExtinctionRGB;
-float _BounceStrength;
 float _EmissionScale;
 float _MaximumLightMultiplier;
 float _CellSize;
 float _TransmittanceDebugDistanceCells;
 int _DebugView;
 int _MaterialYFlip;
-int _EnableDiffuseBounce;
 int _EnableBilinearFix;
 
 // PerBlock quality tier: when nonzero, ResolveDirect samples the radiance atlas
@@ -218,11 +203,8 @@ SamplerState sampler_LinearClamp;
 #include "Assets/Resources/Shaders/Lighting/Dynamic/DynamicLightTrace.hlsl"
 
 // ============================================================================
-// Diffuse Bounce
 // ============================================================================
 
-#include "Assets/Resources/Shaders/Lighting/Bounce/BounceCache.hlsl"
-#include "Assets/Resources/Shaders/Lighting/Bounce/BounceSolve.hlsl"
 
 // ============================================================================
 // Composite

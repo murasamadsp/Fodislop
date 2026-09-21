@@ -28,7 +28,6 @@ internal sealed class LightingResourceManager
     private RenderTexture? _staticEmissionField;
     private RenderTexture? _directTexture;
     private RenderTexture? _staticDirectTexture;
-    private RenderTexture? _bounceTexture;
     private RenderTexture? _lightmapTexture;
     private RenderTexture? _cellSolidMask;
     private RenderTexture? _ambientOcclusionField;
@@ -41,7 +40,6 @@ internal sealed class LightingResourceManager
     public RenderTexture? StaticEmissionField => _staticEmissionField;
     public RenderTexture? DirectTexture => _directTexture;
     public RenderTexture? StaticDirectTexture => _staticDirectTexture;
-    public RenderTexture? BounceTexture => _bounceTexture;
     public RenderTexture? LightmapTexture => _lightmapTexture;
     public ComputeBuffer? RadianceAtlas => _buffers.RadianceAtlas;
     public ComputeBuffer? RadianceScratchAtlas => _buffers.RadianceScratchAtlas;
@@ -56,8 +54,6 @@ internal sealed class LightingResourceManager
     public RenderTexture? CellSolidMask => _cellSolidMask;
     public RenderTexture? AmbientOcclusionField => _ambientOcclusionField;
     public RenderTexture? AmbientOcclusionScratch => _ambientOcclusionScratch;
-    public ComputeBuffer? BounceTaps { get; private set; }
-    public ComputeBuffer? BounceFilterWeights { get; private set; }
     public bool GeometryCachesValid { get; set; }
     public int CellGridWidth { get; private set; }
     public int CellGridHeight { get; private set; }
@@ -70,17 +66,12 @@ internal sealed class LightingResourceManager
     public int ClearDynamicDirectKernel { get; private set; }
     public int ResolveDirectKernel { get; private set; }
     public int ResolveTransmissionDebugKernel { get; private set; }
-    public int SolveDiffuseBounceKernel { get; private set; }
     public int CompositeLightingKernel { get; private set; }
     public int BuildCellSolidMaskKernel { get; private set; }
-    public int BuildBounceTapsKernel { get; private set; }
-    public int BuildBounceFilterKernel { get; private set; }
     public int FieldWidth { get; private set; }
     public int FieldHeight { get; private set; }
     public int AmbientOcclusionWidth { get; private set; }
     public int AmbientOcclusionHeight { get; private set; }
-    public int BounceWidth { get; private set; }
-    public int BounceHeight { get; private set; }
     public int AtlasCapacity => _buffers.AtlasCapacity;
     public int AtlasEntryCount { get; private set; }
     public long EstimatedCascadeRayWorkUnits { get; private set; }
@@ -107,11 +98,8 @@ internal sealed class LightingResourceManager
         ClearDynamicDirectKernel = loaded.ClearDynamicDirectKernel;
         ResolveDirectKernel = loaded.ResolveDirectKernel;
         ResolveTransmissionDebugKernel = loaded.ResolveTransmissionDebugKernel;
-        SolveDiffuseBounceKernel = loaded.SolveDiffuseBounceKernel;
         CompositeLightingKernel = loaded.CompositeLightingKernel;
         BuildCellSolidMaskKernel = loaded.BuildCellSolidMaskKernel;
-        BuildBounceTapsKernel = loaded.BuildBounceTapsKernel;
-        BuildBounceFilterKernel = loaded.BuildBounceFilterKernel;
         LightingShaderValidator.ValidateGpuRequirements();
         LightingShaderValidator.ValidateMaterialFieldPass(LightingTexturePool.DestroyLightingObject);
         LightingCommandBuffer = new CommandBuffer
@@ -196,8 +184,6 @@ internal sealed class LightingResourceManager
             qualitySettings.LightingCascadeAtlasLimit,
             MaximumStaticCascadeDirections,
             MaximumStaticCascadeRayWork);
-        int bounceWidth = Mathf.Max(1, Mathf.CeilToInt(fieldWidth * 0.5f));
-        int bounceHeight = Mathf.Max(1, Mathf.CeilToInt(fieldHeight * 0.5f));
 
         FilterMode lightmapFilterMode = qualityMode == LightingQualityMode.PerBlock
             ? FilterMode.Point
@@ -224,8 +210,6 @@ internal sealed class LightingResourceManager
         FieldHeight = fieldHeight;
         AmbientOcclusionWidth = ambientOcclusionWidth;
         AmbientOcclusionHeight = ambientOcclusionHeight;
-        BounceWidth = bounceWidth;
-        BounceHeight = bounceHeight;
 
         // Transport reads mip0 only. Terrain AO owns a separate geometry
         // pyramid below, so lighting quality cannot change its silhouette.
@@ -259,13 +243,6 @@ internal sealed class LightingResourceManager
             randomWrite: true,
             FilterMode.Bilinear,
             "_RadianceDirectStatic");
-        _bounceTexture = LightingTexturePool.CreateTexture(
-            bounceWidth,
-            bounceHeight,
-            RenderTextureFormat.ARGBHalf,
-            randomWrite: true,
-            FilterMode.Bilinear,
-            "_RadianceBounce");
         _lightmapTexture = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
@@ -301,14 +278,6 @@ internal sealed class LightingResourceManager
             randomWrite: false,
             FilterMode.Bilinear,
             "_LightingAmbientOcclusionScratch");
-        BounceTaps = new ComputeBuffer(
-            bounceWidth * bounceHeight * 16,
-            sizeof(float) * 4,
-            ComputeBufferType.Structured);
-        BounceFilterWeights = new ComputeBuffer(
-            fieldWidth * fieldHeight * 4,
-            sizeof(float) * 4,
-            ComputeBufferType.Structured);
         GeometryCachesValid = false;
 
         CascadeLayoutBuilder.BuildCascadeLayouts(
@@ -367,12 +336,6 @@ internal sealed class LightingResourceManager
         Registry.Direct.Dynamic = _directTexture;
         Registry.Direct.DynamicLightsBuffer = DynamicLightBuffer;
 
-        Registry.Bounce.Texture = _bounceTexture;
-        Registry.Bounce.Taps = BounceTaps;
-        Registry.Bounce.FilterWeights = BounceFilterWeights;
-        Registry.Bounce.Width = BounceWidth;
-        Registry.Bounce.Height = BounceHeight;
-
         Registry.Output.Lightmap = _lightmapTexture;
     }
 
@@ -382,15 +345,10 @@ internal sealed class LightingResourceManager
         LightingTexturePool.ReleaseTexture(ref _staticEmissionField);
         LightingTexturePool.ReleaseTexture(ref _directTexture);
         LightingTexturePool.ReleaseTexture(ref _staticDirectTexture);
-        LightingTexturePool.ReleaseTexture(ref _bounceTexture);
         LightingTexturePool.ReleaseTexture(ref _lightmapTexture);
         LightingTexturePool.ReleaseTexture(ref _cellSolidMask);
         LightingTexturePool.ReleaseTexture(ref _ambientOcclusionField);
         LightingTexturePool.ReleaseTexture(ref _ambientOcclusionScratch);
-        BounceTaps?.Release();
-        BounceTaps = null;
-        BounceFilterWeights?.Release();
-        BounceFilterWeights = null;
         GeometryCachesValid = false;
         CellGridWidth = 0;
         CellGridHeight = 0;
@@ -398,8 +356,6 @@ internal sealed class LightingResourceManager
         FieldHeight = 0;
         AmbientOcclusionWidth = 0;
         AmbientOcclusionHeight = 0;
-        BounceWidth = 0;
-        BounceHeight = 0;
         Cascades.Clear();
     }
 

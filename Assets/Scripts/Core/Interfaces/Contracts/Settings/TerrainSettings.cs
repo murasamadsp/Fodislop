@@ -49,6 +49,14 @@ public sealed class TerrainSettings
     [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainRenderer._precalc.EnableDistortion")]
     public bool EnableDistortion = true;
 
+    // Тумблер каймы рельефа: затемнения к границам чужой рельефной семьи.
+    // Выключенная кайма не убирает ни маску, ни транспорт — шейдер просто
+    // перестаёт на неё умножать, поэтому переключение стоит кадра.
+    [SettingUnbounded("Тумблер каймы рельефа на границах семей.")]
+    [SettingLabel("settings.world.relief_rim")]
+    [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainRenderer.ApplyClientConfig")]
+    public bool EnableReliefRim = true;
+
     [SettingLabel("settings.world.surface_emission_color")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]
     [SettingConsumer(SettingConsumerTarget.SurfaceRenderer, "SurfaceRenderer._materialManager.ApplyMaterialConfig")]

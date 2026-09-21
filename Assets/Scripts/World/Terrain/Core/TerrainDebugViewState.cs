@@ -17,6 +17,7 @@ namespace Kern.World.Terrain;
 public enum TerrainDebugView
 {
     Off = 0,
+    ReliefRim = 1,
     ForeignSides = 2,
     Coverage = 3,
     Layer = 4,
@@ -43,6 +44,7 @@ public static class TerrainDebugViewState
     public static string Describe(TerrainDebugView view) => view switch
     {
         TerrainDebugView.Off => "Обычный вид",
+        TerrainDebugView.ReliefRim => "Кайма рельефа",
         TerrainDebugView.ForeignSides => "Чужие стороны",
         TerrainDebugView.Coverage => "Силуэт клетки",
         TerrainDebugView.Layer => "Слой",
@@ -57,6 +59,9 @@ public static class TerrainDebugViewState
     public static string Legend(TerrainDebugView view) => view switch
     {
         TerrainDebugView.Off => "Термы террейна не подменяются.",
+        TerrainDebugView.ReliefRim =>
+            "Зелёное — кайма не трогает пиксель, красное — гасит. " +
+            "Фиолетовое — кайма выключена настройкой, считать нечего.",
         TerrainDebugView.ForeignSides =>
             "Красный — чужой сосед сверху, зелёный — снизу, синий — слева, " +
             "жёлтый — справа. Серое — клетка без рельефной группы.",
