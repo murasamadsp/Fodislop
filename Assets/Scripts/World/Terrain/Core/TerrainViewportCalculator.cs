@@ -186,12 +186,3 @@ public sealed class TerrainViewportCalculator
             ShouldProcess: true);
     }
 }
-
-public readonly record struct TerrainFramePlan(
-    StreamingWindow RequestedWindow,
-    StreamingWindow CommittedWindow,
-    StreamingWindow ActiveWindow,
-    RectInt CameraViewport,
-    RectInt LightingViewport,
-    bool DimensionsChanged,
-    bool ShouldProcess);

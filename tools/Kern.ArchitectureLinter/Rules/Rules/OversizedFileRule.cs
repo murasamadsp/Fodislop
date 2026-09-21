@@ -24,7 +24,6 @@ public sealed class OversizedFileRule : IRule
     {
         "Assets/Scripts/World/Lighting/Core/LightingEngine.cs",
         "Assets/Scripts/World/Persistence/WorldLayer.cs",
-        "Assets/Scripts/World/Terrain/Core/TerrainRenderer.cs",
     };
 
     public Task<IReadOnlyList<RuleViolation>> EvaluateAsync(

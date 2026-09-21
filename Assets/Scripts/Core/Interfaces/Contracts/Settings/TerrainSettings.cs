@@ -46,7 +46,7 @@ public sealed class TerrainSettings
     // и в настройках графики, и в инструментах (F1).
     [SettingUnbounded("Тумблер искажения сетки террейна.")]
     [SettingLabel("settings.world.block_edge_distortion")]
-    [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainRenderer._precalc.EnableDistortion")]
+    [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainBuildPipeline.EnableDistortion")]
     public bool EnableDistortion = true;
 
     // Тумблер каймы рельефа: затемнения к границам чужой рельефной семьи.
