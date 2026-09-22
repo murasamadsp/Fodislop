@@ -1,15 +1,15 @@
 # Расхождения компонентов с макетом
 
 ФАЙЛ МАШИННЫЙ. Правки будут затёрты.
-Генератор: `visual/kern-ui-lab/tools/compare-components.py`.
+Генератор: `visual/kern-ui-lab/tools/compare-components.js`.
 Карта пар: `visual/kern-ui-lab/component-map.json`.
 
 ## Что это
 
 Токены игра и макет делят с точностью до значения, но словарь — не текст:
 одними и теми же значениями собираются разные экраны. Этот отчёт сверяет уже
-сказанное: 126 пар компонентов, 712 сравнимых свойств,
-**0 расхождений** плюс 33, которые устранить нельзя.
+сказанное: 126 пар компонентов, 435 сравнимых свойств,
+**0 расхождений** плюс 71, которые устранить нельзя.
 
 Сравнивается и покой, и реакция: селекторы игры переписываются именами макета
 (`.mm-side-btn:hover` → `.side-icon-btn:hover`), и семейства двух сторон
@@ -28,7 +28,11 @@
 
 | секция | игра | селектор макета |
 |---|---|---|
-| — | | |
+| хроника | `.mm-bead-core` | `.chronicle-item.current .chronicle-bead-core` |
+| хроника | `.mm-bead-core` | `.chronicle-item.future .chronicle-bead-core` |
+| хроника | `.mm-bead-core` | `.chronicle-item.past .chronicle-bead-core` |
+| хроника | `.mm-timeline-card` | `.chronicle-item:hover` |
+| меню | `.mm-update-banner` | `.update-alert-banner:hover` |
 
 ## Макет сказал — игра промолчала
 
@@ -59,26 +63,66 @@ USS — не CSS, и часть расхождений структурная: �
 элемента `svg` в UI Toolkit не существует.
 
 | секция | игра | макет | свойство | почему |
-| --- | --- | --- | --- | --- |
+|---|---|---|---|---|
+| фон и планета | `.mm-planet-system` | `.fa-planet-system` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| фон и планета | `.mm-planet-body` | `.fa-planet-body` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | фон и планета | `.mm-beacon` | `.planet-beacon` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| меню | `.mm-update-banner` | `.update-alert-banner` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | меню | `.mm-update-banner-text` | `.uab-text` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| меню | `.mm-update-banner-cta` | `.uab-btn` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | меню | `.mm-btn-primary-arrow-box` | `.action-arrow` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| меню | `.mm-text--gold` | `.fdn-text--gold` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| меню | `.mm-update-banner-title` | `.uab-title` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| меню | `.mm-update-banner-sub` | `.uab-sub` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | меню | `.mm-eyebrow-text` | `.eyebrow-text` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | загрузка | `.mm-loader-phase-label` | `.progress-meta-label` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | футер | `.mm-route-text` | `.route-text` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | футер | `.mm-route-item--active` | `.route-item.active` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline` | `.chronicle-container` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline-spine` | `.chronicle-spine` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline-section-title` | `.chronicle-section-header` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline-card` | `.chronicle-item` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline-bead` | `.chronicle-bead` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tc-header` | `.chronicle-top-row` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tc-tag` | `.chronicle-tag` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tc-date` | `.chronicle-time` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tc-title` | `.chronicle-title` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tc-body` | `.chronicle-desc` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | хроника | `.mm-tc--purple` | `.chronicle-item.future` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tc--gold` | `.chronicle-item.current` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tc--dim` | `.chronicle-item.past` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tag--purple` | `.chronicle-tag.event` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tag--gold` | `.chronicle-tag.patch` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tb--purple` | `.chronicle-item.future .chronicle-bead` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tb--gold` | `.chronicle-item.current .chronicle-bead` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-tb--dim` | `.chronicle-item.past .chronicle-bead` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-bead-core` | `.chronicle-bead-core` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline-section--purple` | `.chronicle-section-header.future` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline-section--gold` | `.chronicle-section-header.current` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| хроника | `.mm-timeline-section--dim` | `.chronicle-section-header.past` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| профиль | `.mm-profile-avatar` | `.profile-avatar` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| профиль | `.mm-profile-name` | `.profile-name` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| профиль | `.mm-profile-clan` | `.profile-clan` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| профиль | `.mm-profile-hero` | `.profile-head` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| серверы | `.mm-server-detail-card` | `.server-detail-card` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| серверы | `.mm-detail-desc` | `.srv-detail-text` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| серверы | `.mm-detail-title` | `.srv-detail-title` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| настройки | `.mm-card-box` | `.settings-block` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| настройки | `.mm-card-tag` | `.settings-block-title` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| настройки | `.mm-row-item` | `.settings-row` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| настройки | `.mm-item-title` | `.settings-label` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| настройки | `.mm-key-badge` | `.keybinding-key` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| настройки | `.mm-tab-pane--active` | `.tab-panel.active` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| ремонт | `.mm-repair-log` | `.terminal-box-view` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| ремонт | `.mm-log-line` | `.term-row` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| ремонт | `.mm-log-line--success` | `.term-row.ok` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| обновление | `.mm-update-hero-box` | `.update-callout` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
+| обновление | `.mm-update-title` | `.update-version` | `—` | компонент собран иначе: у одной стороны отдельного правила нет |
 | шапка | `.mm-brand-sub` | `.brand-subtitle` | `-unity-font-style` | USS знает только normal и bold; вес 600 недостижим |
 | шапка | `.mm-brand-title` | `.brand-title` | `-unity-font-style` | USS знает только normal и bold; вес 800 недостижим |
 | меню | `.mm-btn-outline` | `.btn-outline-action` | `-unity-font-style` | USS знает только normal и bold; вес 600 недостижим |
-| хроника | `.mm-timeline-section-title` | `.chronicle-section-header` | `-unity-font-style` | USS знает только normal и bold; вес 800 недостижим |
-| хроника | `.mm-timeline-spine` | `.chronicle-spine` | `background-color` | градиентов в USS нет: заливка только сплошная |
 | футер | `.mm-footer` | `.fa-footer` | `background-color` | градиентов в USS нет: заливка только сплошная |
 | шапка | `.mm-header` | `.fa-header` | `background-color` | градиентов в USS нет: заливка только сплошная |
-| фон и планета | `.mm-planet-body` | `.fa-planet-body` | `height` | положение задаёт сцена, а не вёрстка |
-| фон и планета | `.mm-planet-body` | `.fa-planet-body` | `width` | положение задаёт сцена, а не вёрстка |
-| фон и планета | `.mm-planet-system` | `.fa-planet-system` | `right` | положение задаёт сцена, а не вёрстка |
-| фон и планета | `.mm-planet-system` | `.fa-planet-system` | `top` | положение задаёт сцена, а не вёрстка |
 | фон и планета | `.mm-target-reticle` | `.fa-target` | `left` | положение задаёт сцена, а не вёрстка |
 | фон и планета | `.mm-target-reticle` | `.fa-target` | `top` | положение задаёт сцена, а не вёрстка |
 | фон и планета | `.mm-tb-title` | `.fa-tb-title` | `-unity-font-style` | USS знает только normal и bold; вес 800 недостижим |
@@ -86,10 +130,56 @@ USS — не CSS, и часть расхождений структурная: �
 | модалка | `.mm-modal-card` | `.modal-card` | `max-height` | относительных единиц в USS нет |
 | модалка | `.mm-modal-card` | `.modal-card` | `max-width` | относительных единиц в USS нет |
 | загрузка | `.mm-loader-progress-fill` | `.progress-fill` | `background-color` | градиентов в USS нет: заливка только сплошная |
-| настройки | `.mm-item-title` | `.settings-label` | `-unity-font-style` | USS знает только normal и bold; вес 600 недостижим |
 | фон и планета | `.mm-target-cross-h` | `.target-cross-h` | `left` | положение задаёт сцена, а не вёрстка |
 | фон и планета | `.mm-target-cross-h` | `.target-cross-h` | `right` | положение задаёт сцена, а не вёрстка |
 | фон и планета | `.mm-target-cross-v` | `.target-cross-v` | `bottom` | положение задаёт сцена, а не вёрстка |
 | фон и планета | `.mm-target-cross-v` | `.target-cross-v` | `top` | положение задаёт сцена, а не вёрстка |
-| обновление | `.mm-update-title` | `.update-version` | `-unity-font-style` | USS знает только normal и bold; вес 800 недостижим |
 | фон и планета | `.mm-root` | `.viewport` | `background-color` | фон web-макета рисует сам viewport; прозрачный Unity-root обязан пропускать изображение камеры |
+
+## Покрытие карты
+
+В `MainMenu.uxml` 160 классов, в карте 126. Непокрыто
+37: 9 модификаторов и 28 прочих. Модификаторы
+первыми — у них в карте уже есть база, но нет варианта, и сверка проходит мимо них
+молча. Вносить пару можно, только прочитав обе стороны: класс, которого в макете
+нет, в карту не попадает, и это тоже ответ.
+
+| класс игры |  |
+|---|---|
+| `fit-atomic` |  |
+| `fit-wrap` |  |
+| `is-hidden` |  |
+| `mm-btn-primary-arrow` |  |
+| `mm-btn-primary-text` |  |
+| `mm-card-box--gap-top` | модификатор |
+| `mm-feedback-tag` |  |
+| `mm-flex-1` |  |
+| `mm-footer--between` | модификатор |
+| `mm-heading-white` |  |
+| `mm-item-val` |  |
+| `mm-kbd-dot` |  |
+| `mm-kbd-label` |  |
+| `mm-loader` |  |
+| `mm-modal-desc` |  |
+| `mm-profile-info` |  |
+| `mm-profile-uid` |  |
+| `mm-progress-fill--init` | модификатор |
+| `mm-row-item--gap` | модификатор |
+| `mm-row-item--meta` | модификатор |
+| `mm-sc-desc` |  |
+| `mm-sc-left` |  |
+| `mm-sc-online` |  |
+| `mm-sc-right` |  |
+| `mm-sc-title` |  |
+| `mm-scenery-body` |  |
+| `mm-scenery-system` |  |
+| `mm-select--controls` | модификатор |
+| `mm-server-badge` |  |
+| `mm-server-card` |  |
+| `mm-server-card--active` | модификатор |
+| `mm-server-list` |  |
+| `mm-settings-content--servers` | модификатор |
+| `mm-side-badge` |  |
+| `mm-target-badge--right` | модификатор |
+| `mm-user-meta` |  |
+| `onb-select` |  |

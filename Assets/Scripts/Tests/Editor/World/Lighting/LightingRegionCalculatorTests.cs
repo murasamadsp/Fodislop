@@ -183,4 +183,27 @@ public class LightingRegionCalculatorTests
         Assert.That(region.z, Is.GreaterThanOrEqualTo(2f));
         Assert.That(region.w, Is.GreaterThanOrEqualTo(2f));
     }
+
+    [Test]
+    public void TouchesStableRegionIncludesExactlyOneCellMargin()
+    {
+        Vector4 stable = new(0, 0, 10, 10);
+
+        Assert.That(
+            LightingRegionCalculator.TouchesStableRegion(10, 0, 1, 1, stable),
+            Is.True,
+            "The first cell immediately outside the right edge must invalidate lighting.");
+        Assert.That(
+            LightingRegionCalculator.TouchesStableRegion(11, 0, 1, 1, stable),
+            Is.False,
+            "A second cell outside the right edge must not invalidate lighting.");
+        Assert.That(
+            LightingRegionCalculator.TouchesStableRegion(0, 10, 1, 1, stable),
+            Is.True,
+            "The first cell immediately below the region must invalidate lighting.");
+        Assert.That(
+            LightingRegionCalculator.TouchesStableRegion(0, 11, 1, 1, stable),
+            Is.False,
+            "A second cell below the region must not invalidate lighting.");
+    }
 }

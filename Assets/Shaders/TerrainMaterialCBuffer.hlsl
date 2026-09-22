@@ -25,8 +25,8 @@ CBUFFER_START(UnityPerMaterial)
     float4 _DebugColor;
     float _DebugMode;
     float4 _BaseMap_TexelSize;
-    float4 _FlowMap_TexelSize;
-    float4 _TerrainDecalAtlas_TexelSize;
+    float4 _FlowMap_TexelSize; // KERN-SHADER-DEAD-UNIFORM: layout — см. комментарий выше
+    float4 _TerrainDecalAtlas_TexelSize; // KERN-SHADER-DEAD-UNIFORM: layout — см. комментарий выше
     float _TerrainAtlasIndex;
     float4 _TerrainAtlas0_TexelSize;
     float4 _TerrainAtlas1_TexelSize;

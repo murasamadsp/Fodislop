@@ -259,10 +259,12 @@ internal static class TerrainQuadBuilder
         // ring-адрес у фонового текселя тот же, и чужой код рельефа въехал бы
         // в соседний слой.
         byte reliefMask = precalc.CellReliefMasks[x, y];
-        // Состав каймы решает каталог семей, а не рельефная группа: в
-        // оригинале блоки лежат в одной группе со скалами, но каймы не
-        // получают. Сейчас участвуют все, каталог — место, где это режется.
-        bool hasRelief = !isBackground && TerrainReliefRimCatalog.ParticipatesInRim(cellFgType);
+        // Каталог задаёт состав семей, а группа подтверждает, что у клетки
+        // вообще есть рельеф. Без этой проверки обычный грунт с группой 0
+        // получает reliefCode=1 и рисует фаску по всем четырём сторонам.
+        bool hasRelief = !isBackground &&
+            ccd.ReliefGroup != 0 &&
+            TerrainReliefRimCatalog.ParticipatesInRim(cellFgType);
         TerrainLightingData lightingData = TerrainLightingData.Pack(
             solidConnectivityMask,
             isGlowing,

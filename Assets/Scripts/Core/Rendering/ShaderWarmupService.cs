@@ -66,7 +66,26 @@ public sealed class ShaderWarmupService : IShaderWarmupService, IDisposable
         int warmedStates = 0;
         if (_collection != null)
         {
-            warmedStates = await WarmUpAsync(_collection, progressCallback, cancellationToken);
+            string currentQuality = GetCurrentQualityName();
+            if (!string.IsNullOrEmpty(_collection.qualityLevelName) &&
+                !string.Equals(
+                    _collection.qualityLevelName,
+                    currentQuality,
+                    StringComparison.Ordinal))
+            {
+                // Unity warns that a GraphicsStateCollection is inaccurate when
+                // its recorded quality differs from the active one. Do not feed
+                // that collection into the warmup API: it only burns startup
+                // time and still leaves the real variants cold.
+                Debug.LogWarning(
+                    $"[ShaderWarmup] Skipping collection recorded for quality " +
+                    $"'{_collection.qualityLevelName}' while active quality is " +
+                    $"'{currentQuality}'.");
+            }
+            else
+            {
+                warmedStates = await WarmUpAsync(_collection, progressCallback, cancellationToken);
+            }
         }
         else
         {
@@ -92,6 +111,15 @@ public sealed class ShaderWarmupService : IShaderWarmupService, IDisposable
             $"[ShaderWarmup] Primed {warmedStates} graphics state(s) in " +
             $"{stopwatch.ElapsedMilliseconds} ms.");
         progressCallback?.Invoke("Ready", 1.0f);
+    }
+
+    private static string GetCurrentQualityName()
+    {
+        string[] qualityNames = QualitySettings.names;
+        int qualityIndex = QualitySettings.GetQualityLevel();
+        return qualityIndex >= 0 && qualityIndex < qualityNames.Length
+            ? qualityNames[qualityIndex]
+            : string.Empty;
     }
 
     private static async UniTask<int> WarmUpAsync(
@@ -149,7 +177,7 @@ public sealed class ShaderWarmupService : IShaderWarmupService, IDisposable
         {
             graphicsDeviceType = SystemInfo.graphicsDeviceType,
             runtimePlatform = Application.platform,
-            qualityLevelName = QualitySettings.names[QualitySettings.GetQualityLevel()],
+            qualityLevelName = GetCurrentQualityName(),
         };
 
         if (!trace.BeginTrace())

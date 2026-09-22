@@ -1,64 +1,64 @@
-# Карта репозитория Kern
+# Kern Repository Map
 
-Этот файл — навигатор по дереву проекта. Он не заменяет `AGENTS.md` и
-`.agents/project-context.md`: здесь только расположение и границы подсистем.
+This file navigates the project tree. It does not replace `AGENTS.md` or
+`.agents/project-context.md`; it only describes locations and subsystem boundaries.
 
-## Верхний уровень
+## Top level
 
-| Путь | Назначение | Правило изменений |
+| Path | Purpose | Change rule |
 | --- | --- | --- |
-| `Assets/` | Unity-исходники, сцены, материалы, UI и runtime-ресурсы | Unity-ассеты не редактировать текстом; `.meta` перемещать вместе с объектом |
-| `Assets/Scripts/` | C# runtime/editor/tests | Владелец определяется ближайшим asmdef; не переносить файл через границу без проверки зависимостей |
-| `Assets/Resources/Shaders/` | production shaders/compute и include-файлы | Для lighting читать `docs/architecture/LIGHTING_ARCHITECTURE.md` перед изменением |
-| `Packages/` | локальные Unity packages и third-party code | Не смешивать с кодом игры |
-| `tools/` | standalone .NET/Python-инструменты и тестовые harness'ы | Generated `bin/`/`obj/` не являются исходниками |
-| `visual/` | независимый UI lab и визуальные генераторы | Не считать production UI без явного production-пути |
-| `KernAudio/` | FMOD Studio project и банки | Синхронизация описана в skill `fmod-sync` |
-| `ProjectSettings/` | Unity project configuration | Менять только по задаче, не форматировать массово |
-| `docs/` | автономные HTML-отчёты и проектные заметки | Новые HTML — self-contained, inline style |
-| `.agents/` | инструкции и контекст для агентов | Не складывать сюда runtime-код |
-| `scripts/` | небольшие asset/design automation scripts | Не путать с `tools/`: scripts работают с проектными артефактами |
+| `Assets/` | Unity source, scenes, materials, UI, and runtime resources | Do not edit Unity assets as text; move `.meta` files with their assets |
+| `Assets/Scripts/` | C# runtime/editor/tests | The nearest asmdef owns a file; do not cross a boundary without checking dependencies |
+| `Assets/Resources/Shaders/` | Production shaders/compute and include files | Read `docs/architecture/LIGHTING_ARCHITECTURE.md` before lighting changes |
+| `Packages/` | Local Unity packages and third-party code | Do not mix with game code |
+| `tools/` | Standalone .NET/Python tools and test harnesses | Generated `bin/`/`obj/` are not source files |
+| `visual/` | Independent UI lab and visual generators | Do not treat it as production UI without an explicit production path |
+| `KernAudio/` | FMOD Studio project and banks | Synchronization is documented in the `fmod-sync` skill |
+| `ProjectSettings/` | Unity project configuration | Change only when requested; do not mass-format |
+| `docs/` | Self-contained HTML reports and project notes | New HTML must be self-contained with inline styles |
+| `.agents/` | Agent instructions and context | Do not place runtime code here |
+| `scripts/` | Small asset/design automation scripts | Do not confuse with `tools/`: scripts operate on project artifacts |
 
-## C#-модули
+## C# modules
 
-Основные границы определяются asmdef, а не глубиной папки:
+The main boundaries are defined by asmdefs, not folder depth:
 
-- `Kern.Core` — общие runtime-сервисы, конфигурация и lifecycle;
-- `Kern.Infrastructure` — внешние адаптеры, audio и Effekseer;
+- `Kern.Core` — shared runtime services, configuration, and lifecycle;
+- `Kern.Infrastructure` — external adapters, audio, and Effekseer;
 - `Kern.Application` — game/player orchestration;
-- `Kern.Presentation` — rendering и debug tooling;
-- `Kern.World` — мир, terrain, streaming и lighting;
-- `Kern.Networking` — сетевой клиентский слой;
-- `Kern.UI` — UI Toolkit и presentation;
-- `Kern.Persistence` — сохранение и загрузка;
-- `Kern.Bootstrap` — composition roots и запуск;
+- `Kern.Presentation` — rendering and debug tooling;
+- `Kern.World` — world, terrain, streaming, and lighting;
+- `Kern.Networking` — client networking layer;
+- `Kern.UI` — UI Toolkit and presentation;
+- `Kern.Persistence` — saving and loading;
+- `Kern.Bootstrap` — composition roots and startup;
 - `Kern.Editor` — editor tooling;
-- `Kern.Tests.*` — тестовые сборки;
-- `Kern.Contracts` — нижний слой контрактов через `asmdef`/`asmref`.
+- `Kern.Tests.*` — test assemblies;
+- `Kern.Contracts` — the lowest contract layer through `asmdef`/`asmref`.
 
-Папки `Core`, `Game`, `Rendering` и их поддеревья теперь являются assembly
-roots. `Player` находится внутри `Game`, `Tools` — внутри `Rendering`, а
-Effekseer-адаптер — внутри `Audio`, чтобы каждый слой имел один явный root.
+The `Core`, `Game`, and `Rendering` folders and their subtrees are assembly
+roots. `Player` lives inside `Game`, `Tools` inside `Rendering`, and the
+Effekseer adapter inside `Audio`, so every layer has one explicit root.
 
-## Навигация по документации
+## Documentation navigation
 
-- визуальный каталог: [`docs/index.html`](../docs/index.html);
-- архитектура и инварианты: [`AGENTS.md`](../AGENTS.md),
+- visual catalog: [`docs/index.html`](../docs/index.html);
+- architecture and invariants: [`AGENTS.md`](../AGENTS.md),
   [`.agents/project-context.md`](project-context.md);
 - lighting dataflow: [`LIGHTING_ARCHITECTURE.md`](../docs/architecture/LIGHTING_ARCHITECTURE.md);
-- текущие handoff и незавершённые работы: [`docs/operations/`](../docs/operations/),
+- current handoffs and unfinished work: [`docs/operations/`](../docs/operations/),
   [`docs/planning/TODO.md`](../docs/planning/TODO.md).
 
-## Что сознательно не является исходником
+## Deliberately not source files
 
-Локальные `.kilo/worktrees/`, `Library/`, `Temp/`, `Logs/`, `Build/`,
-`LightingDumps/`, `ProfilerCaptures/`, `UserSettings/`, `bin/` и `obj/` не
-должны попадать в карту production-файлов. Их наличие полезно для локальной
-работы, но оно не должно создавать ложное ощущение дублирования исходников.
+Local `.kilo/worktrees/`, `Library/`, `Temp/`, `Logs/`, `Build/`,
+`LightingDumps/`, `ProfilerCaptures/`, `UserSettings/`, `bin/`, and `obj/` must
+not appear in the production-file map. Their presence is useful for local work,
+but must not create a false impression of duplicated source.
 
-## Следующий безопасный этап
+## Next safe step
 
-1. Разобрать корневые handoff/спецификации по жизненному циклу и владельцу.
-2. Проверить, какие `Assets/Scripts/*` реально пересекают asmdef-границы.
-3. Только после этого сокращать глубину каталогов или переносить C# вместе с
-   `.meta` и проверкой ссылок.
+1. Break down root handoffs/specifications by lifecycle and owner.
+2. Check which `Assets/Scripts/*` actually cross asmdef boundaries.
+3. Only then reduce folder depth or move C# together with `.meta` files and
+   reference checks.

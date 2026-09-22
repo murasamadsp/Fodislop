@@ -14,6 +14,41 @@ public static class LightingRegionCalculator
     public static int LightingRegionPaddingCells =>
         StreamingPolicy.DefaultLightingPaddingCells;
 
+    /// <summary>Кайма террейна под динамические источники.</summary>
+    ///
+    /// Dynamic sources are rasterized as one-cell emitters. Their propagation
+    /// distance is solved by the same extinction and cascade intervals as
+    /// terrain emission, not by a source halo.
+    public static int TerrainPaddingCells => 3;
+
+    /// <summary>Регион задевает стабильное окно — с каймой ровно в одну клетку.</summary>
+    ///
+    /// Кайма симметрична: клетка сразу за кромкой окна его ещё задевает (её
+    /// правка меняет и соседнюю клетку внутри), а вторая клетка — уже нет.
+    /// Поэтому справа и снизу граница — `x + z`, а не `x + z + 1`: с плюс
+    /// единицей запас выходил в две клетки против одной слева, и правка второй
+    /// клетки за окном запускала полный пересчёт зря. Стережёт
+    /// TouchesStableRegionIncludesExactlyOneCellMargin.
+    public static bool TouchesStableRegion(
+        int worldX,
+        int worldY,
+        int width,
+        int height,
+        Vector4 stableRegion)
+    {
+        if (float.IsNaN(stableRegion.x))
+        {
+            return true;
+        }
+
+        int regionMaxX = worldX + width - 1;
+        int regionMaxY = worldY + height - 1;
+        return regionMaxX >= stableRegion.x - 1f &&
+            worldX <= stableRegion.x + stableRegion.z &&
+            regionMaxY >= stableRegion.y - 1f &&
+            worldY <= stableRegion.y + stableRegion.w;
+    }
+
     public static Vector4 GetStableLightingRegion(
         int visibleMinX,
         int visibleMinY,

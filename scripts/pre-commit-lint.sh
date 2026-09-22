@@ -108,6 +108,17 @@ for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     fi
 done
 
+# Настоящая тип-проверка C#: отклики Roslyn из Library/Bee, компилятор зовётся
+# напрямую. Ниже идёт разбор по сгенерированным Unity .csproj — они устарели
+# (Kern.Runtime.csproj перечисляет файлы, которых нет), и на отсутствующих
+# проектах этот шаг молча печатал «Skipping… likely missing targeting pack»,
+# то есть выглядел проверкой компиляции, не будучи ею. Проверяем здесь.
+echo "--- Step 2: Тип-проверка сборок без Unity ---"
+if ! "$(dirname "$0")/check-compile.sh"; then
+    echo -e "\n\033[0;31mКомпиляция сборок Kern упала.\033[0m"
+    exit 1
+fi
+
 # Build the runtime project before editor projects. The editor assembly references
 # Assembly-CSharp.dll, so filesystem-dependent find order can otherwise validate
 # editor code against a stale runtime assembly and report false missing members.

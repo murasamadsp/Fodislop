@@ -80,6 +80,10 @@ namespace Kern.Networking.Connection
             try
             {
                 var client = new TcpClient { NoDelay = true };
+                // Ожидание синхронное намеренно: RunWorker идёт в отдельном
+                // потоке (см. Connect), поэтому ждёт рабочий поток, а не кадр.
+                // Переводить на await здесь нечего — выигрыша нет, а цикл чтения
+                // ниже всё равно блокирующий.
                 if (!client.ConnectAsync(_address, _port).Wait(ConnectTimeoutMs))
                 {
                     client.Close();

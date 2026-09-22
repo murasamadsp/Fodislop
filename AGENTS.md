@@ -1,45 +1,49 @@
 # Kern agent guidance
 
-Kern — 2D MMORPG-песочница на Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask и пакетах `darkar25.fodina.*`.
+Kern — 2D MMORPG sandbox on Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask, and `darkar25.fodina.*` packages.
 
-## Специализированные руководства
+## Specialized guides
 
-Читай только то, чего касается задача:
+Specializations are implemented as skills and auto-load based on task triggers. If the task changes domain — explicitly load the corresponding skill before proceeding.
 
-- C#, namespace, DI, слои сборок → [`.agents/csharp-conventions.md`](.agents/csharp-conventions.md)
-- Координаты, UI-позиционирование, камера, RenderTexture, фолбеки, profiler → [`.agents/critical-invariants.md`](.agents/critical-invariants.md)
-- Шейдеры освещения, bloom, tonemapping, HDR, постобработка, калибровка → [`.agents/hdr-color-contract.md`](.agents/hdr-color-contract.md)
-- Lighting compute, DDA, каскады, bounce → [`.agents/lighting-guide.md`](.agents/lighting-guide.md)
-- Сцены, DI, startup pipeline → раздел 2–3 [`.agents/project-context.md`](.agents/project-context.md)
-- Сеть, UI, мир, рендеринг, аудио, Programmator → соответствующий подраздел 4 [`.agents/project-context.md`](.agents/project-context.md)
-- Архитектурные инварианты → раздел 5 [`.agents/project-context.md`](.agents/project-context.md)
-- Диагностика, производительность → раздел 6 [`.agents/project-context.md`](.agents/project-context.md)
-- Границы директорий и asmdef → [`.agents/repository-map.md`](.agents/repository-map.md)
+| Domain | Skill | Triggers |
+|--------|-------|---------|
+| C#, namespaces, DI, assembly layers | `csharp-conventions` | MonoBehaviour, VContainer, asmdef, nullable, SA1513 |
+| Coordinates, UI positioning, camera, RenderTexture, fallbacks, profiler | `critical-invariants` | CoordinateUtils, RuntimePanelUtils, LifetimeScope, VSync, EditorLoop |
+| Lighting shaders, bloom, tonemapping, HDR, post-processing, calibration | `hdr-color-contract` | saturate, ARGBHalf, HDROutputReconciler, paper white, CompositeFinal |
+| Lighting compute, DDA, cascades, bounce | `lighting-guide` | CascadeTrace, DDA.hlsl, TraceLightSegment, IFrameTelemetry |
+| Scenes, DI, startup pipeline | sections 2–3 of [`project-context.md`](.agents/project-context.md) | |
+| Network, UI, world, rendering, audio, Programmator | section 4 of [`project-context.md`](.agents/project-context.md) | |
+| Architectural invariants | section 5 of [`project-context.md`](.agents/project-context.md) | |
+| Diagnostics, performance | section 6 of [`project-context.md`](.agents/project-context.md) | |
+| Directory boundaries and asmdef | [`repository-map.md`](.agents/repository-map.md) | |
 
-Код является источником истины, если справочный контекст устарел. Не читай всё подряд — только то, что касается задачи.
+Code is the source of truth if reference context is stale. Don't read everything — only what the task requires.
 
-## Границы полномочий
+## Authority boundaries
 
-- Не запускайте, не открывайте, не закрывайте и не контролируйте Unity Editor/Hub; не вызывайте Unity CLI, MCP, Editor API, batch mode, build, tests, импорт или чтение Editor-логов, если текущий запрос пользователя прямо не называет конкретную Unity-операцию. Не запрашивайте системное разрешение на действие в Unity по собственной инициативе.
-- Разрешение распространяется только на прямо названную Unity-операцию. Если без Unity нельзя завершить проверку, остановитесь и назовите конкретную операцию, которая осталась пользователю.
-- Не выполняйте Git-откат или переписывание истории без прямого запроса в текущем сообщении: `reset`, `restore`, checkout для восстановления, `revert`, `clean`, amend, rebase или force-push. Не восстанавливайте файлы из `HEAD`, stash или reflog и не запрашивайте такое разрешение по собственной инициативе.
-- НИКОГДА НЕ ОТКАТЫВАЙТЕ НИЧЕГО. Правило шире Git: запрещено отменять собственную правку любым способом — ни `git`-командой, ни ручным возвращением файла к прежнему тексту, ни удалением добавленного кода и тестов. Откат допустим ТОЛЬКО когда пользователь в текущем сообщении прямо просит откатить.
-- Не редактируйте текстом `.prefab`, `.unity` или `.asset`; изменяйте их только через явно разрешённый Unity Editor API/Inspector. Сохраняйте GUID и `.meta`.
-- Имеющиеся изменения в рабочем дереве принадлежат пользователю. Не перезаписывайте и не включайте их в свои изменения без необходимости.
-- Когда пользователь задаёт вопрос или пишет реплику-вопрос — немедленно прерывайтесь, отвечайте по существу и НИЧЕГО не редактируйте, не создавайте и не запускайте без прямого указания пользователя.
-- НИКОГДА НЕ ДЕЛАЙ `--no-verify`!
-- Подавление предупреждений запрещено: не добавляйте `SuppressMessage`, `#pragma warning disable`, `NoWarn`, отключение общих предупреждений или аналогичные исключения. Исправляйте первопричину предупреждения; исключение допускается только для неизменяемого стороннего пакета, который не входит в код проекта.
-- `git commit` и `git push` выполняются ТОЛЬКО когда пользователь прямо просит об этом в текущем сообщении. Не коммитьте и не пушьте по завершении задачи «для удобства» или «чтобы сохранить» — только правки в файлах.
-- Коммить всегда всё: все изменения рабочего дерева одним коммитом (`git add -A && git commit`), без дробления на части и без выборочного стейджинга, если пользователь прямо не попросил об обратном.
+- Do not launch, open, close, or control Unity Editor/Hub; do not invoke Unity CLI, MCP, Editor API, batch mode, build, tests, import, or read Editor logs unless the current user request explicitly names a specific Unity operation. Do not solicit system permission to act in Unity on your own initiative.
+- Permission extends only to the explicitly named Unity operation. If the verification cannot be completed without Unity, stop and name the specific operation left for the user.
+- Do not perform Git rollback or history rewriting without an explicit request in the current message: `reset`, `restore`, checkout for restoration, `revert`, `clean`, amend, rebase, or force-push. Do not restore files from `HEAD`, stash, or reflog, and do not solicit such permission on your own initiative.
+- NEVER ROLL BACK ANYTHING. This rule is broader than Git: it is forbidden to undo your own edit by any means — neither a `git` command, nor manually reverting file text, nor deleting added code and tests. Rollback is permitted ONLY when the user explicitly requests it in the current message.
+- Do not edit `.prefab`, `.unity`, or `.asset` files as text; modify them only through explicitly permitted Unity Editor API/Inspector. Preserve GUIDs and `.meta` files.
+- Existing working-tree changes belong to the user. Do not overwrite or incorporate them into your changes without necessity.
+- When the user asks a question or writes a question-reply — stop immediately, answer directly, and do NOT edit, create, or run anything without explicit instruction from the user.
+- NEVER USE `--no-verify`!
+- Warning suppression is forbidden: do not add `SuppressMessage`, `#pragma warning disable`, `NoWarn`, disabling blanket warnings, or similar exclusions. Fix the root cause of the warning; an exception is permitted only for an immutable third-party package that is not part of project code.
+- `git commit` and `git push` are executed ONLY when the user explicitly requests it in the current message. Do not commit or push after completing a task "for convenience" or "to save" — only file edits.
+- Always commit everything: all working-tree changes in one commit (`git add -A && git commit`), without splitting or selective staging, unless the user explicitly requests otherwise.
 
-## Выполнение задач
+## Task execution
 
-Для нетривиальной работы определите результат, внесите изменения и продолжайте до проверенного завершения, если не требуется новое решение пользователя. Без отдельного согласования разрешено запускать релевантные локальные проверки, которые не управляют Unity, не имеют production-доступа и используют disposable fixtures. Исправляйте вызванные вашим изменением сбои и повторяйте соответствующие проверки.
+When the user sends project errors, compiler output, stack traces, or runtime logs, treat them as an instruction to fix the reported problem immediately. Locate the root cause, edit the affected files, and run the strongest permitted verification. Do not stop at explaining the error or merely suggesting a fix; only report without editing when the user explicitly asks for diagnosis only.
 
-Для утверждений о визуальном или GPU-результате тест обязан проходить через production-путь: настоящий shader и pass, реальные mesh attributes/`SV_POSITION`, production material keywords, реальные data textures и тот же camera/projection path. Изолированный probe shader, ручной вызов helper-функции, статическая проверка исходника или CPU-модель — только вспомогательные тесты; они не доказывают поведение игры. Если production-путь нельзя запустить, явно помечайте проверку как неполную.
+For non-trivial work: define the outcome, make the changes, and continue until verified completion unless a new user decision is required. Without separate approval, you may run relevant local checks that do not control Unity, have no production access, and use disposable fixtures. Fix failures caused by your change and re-run the relevant checks.
 
-Оракул визуального теста должен быть независим от production-функций. Совпадение helper-а с самим собой недействительно как регрессионное доказательство.
+For claims about visual or GPU results, the test must go through the production path: real shader and pass, real mesh attributes/`SV_POSITION`, production material keywords, real data textures, and the same camera/projection path. An isolated probe shader, a manual helper function call, a static source check, or a CPU model are supplementary tests only — they do not prove game behavior. If the production path cannot be run, explicitly mark the verification as incomplete.
 
-Не придумывайте за пользователя то, чего он не просил. Движение, вращение, анимация, пульсация, мерцание — НЕ добавляются по инициативе агента. Статичная картинка означает статичный результат. Поправка к одному слову в описании относится ко всей сущности предмета.
+The visual test oracle must be independent of production functions. A helper matching itself is not valid as a regression proof.
 
-Не возвращайте пользователю промежуточный блокер или описание симптомов как результат работы. Самостоятельно локализуйте первопричину и продолжайте до фактического результата. Останавливайтесь только когда исчерпаны доступные варианты и дальнейший шаг требует нового разрешения или решения пользователя — тогда сообщайте конкретный доказанный блокер без оправданий и повторов.
+Do not invent things the user did not ask for. Motion, rotation, animation, pulsing, flickering — NOT added on the agent's initiative. A static image means a static result. A correction to one word in the description applies to the entire entity.
+
+Do not return an intermediate blocker or symptom description as a result. Independently locate the root cause and continue to an actual result. Stop only when available options are exhausted and the next step genuinely requires new permission or a user decision — then report a specific proven blocker without excuses or repetition.

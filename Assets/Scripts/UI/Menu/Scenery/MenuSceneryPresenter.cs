@@ -53,12 +53,16 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
     /// раскладки, и нулевой размер — самый частый ответ.
     public string DescribeReadiness()
     {
+        // KERN-HARDCODED-TEXT: диагностика, см. пояснение у return.
         string sceneryImageSize = _sceneryImage == null
             ? "элемента нет"
             : $"{_sceneryImage.resolvedStyle.width:F0}×{_sceneryImage.resolvedStyle.height:F0}";
+        // KERN-HARDCODED-TEXT: диагностика, см. пояснение у return.
         string spaceImageSize = _spaceBgImage == null
             ? "элемента нет"
             : $"{_spaceBgImage.resolvedStyle.width:F0}×{_spaceBgImage.resolvedStyle.height:F0}";
+        // KERN-HARDCODED-TEXT: диагностика — строка читается человеком в логе и
+        // в дев-панели; ключа у неё нет и перевода она не требует.
         return
             $"текстуры интерфейса={_uiTexturesReady}, " +
             $"MenuStarfield={(_starfield != null ? "привязан" : "НЕТ")}, " +
@@ -224,9 +228,32 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
                 ? assetPath["Assets/".Length..]
                 : assetPath;
 
-        string? absolutePath = _runtimeAssetPaths.FindBundledTextureFile(relativePath);
+        // The editor and the player can have the same authored UI asset in
+        // different roots: the editor reads Assets/Textures, while a previous
+        // run may have already persisted the extracted copy. Resolve the
+        // canonical file through the public combined lookup instead of assuming
+        // the bundled root is the only valid runtime location.
+        string? absolutePath = _runtimeAssetPaths.FindTextureFile(relativePath);
+        if (absolutePath == null && Application.isEditor)
+        {
+            // The editor can enter MainMenu before RuntimeAssetPaths has
+            // resolved its bundled root. Keep authored UI textures available
+            // during that transition; player builds still use the managed
+            // bundled/persistent lookup above.
+            string editorPath = Path.Combine(
+                Application.dataPath,
+                "Textures",
+                relativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(editorPath))
+            {
+                absolutePath = editorPath;
+            }
+        }
         if (absolutePath == null)
         {
+            Debug.LogError(
+                $"[MainMenu] Required UI texture is missing: '{relativePath}'. " +
+                $"BundledRoot='{_runtimeAssetPaths.BundledTexturesRoot}'.");
             return null;
         }
 

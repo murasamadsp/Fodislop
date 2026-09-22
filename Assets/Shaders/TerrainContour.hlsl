@@ -5,6 +5,7 @@
 
 static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
 static const float KERN_TERRAIN_GEOMETRY_EPSILON = 0.0001;
+static const float KERN_TERRAIN_EDGE_SEAL = 0.5 / KERN_TERRAIN_FACE_GRID_SIZE;
 
 float2 QuantizeTerrainGeometryPoint(float2 samplePosition)
 {
@@ -42,6 +43,19 @@ float2 TerrainGeometryCorner(float4 cornersX, float4 cornersY, int index)
     return float2(cornersX.w, cornersY.w);
 }
 
+float TerrainGeometrySegmentDistanceSquared(
+    float2 samplePosition,
+    float2 edgeStart,
+    float2 edgeEnd)
+{
+    float2 edge = edgeEnd - edgeStart;
+    float edgeLengthSquared = max(dot(edge, edge), KERN_TERRAIN_GEOMETRY_EPSILON);
+    float projection = saturate(dot(samplePosition - edgeStart, edge) / edgeLengthSquared);
+    float2 closest = edgeStart + edge * projection;
+    float2 delta = samplePosition - closest;
+    return dot(delta, delta);
+}
+
 float TerrainGeometryCoverage(
     float2 samplePosition,
     float4 cornersX,
@@ -67,6 +81,14 @@ float TerrainGeometryCoverage(
             cornersX,
             cornersY,
             (index + 1) & 3);
+        if (TerrainGeometrySegmentDistanceSquared(
+                quantizedPoint,
+                edgeStart,
+                edgeEnd) <= KERN_TERRAIN_EDGE_SEAL * KERN_TERRAIN_EDGE_SEAL)
+        {
+            return 1.0;
+        }
+
         float2 edge = edgeEnd - edgeStart;
         float edgeCross = TerrainGeometryEdgeCross(
             edgeStart,

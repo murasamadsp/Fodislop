@@ -94,21 +94,22 @@ float3 TerrainResolveFlowSample(
     float4 packedData,
     float4 flowScale)
 {
+    float3 result = 0.0;
+
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
     {
-        return SAMPLE_TEXTURE2D(
+        result = SAMPLE_TEXTURE2D(
             _PrismaticFlowMap,
             sampler_PrismaticFlowMap,
             PrismaticCrystalFlowUV(worldPos.xy, packedData.yz)).rgb;
     }
-
-    if (TerrainAnimationUsesFlowMap(animationType, animationProfile))
+    else if (TerrainAnimationUsesFlowMap(animationType, animationProfile))
     {
         float2 flowPosition = worldPos.xy + packedData.yz * float2(1.0, -1.0);
-        return SAMPLE_TEXTURE2D(_FlowMap, sampler_FlowMap, flowPosition / flowScale.xy).rgb;
+        result = SAMPLE_TEXTURE2D(_FlowMap, sampler_FlowMap, flowPosition / flowScale.xy).rgb;
     }
 
-    return 0.0;
+    return result;
 }
 
 // Мировая позиция для анимации цвета и декалей: тот же сдвиг, что у выборки

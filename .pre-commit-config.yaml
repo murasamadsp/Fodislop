@@ -38,13 +38,13 @@ repos:
             pass_filenames: false
           - id: terrain-crystal-math
             name: X-crystal phase and math checks (CPU)
-            entry: python3 tools/terrain-crystal-tests/run.py
+            entry: node tools/terrain-crystal-tests/run.js
             language: system
             files: ^(Assets/Shaders/Terrain|Assets/Resources/PrismaticFlowMap|tools/terrain-crystal-tests/|tools/lighting-tests/NativeTransportShim.cpp)
             pass_filenames: false
           - id: terrain-raster-regression
             name: Validate terrain raster coverage and AO geometry
-            entry: python3 tools/terrain-raster-tests/run.py
+            entry: node tools/terrain-raster-tests/run.js
             language: system
             files: ^(Assets/Shaders/Terrain|Assets/Scripts/World/Terrain/|tools/terrain-raster-tests/|tools/lighting-tests/NativeTransportShim.cpp)
             pass_filenames: false

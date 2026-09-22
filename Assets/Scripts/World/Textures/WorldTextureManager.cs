@@ -378,10 +378,17 @@ namespace Kern.World
                 return;
             }
 
-            Debug.LogWarning(
-                $"[AssetDiag] TEXFAIL {filename} — using deterministic random diagnostic texture");
+            // Missing server data must stay missing. A generated diagnostic image
+            // must never invent a colour. The map configuration is authoritative
+            // for the visual identity of the cell, so it is the only permitted
+            // source for this explicit degraded rendering path.
+            Debug.LogError($"[AssetDiag] TEXFAIL {filename} — using map colour fallback");
+            Color mapColor = _mapManager.GetCellMinimapColor(cellType);
             await UniTask.SwitchToMainThread();
-            texture = WorldTextureGenerator.CreateMissingCellTexture(cellType, _cellTextureSize);
+            texture = WorldTextureGenerator.CreateMapColorCellTexture(
+                cellType,
+                _cellTextureSize,
+                mapColor);
             AddTextureToAtlas(cellType, texture, ownsTexture: true);
         }
 

@@ -1,6 +1,6 @@
 # Original OpenMines shimmer and lava checks
 
-Run `python3 tools/terrain-crystal-tests/run.py`. These are auxiliary CPU checks
+Run `node tools/terrain-crystal-tests/run.js`. These are auxiliary CPU checks
 of production HLSL, not Unity shader compilation or a visual/GPU regression test.
 
 X-crystals use the OpenMines `Unlit_TerrainShader.shader` branch `animType == 5`
@@ -14,7 +14,7 @@ are part of this effect.
 `PrismaticFlowMap.bytes` is the original 160×128 RGBA8 phase region, extracted
 from the 2048×2048 OpenMines terrain atlas: x=400,y=368,width=160,height=128.
 Rows are flipped for Unity raw texture loading; no resampling/recoloring occurs.
-Regenerate with `python3 tools/terrain-crystal-tests/generate.py` (requires Pillow
+Regenerate with `node tools/terrain-crystal-tests/generate.js` (requires the .NET
 and the sibling OpenMines checkout). Tests require neither Pillow nor OpenMines;
 they verify the committed phase data hash and compare 12,000 color samples to an
 independent Python/colorsys evaluation of the source equation. Wrong Y and wrong

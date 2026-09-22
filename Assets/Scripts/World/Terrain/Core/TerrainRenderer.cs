@@ -34,7 +34,7 @@ namespace Kern.World.Terrain
         [SerializeField]
         private float _cellSize = ProjectRuntimeContracts.World.CellSize;
         [SerializeField]
-        private Shader? _terrainShader;
+        private Shader? _terrainShader = null;
         [SerializeField]
         private string _sortingLayerName = "Default";
         [SerializeField]

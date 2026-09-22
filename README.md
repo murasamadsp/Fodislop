@@ -1,6 +1,6 @@
-# Kern
+# Project Kern
 
-2D-клиент для [Kern](https://github.com/MinesReborn) — реворк клиента давно почившей MMORPG Сергея Мячина.
+2D-клиент для [Project Kern](https://github.com/MinesReborn) — реворк клиента давно почившей MMORPG Сергея Мячина.
 
 ## Быстрый старт
 

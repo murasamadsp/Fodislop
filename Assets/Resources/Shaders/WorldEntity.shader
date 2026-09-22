@@ -89,10 +89,10 @@ Shader "Kern/World Entity"
 
             half4 frag(Varyings input) : SV_Target
             {
-                float2 sampleUV = PixelArtSampleUV(input.uv, _MainTex_TexelSize.zw);
-                half4 texColor = _PixelArtFiltering < 0.5
-                    ? SAMPLE_TEXTURE2D(_MainTex, sampler_PointClamp, sampleUV)
-                    : SAMPLE_TEXTURE2D(_MainTex, sampler_LinearClamp, sampleUV);
+                half4 texColor = PixelArtSample(
+                    TEXTURE2D_ARGS(_MainTex, sampler_PointClamp),
+                    input.uv,
+                    _MainTex_TexelSize.zw);
                 half4 color = texColor * input.color * _Color;
                 if (color.a > 0.003)
                 {
@@ -173,6 +173,11 @@ Shader "Kern/World Entity"
 
             LightingFieldOutput LightingFieldFrag(Varyings input)
             {
+                // Отбор муара здесь не нужен и был бы вреден: это не видимый
+                // спрайт, а поле материалов для освещения. Производная fwidth
+                // тут считалась бы в текселях поля, а не экрана, и ширина
+                // смешивания означала бы другое. Поле и так читается с
+                // интерполяцией, а текстура остаётся точечной намеренно.
                 half4 color = SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_PointClamp, input.uv, 0) *
                     input.color * _Color;
                 float strength = step(0.05, color.a) * color.a;

@@ -11,9 +11,19 @@ public sealed class PixelArtTextureImportPolicy : AssetPostprocessor
     private const string ProgrammatorRoot = "Assets/Resources/Programmator/";
     private const string SkillsRoot = "Assets/Resources/Skills/";
 
+    // Для ветки Assets/Textures политика нужна единообразием редактора, а не
+    // видом в игре: BuildTextureStager копирует эти файлы как есть в
+    // StreamingAssets/Textures, а TextureStorageManager.DecodeTexture
+    // разбирает байты сам и принудительно ставит Point/Clamp. Настройки
+    // импорта отсюда на экран не доезжают вовсе — но и в редакторе пусть
+    // выглядят так же, как остальной пиксель-арт.
+    private const string TexturesRoot = "Assets/Textures/";
+
     public override int GetPostprocessOrder() => -1000;
 
-    public override uint GetVersion() => 1;
+    // Версия поднята вместе с новым корнем: без неё Unity не перечитает уже
+    // импортированные текстуры Assets/Textures.
+    public override uint GetVersion() => 2;
 
     private void OnPreprocessTexture()
     {
@@ -42,6 +52,7 @@ public sealed class PixelArtTextureImportPolicy : AssetPostprocessor
     private static bool IsPixelArtResource(string path)
     {
         return path.StartsWith(ProgrammatorRoot, StringComparison.Ordinal) ||
-            path.StartsWith(SkillsRoot, StringComparison.Ordinal);
+            path.StartsWith(SkillsRoot, StringComparison.Ordinal) ||
+            path.StartsWith(TexturesRoot, StringComparison.Ordinal);
     }
 }

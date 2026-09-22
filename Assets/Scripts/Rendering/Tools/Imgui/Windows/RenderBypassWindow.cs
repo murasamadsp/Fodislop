@@ -141,6 +141,7 @@ public sealed class RenderBypassWindow : ToolWindow
         if (DrawSwitch(distortion, "Искажение сетки", ToolTheme.Success) != distortion)
         {
             bool next = !distortion;
+            _clientConfig.MarkGraphicsAsCustom();
             _clientConfig.UpdateSection(config => config.Terrain, terrain => terrain.EnableDistortion = next);
             _terrainRenderer.ApplyClientConfig();
         }
@@ -155,6 +156,7 @@ public sealed class RenderBypassWindow : ToolWindow
         if (DrawSwitch(rim, "Кайма рельефа", ToolTheme.Success) != rim)
         {
             bool next = !rim;
+            _clientConfig.MarkGraphicsAsCustom();
             _clientConfig.UpdateSection(config => config.Terrain, terrain => terrain.EnableReliefRim = next);
             _terrainRenderer.ApplyClientConfig();
         }

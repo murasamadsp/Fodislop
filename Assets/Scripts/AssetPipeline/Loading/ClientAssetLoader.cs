@@ -19,6 +19,7 @@ namespace Kern
         private AssetCache _cache = null!;
         private readonly AssetBatchDispatcher _dispatcher = new();
         private bool _batchLoopStarted;
+        private bool _destroyed;
 
         private AssetCache _Cache => _cache ??
             throw new ObjectDisposedException(nameof(ClientAssetLoader));
@@ -85,6 +86,7 @@ namespace Kern
 
         protected void OnDestroy()
         {
+            _destroyed = true;
             _dispatcher.Dispose();
             if (_cache != null)
             {
@@ -141,18 +143,26 @@ namespace Kern
             _assetSubscriptionEstablished = false;
         }
 
-        public UniTask<byte[]?> GetAssetBytesAsync(
+        public async UniTask<byte[]?> GetAssetBytesAsync(
             string filename,
             CancellationToken cancellationToken = default,
             int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.AssetRequestTimeoutSeconds)
         {
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
             string cleanFilename = filename.TrimStart('/').ToLowerInvariant();
             if (AssetBatchDispatcher.IsAudioBank(cleanFilename) && _dispatcher.IsKnownMissing(cleanFilename))
             {
-                return UniTask.FromResult<byte[]?>(null);
+                return null;
             }
 
-            return _Cache.GetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
+            return await _Cache.GetBytesAsync(
+                cleanFilename,
+                linkedCancellation.Token,
+                timeoutSeconds);
         }
 
         public async UniTask<string> GetAssetPathAsync(
@@ -189,25 +199,62 @@ namespace Kern
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
-            Texture2D? texture = await _Cache.GetTextureAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            Texture2D? texture = await _Cache.GetTextureAsync(
+                filename,
+                linkedCancellation.Token);
             return texture ?? throw new FileNotFoundException(
                 $"Required texture '{filename}' could not be loaded.",
                 filename);
         }
 
-        public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _Cache.GetAudioAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            return await _Cache.GetAudioAsync(filename, linkedCancellation.Token);
         }
 
-        public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _Cache.GetSpritesAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            return await _Cache.GetSpritesAsync(filename, linkedCancellation.Token);
         }
 
-        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(
+            string filename,
+            CancellationToken cancellationToken = default)
         {
-            return _Cache.GetAnimatedSpritesAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            return await _Cache.GetAnimatedSpritesAsync(filename, linkedCancellation.Token);
+        }
+
+        private void ThrowIfDestroyed(CancellationToken cancellationToken)
+        {
+            if (!_destroyed)
+            {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new OperationCanceledException(
+                "ClientAssetLoader was destroyed while an asset request was active.",
+                cancellationToken);
         }
         public void ClearCache()
         {

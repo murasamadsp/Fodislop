@@ -1,6 +1,6 @@
 # Terrain raster and contact AO regression
 
-Run `python3 tools/terrain-raster-tests/run.py` (Python 3 and clang++ required).
+Run `node tools/terrain-raster-tests/run.js` (Node.js and the test backend required).
 The local pre-commit hook and the architecture CI job run this check. CI currently
 has manual workflow triggers; the hook supplies automatic local coverage.
 

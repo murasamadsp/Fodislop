@@ -5,6 +5,26 @@
 
 # C# и шейдеры
 *.cs      text diff=csharp
+*.csproj  text
+*.props   text
+*.targets text
+*.sln     text
+*.slnx    text
+*.js      text
+*.mjs     text
+*.cjs     text
+*.ts      text
+*.tsx     text
+*.cpp     text
+*.cc      text
+*.c       text
+*.h       text
+*.hpp     text
+*.cmake   text
+*.sh      text eol=lf
+*.bash    text eol=lf
+*.ps1     text
+*.bat     text eol=crlf
 *.shader  text
 *.hlsl    text
 *.cginc   text
@@ -18,6 +38,7 @@
 *.md      text
 *.xml     text
 *.inputactions text
+*.asmref   text
 
 ###############################################################################
 # 2. UNITY YAML (MERGE DRIVERS)
@@ -49,6 +70,18 @@
 *.tga  binary
 *.gif  binary
 *.webp binary
+*.wav  binary
+*.mp3  binary
+*.ogg  binary
+*.flac binary
+*.aiff binary
+*.ttf  binary
+*.otf  binary
+*.bytes binary
+*.mapb  binary
+*.zip   binary
+*.tar   binary
+*.gz    binary
 
 # Assembly definitions — JSON, но генерируются Unity
 *.asmdef text

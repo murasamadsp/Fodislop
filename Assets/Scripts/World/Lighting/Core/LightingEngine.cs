@@ -7,11 +7,8 @@ using Kern.Core.Interfaces;
 using Kern.Rendering;
 using Kern.World.Lighting.Diagnostics;
 using Kern.World.Lighting.Quality;
-using Kern.World.Streaming;
 using Kern.World.Terrain;
 using UnityEngine;
-using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
 using VContainer;
 
 namespace Kern.World.Lighting
@@ -223,16 +220,7 @@ namespace Kern.World.Lighting
 
         public int StableRegionPaddingCells => LightingRegionCalculator.LightingRegionPaddingCells;
 
-        public int RequiredTerrainPadding
-        {
-            get
-            {
-                // Dynamic sources are rasterized as one-cell emitters. Their
-                // propagation distance is solved by the same extinction and
-                // cascade intervals as terrain emission, not by a source halo.
-                return 3;
-            }
-        }
+        public int RequiredTerrainPadding => LightingRegionCalculator.TerrainPaddingCells;
 
         private void Start()
         {
@@ -289,7 +277,8 @@ namespace Kern.World.Lighting
         private void OnDestroy()
         {
 
-            ReleaseGPUPipeline();
+            LightingGpuTeardown.ReleasePipeline(
+                _composition, _resources, _dynamicLightManager);
             Shader.DisableKeyword(LightingPresentation.WorldLightingKeyword);
         }
 
@@ -342,31 +331,27 @@ namespace Kern.World.Lighting
                 return;
             }
 
-            int regionMaxX = worldX + width - 1;
-            int regionMaxY = worldY + height - 1;
-            Vector4 stableRegion = _runtimeState.LastVisibleRegion;
-            if (float.IsNaN(stableRegion.x) ||
-                (regionMaxX >= stableRegion.x - 1f &&
-                worldX <= stableRegion.x + stableRegion.z + 1f &&
-                regionMaxY >= stableRegion.y - 1f &&
-                worldY <= stableRegion.y + stableRegion.w + 1f))
+            if (!LightingRegionCalculator.TouchesStableRegion(
+                worldX,
+                worldY,
+                width,
+                height,
+                _runtimeState.LastVisibleRegion))
             {
-                _telemetry.LightingRegionInvalidationCount++;
-                _telemetry.LightingRegionInvalidationFrameCount++;
-                _runtimeState.QueueRegionInvalidation(
-                    new RectInt(worldX, worldY, width, height));
+                return;
             }
+
+            _telemetry.LightingRegionInvalidationCount++;
+            _telemetry.LightingRegionInvalidationFrameCount++;
+            _runtimeState.QueueRegionInvalidation(
+                new RectInt(worldX, worldY, width, height));
         }
         public void ApplyClientConfig()
         {
             ApplyQualitySettings(
                 _clientConfig.Config.GraphicsPreset,
                 _clientConfig.Config.GraphicsQualitySettings);
-            _runtimeState.FieldDirty = true;
-            _runtimeState.CompositeDirty = true;
-            _runtimeState.HasStaticRadianceState = false;
-            _runtimeState.HasDynamicRadianceState = false;
-            _runtimeState.HasRenderedLightState = false;
+            LightingRuntimeInvalidation.ResetFieldAndRadiance(_runtimeState);
             _dynamicLightManager.IncrementGeneration();
             _dynamicLightManager.MarkDirty();
             Debug.Log($"[LightingEngine] Applied client config (Preset={_clientConfig.Config.GraphicsPreset})");
@@ -399,10 +384,7 @@ namespace Kern.World.Lighting
         // да и размерность при смене экспозиции та же самая.
         public void InvalidateRadiance()
         {
-            _runtimeState.HasRenderedLightState = false;
-            _runtimeState.HasStaticRadianceState = false;
-            _runtimeState.HasDynamicRadianceState = false;
-            _runtimeState.CompositeDirty = true;
+            LightingRuntimeInvalidation.ResetRadiance(_runtimeState);
         }
 
 
@@ -411,11 +393,7 @@ namespace Kern.World.Lighting
             ApplyQualitySettings(
                 _clientConfig.Config.GraphicsPreset,
                 _clientConfig.Config.GraphicsQualitySettings);
-            _runtimeState.FieldDirty = true;
-            _runtimeState.CompositeDirty = true;
-            _runtimeState.HasRenderedLightState = false;
-            _runtimeState.HasStaticRadianceState = false;
-            _runtimeState.HasDynamicRadianceState = false;
+            LightingRuntimeInvalidation.ResetFieldAndRadiance(_runtimeState);
         }
 
         public void UpdateLighting(
@@ -445,20 +423,9 @@ namespace Kern.World.Lighting
 
         private void DisableGPULighting()
         {
-            ReleaseGPUPipeline();
+            LightingGpuTeardown.ReleasePipeline(
+                _composition, _resources, _dynamicLightManager);
             Composition.Presentation.PublishDisabled();
-        }
-
-        private void ReleaseGPUPipeline()
-        {
-            if (_composition != null)
-            {
-                _composition.GpuLifecycle.ReleasePipeline();
-                return;
-            }
-
-            _resources.ReleaseGPUPipeline();
-            _dynamicLightManager.ResetUploadState();
         }
 
         private void ApplyQualitySettings(
@@ -470,11 +437,12 @@ namespace Kern.World.Lighting
             LightingQualityMode previousQuality = _lightingQualityMode;
             if (technicalSettingsChanged && _resources.GPUPipelineInitialized)
             {
-                ReleaseResources();
+                LightingGpuTeardown.ReleaseResources(
+                    _composition, _resources, _dynamicLightManager, _runtimeState);
             }
 
             _graphicsPreset = preset;
-            ApplyUnityQualityLevel(preset);
+            LightingUnityQualityApplier.ApplyQualityLevel(preset);
             _qualitySettings = settings;
             LightingQualityMode resolvedQuality = LightingQualityResolver.Resolve(
                 preset,
@@ -494,80 +462,14 @@ namespace Kern.World.Lighting
                 Shader.EnableKeyword(LightingPresentation.WorldLightingKeyword);
             }
 
-            ApplyUnityRenderingSettings(_qualitySettings);
+            LightingUnityQualityApplier.ApplyRenderingSettings(_qualitySettings);
             if (!technicalSettingsChanged && previousQuality == resolvedQuality)
             {
                 return;
             }
 
             _runtimeState.LastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
-            _runtimeState.FieldDirty = true;
-            _runtimeState.CompositeDirty = true;
-            _runtimeState.HasRenderedLightState = false;
-            _runtimeState.HasStaticRadianceState = false;
-            _runtimeState.HasDynamicRadianceState = false;
-        }
-
-        // Владение глобальным качеством Unity. Это единственное место, где
-        // присваиваются уровень качества, сглаживание и масштаб рендера URP:
-        // у глобального тумблера обязан быть ровно один владелец, иначе
-        // «кто выставил текущее значение» становится неустановимым. Стережёт
-        // KERN-PATTERN. Поиск уровня и квантование масштаба остались в
-        // LightingUnityQuality — они чистая арифметика и тестируются без сцены.
-        private void ApplyUnityQualityLevel(GraphicsPreset preset)
-        {
-            int qualityIndex = LightingUnityQuality.ResolveQualityLevelIndex(preset);
-            if (qualityIndex < 0)
-            {
-                return;
-            }
-
-            QualitySettings.SetQualityLevel(qualityIndex, applyExpensiveChanges: true);
-            Debug.Log(
-                "[LightingEngine] Applied Unity QualityLevel: " +
-                $"{LightingUnityQuality.DescribeQualityLevel(qualityIndex)} ({qualityIndex})");
-        }
-
-        private void ApplyUnityRenderingSettings(GraphicsQualitySettings settings)
-        {
-            LightingUnityQuality.RenderingPlan plan =
-                LightingUnityQuality.ResolveRenderingPlan(settings);
-            QualitySettings.antiAliasing = plan.AntiAliasing;
-            if (plan.RenderScaleWasQuantized)
-            {
-                Debug.Log(
-                    $"[LightingEngine] Масштаб рендера {plan.RequestedRenderScale:F2} приведён " +
-                    $"к {plan.RenderScale:F2}: промежуточные значения дают дробный апскейл " +
-                    "и муар на пиксель-арте.");
-            }
-
-            float appliedScale = plan.RequestedRenderScale;
-            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
-            {
-                urp.renderScale = plan.RenderScale;
-                urp.msaaSampleCount = plan.MsaaSampleCount;
-                appliedScale = urp.renderScale;
-            }
-
-            Debug.Log(
-                $"[LightingEngine] ApplyUnityRenderingSettings: AA={settings.AntiAliasing}, " +
-                $"RenderScale={appliedScale} (запрошено {settings.RenderScale})");
-        }
-
-        private void ReleaseResources()
-        {
-            if (_composition != null)
-            {
-                _composition.GpuLifecycle.ReleaseResources();
-            }
-            else
-            {
-                _resources.ReleaseResources();
-                _dynamicLightManager.ResetUploadState();
-            }
-
-            _runtimeState.HasStaticRadianceState = false;
-            _runtimeState.HasDynamicRadianceState = false;
+            LightingRuntimeInvalidation.ResetFieldAndRadiance(_runtimeState);
         }
     }
 }

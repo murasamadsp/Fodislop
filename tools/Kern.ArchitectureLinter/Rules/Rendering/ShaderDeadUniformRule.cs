@@ -31,6 +31,17 @@ public sealed class ShaderDeadUniformRule : IRule
         @"(?:Texture\d?D(?:Array)?(?:<[^>]+>)?|SamplerState|SamplerComparisonState)\s+(\w+)\s*;",
         RegexOptions.Compiled);
 
+    // Член общего UnityPerMaterial объявляется ради совпадения раскладки между
+    // пассами: SRP Batcher склеивает вызовы только там, где набор одинаков, и
+    // такой член может никем не читаться — он не plumbing, а раскладка, и
+    // удалять его нельзя (см. TerrainMaterialCBuffer.hlsl). Пометка ставится на
+    // строке объявления: комментарии правило вырезает, поэтому смотрит оно
+    // сырую строку, а не ту, которую разбирает.
+    // Единственная форма исключения — «<идентификатор правила>: <причина>».
+    // Причина обязательна: пометка без неё превращает правило в молчание, а
+    // молчание неотличимо от проверенной тишины.
+    private const string LayoutMarker = "KERN-SHADER-DEAD-UNIFORM:";
+
     public string Id => "KERN-SHADER-DEAD-UNIFORM";
     public string Description => "Shader globals declared but never read";
     public RuleSeverity Severity => RuleSeverity.Warning;
@@ -42,7 +53,7 @@ public sealed class ShaderDeadUniformRule : IRule
         CancellationToken cancellationToken = default)
     {
         var violations = new List<RuleViolation>();
-        var sources = new List<(string Relative, string Code)>();
+        var sources = new List<(string Relative, string Code, string[] RawLines)>();
         foreach (string root in ShaderRoots)
         {
             string full = Path.Combine(context.ProjectRoot, root);
@@ -51,8 +62,12 @@ public sealed class ShaderDeadUniformRule : IRule
             foreach (string file in SourceScanner.EnumerateShaderFiles(full))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string code = SourceScanner.StripComments(File.ReadAllText(file));
-                sources.Add((SourceScanner.GetProjectRelativePath(context.ProjectRoot, file), code));
+                string raw = File.ReadAllText(file);
+                string code = SourceScanner.StripComments(raw);
+                sources.Add((
+                    SourceScanner.GetProjectRelativePath(context.ProjectRoot, file),
+                    code,
+                    raw.Split('\n')));
             }
         }
 
@@ -63,14 +78,14 @@ public sealed class ShaderDeadUniformRule : IRule
         // locals and function bodies must not count as globals. CBUFFER_START
         // blocks use macros (no braces), so their members stay at depth 0.
         var declarations = new Dictionary<string, (string File, int Line)>(StringComparer.Ordinal);
-        foreach (var (relative, code) in sources)
+        foreach (var (relative, code, rawLines) in sources)
         {
             int depth = 0;
             string[] lines = code.Split('\n');
             for (int index = 0; index < lines.Length; index++)
             {
                 string line = lines[index];
-                if (depth == 0)
+                if (depth == 0 && !HasLayoutMarker(rawLines, index))
                 {
                     Match uniform = UniformRegex.Match(line);
                     if (uniform.Success)
@@ -115,6 +130,18 @@ public sealed class ShaderDeadUniformRule : IRule
         }
 
         return Task.FromResult<IReadOnlyList<RuleViolation>>(violations);
+    }
+
+    /// <summary>Пометка «это раскладка, а не plumbing» — обязана нести причину.</summary>
+    private static bool HasLayoutMarker(string[] rawLines, int index)
+    {
+        if (index >= rawLines.Length)
+        {
+            return false;
+        }
+
+        int at = rawLines[index].IndexOf(LayoutMarker, StringComparison.Ordinal);
+        return at >= 0 && rawLines[index][(at + LayoutMarker.Length)..].Trim().Length > 0;
     }
 
     private static void Record(

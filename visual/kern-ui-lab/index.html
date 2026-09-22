@@ -22,7 +22,7 @@
 
   <!-- Нижняя Dev-панель: Строгий хронологический порядок экранов -->
   <!-- Дев-панель не переводится: это инструмент разработки, а не интерфейс
-       игры. Решение стоит здесь, в разметке, а не внутри tools/extract-i18n.py,
+       игры. Решение стоит здесь, в разметке, а не внутри tools/extract-i18n.js,
        где его никто не найдёт. translate="no" наследуется на всё поддерево. -->
   <div class="dev-drawer" translate="no">
     <span>ЭКРАНЫ:</span>
@@ -43,7 +43,7 @@
       <span id="sfxStatus"><svg class="fdn-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-scan"/></svg> ЗВУК</span>
     </div>
     <!-- Нагрузка текстом. Коэффициенты роста посчитаны по словарям игры
-         (см. js/i18n.js и tools/measure-i18n.py), а не подобраны. -->
+         (см. js/i18n.js и tools/measure-i18n.js), а не подобраны. -->
     <!-- Язык берётся из словаря игры (Assets/Resources/Localization),
          а не из копии: макет присоединяется к источнику истины. -->
     <select class="dev-select" id="langSelect" onchange="i18nProbe.setLanguage(this.value)" data-sfx="click" title="Подставить текст из словаря игры">

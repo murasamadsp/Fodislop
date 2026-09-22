@@ -128,18 +128,19 @@ float3 AnimateTerrainColor(
     float shimmerSpeedScale,
     float pulseSpeedScale)
 {
+    float3 result = baseColor;
+
     if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
     {
 #if defined(UNITY_COLORSPACE_GAMMA)
-        return EvaluatePrismaticCrystal(
+        result = EvaluatePrismaticCrystal(
             baseColor, flowSample, animationOffset, _Time.y * animationSpeed * 0.05);
 #else
-        return SRGBToLinear(EvaluatePrismaticCrystal(
+        result = SRGBToLinear(EvaluatePrismaticCrystal(
             LinearToSRGB(baseColor), flowSample, animationOffset, _Time.y * animationSpeed * 0.05));
 #endif
     }
-
-    if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)
+    else if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)
     {
         // Each cell receives a deterministic phase from TerrainQuadBuilder.
         // A diagonal sweep brings out facet glints without long dead pauses.
@@ -158,42 +159,38 @@ float3 AnimateTerrainColor(
         float strength = eventEnvelope * band * facetMask * 0.45;
         float3 cellColor = TerrainUnpackRgb24(packedCellColor);
         float3 glintColor = lerp(cellColor, 1.0.xxx, 0.72);
-        return baseColor + glintColor * strength;
+        result = baseColor + glintColor * strength;
     }
-
-    if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
+    else if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE)
     {
-        return EvaluateMoltenHeat(baseColor, surfacePosition, _Time.y * animationSpeed * 0.12);
+        result = EvaluateMoltenHeat(baseColor, surfacePosition, _Time.y * animationSpeed * 0.12);
     }
-
-    if (animationType == 1) // Blinking
+    else if (animationType == 1) // Blinking
     {
         float pulse = 0.5 + 0.5 * sin(
             _Time.y * animationSpeed * pulseSpeedScale + animationOffset);
-        return baseColor * pulse;
+        result = baseColor * pulse;
     }
-
-    if (animationType == 2) // Shimmer
+    else if (animationType == 2) // Shimmer
     {
         TerrainShimmerSignal signal = EvaluateTerrainShimmer(
             luminanceSource,
             flowSample,
             animationSpeed,
             shimmerSpeedScale);
-        return lerp(
+        result = lerp(
             baseColor,
             shimmerColor,
             signal.body * signal.surfaceMask);
     }
-
-    if (animationType == 3) // Rainbow
+    else if (animationType == 3) // Rainbow
     {
         float3 rainbowHSV = TerrainRGBToHSV(baseColor);
         rainbowHSV.x = frac(rainbowHSV.x + _Time.y * (animationSpeed / 255.0));
-        return TerrainHSVToRGB(rainbowHSV);
+        result = TerrainHSVToRGB(rainbowHSV);
     }
 
-    return baseColor;
+    return result;
 }
 
 #endif

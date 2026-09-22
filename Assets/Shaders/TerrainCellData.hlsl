@@ -31,7 +31,8 @@ float4 _TerrainCellViewOffset;
 
 int TerrainRing(int value, int size)
 {
-    int remainder = value % size;
+    int quotient = value / size;
+    int remainder = value - quotient * size;
     return remainder < 0 ? remainder + size : remainder;
 }
 

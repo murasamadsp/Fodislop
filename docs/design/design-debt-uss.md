@@ -1,8 +1,8 @@
 # Цвета общего слоя вне палитры
 
 ФАЙЛ МАШИННЫЙ. Правки будут затёрты.
-Генератор: `visual/kern-ui-lab/tools/report-off-palette.py`.
-Потолки этих чисел держит `DEBT_BUDGET` в `scripts/check-architecture.js`.
+Генератор: `visual/kern-ui-lab/tools/report-off-palette.js`.
+Потолки этих чисел держит `Debt`-бюджетами в правилах `tools/Kern.ArchitectureLinter`.
 
 ## Что это
 

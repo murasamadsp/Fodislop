@@ -199,9 +199,10 @@ public sealed class TerrainCellMaskCalculator
         return cornerSideMask;
     }
 
-    // Рельефная маска: бит стоит там, где сосед принадлежит ТОЙ ЖЕ рельефной
-    // группе. Группа 0 — такая же группа, как остальные: две клетки без
-    // рельефа считают друг друга своими, и шва между ними нет.
+    // Рельефная маска: бит стоит там, где сосед принадлежит той же рельефной
+    // поверхности. Для обычных клеток это рельефная группа. Для непрерывных
+    // crystal/rock-листов это семейство листа: разные варианты одной
+    // текстуры не должны получать внутреннюю фаску на границе тайла.
     //
     // Сравнение именно на равенство, а не «сосед не ниже». Кайма рисуется по
     // сторонам, где сосед чужой, и порядковое сравнение делало её
@@ -222,27 +223,45 @@ public sealed class TerrainCellMaskCalculator
         }
 
         byte rm = 0;
-        if (top.ReliefGroup == data.ReliefGroup)
+        if (SameReliefSurface(data, top))
         {
             rm |= 1;
         }
 
-        if (left.ReliefGroup == data.ReliefGroup)
+        if (SameReliefSurface(data, left))
         {
             rm |= 2;
         }
 
-        if (bottom.ReliefGroup == data.ReliefGroup)
+        if (SameReliefSurface(data, bottom))
         {
             rm |= 4;
         }
 
-        if (right.ReliefGroup == data.ReliefGroup)
+        if (SameReliefSurface(data, right))
         {
             rm |= 8;
         }
 
         return rm;
+    }
+
+    private static bool SameReliefSurface(CachedCellData first, CachedCellData second)
+    {
+        if (second.ReliefGroup == 0)
+        {
+            return false;
+        }
+
+        if (first.ReliefGroup == second.ReliefGroup)
+        {
+            return true;
+        }
+
+        return TerrainSheetCatalog.IsContinuousSheet(first.Type) &&
+            TerrainSheetCatalog.IsContinuousSheet(second.Type) &&
+            TerrainReliefRimCatalog.GetFamily(first.Type) ==
+            TerrainReliefRimCatalog.GetFamily(second.Type);
     }
 
     public static byte CalculateSolidBoundaryMask(

@@ -65,13 +65,13 @@ public struct GraphicsQualitySettings : IEquatable<GraphicsQualitySettings>
     [Range(0.5f, 1f)]
     [SettingLabel("settings.graphics.render_scale")]
     [Tooltip("URP render scale для данного quality tier.")]
-    [SettingConsumer(SettingConsumerTarget.LightingEngine, "LightingEngine.ApplyUnityRenderingSettings -> UniversalRenderPipelineAsset.renderScale")]
+    [SettingConsumer(SettingConsumerTarget.LightingEngine, "LightingUnityQualityApplier.ApplyRenderingSettings -> UniversalRenderPipelineAsset.renderScale")]
     public float RenderScale;
 
     [Range(0, 8)]
     [SettingLabel("settings.graphics.anti_aliasing")]
     [Tooltip("MSAA sample count для данного quality tier.")]
-    [SettingConsumer(SettingConsumerTarget.LightingEngine, "LightingEngine.ApplyUnityRenderingSettings -> UniversalRenderPipelineAsset.msaaSampleCount")]
+    [SettingConsumer(SettingConsumerTarget.LightingEngine, "LightingUnityQualityApplier.ApplyRenderingSettings -> UniversalRenderPipelineAsset.msaaSampleCount")]
     public int AntiAliasing;
 
     [SettingUnbounded("Режим освещения — перечисление; проверяется на определённость.")]

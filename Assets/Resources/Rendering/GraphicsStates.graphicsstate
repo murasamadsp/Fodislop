@@ -19,6 +19,46 @@
         {
             "first": {
                 "serializedVersion": "2",
+                "Hash": "bf2fce624cd48e0427890f3897f995d0"
+            },
+            "second": {
+                "shader": {
+                    "fileID": 70,
+                    "guid": "0000000000000000e000000000000000",
+                    "type": 0
+                },
+                "shaderName": "Hidden/Internal-Loading",
+                "shaderAssetGUID": "7d3344c24e361eb40bbe181c1c6b910b",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "",
+                "subShaderIndex": 0,
+                "passIndex": 0,
+                "graphicsStateInfoSet": [
+                    {
+                        "vertexLayout": 9346122305125408839,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 15649462741326987297,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    }
+                ]
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
                 "Hash": "20a81fe87817d5e292583bf0a8d18874"
             },
             "second": {
@@ -1652,26 +1692,26 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "901666ed13c8fe10064e8f39bcbd41ee"
+                "Hash": "9756dc62848710360dc8cd24c32a703b"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "810f9c6b8f8e24eccb19735f7c2ccf55",
+                    "guid": "a89bee29cffa951418fc1e2da94d1959",
                     "type": 3
                 },
-                "shaderName": "Kern/UI/Starfield",
-                "shaderAssetGUID": "810f9c6b8f8e24eccb19735f7c2ccf55",
+                "shaderName": "Hidden/Universal/BlitHDROverlay",
+                "shaderAssetGUID": "a89bee29cffa951418fc1e2da94d1959",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "",
+                "keywordNames": "HDR_ENCODING _HDR_OVERLAY",
                 "subShaderIndex": 0,
-                "passIndex": 0,
+                "passIndex": 1,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 1433109904469103815,
-                        "renderPass": 14152621794517940071,
+                        "vertexLayout": 15807068410263000910,
+                        "renderPass": 17386594603764001319,
                         "renderState": 17623681824384884761,
-                        "subPassIndex": -1,
+                        "subPassIndex": 0,
                         "topology": 0,
                         "forceCullMode": -1,
                         "shadingRateCombinerPrimitive": 0,
@@ -1682,7 +1722,7 @@
                         "userBackface": false,
                         "appBackface": false,
                         "wireframe": false,
-                        "invertProjectionMatrix": true,
+                        "invertProjectionMatrix": false,
                         "unfilterableTextureBindings": 0,
                         "nonfilteringSamplerBindings": 0
                     }
@@ -1772,44 +1812,25 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "998eea5f0e22e6834e124bed966ad33a"
+                "Hash": "901666ed13c8fe10064e8f39bcbd41ee"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "b5b2cd0432454877a4825471a6e12a70",
+                    "guid": "810f9c6b8f8e24eccb19735f7c2ccf55",
                     "type": 3
                 },
-                "shaderName": "Kern/World Surface",
-                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
+                "shaderName": "Kern/UI/Starfield",
+                "shaderAssetGUID": "810f9c6b8f8e24eccb19735f7c2ccf55",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_SURFACE_REDROCK",
+                "keywordNames": "",
                 "subShaderIndex": 0,
-                "passIndex": 1,
+                "passIndex": 0,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 4933427786327595115,
-                        "renderPass": 17065834461829938205,
-                        "renderState": 3409366084545131148,
-                        "subPassIndex": -1,
-                        "topology": 0,
-                        "forceCullMode": -1,
-                        "shadingRateCombinerPrimitive": 0,
-                        "shadingRateCombinerFragment": 0,
-                        "baseShadingRate": 0,
-                        "depthBias": 0.0,
-                        "slopeDepthBias": 0.0,
-                        "userBackface": false,
-                        "appBackface": false,
-                        "wireframe": false,
-                        "invertProjectionMatrix": true,
-                        "unfilterableTextureBindings": 0,
-                        "nonfilteringSamplerBindings": 0
-                    },
-                    {
-                        "vertexLayout": 4933427786327595115,
-                        "renderPass": 9980060513523334430,
-                        "renderState": 3409366084545131148,
+                        "vertexLayout": 1433109904469103815,
+                        "renderPass": 14152621794517940071,
+                        "renderState": 17623681824384884761,
                         "subPassIndex": -1,
                         "topology": 0,
                         "forceCullMode": -1,
@@ -1911,7 +1932,7 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "9b7696a92f5ceca9cbd522d9951adb9b"
+                "Hash": "998eea5f0e22e6834e124bed966ad33a"
             },
             "second": {
                 "shader": {
@@ -1922,7 +1943,7 @@
                 "shaderName": "Kern/World Surface",
                 "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_SURFACE_PERSPECTIVE",
+                "keywordNames": "KERN_SURFACE_REDROCK",
                 "subShaderIndex": 0,
                 "passIndex": 1,
                 "graphicsStateInfoSet": [
@@ -1987,6 +2008,25 @@
                 "graphicsStateInfoSet": [
                     {
                         "vertexLayout": 4414763972540129653,
+                        "renderPass": 3144762649933053333,
+                        "renderState": 3838266878448957994,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    },
+                    {
+                        "vertexLayout": 4414763972540129653,
                         "renderPass": 9275988505343452128,
                         "renderState": 3838266878448957994,
                         "subPassIndex": 1,
@@ -2001,46 +2041,6 @@
                         "appBackface": false,
                         "wireframe": false,
                         "invertProjectionMatrix": false,
-                        "unfilterableTextureBindings": 0,
-                        "nonfilteringSamplerBindings": 0
-                    }
-                ]
-            }
-        },
-        {
-            "first": {
-                "serializedVersion": "2",
-                "Hash": "b3278976068a6228567c026a179d5888"
-            },
-            "second": {
-                "shader": {
-                    "fileID": 4800000,
-                    "guid": "b5b2cd0432454877a4825471a6e12a70",
-                    "type": 3
-                },
-                "shaderName": "Kern/World Surface",
-                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
-                "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_SURFACE_REDROCK",
-                "subShaderIndex": 0,
-                "passIndex": 0,
-                "graphicsStateInfoSet": [
-                    {
-                        "vertexLayout": 4933427786327595115,
-                        "renderPass": 15945554207292896147,
-                        "renderState": 2874810695172648804,
-                        "subPassIndex": 0,
-                        "topology": 0,
-                        "forceCullMode": -1,
-                        "shadingRateCombinerPrimitive": 0,
-                        "shadingRateCombinerFragment": 0,
-                        "baseShadingRate": 0,
-                        "depthBias": 0.0,
-                        "slopeDepthBias": 0.0,
-                        "userBackface": false,
-                        "appBackface": false,
-                        "wireframe": false,
-                        "invertProjectionMatrix": true,
                         "unfilterableTextureBindings": 0,
                         "nonfilteringSamplerBindings": 0
                     }
@@ -2067,6 +2067,46 @@
                 "graphicsStateInfoSet": [
                     {
                         "vertexLayout": 9346122305125408839,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 2874810695172648804,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    }
+                ]
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
+                "Hash": "b3278976068a6228567c026a179d5888"
+            },
+            "second": {
+                "shader": {
+                    "fileID": 4800000,
+                    "guid": "b5b2cd0432454877a4825471a6e12a70",
+                    "type": 3
+                },
+                "shaderName": "Kern/World Surface",
+                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "KERN_SURFACE_REDROCK",
+                "subShaderIndex": 0,
+                "passIndex": 0,
+                "graphicsStateInfoSet": [
+                    {
+                        "vertexLayout": 4933427786327595115,
                         "renderPass": 15945554207292896147,
                         "renderState": 2874810695172648804,
                         "subPassIndex": 0,
@@ -2149,26 +2189,26 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "9756dc62848710360dc8cd24c32a703b"
+                "Hash": "9b7696a92f5ceca9cbd522d9951adb9b"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "a89bee29cffa951418fc1e2da94d1959",
+                    "guid": "b5b2cd0432454877a4825471a6e12a70",
                     "type": 3
                 },
-                "shaderName": "Hidden/Universal/BlitHDROverlay",
-                "shaderAssetGUID": "a89bee29cffa951418fc1e2da94d1959",
+                "shaderName": "Kern/World Surface",
+                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "HDR_ENCODING _HDR_OVERLAY",
+                "keywordNames": "KERN_SURFACE_PERSPECTIVE",
                 "subShaderIndex": 0,
                 "passIndex": 1,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 15807068410263000910,
-                        "renderPass": 17386594603764001319,
-                        "renderState": 17623681824384884761,
-                        "subPassIndex": 0,
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 17065834461829938205,
+                        "renderState": 3409366084545131148,
+                        "subPassIndex": -1,
                         "topology": 0,
                         "forceCullMode": -1,
                         "shadingRateCombinerPrimitive": 0,
@@ -2179,7 +2219,26 @@
                         "userBackface": false,
                         "appBackface": false,
                         "wireframe": false,
-                        "invertProjectionMatrix": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    },
+                    {
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 9980060513523334430,
+                        "renderState": 3409366084545131148,
+                        "subPassIndex": -1,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
                         "unfilterableTextureBindings": 0,
                         "nonfilteringSamplerBindings": 0
                     }

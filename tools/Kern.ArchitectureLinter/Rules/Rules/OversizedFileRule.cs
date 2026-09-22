@@ -20,11 +20,9 @@ public sealed class OversizedFileRule : IRule
 
     private const int LineLimit = 500;
 
-    private static readonly HashSet<string> Debt = new(StringComparer.Ordinal)
-    {
-        "Assets/Scripts/World/Lighting/Core/LightingEngine.cs",
-        "Assets/Scripts/World/Persistence/WorldLayer.cs",
-    };
+    // Список исключений закрыт: он сократился до нуля и обратно не заводится.
+    // Файл сверх лимита — нарушение без права на поблажку; разбирайте
+    // ответственности, а не вносите путь сюда.
 
     public Task<IReadOnlyList<RuleViolation>> EvaluateAsync(
         IReadOnlyList<AssemblyDefinition> assemblies,
@@ -37,7 +35,6 @@ public sealed class OversizedFileRule : IRule
         foreach (var file in SourceScanner.EnumerateCsFiles(scriptsRoot, "Tests", "Editor", "VContainer"))
         {
             var relative = SourceScanner.GetProjectRelativePath(context.ProjectRoot, file);
-            if (Debt.Contains(relative)) continue;
 
             var lineCount = File.ReadLines(file).Count();
             if (lineCount > LineLimit)

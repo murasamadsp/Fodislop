@@ -15,13 +15,6 @@ float _PixelArtFiltering;
 // какие-то строки текселей вывести дважды, а какие-то потерять:
 // на регулярной кладке это муар, и он ползёт вместе с камерой.
 //
-// ЧТО ДЕЛАЕТ ЭТА ФУНКЦИЯ. Оставляет ближайшую выборку внутри
-// текселя и размывает только его границу — ровно на ширину
-// одного экранного пикселя, которую даёт fwidth. Тексель
-// остаётся плоским квадратом, а переход между соседями
-// перестаёт быть скачком, поэтому лишняя или потерянная строка
-// больше не возникает.
-//
 // Сглаживание идёт по ширине пикселя, а не по фиксированной
 // доле текселя: иначе на приближении картинка размывалась бы
 // тем сильнее, чем крупнее тексель, — а нужно ровно обратное.
@@ -37,6 +30,15 @@ float2 PixelArtSampleUV(float2 uv, float2 textureSize)
     float2 pixelWidth = max(fwidth(uvTexels), 1e-5);
     uvTexels = seam + clamp((uvTexels - seam) / pixelWidth, -0.5, 0.5);
     return uvTexels / textureSize;
+}
+
+// Shared texture-sampling entry point used by entity shaders. Keep the
+// filtering math in PixelArtSampleUV so terrain and entities use the same
+// pixel-grid correction without duplicating the implementation.
+half4 PixelArtSample(TEXTURE2D_PARAM(tex, sampler_PointClamp), float2 uv, float2 textureSize)
+{
+    float2 filteredUV = PixelArtSampleUV(uv, textureSize);
+    return SAMPLE_TEXTURE2D(tex, sampler_PointClamp, filteredUV);
 }
 
 #endif

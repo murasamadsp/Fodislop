@@ -44,6 +44,10 @@ public sealed class PlayerHUDBasketView
             }
             catch (OperationCanceledException)
             {
+                // The loader can be torn down before the HUD receives its own
+                // destroy cancellation during a scene transition. In that case
+                // the request is intentionally abandoned, not an optional asset
+                // failure worth reporting as a warning.
                 return;
             }
             catch (Exception exception)

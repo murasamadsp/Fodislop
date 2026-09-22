@@ -127,7 +127,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             Varyings vert (TerrainVertexInput input)
             {
-                Varyings output;
+                Varyings output = (Varyings)0;
             #if defined(KERN_TERRAIN_CELLS)
                 TERRAIN_RESOLVE_CELL_VERTEX(input, output)
                 output.worldPosition = TransformObjectToWorld(cell.positionOS);
@@ -266,10 +266,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                // Кайма умножает сырой тексель, до цветовой анимации и до
-                // декалей, как в оригинале: анимация кристалла подмешивает
-                // блик, и затемнение после неё гасило бы и его.
-                float3 finalRGB = texColor.rgb * TerrainReliefRim(surface);
+                // Relief mask остаётся в cell data для диагностики и
+                // downstream lighting, но не затемняет альбедо: это создавало
+                // видимую рамку вокруг каждой клетки и плиточные щели.
+                float3 finalRGB = texColor.rgb;
                 finalRGB = AnimateTerrainColor(
                     finalRGB,
                     texColor.rgb,
@@ -373,7 +373,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             MaterialFieldVaryings MaterialFieldVert(TerrainVertexInput input)
             {
-                MaterialFieldVaryings output;
+                MaterialFieldVaryings output = (MaterialFieldVaryings)0;
             #if defined(KERN_TERRAIN_CELLS)
                 TERRAIN_RESOLVE_CELL_VERTEX(input, output)
             #else
@@ -417,6 +417,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     flowSample);
                 finalUV = ClampTerrainTileUV(finalUV, tileUV);
 
+                // Материальное поле читает грубое альбедо для отражённого
+                // света; здесь используется обычная линейная выборка.
             #if defined(KERN_TERRAIN_CELLS)
                 return TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
             #else
@@ -466,7 +468,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // Без фолбеков: нет текселя — нет альбедо. Плоский цвет
                 // миникарты сюда больше не попадает ни в каком виде.
                 float3 surfaceAlbedo = albedoTexel.a >= 0.05
-                    ? albedoTexel.rgb * TerrainReliefRim(surface)
+                    ? albedoTexel.rgb
                     : 0.0;
                 uint lightingFlags = KernTerrainLightingFlags(input.glowData.y);
                 float emissionStrength = KernTerrainEmissionStrength(
