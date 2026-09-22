@@ -2,7 +2,9 @@
 
 using Mono.Cecil;
 using Kern.ArchitectureLinter.Core;
+#if KERN_SETTINGS_PROBE
 using Kern.ArchitectureLinter.SettingsProbe;
+#endif
 
 namespace Kern.ArchitectureLinter.Rules.Settings;
 
@@ -24,6 +26,7 @@ public sealed class SettingsProbeRule : IRule
     {
         var violations = new List<RuleViolation>();
 
+#if KERN_SETTINGS_PROBE
         try
         {
             // Use the project root from the linter context, not command line args
@@ -47,6 +50,7 @@ public sealed class SettingsProbeRule : IRule
                 Severity = Severity
             });
         }
+#endif
 
         return Task.FromResult<IReadOnlyList<RuleViolation>>(violations);
     }
