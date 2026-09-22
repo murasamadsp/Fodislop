@@ -416,28 +416,31 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
             }
         }
 
-        // The packer reserves padding only to the right and below the source
-        // rectangle. Keep that gutter opaque by extending the edge texels;
-        // otherwise any linear sample at the atlas boundary blends with the
-        // transparent-black atlas clear color and produces visible seams.
+        // Extrude the source edge into every reserved gutter. Smooth atlas
+        // sampling can approach a region from any direction; padding only on
+        // the right and bottom still lets the left/top edge blend with the
+        // neighbouring region or the transparent atlas clear color.
         for (int y = 0; y < height; y++)
         {
-            Color32 edge = sourcePixels[(y * width) + (width - 1)];
+            Color32 leftEdge = sourcePixels[y * width];
+            Color32 rightEdge = sourcePixels[(y * width) + (width - 1)];
             for (int padding = 1; padding <= Padding; padding++)
             {
-                int index = ((destination.Y + y) * Size) +
-                    destination.X + width + padding - 1;
-                _atlasPixels[index] = edge;
+                int row = (destination.Y + y) * Size;
+                _atlasPixels[row + destination.X - padding] = leftEdge;
+                _atlasPixels[row + destination.X + width + padding - 1] = rightEdge;
             }
         }
 
         for (int padding = 1; padding <= Padding; padding++)
         {
-            int row = (destination.Y + height + padding - 1) * Size;
-            for (int x = 0; x < width + Padding; x++)
+            int topRow = (destination.Y - padding) * Size;
+            int bottomRow = (destination.Y + height + padding - 1) * Size;
+            for (int x = -Padding; x < width + Padding; x++)
             {
-                int sourceX = Math.Min(x, width - 1);
-                _atlasPixels[row + destination.X + x] =
+                int sourceX = Math.Clamp(x, 0, width - 1);
+                _atlasPixels[topRow + destination.X + x] = sourcePixels[sourceX];
+                _atlasPixels[bottomRow + destination.X + x] =
                     sourcePixels[((height - 1) * width) + sourceX];
             }
         }
@@ -453,15 +456,45 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
         for (int padding = 1; padding <= Padding; padding++)
         {
             Graphics.CopyTexture(
+                source, 0, 0, 0, 0, 1, source.height,
+                _atlasTexture, 0, 0,
+                destination.X - padding,
+                destination.Y);
+
+            Graphics.CopyTexture(
                 source, 0, 0, source.width - 1, 0, 1, source.height,
                 _atlasTexture, 0, 0,
                 destination.X + source.width + padding - 1,
                 destination.Y);
 
             Graphics.CopyTexture(
+                source, 0, 0, 0, 0, source.width, 1,
+                _atlasTexture, 0, 0,
+                destination.X,
+                destination.Y - padding);
+
+            Graphics.CopyTexture(
                 source, 0, 0, 0, source.height - 1, source.width, 1,
                 _atlasTexture, 0, 0,
                 destination.X,
+                destination.Y + source.height + padding - 1);
+
+            Graphics.CopyTexture(
+                source, 0, 0, 0, 0, 1, 1,
+                _atlasTexture, 0, 0,
+                destination.X - padding,
+                destination.Y - padding);
+
+            Graphics.CopyTexture(
+                source, 0, 0, source.width - 1, 0, 1, 1,
+                _atlasTexture, 0, 0,
+                destination.X + source.width + padding - 1,
+                destination.Y - padding);
+
+            Graphics.CopyTexture(
+                source, 0, 0, 0, source.height - 1, 1, 1,
+                _atlasTexture, 0, 0,
+                destination.X - padding,
                 destination.Y + source.height + padding - 1);
 
             Graphics.CopyTexture(

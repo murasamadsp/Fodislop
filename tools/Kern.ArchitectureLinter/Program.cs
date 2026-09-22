@@ -41,6 +41,7 @@ public static class Program
         bool sarif = false;
         RuleSeverity failOn = RuleSeverity.Error;
         bool strict = false;
+        bool allowMissingAssemblies = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -94,6 +95,9 @@ public static class Program
                 case "--strict":
                     strict = true;
                     break;
+                case "--allow-missing-assemblies":
+                    allowMissingAssemblies = true;
+                    break;
                 default:
                     if (arg.StartsWith("-", StringComparison.Ordinal))
                     {
@@ -130,7 +134,8 @@ public static class Program
             EnableSarif = sarif,
             SarifOutputPath = sarifPath ?? Path.Combine(projectRoot, "architecture-lint.sarif"),
             FailOnSeverity = failOn,
-            Strict = strict
+            Strict = strict,
+            AllowMissingAssemblies = allowMissingAssemblies,
         };
     }
 
@@ -235,6 +240,7 @@ public static class Program
         Console.WriteLine("  --sarif [path]               Output SARIF report (default: architecture-lint.sarif)");
         Console.WriteLine("  --fail-on <severity>         Exit code 1 on this severity (Error, Warning, Info)");
         Console.WriteLine("  --strict                     Treat warnings as errors");
+        Console.WriteLine("  --allow-missing-assemblies   Run source rules when Unity assemblies are unavailable");
         Console.WriteLine("  -h, --help                   Show this help");
     }
 }

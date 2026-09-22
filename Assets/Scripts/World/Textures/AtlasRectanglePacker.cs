@@ -37,10 +37,10 @@ internal sealed class AtlasRectanglePacker
 
         allocatedRect = bestFit.Value;
         var rectWithPadding = new Rectangle(
-            allocatedRect.X,
-            allocatedRect.Y,
-            allocatedRect.Width + _padding,
-            allocatedRect.Height + _padding);
+            allocatedRect.X - _padding,
+            allocatedRect.Y - _padding,
+            allocatedRect.Width + (_padding * 2),
+            allocatedRect.Height + (_padding * 2));
 
         _usedRectangles.Add(rectWithPadding);
         SplitFreeRectangles(rectWithPadding);
@@ -53,13 +53,19 @@ internal sealed class AtlasRectanglePacker
         int bestScore = int.MaxValue;
         foreach (var freeRect in _freeRectangles)
         {
-            if (freeRect.Width >= width + _padding && freeRect.Height >= height + _padding)
+            int occupiedWidth = width + (_padding * 2);
+            int occupiedHeight = height + (_padding * 2);
+            if (freeRect.Width >= occupiedWidth && freeRect.Height >= occupiedHeight)
             {
-                int score = (freeRect.Width - width) * (freeRect.Height - height);
+                int score = (freeRect.Width - occupiedWidth) * (freeRect.Height - occupiedHeight);
                 if (score < bestScore)
                 {
                     bestScore = score;
-                    bestFit = new Rectangle(freeRect.X, freeRect.Y, width, height);
+                    bestFit = new Rectangle(
+                        freeRect.X + _padding,
+                        freeRect.Y + _padding,
+                        width,
+                        height);
                 }
             }
         }

@@ -326,6 +326,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/Shaders/PixelArtFiltering.hlsl"
             #include "Assets/Shaders/TerrainColorAnimation.hlsl"
             #include "Assets/Shaders/TerrainCellData.hlsl"
             #include "TerrainTileAddressing.hlsl"
@@ -415,10 +416,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     tileSize.xy,
                     animationProfile,
                     flowSample);
+                finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
                 finalUV = ClampTerrainTileUV(finalUV, tileUV);
 
-                // Материальное поле читает грубое альбедо для отражённого
-                // света; здесь используется обычная линейная выборка.
+                // The lighting field must use the same pixel-grid correction
+                // as the visible pass, otherwise atlas boundaries darken with
+                // a different texel than the one shown on screen.
             #if defined(KERN_TERRAIN_CELLS)
                 return TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
             #else

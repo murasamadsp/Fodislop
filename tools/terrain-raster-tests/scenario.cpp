@@ -21,6 +21,29 @@ bool oracle(float2 p, float4 xs, float4 ys)
     }
     return true;
 }
+float segmentDistanceSquared(float2 p, float2 a, float2 b)
+{
+    float2 edge = b - a;
+    float lengthSquared = std::max(dot(edge, edge), 1e-6f);
+    float projection = std::clamp(dot(p - a, edge) / lengthSquared, 0.0f, 1.0f);
+    float2 delta = p - (a + edge * projection);
+    return dot(delta, delta);
+}
+bool sealedOracle(float2 p, float4 xs, float4 ys)
+{
+    if (oracle(p, xs, ys)) return true;
+    const float seal = 0.5f / 32.0f;
+    for (int i = 0; i < 4; ++i)
+    {
+        int j = (i + 1) % 4;
+        if (segmentDistanceSquared(
+                p,
+                float2{xs[i], ys[i]},
+                float2{xs[j], ys[j]}) <= seal * seal)
+            return true;
+    }
+    return false;
+}
 bool rendered(float2 p, const TerrainCellVertex* vertices, float4 xs, float4 ys)
 {
     for(int tri=0;tri<2;++tri)
@@ -30,6 +53,21 @@ bool rendered(float2 p, const TerrainCellVertex* vertices, float4 xs, float4 ys)
         if(!triangle(p,vertices[a].positionOS.xy,vertices[b].positionOS.xy,vertices[c].positionOS.xy,w)) continue;
         float2 sample=vertices[a].packedData.yz*w.x+vertices[b].packedData.yz*w.y+vertices[c].packedData.yz*w.z;
         return TerrainGeometryCoverage(sample,xs,ys,1)>.5f;
+    }
+    return false;
+}
+bool expectedRendered(float2 p, const TerrainCellVertex* vertices, float4 xs, float4 ys)
+{
+    for(int tri=0;tri<2;++tri)
+    {
+        int a=0,b=tri+1,c=tri+2;
+        float3 w;
+        if(!triangle(p,vertices[a].positionOS.xy,vertices[b].positionOS.xy,vertices[c].positionOS.xy,w)) continue;
+        float2 sample=vertices[a].packedData.yz*w.x+vertices[b].packedData.yz*w.y+vertices[c].packedData.yz*w.z;
+        float2 quantized = float2{
+            (std::floor(sample.x * 32.0f) + 0.5f) / 32.0f,
+            (std::floor(sample.y * 32.0f) + 0.5f) / 32.0f};
+        return sealedOracle(quantized,xs,ys);
     }
     return false;
 }
@@ -389,12 +427,12 @@ int runChecks()
         }
         for(int y=-5;y<37;++y) for(int x=-5;x<37;++x)
         {
-            bool expected=oracle(float2{(x+.5f)/32,(y+.5f)/32},xs,ys);
             for(int sy=0;sy<4;++sy) for(int sx=0;sx<4;++sx)
             {
                 float2 p={(x+(sx+.5f)/4)/32,(y+(sy+.5f)/4)/32};
                 bool actual=rendered(p,vertices,xs,ys);
                 ++checked;
+                bool expected=expectedRendered(p,vertices,xs,ys);
                 outward += expected && !oracle(p,xs,ys);
                 if(actual!=expected)
                 {

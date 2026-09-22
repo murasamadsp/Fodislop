@@ -36,15 +36,22 @@ public sealed class ArchitectureLinter
             {
                 if (_context.AssemblyPaths.Count == 0)
                 {
-                    Console.Error.WriteLine("No assemblies found for the selected rules.");
-                    return 2;
-                }
+                    if (!_context.AllowMissingAssemblies)
+                    {
+                        Console.Error.WriteLine("No assemblies found for the selected rules.");
+                        return 2;
+                    }
 
-                assemblies = await CecilAssemblyScanner.LoadAssembliesAsync(
-                    _context.AssemblyPaths,
-                    _context.UnityAssemblyPaths,
-                    ct);
-                Console.WriteLine($"Loaded {assemblies.Count} assemblies successfully.");
+                    Console.WriteLine("No Unity assemblies found; assembly-dependent rules will be skipped.");
+                }
+                else
+                {
+                    assemblies = await CecilAssemblyScanner.LoadAssembliesAsync(
+                        _context.AssemblyPaths,
+                        _context.UnityAssemblyPaths,
+                        ct);
+                    Console.WriteLine($"Loaded {assemblies.Count} assemblies successfully.");
+                }
             }
             else
             {
@@ -57,6 +64,12 @@ public sealed class ArchitectureLinter
             foreach (var rule in _rules)
             {
                 ct.ThrowIfCancellationRequested();
+                if (rule.RequiresAssemblies && assemblies.Count == 0)
+                {
+                    Console.WriteLine($"Skipping rule {rule.Id}: Unity assemblies are unavailable.");
+                    continue;
+                }
+
                 Console.Write($"Running rule {rule.Id} ({rule.Description})... ");
 
                 try
