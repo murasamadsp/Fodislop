@@ -37,7 +37,7 @@ jobs:
       - name: Validate architecture, USS, and localization
         run: dotnet run --project tools/Kern.ArchitectureLinter
       - name: Test terrain raster coverage and AO geometry without Unity
-        run: python3 tools/terrain-raster-tests/run.py
+        run: node tools/terrain-raster-tests/run.js
       - name: Test display mode lifecycle without Unity
         run: dotnet test tools/Kern.DisplayTests/Kern.DisplayTests.csproj --verbosity minimal
 
@@ -50,7 +50,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: true
-        run: |
       - name: Verify toolchain
         run: |
           unity --version
@@ -88,7 +87,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: true
-        run: |
       - name: Verify toolchain
         shell: pwsh
         run: |
@@ -162,7 +160,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: true
-        run: |
       - name: Build player
         run: >-
           unity run . --editor-version "$UNITY_EDITOR_VERSION"
