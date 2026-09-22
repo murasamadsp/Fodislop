@@ -25,17 +25,70 @@ env:
   UNITY_NO_UPDATE_CHECK: '1'
 
 jobs:
-  architecture:
-    name: Architecture and asset contracts
+  changes:
+    name: Detect code changes
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    outputs:
+      code_changed: ${{ steps.detect.outputs.code_changed }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          from="$EVENT_BEFORE"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            from="$BASE_SHA"
+          fi
+
+          if [ -z "$from" ] || [ "$from" = "0000000000000000000000000000000000000000" ]; then
+            files=$(git ls-files)
+          else
+            files=$(git diff --name-only "$from" "$HEAD_SHA")
+          fi
+
+          if printf '%s\n' "$files" | grep -Eq '^(Assets/|Packages/|ProjectSettings/|tools/|\.github/workflows/)|\.(cs|asmdef|shader|hlsl|compute|cginc|uxml|uss|unity|prefab|asset|meta|csproj|sln)$'; then
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  architecture:
+    name: Architecture and asset contracts
+    needs: changes
+    if: needs.changes.outputs.code_changed == 'true'
+    runs-on: [self-hosted, macOS, ARM64, kern-unity]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: true
+      - name: Verify Unity toolchain
+        run: |
+          unity --version
+          unity editors --installed --format json
+      - name: Rebuild Unity assemblies from this checkout
+        run: |
+          rm -rf Library/ScriptAssemblies Library/Bee Temp
+          unity test . --editor-version "$UNITY_EDITOR_VERSION" \
+            --mode EditMode --report-format nunit \
+            --output TestResults/architecture-editmode.xml \
+            --timeout 1200 --format github
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
-      - name: Validate architecture, USS, and localization
-        run: dotnet run --project tools/Kern.ArchitectureLinter -- --allow-missing-assemblies
+      - name: Run the same C# checks as the local pre-commit hook
+        run: CI=true ./scripts/pre-commit-lint.sh
       - name: Test terrain raster coverage and AO geometry without Unity
         run: node tools/terrain-raster-tests/run.js
       - name: Test display mode lifecycle without Unity

@@ -79,7 +79,8 @@ ensure_restore_assets() {
     fi
 }
 
-# Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build
+# Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build.
+# Any existing dependency is mandatory: a failed build must fail the gate.
 DEPENDENCIES=(
     "Effekseer.csproj"
     "EffekseerEditor.csproj"
@@ -97,15 +98,9 @@ for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     if [ ! -f "$DEPENDENCY" ]; then
         continue
     fi
-    if ! dotnet restore "$DEPENDENCY" --ignore-failed-sources --disable-parallel >/dev/null 2>&1; then
-        echo "Skipping $DEPENDENCY: restore failed (likely missing targeting pack on this platform)"
-        continue
-    fi
+    dotnet restore "$DEPENDENCY" --ignore-failed-sources --disable-parallel
     echo "Building $DEPENDENCY..."
-    if ! dotnet build "$DEPENDENCY" --no-restore -maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false -clp:NoSummary >/dev/null 2>&1; then
-        echo "Skipping $DEPENDENCY: build failed (likely missing targeting pack on this platform)"
-        continue
-    fi
+    dotnet build "$DEPENDENCY" --no-restore -maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false -clp:NoSummary
 done
 
 # Настоящая тип-проверка C#: отклики Roslyn из Library/Bee, компилятор зовётся
@@ -137,9 +132,9 @@ for PROJECT_FILE in \
 done
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
-    echo "Notice: No Assembly-CSharp*.csproj files found in repository root."
-    echo "Skipping C# Roslyn analyzer checks."
-    exit 0
+    echo "Error: No Assembly-CSharp*.csproj files found in repository root."
+    echo "The C# compilation/analyzer gate cannot be verified."
+    exit 1
 fi
 
 echo "--- Step 2: Analyzing Assembly-CSharp projects ---"
