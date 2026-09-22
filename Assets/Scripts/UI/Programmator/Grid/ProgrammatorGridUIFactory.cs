@@ -1,14 +1,14 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Localization;
+using Kern.Core;
+using Kern.Core.Localization;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Programmator;
+namespace Kern.UI.Programmator;
 
 // Builds the programmator UI Toolkit tree: the static layout (popup, panel,
 // toolbar, program list, create dialog) lives in Programmator.uxml; this
@@ -34,6 +34,7 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     private Button? _nextBtn;
     private Button? _runBtn;
     private Button? _stopBtn;
+    private Label? _programError;
     private VisualElement? _panel;
     private VisualElement? _programListPanel;
     private ScrollView? _listScroll;
@@ -64,6 +65,28 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     public VisualElement CreateDialog => _createDialog!;
     public Button RunBtn => _runBtn!;
     public Button StopBtn => _stopBtn!;
+
+    public void ShowProtocolError(string message)
+    {
+        if (_programError == null)
+        {
+            return;
+        }
+
+        _programError.text = message;
+        Kern.UI.UIState.Show(_programError);
+    }
+
+    public void ClearProtocolError()
+    {
+        if (_programError == null)
+        {
+            return;
+        }
+
+        _programError.text = string.Empty;
+        Kern.UI.UIState.Hide(_programError);
+    }
 
     public void Build(
         ProgrammatorSelectionModel selection,
@@ -151,6 +174,9 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
             throw new InvalidOperationException("[Programmator] StopButton is missing from Programmator.uxml.");
         _stopBtn.clicked += programs.StopProgram;
         _stopBtn.SetEnabled(false);
+        _programError = tree.Q<Label>("ProgramError") ??
+            throw new InvalidOperationException("[Programmator] ProgramError is missing from Programmator.uxml.");
+        Kern.UI.UIState.Hide(_programError);
 
         Button closeBtn = tree.Q<Button>("ProgrammatorCloseButton") ??
             throw new InvalidOperationException("[Programmator] ProgrammatorCloseButton is missing from Programmator.uxml.");
@@ -391,9 +417,9 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     {
         int idx = (_data.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
                   + (row * ProgrammatorData.COLS) + col;
-        int opId = _data.Codes[idx];
-        var action = (ProgAction)opId;
-        string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? _loc.Get(n) : _loc.Get("programmator.code", opId);
+        int opID = _data.Codes[idx];
+        var action = (ProgAction)opID;
+        string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? _loc.Get(n) : _loc.Get("programmator.code", opID);
         string desc = ProgrammatorData.OPERATOR_DESCRIPTIONS.TryGetValue(action, out var d) ? _loc.Get(d) : string.Empty;
         string text = string.IsNullOrEmpty(desc)
             ? _loc.Get("programmator.cell", col, row, name)

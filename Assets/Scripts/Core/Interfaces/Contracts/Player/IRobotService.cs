@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Core.Interfaces;
+namespace Kern.Core.Interfaces;
 public readonly record struct RobotMetadata(
     int PlayerID,
     byte ClanID,
@@ -41,5 +41,6 @@ public interface IRobotService
     void SetLocalPlayerBotID(uint botID);
     uint LocalPlayerBotID { get; }
     void ClearAllRobots();
+    void PruneStaleRobots(float timeoutSeconds = 2.5f);
     int RobotCount { get; }
 }

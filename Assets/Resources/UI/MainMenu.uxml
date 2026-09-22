@@ -4,13 +4,13 @@
              шейдер блитится в RenderTexture, которая подставляется сюда из кода.
              Именно UI-элемент, а не геометрия в сцене — квад на отдельной камере
              рисовался в дисплей и попадал в игровую камеру, закрывая собой игру.
-             Планета справа рисуется поверх фона, т.к. этот элемент идёт первым
+             Сценка справа рисуется поверх фона, т.к. этот элемент идёт первым
              в дереве. -->
         <ui:Image name="SpaceBgImage" class="mm-space-bg" scale-mode="ScaleAndCrop" />
 
-        <!-- МОНУМЕНТАЛЬНАЯ ПЛАНЕТАРНАЯ СИСТЕМА СПРАВА -->
-        <ui:VisualElement name="MainMenuPlanetContainer" class="mm-planet-system">
-            <ui:Image name="MainMenuPlanetImage" class="mm-planet-body" scale-mode="ScaleToFit" />
+        <!-- СЦЕНКА СПРАВА -->
+        <ui:VisualElement name="MainMenuSceneryContainer" class="mm-scenery-system">
+            <ui:Image name="MainMenuSceneryImage" class="mm-scenery-body" scale-mode="ScaleToFit" />
 
             <!-- Метка станции на орбите. Позиция берётся из 3D-сцены каждый кадр
                  (MenuSceneryController.TryGetStationViewportPosition), поэтому
@@ -26,16 +26,6 @@
                 </ui:VisualElement>
             </ui:VisualElement>
 
-            <!-- Прицел высадки с координатами -->
-            <ui:VisualElement name="TargetReticle" class="is-hidden mm-target-reticle">
-                <ui:VisualElement class="mm-target-cross-v" />
-                <ui:VisualElement class="mm-target-cross-h" />
-                <ui:VisualElement class="mm-target-dot" />
-                <ui:VisualElement class="mm-target-badge">
-                    <ui:Label class="mm-tb-title" text="mainmenu.sector" />
-                    <ui:Label class="mm-tb-coords" text="mainmenu.coords" />
-                </ui:VisualElement>
-            </ui:VisualElement>
         </ui:VisualElement>
 
         <!-- ТЕНЕВОЙ ГРАДИЕНТ СЛЕВА -->
@@ -66,9 +56,9 @@
         <!-- ВЕРХНИЙ ХЕДЕР (64px) -->
         <ui:VisualElement name="MainMenuHeader" class="mm-header">
             <ui:VisualElement name="MainMenuWordmark" class="mm-wordmark">
-                <ui:Image name="MainMenuPlanetIcon" class="mm-wordmark-icon" />
+                <ui:Image name="MainMenuLogoIcon" class="mm-wordmark-icon" />
                 <ui:VisualElement class="mm-brand-text">
-                    <ui:Label class="mm-brand-title" text="FODINAE" />
+                    <ui:Label class="mm-brand-title" text="KERN" />
                     <ui:Label class="mm-brand-sub" text="mainmenu.brand_sub" />
                 </ui:VisualElement>
             </ui:VisualElement>
@@ -93,7 +83,7 @@
                 <ui:Label class="mm-eyebrow-text" text="mainmenu.rig_ready" />
             </ui:VisualElement>
             <ui:VisualElement class="mm-heading-group">
-                <ui:Label class="mm-heading-white" text="mainmenu.planet_waiting" />
+                <ui:Label class="mm-heading-white" text="mainmenu.world_waiting" />
                 <ui:Label class="mm-heading-gold" text="mainmenu.below_surface" />
             </ui:VisualElement>
             <ui:Label class="mm-subtitle" text="mainmenu.tagline" />
@@ -102,7 +92,7 @@
                  MainMenu.cs:265 запрашивает #UpdateAlertBanner и вешает на него
                  открытие окна обновления, но самого элемента в разметке не было —
                  биндинг молча получал null. Разметка соответствует
-                 .update-alert-banner из visual/fodinae-ui-lab. -->
+                 .update-alert-banner из visual/kern-ui-lab. -->
             <ui:Button name="UpdateAlertBanner" class="mm-update-banner">
                 <ui:VisualElement class="mm-update-banner-text">
                     <ui:Label class="mm-update-banner-title" text="mainmenu.update_banner_title" />
@@ -230,28 +220,6 @@
                                     </ui:VisualElement>
                                 </ui:Button>
 
-                                <ui:Button name="ServerItemTartarus" class="mm-server-card">
-                                    <ui:VisualElement class="mm-sc-left">
-                                        <ui:Label class="mm-sc-title" text="mainmenu.server_eu_east" />
-                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_eu_east_desc" />
-                                    </ui:VisualElement>
-                                    <ui:VisualElement class="mm-sc-right">
-                                        <ui:Label class="mm-sc-ping" text="mainmenu.server_eu_east_ping" />
-                                        <ui:Label class="mm-sc-online" text="mainmenu.server_eu_east_online" />
-                                    </ui:VisualElement>
-                                </ui:Button>
-
-                                <ui:Button name="ServerItemCyber" class="mm-server-card">
-                                    <ui:VisualElement class="mm-sc-left">
-                                        <ui:Label class="mm-sc-title" text="mainmenu.server_asia" />
-                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_asia_desc" />
-                                    </ui:VisualElement>
-                                    <ui:VisualElement class="mm-sc-right">
-                                        <ui:Label class="mm-sc-ping mm-sc-ping--yellow" text="mainmenu.server_asia_ping" />
-                                        <ui:Label class="mm-sc-online" text="mainmenu.server_asia_online" />
-                                    </ui:VisualElement>
-                                </ui:Button>
-
                                 <ui:Button name="ServerItemDummy" class="mm-server-card">
                                     <ui:VisualElement class="mm-sc-left">
                                         <ui:Label class="mm-sc-title" text="DUMMY OFFLINE" />
@@ -262,12 +230,7 @@
                                         <ui:Label class="mm-sc-online" text="LOCAL" />
                                     </ui:VisualElement>
                                 </ui:Button>
-                            </ui:VisualElement>
 
-                            <ui:VisualElement class="mm-card-box mm-ip-connect-box">
-                                <ui:Label class="mm-card-tag" text="IP:" />
-                                <ui:TextField name="DirectServerIpInput" value="127.0.0.1:7777" class="mm-flex-1" />
-                                <ui:Button name="DirectConnectButton" class="mm-btn-outline fit-wrap" text="mainmenu.server_direct_connect" />
                             </ui:VisualElement>
                         </ui:VisualElement>
 

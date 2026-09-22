@@ -1,12 +1,12 @@
 #nullable enable
 
-namespace Fodinae.Rendering;
+namespace Kern.Rendering;
 
 using System;
 using System.Text;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -15,6 +15,7 @@ public static class HDROutput
 {
     private static HDRDiagnosticState _lastDiagnosticState;
     private static bool _hasDiagnosticState;
+    private static string? _lastReadError;
     private static HDROutputController _controller = new(new UnityHDROutputBackend());
 
     public static bool Enabled => _controller.DesiredHDR;
@@ -26,12 +27,42 @@ public static class HDROutput
         _controller.Status is not HDROutputController.Phase.Pending and not HDROutputController.Phase.Uninitialized &&
         !_controller.HasReadFailure;
 
+    public static bool CanRetryRead => _controller.HasReadFailure;
+
+    // Ключ дедупликации строится по решениям, а не по снимку целиком.
+    // Снимок несёт paperWhiteNits дробным числом от системы: оно дрожит в
+    // младших разрядах само по себе, и сравнение снимков печатало новую
+    // строку каждую секунду, хотя состояние вывода не менялось. Яркости
+    // входят округлёнными до нита — на уровне решения различать тоньше
+    // нечего, а реальную смену калибровки такой ключ всё ещё ловит.
     private readonly record struct HDRDiagnosticState(
-        HDROutputController.Snapshot Output,
+        HDROutputController.OutputIdentity Identity,
+        bool Supported,
+        bool PipelineSupported,
+        bool Available,
+        bool Active,
+        bool Pending,
+        bool Switchable,
+        int PaperWhiteNits,
+        int MinNits,
+        int MaxNits,
+        int Gamut,
         bool DesiredHDR,
         HDROutputController.Phase Phase,
         int Attempts,
-        string? Error);
+        string? Error)
+    {
+        public static HDRDiagnosticState From(
+            HDROutputController.Snapshot output,
+            bool desiredHDR,
+            HDROutputController.Phase phase,
+            int attempts,
+            string? error) =>
+            new(output.Identity, output.Supported, output.PipelineSupported, output.Available,
+                output.Active, output.Pending, output.Switchable,
+                Mathf.RoundToInt(output.PaperWhiteNits), output.MinNits, output.MaxNits, output.Gamut,
+                desiredHDR, phase, attempts, error);
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetDiagnostics()
@@ -89,6 +120,12 @@ public static class HDROutput
         return ApplyPreference();
     }
 
+    public static void RetryRead()
+    {
+        _controller.RetryRead();
+        Reconcile();
+    }
+
     public static void Retry()
     {
         _controller.NotifyEnvironmentChanged();
@@ -119,8 +156,42 @@ public static class HDROutput
 
     private static void LogDiagnostics()
     {
-        var state = new HDRDiagnosticState(
-            _controller.Current, Enabled, Status, _controller.Attempts, _controller.Error);
+        // Пока предпочтение не задано, докладывать не о чем: контроллер
+        // прочитал вывод, но ни одного решения не принял. Такое состояние
+        // существует ровно между стартом HDROutputReconciler и применением
+        // настроек дисплея — порядок IStartable не определён, и оба пути
+        // проходят здесь. Строка про desired=False/Uninitialized в этом окне
+        // не отчёт, а внутренний порядок запуска, вынесенный в лог: читается
+        // как второе включение HDR, которого не было.
+        if (Status == HDROutputController.Phase.Uninitialized)
+        {
+            return;
+        }
+
+        HDROutputController.Snapshot output = _controller.Current;
+        HDRDiagnosticState state = HDRDiagnosticState.From(
+            output, Enabled, Status, _controller.Attempts, _controller.Error);
+        string? readError = _controller.Error;
+
+        // A read failure is terminal until the user retries it. The same
+        // failure recurs every reconcile/tick while it stands, and the two
+        // startup paths (DisplayManager.ApplyInitialSettings vs
+        // HDROutputReconciler.Start) initialize with different DesiredHDR, so
+        // the state differs and the warning would otherwise fire twice.
+        if (readError != null)
+        {
+            if (readError == _lastReadError)
+            {
+                return;
+            }
+
+            _lastReadError = readError;
+        }
+        else
+        {
+            _lastReadError = null;
+        }
+
         if (_hasDiagnosticState && state == _lastDiagnosticState)
         {
             return;
@@ -130,17 +201,17 @@ public static class HDROutput
         _hasDiagnosticState = true;
         string message =
             "[HDR] " +
-            $"available={state.Output.Available}, active={state.Output.Active}, " +
-            $"changeRequested={state.Output.Pending}, " +
-            $"display={state.Output.Identity}, desired={state.DesiredHDR}, phase={state.Phase}, " +
+            $"available={output.Available}, active={output.Active}, " +
+            $"changeRequested={output.Pending}, " +
+            $"display={output.Identity}, desired={state.DesiredHDR}, phase={state.Phase}, " +
             $"attempts={state.Attempts}, error={state.Error}, " +
             $"environment={Application.platform}, graphicsAPI={SystemInfo.graphicsDeviceType}, " +
-            $"pipelineHDR={_controller.Current.PipelineSupported}, " +
-            $"supported={state.Output.Supported}, switchable={state.Output.Switchable}, " +
-            $"gamut={(ColorGamut)state.Output.Gamut}, " +
-            $"paperWhite={state.Output.PaperWhiteNits:F1} nits, " +
-            $"min={state.Output.MinNits} nits, " +
-            $"max={state.Output.MaxNits} nits.";
+            $"pipelineHDR={output.PipelineSupported}, " +
+            $"supported={output.Supported}, switchable={output.Switchable}, " +
+            $"gamut={(ColorGamut)output.Gamut}, " +
+            $"paperWhite={output.PaperWhiteNits:F1} nits, " +
+            $"min={output.MinNits} nits, " +
+            $"max={output.MaxNits} nits.";
         if (state.Phase == HDROutputController.Phase.Failed)
         {
             Debug.LogWarning(message);

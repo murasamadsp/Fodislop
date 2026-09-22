@@ -1,6 +1,6 @@
 /* ФАЙЛ МАШИННЫЙ. Правки будут затёрты.
-   Источник истины: visual/fodinae-ui-lab/css/tokens.css
-   Генератор:       visual/fodinae-ui-lab/tools/emit-uss-tokens.py
+   Источник истины: visual/kern-ui-lab/css/tokens.css
+   Генератор:       visual/kern-ui-lab/tools/emit-uss-tokens.py
    Расхождение ловит CI (scripts/check-architecture.js). */
 
 :root {
@@ -63,7 +63,7 @@
     --ease-signature: ease-out-circ;  /* подбор fit-easing.py, max-отклонение 0.129 */
     --order-corona: 1;
     --order-orbit: 2;
-    --order-planet: 3;
+    --order-scenery: 3;
     --order-beacon: 10;
     --order-surface: 1;
     --order-magma: 2;
@@ -79,7 +79,7 @@
     --blur-lg: 16px;
     --blur-xl: 24px;
     --menu-column: 500px;
-    --planet-disc: 860px;
+    --scenery-disc: 860px;
     --menu-action-width: 380px;
     --accent-cyan-dense: rgba(86, 221, 212, 0.85);
     --accent-cyan-fill: rgba(86, 221, 212, 0.55);
@@ -175,7 +175,7 @@
     --space-12: 24px;
     --space-13: 28px;
     --space-14: 32px;
-    --planet-disc: 520px;
+    --scenery-disc: 520px;
 }
 
 /* Тир задаётся классом на корневом элементе: @media в USS нет.
@@ -190,7 +190,7 @@
     --space-13: 48px;
     --space-14: 60px;
     --menu-column: 600px;
-    --planet-disc: 940px;
+    --scenery-disc: 940px;
 }
 
-/* Не переносится в USS (67): fit-lines, font-body, font-data, font-label, font-title, hex-abyss, hex-anomaly, hex-cyan, hex-cyan-deep, hex-cyan-lift, hex-danger, hex-danger-lift, hex-gold, hex-gold-lift, hex-ink-100, hex-ink-30, hex-ink-50, hex-ink-70, hex-magma, hex-ok, hex-slate, hex-void, layer-backdrop, layer-chrome, layer-content, layer-devtools, layer-gate, layer-modal, layer-overlay, layer-rail, layer-scene, layer-shade, layer-toast, mat-basalt-hi, mat-basalt-lo, mat-mined, mat-planet-hi, mat-planet-lo, mat-planet-mid, mat-planet-shadow, mat-redrock-hi, mat-redrock-lo, mat-space-hi, mat-space-lo, mat-space-mid, mat-strata-0, mat-strata-1, mat-strata-2, mat-strata-3, rgb-abyss, rgb-anomaly, rgb-crisis, rgb-cyan, rgb-danger, rgb-ember, rgb-gold, rgb-light, rgb-magma, rgb-ok, rgb-shadow, rgb-shelf, rgb-slate, rgb-steel, rgb-void, tracking-base, tracking-wide, tracking-widest */
+/* Не переносится в USS (67): fit-lines, font-body, font-data, font-label, font-title, hex-abyss, hex-anomaly, hex-cyan, hex-cyan-deep, hex-cyan-lift, hex-danger, hex-danger-lift, hex-gold, hex-gold-lift, hex-ink-100, hex-ink-30, hex-ink-50, hex-ink-70, hex-magma, hex-ok, hex-slate, hex-void, layer-backdrop, layer-chrome, layer-content, layer-devtools, layer-gate, layer-modal, layer-overlay, layer-rail, layer-scene, layer-shade, layer-toast, mat-basalt-hi, mat-basalt-lo, mat-mined, mat-scenery-hi, mat-scenery-lo, mat-scenery-mid, mat-scenery-shadow, mat-redrock-hi, mat-redrock-lo, mat-space-hi, mat-space-lo, mat-space-mid, mat-strata-0, mat-strata-1, mat-strata-2, mat-strata-3, rgb-abyss, rgb-anomaly, rgb-crisis, rgb-cyan, rgb-danger, rgb-ember, rgb-gold, rgb-light, rgb-magma, rgb-ok, rgb-shadow, rgb-shelf, rgb-slate, rgb-steel, rgb-void, tracking-base, tracking-wide, tracking-widest */

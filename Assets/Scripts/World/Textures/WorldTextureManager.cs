@@ -6,14 +6,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
-using Fodinae.World.Terrain;
-using Fodinae.World.Textures;
+using Kern.Core.Interfaces;
+using Kern.World.Terrain;
+using Kern.World.Textures;
 using MinesServer.Data;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.World
+namespace Kern.World
 {
     public class WorldTextureManager : MonoBehaviour, ITextureService
     {
@@ -38,10 +38,16 @@ namespace Fodinae.World
         [Inject]
         private IAssetLoader _assetLoader = null!;
         [Inject]
+        private ITextureStorageService _textureStorage = null!;
+        [Inject]
         private IAsyncOperationSupervisor _operations = null!;
         private CellTextureCache _textureCache = null!;
+        private Texture2D? _prismaticFlowMapTexture;
+        public Texture2D? PrismaticFlowMapTexture => _prismaticFlowMapTexture;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
+        private readonly TerrainDecalAtlasLoader _decalLoader = new();
+        public Texture2D? TerrainDecalAtlasTexture => _decalLoader.AtlasTexture;
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
         private readonly CellTextureRetryTracker _retryTracker = new();
 
@@ -69,6 +75,22 @@ namespace Fodinae.World
 
                 _flowMapTexture = null;
             }
+
+            if (_prismaticFlowMapTexture != null)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(_prismaticFlowMapTexture);
+                }
+                else
+                {
+                    DestroyImmediate(_prismaticFlowMapTexture);
+                }
+
+                _prismaticFlowMapTexture = null;
+            }
+
+            _decalLoader.Dispose();
         }
 
         private void Initialize()
@@ -85,10 +107,11 @@ namespace Fodinae.World
                 _cellTextureSize,
                 _texturePadding,
                 GetCachedTexture);
-
             _pendingRequests = new ConcurrentDictionary<CellType, TextureRequest>();
 
+            _prismaticFlowMapTexture = WorldTextureGenerator.CreatePrismaticFlowMap();
             GenerateFlowMap();
+            _decalLoader.StartLoad(_textureStorage, _operations, (name, tex) => OnTextureLoaded?.Invoke(name, tex));
         }
 
         private void EnsureInitialized()
@@ -355,10 +378,17 @@ namespace Fodinae.World
                 return;
             }
 
-            Debug.LogWarning(
-                $"[AssetDiag] TEXFAIL {filename} — using deterministic random diagnostic texture");
+            // Missing server data must stay missing. A generated diagnostic image
+            // must never invent a colour. The map configuration is authoritative
+            // for the visual identity of the cell, so it is the only permitted
+            // source for this explicit degraded rendering path.
+            Debug.LogError($"[AssetDiag] TEXFAIL {filename} — using map colour fallback");
+            Color mapColor = _mapManager.GetCellMinimapColor(cellType);
             await UniTask.SwitchToMainThread();
-            texture = WorldTextureGenerator.CreateMissingCellTexture(cellType, _cellTextureSize);
+            texture = WorldTextureGenerator.CreateMapColorCellTexture(
+                cellType,
+                _cellTextureSize,
+                mapColor);
             AddTextureToAtlas(cellType, texture, ownsTexture: true);
         }
 

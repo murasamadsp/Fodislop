@@ -1,10 +1,10 @@
 #nullable enable
 
 using System;
-using Fodinae.Core.Localization;
+using Kern.Core.Localization;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 internal sealed class ChatViewElements
 {
@@ -21,8 +21,6 @@ internal sealed class ChatViewElements
     public Label? ChatHeader { get; }
 
     public Button? GlobalChannelButton { get; }
-
-    public Button? LocalChannelButton { get; }
 
     public Button? SendButton { get; }
 
@@ -54,7 +52,6 @@ internal sealed class ChatViewElements
         InputField = tree.Q<TextField>("ChatInput");
         ChatHeader = tree.Q<Label>("ChatHeader");
         GlobalChannelButton = tree.Q<Button>("GlobalChannelButton");
-        LocalChannelButton = tree.Q<Button>("LocalChannelButton");
         SendButton = tree.Q<Button>("SendButton");
         ColorButton = tree.Q<Button>("ColorButton");
         ColorGrid = tree.Q<VisualElement>("ColorGrid");
@@ -73,7 +70,7 @@ internal sealed class ChatViewElements
         }
     }
 
-    public void BindActions(Action onSend, Action selectGlobal, Action selectLocal)
+    public void BindActions(Action onSend, Action selectGlobal)
     {
         if (SendButton != null)
         {
@@ -85,10 +82,6 @@ internal sealed class ChatViewElements
             GlobalChannelButton.clicked += selectGlobal;
         }
 
-        if (LocalChannelButton != null)
-        {
-            LocalChannelButton.clicked += selectLocal;
-        }
     }
 
     public void SetMuteStatus(string message)

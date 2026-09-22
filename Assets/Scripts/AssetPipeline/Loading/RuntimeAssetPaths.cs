@@ -4,12 +4,12 @@ using System;
 using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Fodinae.Core;
-// Контракт IRuntimeAssetPaths находится в Fodinae.Contracts, а реализация
+namespace Kern.Core;
+// Контракт IRuntimeAssetPaths находится в Kern.Contracts, а реализация
 // живёт рядом с потребителями asset pipeline.
 public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
 {
@@ -38,7 +38,7 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
             TexturesFolderName);
         string markerPath = Path.Combine(extractedRoot, ".manifest");
         string manifest = await DownloadTextAsync(
-            CombineStreamingUri(Application.streamingAssetsPath, "Textures.manifest"));
+            CombineStreamingURI(Application.streamingAssetsPath, "Textures.manifest"));
         if (!File.Exists(markerPath) ||
             !string.Equals(await File.ReadAllTextAsync(markerPath), manifest, System.StringComparison.Ordinal))
         {
@@ -67,7 +67,7 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
 
                 Directory.CreateDirectory(directory);
                 byte[] bytes = await DownloadBytesAsync(
-                    CombineStreamingUri(
+                    CombineStreamingURI(
                         Application.streamingAssetsPath,
                         $"Textures/{relativeFile}"));
                 await File.WriteAllBytesAsync(destination, bytes);
@@ -157,23 +157,26 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
         {
             string segment = segments[index];
             string exact = Path.Combine(current, segment);
-            if (File.Exists(exact) || Directory.Exists(exact))
-            {
-                current = exact;
-                continue;
-            }
-
             if (!Directory.Exists(current))
             {
                 return null;
             }
 
             bool isLeaf = index == segments.Length - 1;
+            // Do not trust File.Exists/Directory.Exists for the fast path:
+            // macOS commonly uses a case-insensitive volume and would then
+            // return the caller's spelling instead of the canonical on-disk
+            // spelling. Returning the actual directory entry keeps persistent
+            // and bundled paths stable across platforms.
             string? match = Directory.EnumerateFileSystemEntries(current)
                 .FirstOrDefault(entry => string.Equals(
                     Path.GetFileName(entry),
                     segment,
                     StringComparison.OrdinalIgnoreCase));
+            if (match == null && (File.Exists(exact) || Directory.Exists(exact)))
+            {
+                match = exact;
+            }
             if (match == null && isLeaf && string.IsNullOrEmpty(Path.GetExtension(segment)))
             {
                 match = Directory.EnumerateFiles(current)
@@ -235,7 +238,7 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
         return request.downloadHandler.data;
     }
 
-    private static string CombineStreamingUri(string root, string relativePath)
+    private static string CombineStreamingURI(string root, string relativePath)
     {
         string encodedPath = string.Join(
             "/",

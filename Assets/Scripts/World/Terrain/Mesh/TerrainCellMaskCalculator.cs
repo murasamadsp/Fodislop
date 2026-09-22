@@ -4,26 +4,26 @@ using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 public sealed class TerrainCellMaskCalculator
 {
-    public int[,] CellTilingDescriptors { get; private set; } = null!;
+    public TerrainRingGrid<int> CellTilingDescriptors { get; } = new();
 
-    public int[,] CellCornerVariants { get; private set; } = null!;
+    public TerrainRingGrid<int> CellCornerVariants { get; } = new();
 
-    public byte[,] CellReliefMasks { get; private set; } = null!;
+    public TerrainRingGrid<byte> CellReliefMasks { get; } = new();
 
-    public byte[,] CellSolidBoundaryMasks { get; private set; } = null!;
+    public TerrainRingGrid<byte> CellSolidBoundaryMasks { get; } = new();
 
     public void EnsureCapacity(int meshWidth, int meshHeight)
     {
-        if (CellTilingDescriptors == null || CellTilingDescriptors.GetLength(0) != meshWidth || CellTilingDescriptors.GetLength(1) != meshHeight)
+        if (CellTilingDescriptors.Width != meshWidth || CellTilingDescriptors.Height != meshHeight)
         {
-            CellTilingDescriptors = new int[meshWidth, meshHeight];
-            CellCornerVariants = new int[meshWidth, meshHeight];
-            CellReliefMasks = new byte[meshWidth, meshHeight];
-            CellSolidBoundaryMasks = new byte[meshWidth, meshHeight];
+            CellTilingDescriptors.EnsureSize(meshWidth, meshHeight);
+            CellCornerVariants.EnsureSize(meshWidth, meshHeight);
+            CellReliefMasks.EnsureSize(meshWidth, meshHeight);
+            CellSolidBoundaryMasks.EnsureSize(meshWidth, meshHeight);
         }
     }
 
@@ -60,78 +60,26 @@ public sealed class TerrainCellMaskCalculator
     {
         EnsureCapacity(meshWidth, meshHeight);
 
-        TerrainCellCache.Scroll2DArray(CellTilingDescriptors, meshWidth, meshHeight, dx, dy);
-        TerrainCellCache.Scroll2DArray(CellCornerVariants, meshWidth, meshHeight, dx, dy);
-        TerrainCellCache.Scroll2DArray(CellReliefMasks, meshWidth, meshHeight, dx, dy);
-        TerrainCellCache.Scroll2DArray(CellSolidBoundaryMasks, meshWidth, meshHeight, dx, dy);
+        CellTilingDescriptors.Scroll(dx, dy);
+        CellCornerVariants.Scroll(dx, dy);
+        CellReliefMasks.Scroll(dx, dy);
+        CellSolidBoundaryMasks.Scroll(dx, dy);
 
-        int cxStart = 0;
-        int cxLen = 0;
-        int cyStart = 0;
-        int cyLen = 0;
+        // Кайма в одну клетку: маска клетки описывает её восемь соседей, и у
+        // клетки на старой границе сосед снаружи только что появился.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(
+            meshWidth, meshHeight, dx, dy, neighbourMargin: 1);
+        CalculateBand(cellCache, bands.ColumnBand);
+        CalculateBand(cellCache, bands.RowBand);
+    }
 
-        if (dx > 0)
+    private void CalculateBand(TerrainCellCache cellCache, RectInt band)
+    {
+        for (int x = band.xMin; x < band.xMax; x++)
         {
-            cxStart = Mathf.Max(0, meshWidth - dx - 1);
-            cxLen = meshWidth - cxStart;
-        }
-        else if (dx < 0)
-        {
-            cxStart = 0;
-            cxLen = Mathf.Min(meshWidth, -dx + 1);
-        }
-
-        if (dy > 0)
-        {
-            cyStart = Mathf.Max(0, meshHeight - dy - 1);
-            cyLen = meshHeight - cyStart;
-        }
-        else if (dy < 0)
-        {
-            cyStart = 0;
-            cyLen = Mathf.Min(meshHeight, -dy + 1);
-        }
-
-        if (cxLen > 0 || cyLen > 0)
-        {
-            if (cxLen > 0)
+            for (int y = band.yMin; y < band.yMax; y++)
             {
-                for (int x = cxStart; x < cxStart + cxLen; x++)
-                {
-                    for (int y = 0; y < meshHeight; y++)
-                    {
-                        CalculateCellNode(cellCache, x, y);
-                    }
-                }
-            }
-
-            if (cyLen > 0 && cxLen < meshWidth)
-            {
-                int xStart = 0;
-                int xEnd = meshWidth;
-
-                if (cxLen > 0)
-                {
-                    if (dx > 0)
-                    {
-                        xEnd = cxStart;
-                    }
-                    else
-                    {
-                        xStart = cxLen;
-                    }
-                }
-
-                if (xStart < xEnd)
-                {
-                    for (int y = cyStart; y < cyStart + cyLen; y++)
-                    {
-                        for (int x = xStart; x < xEnd; x++)
-                        {
-                            CalculateCellNode(cellCache, x, y);
-                        }
-                    }
-                }
+                CalculateCellNode(cellCache, x, y);
             }
         }
     }
@@ -251,6 +199,17 @@ public sealed class TerrainCellMaskCalculator
         return cornerSideMask;
     }
 
+    // Рельефная маска: бит стоит там, где сосед принадлежит той же рельефной
+    // поверхности. Для обычных клеток это рельефная группа. Для непрерывных
+    // crystal/rock-листов это семейство листа: разные варианты одной
+    // текстуры не должны получать внутреннюю фаску на границе тайла.
+    //
+    // Сравнение именно на равенство, а не «сосед не ниже». Кайма рисуется по
+    // сторонам, где сосед чужой, и порядковое сравнение делало её
+    // односторонней: кристалл (группа 3) рядом с неразрушимой породой
+    // (группа 4) считал соседа своим и сливался с ним, а порода рядом с
+    // кристаллом — чужим и обводилась. Шов получался у одной клетки из двух.
+    // В оригинале сравнение равенством, и обе стороны обводят друг друга.
     public static byte CalculateReliefMask(
         CachedCellData data,
         CachedCellData top,
@@ -258,28 +217,51 @@ public sealed class TerrainCellMaskCalculator
         CachedCellData bottom,
         CachedCellData right)
     {
+        if (data.ReliefGroup == 0)
+        {
+            return 0;
+        }
+
         byte rm = 0;
-        if (top.ReliefGroup >= data.ReliefGroup)
+        if (SameReliefSurface(data, top))
         {
             rm |= 1;
         }
 
-        if (left.ReliefGroup >= data.ReliefGroup)
+        if (SameReliefSurface(data, left))
         {
             rm |= 2;
         }
 
-        if (bottom.ReliefGroup >= data.ReliefGroup)
+        if (SameReliefSurface(data, bottom))
         {
             rm |= 4;
         }
 
-        if (right.ReliefGroup >= data.ReliefGroup)
+        if (SameReliefSurface(data, right))
         {
             rm |= 8;
         }
 
         return rm;
+    }
+
+    private static bool SameReliefSurface(CachedCellData first, CachedCellData second)
+    {
+        if (second.ReliefGroup == 0)
+        {
+            return false;
+        }
+
+        if (first.ReliefGroup == second.ReliefGroup)
+        {
+            return true;
+        }
+
+        return TerrainSheetCatalog.IsContinuousSheet(first.Type) &&
+            TerrainSheetCatalog.IsContinuousSheet(second.Type) &&
+            TerrainReliefRimCatalog.GetFamily(first.Type) ==
+            TerrainReliefRimCatalog.GetFamily(second.Type);
     }
 
     public static byte CalculateSolidBoundaryMask(

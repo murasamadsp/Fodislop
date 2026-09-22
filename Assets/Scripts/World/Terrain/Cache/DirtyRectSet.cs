@@ -1,24 +1,32 @@
 #nullable enable
 
+using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
+
+// Изменённые клетки МИРА с прошлого кадра, в мировых координатах Unity.
+//
+// Не путать с TerrainDirtyRegion: тот учитывает изменённые ТЕКСЕЛИ в кольцевых
+// координатах текстуры и режет прямоугольники на шве кольца. Здесь шва нет,
+// зато есть границы окна: прямоугольник за ними не нужен, а соседние
+// сливаются, пока слияние не начинает захватывать лишнее.
+//
+// Объединять их в один тип нельзя: у них разные системы координат и разные
+// правила слияния, и общий «набор прямоугольников» скрыл бы обе разницы.
 public sealed class DirtyRectSet
 {
-    public const int MaximumRects = 8;
+    private readonly List<RectInt> _rects = new(8);
 
-    private readonly RectInt[] _rects = new RectInt[MaximumRects];
-    private int _count;
+    public int Count => _rects.Count;
 
-    public int Count => _count;
-
-    public bool IsEmpty => _count == 0;
+    public bool IsEmpty => _rects.Count == 0;
 
     public RectInt this[int index] => _rects[index];
 
     public void Clear()
     {
-        _count = 0;
+        _rects.Clear();
     }
 
     public long TotalArea
@@ -26,7 +34,7 @@ public sealed class DirtyRectSet
         get
         {
             long total = 0;
-            for (int i = 0; i < _count; i++)
+            for (int i = 0; i < _rects.Count; i++)
             {
                 total += Area(_rects[i]);
             }
@@ -47,47 +55,41 @@ public sealed class DirtyRectSet
             return false;
         }
 
-        for (int i = 0; i < _count; i++)
+        RectInt merged = clipped;
+        for (int i = 0; i < _rects.Count;)
         {
             RectInt existing = _rects[i];
-            if (Contains(existing, clipped))
+            if (Contains(existing, merged))
             {
                 return true;
             }
 
-            // Merge only where the union costs no more than keeping the two
-            // rectangles apart - touching or overlapping ones. Merging
-            // distant rectangles is what produced the screen-sized union.
-            RectInt union = Union(existing, clipped);
-            if (Area(union) <= Area(existing) + Area(clipped))
+            // Два повода слить. Перекрытие — чтобы одна и та же клетка не
+            // лежала в двух прямоугольниках: заплатка сделала бы её дважды, а
+            // оценка стоимости посчитала бы её дважды и раньше времени
+            // потребовала полной пересборки. И выгода — когда объединение не
+            // больше суммы.
+            //
+            // КАСАНИЕ САМО ПО СЕБЕ ПОВОДОМ НЕ ЯВЛЯЕТСЯ. Два соседних по
+            // диагонали чанка касаются углом, а их объединение вчетверо
+            // больше их суммы; цепочка таких слияний вдоль диагонали снова
+            // давала прямоугольник во весь экран — ровно ту регрессию, ради
+            // которой этот тип и существует. Полоса вплотную сливается и без
+            // этого: у неё объединение равно сумме.
+            RectInt union = Union(existing, merged);
+            if (Overlaps(existing, merged) ||
+                Area(union) <= Area(existing) + Area(merged))
             {
-                _rects[i] = union;
-                return true;
+                merged = union;
+                _rects.RemoveAt(i);
+                i = 0;
+                continue;
             }
+
+            i++;
         }
 
-        if (_count < MaximumRects)
-        {
-            _rects[_count++] = clipped;
-            return true;
-        }
-
-        // Out of slots. Absorb into whichever rectangle grows least, so the
-        // overflow costs the smallest amount of extra area rather than
-        // whatever happens to sit at index zero.
-        int bestIndex = 0;
-        long bestGrowth = long.MaxValue;
-        for (int i = 0; i < _count; i++)
-        {
-            long growth = Area(Union(_rects[i], clipped)) - Area(_rects[i]);
-            if (growth < bestGrowth)
-            {
-                bestGrowth = growth;
-                bestIndex = i;
-            }
-        }
-
-        _rects[bestIndex] = Union(_rects[bestIndex], clipped);
+        _rects.Add(merged);
         return true;
     }
 
@@ -145,5 +147,15 @@ public sealed class DirtyRectSet
         }
 
         return new RectInt((int)minX, (int)minY, (int)(maxX - minX), (int)(maxY - minY));
+    }
+
+    // Строгое перекрытие: общая площадь, а не общая граница. Касание по ребру
+    // или углу площади не даёт и слиянием не оплачивается.
+    private static bool Overlaps(RectInt left, RectInt right)
+    {
+        return left.xMin < right.xMax &&
+            left.xMax > right.xMin &&
+            left.yMin < right.yMax &&
+            left.yMax > right.yMin;
     }
 }

@@ -1,11 +1,12 @@
 #nullable enable
 
 using System;
-using Fodinae.World.Terrain;
+using System.Runtime.InteropServices;
+using Kern.World.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
 [TestFixture]
 public class TerrainCellDataPackerTests
@@ -57,6 +58,17 @@ public class TerrainCellDataPackerTests
         Assert.That(texels.World.x, Is.EqualTo(9999f));
         Assert.That(texels.World.y, Is.EqualTo(39999f));
         Assert.That(texels.Glow.x, Is.EqualTo(16777215f));
+    }
+
+    [Test]
+    public void GeometryCornersArePackedWithCellData()
+    {
+        TerrainCellTexels texels = TerrainCellDataPacker.PackQuad(Quad(_Identity), 0);
+
+        Assert.That(texels.Meta.a, Is.EqualTo(byte.MaxValue));
+        Assert.That(Mathf.HalfToFloat(texels.GeometryX.R), Is.EqualTo(0.0f));
+        Assert.That(Mathf.HalfToFloat(texels.GeometryX.G), Is.EqualTo(0.1f).Within(0.001f));
+        Assert.That(Mathf.HalfToFloat(texels.GeometryY.B), Is.EqualTo(0.4f).Within(0.001f));
     }
 
     [Test]
@@ -116,5 +128,27 @@ public class TerrainCellDataPackerTests
     public void ShortQuadIsRejected()
     {
         Assert.Throws<ArgumentException>(() => TerrainCellDataPacker.PackQuad(new TerrainVertex[3], 0));
+    }
+
+    [Test]
+    public void VertexStrideMatchesMeshLayout()
+    {
+        Assert.That(Marshal.SizeOf<TerrainVertex>(), Is.EqualTo(84));
+    }
+
+    [Test]
+    public void CellGeometryUsesOneCanonicalCornerOrder()
+    {
+        TerrainCellGeometry geometry = TerrainCellGeometry.FromOffsets(
+            new Vector3(-2f / 32f, 1f / 32f, 0f),
+            new Vector3(3f / 32f, -1f / 32f, 0f),
+            new Vector3(0f, 2f / 32f, 0f),
+            new Vector3(-1f / 32f, 0f, 0f));
+
+        Assert.That(geometry.Corner00, Is.EqualTo(new Vector2(-2f / 32f, 1f / 32f)));
+        Assert.That(geometry.Corner10, Is.EqualTo(new Vector2(1f + 3f / 32f, -1f / 32f)));
+        Assert.That(geometry.Corner11, Is.EqualTo(new Vector2(1f, 1f + 2f / 32f)));
+        Assert.That(geometry.Corner01, Is.EqualTo(new Vector2(-1f / 32f, 1f)));
+        Assert.That(geometry.IsAnchored, Is.True);
     }
 }

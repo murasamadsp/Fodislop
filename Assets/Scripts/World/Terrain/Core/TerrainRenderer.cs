@@ -1,32 +1,40 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces.Diagnostics;
+using Kern.Core.Interfaces.Diagnostics;
 using System;
-using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.World.Lighting;
-using Fodinae.World.Lighting.Quality;
-using Fodinae.World.Terrain.Background;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
+using Kern.World.Lighting;
+using Kern.World.Lighting.Quality;
 using MinesServer.Data;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VContainer;
 
-namespace Fodinae.World.Terrain
+namespace Kern.World.Terrain
 {
+    /// <summary>
+    /// Жизненный цикл террейна в сцене и порядок одного кадра.
+    /// </summary>
+    ///
+    /// Здесь не считается ничего. Кадр — это последовательность вызовов:
+    /// разрешить камеру → выбрать план кадра (<see cref="TerrainFramePlanner"/>)
+    /// → довести окно до плана (<see cref="TerrainWindow"/>) → выгрузить
+    /// тексели → поставить меш показа
+    /// (<see cref="TerrainPresentationWindow"/>) → отдать окно освещению.
+    /// Каждый шаг живёт отдельным типом, и искать его надо там.
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [DefaultExecutionOrder(100)]
-    public class TerrainRenderer : MonoBehaviour, ICachedCellDataProvider
+    public class TerrainRenderer : MonoBehaviour
     {
         [Header("Configuration")]
         [SerializeField]
         private float _cellSize = ProjectRuntimeContracts.World.CellSize;
         [SerializeField]
-        private Shader? _terrainShader;
+        private Shader? _terrainShader = null;
         [SerializeField]
         private string _sortingLayerName = "Default";
         [SerializeField]
@@ -36,18 +44,14 @@ namespace Fodinae.World.Terrain
         [SerializeField]
         private int _viewportPadding = 2;
 
-        private MeshFilter? _meshFilter;
-        private MeshRenderer? _meshRenderer;
-
         [Inject]
         private IWorldDataStorage _storage = null!;
-
+        [Inject]
+        private IConnectionService _connectionService = null!;
         [Inject]
         private MapManager _mapManager = null!;
-
         [Inject]
         private ITextureService _textureService = null!;
-
         [Inject]
         private IClientConfigManager _clientConfigManager = null!;
         [Inject]
@@ -63,73 +67,27 @@ namespace Fodinae.World.Terrain
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
 
-        private Camera? _mainCamera;
-
-        private readonly TerrainCellCache _cellCache = new();
-        private readonly TerrainPrecalculator _precalc = new();
-        private readonly TerrainCellBuilder _cellBuilder = new();
-        private readonly BackgroundFloodFill _backgroundFloodFill = new();
-        private readonly TerrainViewportCalculator _viewportCalculator = new();
-        private readonly TerrainMeshManager _meshManager = new();
-        private readonly TerrainMaterialManager _materialManager = new();
-        private readonly TerrainDoorOverlayRenderer _doorOverlayRenderer = new();
-        private readonly TerrainCellIdMesh _cellIdMesh = new();
-
-        // Экран рисует только видимое окно с полем: запас сетки нужен
-        // освещению и сдвигу, но не кадру.
-        private readonly TerrainCellIdMesh _visibleIdMesh = new();
-        private const int VisibleMarginCells = 2;
-        private Vector4 _viewOffset;
-        private int _visibleWidth;
-        private int _visibleHeight;
-        private int _visibleGridWidth;
-        private int _visibleGridHeight;
-        private readonly List<TerrainVertex> _doorOverlayVertices = [];
-        private bool _cellTexturesDirty = true;
-        private bool _cellsCommitted;
-        private List<int>[] _doorOverlaySubMeshIndices = Array.Empty<List<int>>();
-
-        private Vector2Int _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
-        private int _meshWidth;
-        private int _meshHeight;
-        private bool _isInitialized = false;
-        private bool _hasMissingTextures;
-        private bool _needsRefresh = false;
-        private bool _wasCpuMeshRebuildBypassed;
-        private readonly HashSet<CellType> _pendingTextureCellTypes = [];
-        private readonly DirtyRectSet _dirtyRects = new();
-        private bool _useColorLod = false;
-        private bool _fatalBuildError;
-        private IWorldLayer<CellType>? _subscribedCellLayer;
-        private ITextureService? _subscribedTextureService;
-        private MapManager? _subscribedMapManager;
-        private IWorldDataStorage? _subscribedStorage;
-
-        private static readonly ProfilerMarker _CacheMarker = new("Fodinae.Terrain.Cache");
-        private static readonly ProfilerMarker _PrecalculateMarker = new("Fodinae.Terrain.Precalculate");
-        private static readonly ProfilerMarker _FloodFillMarker = new("Fodinae.World.Terrain.BackgroundFloodFill");
-        private static readonly ProfilerMarker _MeshBuildMarker = new("Fodinae.Terrain.MeshBuild");
-        private static readonly ProfilerMarker _MeshUploadMarker = new("Fodinae.Terrain.MeshUpload");
         private static readonly ProfilerMarker _TerrainLateUpdateMarker =
-            new("Fodinae.Terrain.LateUpdate.CPU");
+            new("Kern.Terrain.LateUpdate.CPU");
 
         private static readonly AllocationLedger.Entry _AllocationEntry =
             AllocationLedger.Register("Террейн — LateUpdate");
-        private ulong _lightingGeometryRevision = 1;
 
-        // Причины пересборки меша — чтобы пик «сборка меша 125 мс» можно было
-        // приписать событию, а не гадать.
-        private static readonly RebuildLedger.Entry _RebuildResize = RebuildLedger.Register("Террейн · полная: смена размера сетки");
-        private static readonly RebuildLedger.Entry _RebuildGridMove = RebuildLedger.Register("Террейн · полная: сдвиг сетки");
-        private static readonly RebuildLedger.Entry _RebuildRefresh = RebuildLedger.Register("Террейн · полная: флаг обновления");
-        private static readonly RebuildLedger.Entry _RebuildPatch = RebuildLedger.Register("Террейн · частичная: изменённые клетки");
+        private readonly TerrainWindow _window = new();
+        private readonly TerrainFramePlanner _planner = new();
+        private readonly TerrainMeshManager _meshManager = new();
+        private readonly TerrainPresentationWindow _presentation = new();
+        private TerrainFrameDiagnostics? _diagnostics;
+        private TerrainClientConfigApplier? _configApplier;
 
+        private MeshFilter? _meshFilter;
+        private MeshRenderer? _meshRenderer;
+        private Camera? _mainCamera;
+        private TerrainSubscriptions? _subscriptions;
 
-        public CachedCellInfo GetCell(int x, int y)
-        {
-            var c = _cellCache.GetCellData(x, y);
-            return new CachedCellInfo { Type = c.Type, Properties = c.Properties };
-        }
+        private RectInt _lightingViewport;
+        private bool _fatalBuildError;
+        private ulong _terrainContentRevision = 1;
 
         public bool BypassCpuMeshRebuild
         {
@@ -143,14 +101,25 @@ namespace Fodinae.World.Terrain
             set => _debugSettings.BypassTerrainDraw = value;
         }
 
-        public ulong LightingGeometryRevision => _lightingGeometryRevision;
+        public ulong TerrainContentRevision => _terrainContentRevision;
+
+        private TerrainFrameDiagnostics Diagnostics => _diagnostics ??= new(_window);
+
+        private TerrainClientConfigApplier ConfigApplier => _configApplier ??= new(_window);
+
+        // Exposes the production builder's geometry evidence to PlayMode
+        // contract tests. A hand-authored cell-data texture can pass a shader
+        // test while the live scene still renders a rectangular CPU path; the
+        // count makes that divergence observable without a second renderer.
+        internal int LastFullBuildAnchoredForegroundCellCount =>
+            _window.Driver.Pipeline.CellBuilder.LastFullBuildAnchoredForegroundCellCount;
 
         public bool IsReadyForGameplay =>
-            _isInitialized &&
-            _cellIdMesh.Mesh != null &&
-            _cellsCommitted &&
-            _materialManager.Materials.Length > 0 &&
-            _pendingTextureCellTypes.Count == 0;
+            _window.IsInitialized &&
+            _window.CellIDMesh != null &&
+            _window.CellsCommitted &&
+            _window.Driver.Materials.Materials.Length > 0 &&
+            _window.PendingTextureCellTypes.Count == 0;
 
         public void ApplyClientConfig()
         {
@@ -161,255 +130,59 @@ namespace Fodinae.World.Terrain
                 throw new InvalidOperationException(
                     "TerrainRenderer requires an initialized ClientConfig.");
 
-            bool enableDistortion = config.Terrain.EnableDistortion;
-            if (_precalc.EnableDistortion != enableDistortion)
-            {
-                _precalc.EnableDistortion = enableDistortion;
-                _needsRefresh = true;
-            }
-
-            _materialManager.ApplyClientConfig(config);
-            Debug.Log($"[TerrainRenderer] ApplyClientConfig: distortion={enableDistortion}");
+            ConfigApplier.Apply(config);
+            _terrainContentRevision++;
         }
 
-        private void HandleCellChanged(int serverX, int serverY)
-        {
-            HandleRegionChanged(serverX, serverY, 1, 1);
-        }
-
-        private void HandleRegionChanged(
-            int serverX,
-            int serverY,
-            int width,
-            int height)
-        {
-            if (_mapManager == null || _lastGridPos.x == int.MinValue)
-            {
-                _needsRefresh = true;
-                return;
-            }
-
-            int lastServerY = serverY + Mathf.Max(0, height - 1);
-            int firstUnityY = Mathf.FloorToInt(
-                CoordinateUtils.ServerToUnityY(serverY, _mapManager.WorldHeight));
-            int lastUnityY = Mathf.FloorToInt(
-                CoordinateUtils.ServerToUnityY(lastServerY, _mapManager.WorldHeight));
-            int minimumUnityY = Mathf.Min(firstUnityY, lastUnityY);
-            int maximumUnityY = Mathf.Max(firstUnityY, lastUnityY);
-            bool affectsCachedTerrain =
-                serverX + width - 1 >= _lastGridPos.x - 1 &&
-                serverX <= _lastGridPos.x + _meshWidth &&
-                maximumUnityY >= _lastGridPos.y - 1 &&
-                minimumUnityY <= _lastGridPos.y + _meshHeight;
-            if (!affectsCachedTerrain)
-            {
-                return;
-            }
-
-            _lightingEngine?.InvalidateRegion(
-                serverX,
-                minimumUnityY,
-                width,
-                maximumUnityY - minimumUnityY + 1);
-
-            _dirtyRects.Add(
-                new RectInt(
-                    serverX,
-                    minimumUnityY,
-                    width,
-                    maximumUnityY + 1 - minimumUnityY),
-                new RectInt(_lastGridPos.x, _lastGridPos.y, _meshWidth, _meshHeight));
-        }
-
-        protected void Awake()
-        {
-            _materialManager.TerrainShader = _terrainShader;
-            _materialManager.InitializeShader();
-
-            _meshFilter = GetComponent<MeshFilter>();
-            _meshRenderer = GetComponent<MeshRenderer>();
-            _mainCamera = _gameplayCamera?.Camera;
-
-            if (_meshRenderer != null)
-            {
-                _meshRenderer.enabled = true;
-                _meshRenderer.sortingLayerName = _sortingLayerName;
-                _meshRenderer.sortingOrder = _sortingOrder;
-            }
-        }
-
-        protected void Start()
-        {
-            _mainCamera = _gameplayCamera?.Camera;
-        }
-
-        public void InitializeEditorPreview(IWorldDataStorage storage, MapManager mapManager, ITextureService textureService)
+        public void InitializeEditorPreview(
+            IWorldDataStorage storage,
+            MapManager mapManager,
+            ITextureService textureService)
         {
             _storage = storage;
             _mapManager = mapManager;
             _textureService = textureService;
-            _meshFilter ??= GetComponent<MeshFilter>();
-            _meshRenderer ??= GetComponent<MeshRenderer>();
-            if (_mainCamera == null)
-            {
-                _mainCamera = _gameplayCamera?.Camera;
-            }
-
-            _materialManager.TerrainShader = _terrainShader;
-            _materialManager.InitializeShader();
-            if (_meshRenderer != null)
-            {
-                _meshRenderer.enabled = true;
-                _meshRenderer.sortingLayerName = _sortingLayerName;
-                _meshRenderer.sortingOrder = _sortingOrder;
-            }
-
+            InitializeSceneBindings();
             EnsureSubscriptions();
-            _needsRefresh = true;
+            _window.NeedsRefresh = true;
         }
 
         public void EnsureSubscriptions()
         {
-            SubscribeToCellLayer();
-            if (_subscribedStorage != null)
-            {
-                _subscribedStorage.CellChanged -= HandleCellChanged;
-                _subscribedStorage.RegionChanged -= HandleRegionChanged;
-            }
-
-            _subscribedStorage = _storage;
-            if (_subscribedStorage != null)
-            {
-                _subscribedStorage.CellChanged += HandleCellChanged;
-                _subscribedStorage.RegionChanged += HandleRegionChanged;
-            }
-
-            if (_subscribedTextureService != null)
-            {
-                _subscribedTextureService.OnTextureLoaded -= OnTextureLoaded;
-            }
-
-            _subscribedTextureService = _textureService;
-            if (_subscribedTextureService != null)
-            {
-                _subscribedTextureService.OnTextureLoaded += OnTextureLoaded;
-            }
-
-            if (_subscribedMapManager != null)
-            {
-                _subscribedMapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
-            }
-
-            _subscribedMapManager = _mapManager;
-            if (_subscribedMapManager != null)
-            {
-                _subscribedMapManager.OnWorldDataLoaded += OnWorldDataLoaded;
-            }
+            _subscriptions ??= new TerrainSubscriptions(
+                HandleCellChanged,
+                HandleRegionChanged,
+                OnTextureLoaded,
+                OnWorldDataLoaded,
+                OnCellLayerChunkLoaded);
+            _subscriptions.Bind(_storage, _textureService, _mapManager);
         }
+
+        public void RenderLightingMaterialFields(
+            CommandBuffer commandBuffer,
+            RenderTexture materialField,
+            RenderTexture emissionField,
+            Vector4 worldRect) =>
+            _meshManager.RenderLightingMaterialFields(
+                commandBuffer,
+                materialField,
+                emissionField,
+                worldRect,
+                transform.localToWorldMatrix,
+                _window.Driver.Materials.CellMaterials,
+                _window.CellIDMesh,
+                _presentation.ViewOffset);
+
+        protected void Awake() => InitializeSceneBindings();
+
+        protected void Start() => _mainCamera = _gameplayCamera?.Camera;
 
         protected void OnDestroy()
         {
-
-            if (_subscribedStorage != null)
-            {
-                _subscribedStorage.CellChanged -= HandleCellChanged;
-                _subscribedStorage.RegionChanged -= HandleRegionChanged;
-                _subscribedStorage = null;
-            }
-
-            if (_subscribedTextureService != null)
-            {
-                _subscribedTextureService.OnTextureLoaded -= OnTextureLoaded;
-                _subscribedTextureService = null;
-            }
-
-            if (_subscribedMapManager != null)
-            {
-                _subscribedMapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
-                _subscribedMapManager = null;
-            }
-
-            if (_subscribedCellLayer != null)
-            {
-                _subscribedCellLayer.ChunkLoaded -= OnCellLayerChunkLoaded;
-                _subscribedCellLayer = null;
-            }
-
-            _cellIdMesh.Dispose();
-            _visibleIdMesh.Dispose();
-            _cellBuilder.Dispose();
-            _doorOverlayRenderer.Dispose();
-            _materialManager.CleanupMaterials();
-        }
-
-        private int _diagLogged;
-
-        [System.Diagnostics.Conditional("FODINAE_TERRAIN_DIAG")]
-        private void LogDiag(int bit, string message)
-        {
-            if ((_diagLogged & bit) != 0)
-            {
-                return;
-            }
-
-            _diagLogged |= bit;
-            Debug.Log(message);
-        }
-
-        private void OnTextureLoaded(string filename, Texture2D texture)
-        {
-            if ((_diagLogged & (1 << 9)) == 0)
-            {
-                LogDiag(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
-            }
-
-            if (filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase))
-            {
-                _materialManager.TerrainShader = _terrainShader;
-                _materialManager.InitializeShader();
-                int extensionIndex = filename.LastIndexOf('.');
-                ReadOnlySpan<char> id = filename.AsSpan(
-                    "Cells/".Length,
-                    (extensionIndex >= 0 ? extensionIndex : filename.Length) - "Cells/".Length);
-                if (int.TryParse(id, out int cellTypeId) &&
-                    (uint)cellTypeId <= ushort.MaxValue)
-                {
-                    _pendingTextureCellTypes.Add((CellType)cellTypeId);
-                }
-            }
-        }
-
-        private void OnWorldDataLoaded()
-        {
-            SubscribeToCellLayer();
-            _needsRefresh = true;
-            _lightingGeometryRevision++;
-            _lightingEngine?.InvalidateStaticCache();
-        }
-
-        private void SubscribeToCellLayer()
-        {
-            IWorldLayer<CellType>? cellLayer = _storage?.CellLayer;
-            if (ReferenceEquals(_subscribedCellLayer, cellLayer))
-            {
-                return;
-            }
-
-            if (_subscribedCellLayer != null)
-            {
-                _subscribedCellLayer.ChunkLoaded -= OnCellLayerChunkLoaded;
-            }
-
-            _subscribedCellLayer = cellLayer;
-            if (_subscribedCellLayer != null)
-            {
-                _subscribedCellLayer.ChunkLoaded += OnCellLayerChunkLoaded;
-            }
-        }
-
-        private void OnCellLayerChunkLoaded(int serverX, int serverY, int width, int height)
-        {
-            HandleRegionChanged(serverX, serverY, width, height);
+            _subscriptions?.Dispose();
+            _subscriptions = null;
+            _presentation.Dispose();
+            _window.Dispose();
         }
 
         protected void LateUpdate()
@@ -420,8 +193,8 @@ namespace Fodinae.World.Terrain
             }
 
             using var terrainLateUpdateMarker = _TerrainLateUpdateMarker.Auto();
-
             using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
+            long stallStart = TerrainStallReport.Begin();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
                 return;
@@ -432,11 +205,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            if ((_diagLogged & (1 << 1)) == 0)
-            {
-                LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
-            }
-
+            Diagnostics.Mark(1 << 1, "[TerrainDiag] gate passed: storage ready");
             if (!TryResolveCamera())
             {
                 return;
@@ -448,46 +217,213 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            UpdateViewportDimensions(
-                lightingEngine,
-                out int requestedWidth,
-                out int requestedHeight,
-                out int effectiveViewportPadding,
-                out bool dimensionsChanged);
-
-            ResolveGridPosition(
-                requestedWidth,
-                requestedHeight,
-                effectiveViewportPadding,
-                dimensionsChanged,
-                out Vector2Int currentGridPos,
-                out int viewportMinX,
-                out int viewportMinY,
-                out int viewportWidth,
-                out int viewportHeight);
+            long planStart = TerrainStallReport.Begin();
+            TerrainFramePlan framePlan = _planner.Plan(
+                _mainCamera!,
+                _cellSize,
+                _viewportPadding,
+                lightingEngine.RequiredTerrainPadding,
+                lightingEngine.StableRegionPaddingCells,
+                _window.Origin,
+                _window.Width,
+                _window.Height,
+                _window.IsInitialized,
+                _window.CellsCommitted,
+                _lightingViewport,
+                _storage,
+                _mapManager,
+                _connectionService,
+                _telemetry);
+            float planMs = TerrainStallReport.ElapsedMs(planStart);
+            if (!framePlan.ShouldProcess)
+            {
+                return;
+            }
 
             if (_meshRenderer != null)
             {
                 _meshRenderer.enabled = !BypassTerrainDraw;
             }
 
-            if (_pendingTextureCellTypes.Count > 0 && !BypassCpuMeshRebuild)
+            float refreshTextureMs = 0f;
+            if (_window.PendingTextureCellTypes.Count > 0 &&
+                !BypassCpuMeshRebuild &&
+                _window.CellsCommitted)
             {
-                UpdateTextureCells(currentGridPos.x, currentGridPos.y);
-                _pendingTextureCellTypes.Clear();
-                _cellTexturesDirty = true;
+                // Поле материалов семплит альбедо и эмиссию из атласа: новые
+                // rect'ы меняют его содержимое без смены геометрии. Без бампа
+                // ревизии поле осталось бы с чёрным/старым альбедо (и без
+                // свечения) до первой копки или сдвига региона — светящиеся
+                // кристаллы гасли навсегда.
+                long refreshStart = TerrainStallReport.Begin();
+                if (_window.RefreshPendingTextureCells(
+                    Services,
+                    _window.NeedsRefresh || framePlan.DimensionsChanged))
+                {
+                    _terrainContentRevision++;
+                }
+
+                refreshTextureMs = TerrainStallReport.ElapsedMs(refreshStart);
             }
 
-            _telemetry.ResetFrameTimers();
-            CoalesceOversizedDirtyRects();
+            long dimensionsStart = TerrainStallReport.Begin();
+            _window.ApplyDimensions(framePlan.ActiveWindow.Size, framePlan.DimensionsChanged);
+            _window.CoalesceDirtyRects();
+            float dimensionsMs = TerrainStallReport.ElapsedMs(dimensionsStart);
 
-            RebuildOrPatchTerrain(currentGridPos, dimensionsChanged);
-            SyncCellTextures();
-            UpdateVisibleWindow(viewportMinX, viewportMinY, viewportWidth, viewportHeight);
+            // Снимок до Process: он чистит набор заплаток, а в отчёт нужно
+            // то, чем кадр был занят, а не то, что от него осталось.
+            int dirtyRectCount = _window.Dirty.Rects.Count;
+            long dirtyArea = _window.Dirty.Rects.TotalArea;
+            long processStart = TerrainStallReport.Begin();
+            if (!_window.Process(
+                Services,
+                _clientConfigManager,
+                framePlan.ActiveWindow.Origin,
+                framePlan.DimensionsChanged,
+                BypassCpuMeshRebuild,
+                _meshRenderer,
+                out Exception? failure))
+            {
+                _fatalBuildError = Diagnostics.ReportBuildFailure(
+                    failure,
+                    framePlan.ActiveWindow.Origin,
+                    _mapManager,
+                    _textureService,
+                    _storage);
+                return;
+            }
 
-            // Свет считается ровно в прямоугольнике сетки: поле препятствий
-            // рисует её меш, за краем сетки поле пустое.
-            PublishLightingUpdate(lightingEngine, currentGridPos.x, currentGridPos.y, _meshWidth, _meshHeight);
+            float processMs = TerrainStallReport.ElapsedMs(processStart);
+            float uploadMs = _window.Commit();
+            if (uploadMs > 0f)
+            {
+                _telemetry.TerrainGpuUploadTimeMs = uploadMs;
+            }
+
+            // Меш показа ставится только по собранному окну: до первой
+            // выгрузки текселей его размеры не с чем согласовывать.
+            if (_window.CellsCommitted && _window.HasOrigin &&
+                _window.Width > 0 && _window.Height > 0)
+            {
+                _presentation.Update(
+                    _planner.Policy,
+                    framePlan.CameraViewport,
+                    _window.Origin,
+                    _window.Width,
+                    _window.Height,
+                    _cellSize,
+                    _meshFilter);
+            }
+
+            // Terrain cache и lighting cache имеют разные окна жизни. Terrain
+            // может сдвинуться на выровненную границу, пока камера всё ещё
+            // находится внутри стабильного lighting region.
+            PublishLightingUpdate(lightingEngine, framePlan.LightingViewport);
+            _lightingViewport = framePlan.LightingViewport;
+            lightingEngine.CaptureBudgetViolationIfNeeded();
+
+            Diagnostics.Record(
+                stallStart,
+                _telemetry,
+                new TerrainFrameTimings(
+                    planMs,
+                    dimensionsMs,
+                    refreshTextureMs,
+                    processMs,
+                    uploadMs,
+                    dirtyRectCount,
+                    dirtyArea));
+        }
+
+        private TerrainBuildServices Services =>
+            new(
+                _storage,
+                _mapManager,
+                _textureService ?? throw new InvalidOperationException(
+                    "TerrainRenderer requires ITextureService injection."),
+                _telemetry);
+
+        private void InitializeSceneBindings()
+        {
+            _meshFilter ??= GetComponent<MeshFilter>();
+            _meshRenderer ??= GetComponent<MeshRenderer>();
+            _mainCamera ??= _gameplayCamera?.Camera;
+
+            _window.Driver.Materials.TerrainShader = _terrainShader;
+            _window.Driver.Materials.InitializeShader();
+            _window.Attach(
+                transform,
+                _sceneObjects,
+                _sortingLayerName,
+                _doorOverlaySortingOrder,
+                _cellSize);
+
+            if (_meshRenderer == null)
+            {
+                return;
+            }
+
+            _meshRenderer.enabled = true;
+            _meshRenderer.sortingLayerName = _sortingLayerName;
+            _meshRenderer.sortingOrder = _sortingOrder;
+        }
+
+        private void HandleCellChanged(int serverX, int serverY) =>
+            HandleRegionChanged(serverX, serverY, 1, 1);
+
+        private void HandleRegionChanged(int serverX, int serverY, int width, int height)
+        {
+            if (_mapManager == null || !_window.HasOrigin)
+            {
+                _window.NeedsRefresh = true;
+                return;
+            }
+
+            RectInt? changed = _window.Dirty.Add(
+                serverX, serverY, width, height,
+                _window.Origin, _window.Width, _window.Height, _mapManager.WorldHeight);
+            if (changed is { } region)
+            {
+                _lightingEngine?.InvalidateRegion(
+                    region.x, region.y, region.width, region.height);
+            }
+        }
+
+        private void OnTextureLoaded(string filename, Texture2D texture)
+        {
+            Diagnostics.Mark(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
+
+            if (TerrainCellTextureName.TryParseCellType(filename, out CellType cellType))
+            {
+                _window.Driver.Materials.TerrainShader = _terrainShader;
+                _window.Driver.Materials.InitializeShader();
+                _window.PendingTextureCellTypes.Add(cellType);
+            }
+            else if (TerrainCellTextureName.IsDecalAtlas(filename))
+            {
+                if (_textureService != null)
+                {
+                    _window.Driver.Materials.BindAtlasTextures(
+                        _textureService.GetAllAtlases(), _textureService);
+                }
+
+                _window.NeedsRefresh = true;
+            }
+        }
+
+        private void OnWorldDataLoaded()
+        {
+            EnsureSubscriptions();
+            _window.NeedsRefresh = true;
+            _terrainContentRevision++;
+            _lightingEngine?.InvalidateStaticCache();
+        }
+
+        private void OnCellLayerChunkLoaded(int serverX, int serverY, int width, int height)
+        {
+            _telemetry.TerrainChunkLoadCount++;
+            HandleRegionChanged(serverX, serverY, width, height);
         }
 
         private bool TryResolveCamera()
@@ -500,15 +436,11 @@ namespace Fodinae.World.Terrain
 
             if (_mainCamera == null)
             {
-                LogDiag(1 << 2, "[TerrainDiag] camera NULL");
+                Diagnostics.Mark(1 << 2, "[TerrainDiag] camera NULL");
                 return false;
             }
 
-            if ((_diagLogged & (1 << 3)) == 0)
-            {
-                LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
-            }
-
+            Diagnostics.Mark(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             return true;
         }
 
@@ -529,511 +461,25 @@ namespace Fodinae.World.Terrain
             return lightingEngine;
         }
 
-        private void UpdateViewportDimensions(
-            LightingEngine lightingEngine,
-            out int requestedWidth,
-            out int requestedHeight,
-            out int effectiveViewportPadding,
-            out bool dimensionsChanged)
+        private void PublishLightingUpdate(LightingEngine lightingEngine, RectInt viewport)
         {
-            _viewportCalculator.CalculateDimensions(
-                _mainCamera!,
-                _cellSize,
-                _viewportPadding,
-                lightingEngine.RequiredTerrainPadding,
-                lightingEngine.StableRegionPaddingCells,
-                _meshWidth,
-                _meshHeight,
-                _isInitialized,
-                out int targetWidth,
-                out int targetHeight,
-                out effectiveViewportPadding,
-                out requestedWidth,
-                out requestedHeight,
-                out dimensionsChanged);
-
-            if (dimensionsChanged || !_isInitialized)
-            {
-                _meshWidth = targetWidth;
-                _meshHeight = targetHeight;
-                _isInitialized = true;
-                _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
-                _cellCache.EnsureCapacity(_meshWidth, _meshHeight);
-                _precalc.EnsureCapacity(_meshWidth, _meshHeight);
-                _cellBuilder.EnsureCapacity(_meshWidth, _meshHeight, _cellSize);
-                _cellIdMesh.EnsureSize(_meshWidth, _meshHeight, _cellSize);
-                _backgroundFloodFill.Allocate(_meshWidth, _meshHeight);
-
-                _needsRefresh = true;
-            }
-        }
-
-        private void ResolveGridPosition(
-            int requestedWidth,
-            int requestedHeight,
-            int effectiveViewportPadding,
-            bool dimensionsChanged,
-            out Vector2Int currentGridPos,
-            out int viewportMinX,
-            out int viewportMinY,
-            out int viewportWidth,
-            out int viewportHeight)
-        {
-            currentGridPos = _viewportCalculator.ResolveGridPosition(
-                _mainCamera!,
-                _cellSize,
-                _meshWidth,
-                _meshHeight,
-                requestedWidth,
-                requestedHeight,
-                effectiveViewportPadding,
-                dimensionsChanged,
-                _lastGridPos,
-                out viewportMinX,
-                out viewportMinY,
-                out viewportWidth,
-                out viewportHeight);
-        }
-
-        private void CoalesceOversizedDirtyRects()
-        {
-            if (!_dirtyRects.IsEmpty && _meshWidth > 0 && _meshHeight > 0)
-            {
-                if (_dirtyRects.TotalArea * 2 >= (long)_meshWidth * _meshHeight)
-                {
-                    _needsRefresh = true;
-                    _dirtyRects.Clear();
-                }
-            }
-        }
-
-        private void RebuildOrPatchTerrain(Vector2Int currentGridPos, bool dimensionsChanged)
-        {
-            if (BypassCpuMeshRebuild)
-            {
-                _wasCpuMeshRebuildBypassed = true;
-                return;
-            }
-
-            if (_wasCpuMeshRebuildBypassed)
-            {
-                _wasCpuMeshRebuildBypassed = false;
-                _needsRefresh = true;
-            }
-
-            bool terrainWasRebuilt = currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged;
-            if (terrainWasRebuilt)
-            {
-                RebuildLedger.Count(
-                    dimensionsChanged ? _RebuildResize
-                    : currentGridPos != _lastGridPos ? _RebuildGridMove
-                    : _RebuildRefresh);
-                transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
-                _lastGridPos = currentGridPos;
-
-                UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
-                _cellTexturesDirty = true;
-                _lightingGeometryRevision++;
-                _dirtyRects.Clear();
-
-                // Сброса кэша здесь нет намеренно: ревизия геометрии поднята
-                // строкой выше, а её изменение и так заставляет освещение
-                // перерисовать поле. Второй повод к тому же действию только
-                // добавлял работы.
-            }
-            else if (!_dirtyRects.IsEmpty)
-            {
-                RebuildLedger.Count(_RebuildPatch);
-                UpdateDirtyCells(currentGridPos.x, currentGridPos.y);
-                _cellTexturesDirty = true;
-                _lightingGeometryRevision++;
-                _dirtyRects.Clear();
-            }
-        }
-
-        private void PublishLightingUpdate(
-            LightingEngine lightingEngine,
-            int viewportMinX,
-            int viewportMinY,
-            int viewportWidth,
-            int viewportHeight)
-        {
-            if (_mainCamera != null &&
-                _mainCamera.orthographic &&
-                lightingEngine.ActiveLightingQuality != LightingQualityMode.Off)
-            {
-                lightingEngine.UpdateLighting(
-                    viewportMinX,
-                    viewportMinY,
-                    viewportWidth,
-                    viewportHeight,
-                    _mainCamera,
-                    _storage,
-                    _mapManager,
-                    this);
-                _materialManager.ValidateLightingBinding();
-            }
-        }
-
-        public void RenderLightingMaterialFields(
-            CommandBuffer commandBuffer,
-            RenderTexture materialField,
-            RenderTexture emissionField,
-            Vector4 worldRect)
-        {
-            _meshManager.RenderLightingMaterialFields(
-                commandBuffer,
-                materialField,
-                emissionField,
-                worldRect,
-                transform.localToWorldMatrix,
-                _materialManager.CellMaterials,
-                _cellIdMesh.Mesh,
-                _viewOffset);
-        }
-
-        private void UpdateVisibleWindow(int viewportMinX, int viewportMinY, int viewportWidth, int viewportHeight)
-        {
-            if (!_cellsCommitted || _meshWidth <= 0 || _meshHeight <= 0 || _lastGridPos.x == int.MinValue)
+            if (_mainCamera == null ||
+                !_mainCamera.orthographic ||
+                lightingEngine.ActiveLightingQuality == LightingQualityMode.Off)
             {
                 return;
             }
 
-            // Размер окна гуляет на клетку при движении камеры внутри клетки,
-            // и меш пересоздавался почти каждый кадр. Размер округляется до 8
-            // и только растёт, пока не сменится сама сетка.
-            if (_visibleGridWidth != _meshWidth || _visibleGridHeight != _meshHeight)
-            {
-                _visibleGridWidth = _meshWidth;
-                _visibleGridHeight = _meshHeight;
-                _visibleWidth = 0;
-                _visibleHeight = 0;
-            }
-
-            int wantedWidth = ((viewportWidth + (VisibleMarginCells * 2) + 7) / 8) * 8;
-            int wantedHeight = ((viewportHeight + (VisibleMarginCells * 2) + 7) / 8) * 8;
-            _visibleWidth = Mathf.Clamp(Mathf.Max(_visibleWidth, wantedWidth), 1, _meshWidth);
-            _visibleHeight = Mathf.Clamp(Mathf.Max(_visibleHeight, wantedHeight), 1, _meshHeight);
-            int width = _visibleWidth;
-            int height = _visibleHeight;
-            viewportMinX -= (width - viewportWidth - (VisibleMarginCells * 2)) / 2;
-            viewportMinY -= (height - viewportHeight - (VisibleMarginCells * 2)) / 2;
-            int offsetX = Mathf.Clamp(viewportMinX - VisibleMarginCells - _lastGridPos.x, 0, _meshWidth - width);
-            int offsetY = Mathf.Clamp(viewportMinY - VisibleMarginCells - _lastGridPos.y, 0, _meshHeight - height);
-
-            _visibleIdMesh.EnsureSize(width, height, _cellSize, _meshWidth, _meshHeight);
-            var offset = new Vector4(offsetX, offsetY, 0f, 0f);
-            if (offset != _viewOffset)
-            {
-                _viewOffset = offset;
-                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, offset);
-            }
-
-            if (_meshFilter != null && _meshFilter.sharedMesh != _visibleIdMesh.Mesh)
-            {
-                _meshFilter.sharedMesh = _visibleIdMesh.Mesh;
-                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, _viewOffset);
-            }
-        }
-
-        // Одна выгрузка текселей за кадр, после сборки или заплатки. Начало
-        // окна публикуется вместе с ними: шейдер берёт по нему кольцевой адрес.
-        private void SyncCellTextures()
-        {
-            if (!_cellTexturesDirty || _lastGridPos.x == int.MinValue || _cellIdMesh.Mesh == null)
-            {
-                return;
-            }
-
-            _cellTexturesDirty = false;
-            long swUpload = System.Diagnostics.Stopwatch.GetTimestamp();
-            using (_MeshUploadMarker.Auto())
-            {
-                _cellBuilder.Commit(_precalc, _lastGridPos.x, _lastGridPos.y);
-            }
-
-            _telemetry.TerrainGpuUploadTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swUpload) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-            _cellsCommitted = true;
-        }
-
-        private TerrainCellSources CreateCellSources(
-            IReadOnlyList<IAtlasDescriptor> atlases,
-            ITextureService textureService) =>
-            new(
-                _cellCache,
-                _precalc,
-                _backgroundFloodFill,
-                _mapManager.WorldWidth,
-                _mapManager.WorldHeight,
-                atlases,
-                _useColorLod,
+            lightingEngine.UpdateLighting(
+                viewport.x,
+                viewport.y,
+                viewport.width,
+                viewport.height,
+                _mainCamera,
+                _storage,
                 _mapManager,
-                textureService);
-
-        private void UpdateVertexAttributes(int minX, int minY)
-        {
-            if ((_diagLogged & (1 << 4)) == 0)
-            {
-                LogDiag(1 << 4, $"[TerrainDiag] UpdateVertexAttributes min=({minX},{minY}) size={_meshWidth}x{_meshHeight}");
-            }
-
-            ITextureService textureService = _textureService ??
-                throw new InvalidOperationException("TerrainRenderer requires ITextureService injection.");
-            if (_mapManager == null || _storage == null)
-            {
-                if ((_diagLogged & (1 << 5)) == 0)
-                {
-                    LogDiag(1 << 5, $"[TerrainDiag] BAIL: textureService=ok mapManager={(_mapManager == null ? "NULL" : "ok")}");
-                }
-
-                return;
-            }
-
-            var atlases = textureService.GetAllAtlases();
-            if (atlases == null || atlases.Count == 0)
-            {
-                LogDiag(1 << 6, "[TerrainDiag] BAIL: atlases empty");
-                return;
-            }
-
-            if ((_diagLogged & (1 << 7)) == 0)
-            {
-                LogDiag(1 << 7, $"[TerrainDiag] atlases: {atlases.Count}");
-            }
-
-            bool materialsChanged = _materialManager.EnsureMaterials(
-                atlases,
-                _meshWidth,
-                _meshHeight,
-                _clientConfigManager,
-                _cellCache);
-
-            textureService.FlushDirtyAtlases();
-
-            try
-            {
-                int cacheDeltaX = (minX - 1) - _cellCache.CacheMinX;
-                int cacheDeltaY = (minY - 1) - _cellCache.CacheMinY;
-                bool canScrollCache =
-                    !_needsRefresh &&
-                    _cellCache.CacheMinX != int.MinValue &&
-                    Mathf.Abs(cacheDeltaX) < _cellCache.CacheWidth &&
-                    Mathf.Abs(cacheDeltaY) < _cellCache.CacheHeight;
-                _telemetry.TerrainRebuildCount++;
-                long swCache = System.Diagnostics.Stopwatch.GetTimestamp();
-                using (_CacheMarker.Auto())
-                {
-                    if (canScrollCache)
-                    {
-                        _cellCache.ScrollAndFill(cacheDeltaX, cacheDeltaY, _storage, _mapManager, textureService, atlases);
-                    }
-                    else
-                    {
-                        _telemetry.TerrainFullPopulateCount++;
-                        _cellCache.PopulateFull(minX, minY, _storage, _mapManager, textureService, atlases);
-                    }
-                }
-
-                _telemetry.TerrainCacheTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swCache) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-
-                using (_PrecalculateMarker.Auto())
-                {
-                    if (canScrollCache)
-                    {
-                        _precalc.PrecalculateIncremental(_cellCache, _meshWidth, _meshHeight, cacheDeltaX, cacheDeltaY, _mapManager.WorldWidth, _mapManager.WorldHeight);
-                    }
-                    else
-                    {
-                        _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight);
-                    }
-                }
-
-                long swFlood = System.Diagnostics.Stopwatch.GetTimestamp();
-                using (_FloodFillMarker.Auto())
-                {
-                    // Тем же сдвигом, что кэш и предрасчёт выше: иначе на
-                    // каждом переходе через границу региона заливка одна
-                    // платила по площади за то, что сдвинулось на кайму.
-                    if (canScrollCache)
-                    {
-                        _backgroundFloodFill.ComputeScrolled(cacheDeltaX, cacheDeltaY, this);
-                    }
-                    else
-                    {
-                        _backgroundFloodFill.ComputeFull(this);
-                    }
-                }
-
-                _telemetry.TerrainFloodFillTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swFlood) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-
-                long swMesh = System.Diagnostics.Stopwatch.GetTimestamp();
-                TerrainCellSources sources = CreateCellSources(atlases, textureService);
-                using (_MeshBuildMarker.Auto())
-                {
-                    // Тексели лежат по кольцевому адресу и при сдвиге не
-                    // двигаются: собирается только вошедшая полоса. Полная
-                    // сборка остаётся там, где переносить нечего, и при смене
-                    // набора атласов — индексы атласов в текселях считаны по
-                    // старому набору.
-                    if (canScrollCache && !materialsChanged)
-                    {
-                        _cellBuilder.ScrollAndBuildBand(sources, minX, minY, cacheDeltaX, cacheDeltaY);
-                    }
-                    else
-                    {
-                        _cellBuilder.BuildFull(sources, minX, minY);
-                    }
-                }
-
-                _telemetry.TerrainMeshTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swMesh) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-
-                if ((_diagLogged & (1 << 8)) == 0)
-                {
-                    LogDiag(
-                        1 << 8,
-                        "[TerrainDiag] BuildFull: grid=(" +
-                        $"{_lastGridPos.x},{_lastGridPos.y}) " +
-                        $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
-                        $"cells={_meshWidth}x{_meshHeight} transform={transform.position}");
-                }
-
-                _materialManager.BindAtlasTextures(atlases, textureService);
-                RebuildDoorOverlay(sources, minX, minY);
-
-                _needsRefresh = false;
-            }
-            catch (Exception ex)
-            {
-                _fatalBuildError = true;
-                Debug.LogException(new InvalidOperationException(
-                    $"[TerrainRenderer] Build failed: grid=({minX},{minY}) " +
-                    $"size={_meshWidth}x{_meshHeight}, world=" +
-                    $"{_mapManager?.WorldWidth ?? 0}x{_mapManager?.WorldHeight ?? 0}, " +
-                    $"atlases={_textureService?.GetAllAtlases().Count ?? 0}, " +
-                    $"storageReady={_storage?.IsReady ?? false}.",
-                    ex));
-            }
-
-            if (materialsChanged && _meshRenderer != null)
-            {
-                _meshRenderer.sharedMaterials = _materialManager.CellMaterials;
-            }
-        }
-
-        private void UpdateDirtyCells(int minX, int minY)
-        {
-            if (_dirtyRects.IsEmpty)
-            {
-                return;
-            }
-
-            if (_storage == null || !_storage.IsReady || _mapManager == null || _cellIdMesh.Mesh == null)
-            {
-                return;
-            }
-
-            ITextureService? textureService = _textureService ?? _subscribedTextureService;
-            if (textureService == null)
-            {
-                return;
-            }
-
-            var atlases = textureService.GetAllAtlases();
-            if (atlases == null || atlases.Count == 0 || _materialManager.Materials.Length == 0)
-            {
-                return;
-            }
-
-            _telemetry.TerrainDirtyPatchCount++;
-
-            TerrainCellSources sources = CreateCellSources(atlases, textureService);
-            bool doorsTouched = false;
-            for (int i = 0; i < _dirtyRects.Count; i++)
-            {
-                RectInt rect = _dirtyRects[i];
-
-                int dirtyMinX = rect.xMin - 1;
-                int dirtyMaxX = rect.xMax + 1;
-                int dirtyMinY = rect.yMin - 1;
-                int dirtyMaxY = rect.yMax + 1;
-
-                int localStartX = dirtyMinX - minX;
-                int localStartY = dirtyMinY - minY;
-                int countX = dirtyMaxX - dirtyMinX;
-                int countY = dirtyMaxY - dirtyMinY;
-
-                _cellCache.UpdateRegion(dirtyMinX, dirtyMinY, countX, countY, _storage, _mapManager, textureService, atlases);
-                _precalc.PrecalculateRegion(_cellCache, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight);
-                _backgroundFloodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, this);
-                _cellBuilder.BuildRegion(sources, minX, minY, localStartX, localStartY, countX, countY);
-                doorsTouched |= _cellBuilder.DoorsTouched;
-            }
-
-            // Накладка пересобирается, только если заплатка задела двери:
-            // заплатка на ходу есть почти в каждом кадре, а двери в ней редки.
-            if (doorsTouched)
-            {
-                RebuildDoorOverlay(sources, minX, minY);
-            }
-        }
-
-        private void UpdateTextureCells(int minX, int minY)
-        {
-            if (_mapManager == null || _cellIdMesh.Mesh == null || _textureService == null)
-            {
-                return;
-            }
-
-            IReadOnlyList<IAtlasDescriptor> atlases = _textureService.GetAllAtlases();
-            if (atlases.Count == 0 || _materialManager.Materials.Length == 0)
-            {
-                return;
-            }
-
-            _textureService.FlushDirtyAtlases();
-            _cellCache.RefreshTextureMetadata(
-                _pendingTextureCellTypes,
-                _mapManager,
-                _textureService,
-                atlases);
-            TerrainCellSources sources = CreateCellSources(atlases, _textureService);
-            _cellBuilder.BuildTextureCells(_pendingTextureCellTypes, sources, minX, minY);
-            _materialManager.BindAtlasTextures(atlases, _textureService);
-            if (_cellBuilder.DoorsTouched)
-            {
-                RebuildDoorOverlay(sources, minX, minY);
-            }
-        }
-
-        private void EnsureDoorOverlayIndices(int atlasCount)
-        {
-            if (_doorOverlaySubMeshIndices.Length == atlasCount)
-            {
-                return;
-            }
-
-            _doorOverlaySubMeshIndices = new List<int>[atlasCount];
-            for (int atlasIndex = 0; atlasIndex < atlasCount; atlasIndex++)
-            {
-                _doorOverlaySubMeshIndices[atlasIndex] = [];
-            }
-        }
-
-        private void RebuildDoorOverlay(TerrainCellSources sources, int minX, int minY)
-        {
-            EnsureDoorOverlayIndices(sources.Atlases.Count);
-            _cellBuilder.BuildDoorOverlay(sources, minX, minY, _doorOverlayVertices, _doorOverlaySubMeshIndices);
-            _doorOverlayRenderer.Rebuild(
-                transform,
-                _sceneObjects,
-                _doorOverlayVertices,
-                _doorOverlaySubMeshIndices,
-                _materialManager.OverlayMaterials,
-                _sortingLayerName,
-                _doorOverlaySortingOrder,
-                _meshWidth,
-                _meshHeight,
-                _cellSize);
+                this);
+            _window.Driver.Materials.ValidateLightingBinding();
         }
     }
 }

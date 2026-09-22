@@ -1,19 +1,17 @@
 #nullable enable
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Audio.Core;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
+using Kern.Audio.Core;
+using Kern.Core;
+using Kern.Core.Interfaces;
 using UnityEngine;
 using VContainer;
 using UnityAudioSettings = UnityEngine.AudioSettings;
 
-namespace Fodinae.Audio.Backend
+namespace Kern.Audio.Backend
 {
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch startup exceptions to prevent game crash.")]
     [DefaultExecutionOrder(-10000)]
     public sealed class AudioSystem : MonoBehaviour, IAudioSystem
     {
@@ -22,6 +20,7 @@ namespace Fodinae.Audio.Backend
         private FmodAudioBackend _backend = null!;
         private bool _configApplied;
         private bool _configWaitLogged;
+        private bool _bankWaitStarted;
         private bool _pausedInBackground;
 
         [Inject]
@@ -44,17 +43,29 @@ namespace Fodinae.Audio.Backend
 
         private void Start()
         {
-            _operations.Run(
-                "wait_audio_banks",
-                cancellationToken => _backend.WaitUntilReadyAsync(this, cancellationToken));
+            TryStartBankWait();
         }
 
         private void Update()
         {
+            TryStartBankWait();
             if (!_configApplied)
             {
                 TryApplySavedBusVolumes();
             }
+        }
+
+        private void TryStartBankWait()
+        {
+            if (_bankWaitStarted || _operations == null || _backend == null)
+            {
+                return;
+            }
+
+            _bankWaitStarted = true;
+            _operations.Run(
+                "wait_audio_banks",
+                cancellationToken => _backend.WaitUntilReadyAsync(this, cancellationToken));
         }
 
         private void OnEnable()
@@ -65,6 +76,11 @@ namespace Fodinae.Audio.Backend
         private void OnDisable()
         {
             UnityAudioSettings.OnAudioConfigurationChanged -= OnAudioConfigurationChanged;
+        }
+
+        private void OnDestroy()
+        {
+            _backend?.StopAll();
         }
 
         private void OnAudioConfigurationChanged(bool deviceChanged)

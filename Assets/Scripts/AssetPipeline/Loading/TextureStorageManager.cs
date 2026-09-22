@@ -7,19 +7,19 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
-using Fodinae.World;
+using Kern.Core.Interfaces;
+using Kern.World;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.AssetPipeline
+namespace Kern.AssetPipeline
 {
     public class TextureStorageManager : MonoBehaviour, ITextureStorageService
     {
         [Inject]
         private IRuntimeAssetPaths _runtimeAssetPaths = null!;
         [SerializeField]
-        private bool _enableDebugLogging;
+        private bool _enableDebugLogging = false;
 
         private readonly ConcurrentDictionary<string, Texture2D> _textureCache =
             new(StringComparer.OrdinalIgnoreCase);

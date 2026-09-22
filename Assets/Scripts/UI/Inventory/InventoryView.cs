@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Core.Models;
-using Fodinae.Networking;
-using Fodinae.Game.Inventory;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Core.Models;
+using Kern.Networking;
+using Kern.Game.Inventory;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Shared.Packets;
@@ -16,12 +16,10 @@ using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI.Inventory
+namespace Kern.UI.Inventory
 {
     public class InventoryView : MonoBehaviour, ILocalizableUI
     {
-
-        private const int SHORTLISTSIZE = 4;
 
         private const int ROWCOUNT = 4;
 
@@ -30,27 +28,24 @@ namespace Fodinae.UI.Inventory
         [Inject]
         private IInventoryModel _model = null!;
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
         private ILocalizationService _loc = null!;
         [Inject]
         private UIInputManager _uiInput = null!;
 
         private readonly Dictionary<int, List<VisualElement>> _slotElements = new();
-        private readonly List<int> _occupiedSlots = new();
         private VisualElement? _hotbarContainer;
         private Button? _inventoryButton;
         private VisualElement? _hotbarSlots;
         private VisualElement? _fullSlots;
         private Label? _toggleGlyph;
         private bool _isInventoryOpen;
-        private Label? _capacityLabel;
+        private Label? _capacityLabel = null;
 
         private int _lastSelectedSlot = -1;
-        private VisualElement _tooltipWrapper = null!;
-        private VisualElement _tooltipBg = null!;
-        private Label _tooltipName = null!;
-        private Label _tooltipDesc = null!;
+        private InventoryTooltipController? _tooltipController;
+        private InventoryContextMenuController? _contextMenuController;
         private bool _initialized;
 
         protected void Start()
@@ -76,7 +71,7 @@ namespace Fodinae.UI.Inventory
                 _model.OnSlotSelected -= OnModelSlotSelected;
             }
 
-            HideContextMenu();
+            _contextMenuController?.HideContextMenu();
         }
 
         protected void Update()
@@ -102,43 +97,9 @@ namespace Fodinae.UI.Inventory
                 return;
             }
 
-            if (Keyboard.current.digit1Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(0);
-            }
-            else if (Keyboard.current.digit2Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(1);
-            }
-            else if (Keyboard.current.digit3Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(2);
-            }
-            else if (Keyboard.current.digit4Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(3);
-            }
-            else if (Keyboard.current.digit5Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(4);
-            }
-            else if (Keyboard.current.digit6Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(5);
-            }
-            else if (Keyboard.current.digit7Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(6);
-            }
-            else if (Keyboard.current.digit8Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(7);
-            }
-            else if (Keyboard.current.digit9Key.wasPressedThisFrame)
-            {
-                _model!.SelectSlot(8);
-            }
-            else if (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame)
+            bool digitPressed = TrySelectSlotFromDigitKey();
+
+            if (!digitPressed && (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
             {
                 // Enter применяет выбранный предмет и имеет приоритет над открытием
                 // чата: чат не должен перехватывать Enter и красть предмет у узла.
@@ -148,6 +109,20 @@ namespace Fodinae.UI.Inventory
                 // чтобы открытие чата не конфликтовало с применением предмета.
                 _model!.UseSelectedItem();
             }
+        }
+
+        private bool TrySelectSlotFromDigitKey()
+        {
+            if (Keyboard.current.digit1Key.wasPressedThisFrame) { _model!.SelectSlot(0); return true; }
+            if (Keyboard.current.digit2Key.wasPressedThisFrame) { _model!.SelectSlot(1); return true; }
+            if (Keyboard.current.digit3Key.wasPressedThisFrame) { _model!.SelectSlot(2); return true; }
+            if (Keyboard.current.digit4Key.wasPressedThisFrame) { _model!.SelectSlot(3); return true; }
+            if (Keyboard.current.digit5Key.wasPressedThisFrame) { _model!.SelectSlot(4); return true; }
+            if (Keyboard.current.digit6Key.wasPressedThisFrame) { _model!.SelectSlot(5); return true; }
+            if (Keyboard.current.digit7Key.wasPressedThisFrame) { _model!.SelectSlot(6); return true; }
+            if (Keyboard.current.digit8Key.wasPressedThisFrame) { _model!.SelectSlot(7); return true; }
+            if (Keyboard.current.digit9Key.wasPressedThisFrame) { _model!.SelectSlot(8); return true; }
+            return false;
         }
 
         private void TryInitialize()
@@ -182,7 +157,8 @@ namespace Fodinae.UI.Inventory
             _model.OnSlotChanged += RefreshSlot;
             _model.OnSlotSelected += OnModelSlotSelected;
 
-            CreateTooltip(_doc.rootVisualElement);
+            _tooltipController = new InventoryTooltipController(_doc.rootVisualElement, _loc);
+            _contextMenuController = new InventoryContextMenuController(_doc, _model, _loc);
             BuildUI();
             _initialized = true;
 
@@ -226,35 +202,12 @@ namespace Fodinae.UI.Inventory
                 var item = _model!.GetSlot(slotIndex);
                 if (item != null)
                 {
-                    _tooltipName.text = item.Name;
-                    _tooltipDesc.text = item.Description ?? string.Empty;
-                    _tooltipWrapper.style.display = DisplayStyle.Flex;
+                    _tooltipController?.ShowSlotTooltip(item);
                     return;
                 }
             }
 
-            _tooltipWrapper.style.display = DisplayStyle.None;
-        }
-
-        private void CreateTooltip(VisualElement root)
-        {
-            _tooltipWrapper = new VisualElement();
-            _tooltipWrapper.AddToClassList("inv-tooltip-wrapper");
-            _tooltipWrapper.style.display = DisplayStyle.None;
-
-            _tooltipBg = new VisualElement();
-            _tooltipBg.AddToClassList("inv-tooltip-bg");
-
-            _tooltipName = new Label();
-            _tooltipName.AddToClassList("inv-tooltip-name");
-            _tooltipBg.Add(_tooltipName);
-
-            _tooltipDesc = new Label();
-            _tooltipDesc.AddToClassList("inv-tooltip-desc");
-            _tooltipBg.Add(_tooltipDesc);
-
-            _tooltipWrapper.Add(_tooltipBg);
-            root.Add(_tooltipWrapper);
+            _tooltipController?.HideTooltip();
         }
 
         private void BuildUI()
@@ -354,8 +307,8 @@ namespace Fodinae.UI.Inventory
                 }
                 else if (evt.button == 1)
                 {
-                    HideContextMenu();
-                    ShowContextMenu(
+                    _contextMenuController?.HideContextMenu();
+                    _contextMenuController?.ShowContextMenu(
                         evt.mousePosition,
                         slotIndex,
                         ShowItemInfo);
@@ -376,15 +329,6 @@ namespace Fodinae.UI.Inventory
 
         private void RefreshSlot(int slotIndex)
         {
-            bool occupied = _model?.GetSlot(slotIndex) != null;
-            if (occupied != _occupiedSlots.Contains(slotIndex))
-            {
-                // Предмет появился или кончился: состав сетки изменился, и
-                // обновлением одной ячейки тут не обойтись.
-                RebuildSlots();
-                return;
-            }
-
             if (!_slotElements.ContainsKey(slotIndex))
             {
                 return;
@@ -423,29 +367,18 @@ namespace Fodinae.UI.Inventory
 
         private void RebuildSlots()
         {
-            _occupiedSlots.Clear();
-            for (int i = 0; i < InventoryModel.TOTALSLOTS; i++)
-            {
-                if (_model?.GetSlot(i) != null)
-                {
-                    _occupiedSlots.Add(i);
-                }
-            }
-
-            FillSlots(_hotbarSlots, "Hotbar", Math.Min(_occupiedSlots.Count, SHORTLISTSIZE));
-            FillSlots(_fullSlots, "Inv", _occupiedSlots.Count);
+            FillSlots(_hotbarSlots, "Hotbar", 0, InventoryModel.HOTBAR_SIZE);
+            FillSlots(_fullSlots, "Inv", InventoryModel.HOTBAR_SIZE, InventoryModel.INVENTORY_SIZE);
 
             if (_inventoryButton != null)
             {
-                _inventoryButton.style.display = _occupiedSlots.Count > SHORTLISTSIZE
-                    ? DisplayStyle.Flex
-                    : DisplayStyle.None;
+                _inventoryButton.style.display = DisplayStyle.Flex;
             }
 
             ApplyInventoryMode();
         }
 
-        private void FillSlots(VisualElement? container, string prefix, int count)
+        private void FillSlots(VisualElement? container, string prefix, int startSlot, int count)
         {
             if (container == null)
             {
@@ -462,10 +395,8 @@ namespace Fodinae.UI.Inventory
             container.Clear();
 
             // Четыре строки, столбцы прирастают влево — как FixedRowCount = 4 со
-            // StartAxis = Vertical в старом клиенте. Столбец здесь настоящий
-            // контейнер, а не результат переноса: перенос раскладывал клетки
-            // лесенкой, потому что высота в точности равна четырём клеткам и на
-            // границе он то влезал, то нет.
+            // StartAxis = Vertical в старом клиенте. Все слоты создаются, включая
+            // пустые: индекс ячейки обязан совпадать с индексом серверного слота.
             VisualElement? column = null;
             for (int i = 0; i < count; i++)
             {
@@ -476,7 +407,7 @@ namespace Fodinae.UI.Inventory
                     container.Add(column);
                 }
 
-                int slotIndex = _occupiedSlots[i];
+                int slotIndex = startSlot + i;
                 column!.Add(CreateCell(slotIndex, $"{prefix}_{slotIndex}"));
             }
         }
@@ -510,92 +441,10 @@ namespace Fodinae.UI.Inventory
         // Клавиша делает ровно то же, что полоса: отдельного окна больше нет.
         private void ToggleInventory() => ToggleFullInventory();
 
-        private VisualElement? _contextMenu;
-
-        private void ShowContextMenu(Vector2 mousePosition, int slotIndex, Action<ItemData> showItemInfo)
-        {
-            ItemData? item = _model!.GetSlot(slotIndex);
-            if (item == null)
-            {
-                return;
-            }
-
-            VisualElement root = _doc.rootVisualElement;
-            _contextMenu = new VisualElement
-            {
-                name = "ContextMenu",
-            };
-            _contextMenu.AddToClassList("inv-context-menu");
-            _contextMenu.style.left = mousePosition.x;
-            _contextMenu.style.top = mousePosition.y;
-            _contextMenu.pickingMode = PickingMode.Position;
-
-            AddContextMenuItem(_loc!.Get("inventory.context_use"), () =>
-            {
-                _model.SelectSlot(slotIndex);
-                _model.UseSelectedItem();
-                HideContextMenu();
-            });
-
-            AddContextMenuItem(_loc.Get("inventory.context_info"), () =>
-            {
-                showItemInfo(item);
-                HideContextMenu();
-            });
-
-            root.Add(_contextMenu);
-            root.RegisterCallback<MouseDownEvent>(OnContextMenuOutsideClick, TrickleDown.TrickleDown);
-            root.RegisterCallback<KeyDownEvent>(OnContextMenuEscape, TrickleDown.TrickleDown);
-        }
-
-        private void AddContextMenuItem(string labelText, Action onClick)
-        {
-            Button button = new(onClick)
-            {
-                text = labelText,
-            };
-            button.AddToClassList("inv-context-btn");
-            _contextMenu?.Add(button);
-        }
-
-        private void HideContextMenu()
-        {
-            if (_contextMenu != null)
-            {
-                _contextMenu.RemoveFromHierarchy();
-                _contextMenu = null;
-            }
-
-            if (_doc?.rootVisualElement is not VisualElement root)
-            {
-                return;
-            }
-
-            root.UnregisterCallback<MouseDownEvent>(OnContextMenuOutsideClick, TrickleDown.TrickleDown);
-            root.UnregisterCallback<KeyDownEvent>(OnContextMenuEscape, TrickleDown.TrickleDown);
-        }
-
-        private void OnContextMenuOutsideClick(MouseDownEvent evt)
-        {
-            if (_contextMenu != null && !_contextMenu.worldBound.Contains(evt.mousePosition))
-            {
-                HideContextMenu();
-            }
-        }
-
-        private void OnContextMenuEscape(KeyDownEvent evt)
-        {
-            if (evt.keyCode == KeyCode.Escape)
-            {
-                HideContextMenu();
-            }
-        }
 
         private void ShowItemInfo(ItemData item)
         {
-            _tooltipName.text = _loc!.Get("inventory.tooltip_item", item.Name ?? item.ItemType.ToString(), item.ItemType, item.Quantity);
-            _tooltipDesc.text = _loc!.Get("inventory.tooltip_type", item.ItemType) + "\n" + (item.Description ?? _loc.Get("inventory.no_description"));
-            _tooltipWrapper.style.display = DisplayStyle.Flex;
+            _tooltipController?.ShowItemInfo(item);
         }
     }
 }

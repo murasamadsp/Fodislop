@@ -2,7 +2,8 @@
 
 using UnityEngine;
 
-namespace Fodinae.Core.Lifecycle;
+namespace Kern.Core.Lifecycle
+{
 
 public enum RuntimeOwner
 {
@@ -22,4 +23,5 @@ public interface ISceneObjectFactory
 
     T Create<T>(string name, RuntimeOwner owner = RuntimeOwner.General)
         where T : MonoBehaviour;
+}
 }

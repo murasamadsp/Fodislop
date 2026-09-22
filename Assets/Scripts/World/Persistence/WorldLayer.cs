@@ -5,47 +5,29 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Fodinae;
-using Fodinae.Core;
-using UnityEngine;
+using Kern;
+using Kern.Core;
 
-[assembly: InternalsVisibleTo("Fodinae.Tests.Editor")]
+[assembly: InternalsVisibleTo("Kern.Tests.Editor")]
+[assembly: InternalsVisibleTo("Kern.Tests.PlayMode")]
+[assembly: InternalsVisibleTo("Kern.World")]
 
-namespace Fodinae.Persistence;
+namespace Kern.Persistence;
 public sealed class WorldLayer<T> : IWorldLayer<T>
     where T : unmanaged
 {
     private readonly int _chunkSize;
-    private readonly int _chunkArea;
     private readonly int _widthChunks;
     private readonly int _heightChunks;
     private readonly int _maxChunksInMemory;
     private readonly string _filePath;
-    private readonly object _ioLock = new object();
 
-    // The Look-Up Table (FAT). Stores file offset for each chunk.
-    private readonly long[] _chunkOffsets;
-
-    // --- Memory Cache (LRU) ---
+    private readonly WorldLayerLifetime _lifetime = new();
     private readonly ChunkLruCache<T> _cache;
-    private readonly HashSet<int> _loadingChunks;
-    private readonly Dictionary<int, Exception> _failedChunkLoads = new();
-    private readonly object _loadingLock = new object();
-    private readonly IAsyncOperationSupervisor _operations;
-    private bool _disposed;
-
-    // A failing disk would otherwise warn once per chunk per streaming
-    // pass and flood the console within seconds.
-    private const int MAX_LOGGED_CHUNK_DISK_FAILURES = 8;
-    private readonly HashSet<int> _loggedChunkLoadFailures = [];
-    private bool _chunkDiskFailureCapLogged;
-
-    private FileStream? _fileStream;
-
-    // One reader for the layer's lifetime, used under _ioLock. A reader per
-    // chunk load allocated its buffers and UTF8 decoder on every load.
-    private BinaryReader? _reader;
+    private readonly WorldLayerFile<T> _file;
+    private readonly WorldLayerChunkLoader<T> _loader;
+    private readonly WorldLayerRegionWriter<T> _regionWriter;
+    private readonly WorldLayerDirtyWriter<T> _dirtyWriter;
 
     public WorldLayer(
         string filePath,
@@ -54,7 +36,25 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         IAsyncOperationSupervisor operations,
         int CHUNK_SIZE = ProjectRuntimeContracts.World.ChunkSize,
         int maxRamChunks = 1000)
+        : this(filePath, WIDTH_CHUNKS, HEIGHT_CHUNKS, operations, OpenMapFile, CHUNK_SIZE, maxRamChunks)
     {
+    }
+
+    // openFile подменяется в тестах отказов диска; в игре это OpenMapFile.
+    internal WorldLayer(
+        string filePath,
+        int WIDTH_CHUNKS,
+        int HEIGHT_CHUNKS,
+        IAsyncOperationSupervisor operations,
+        Func<string, Stream> openFile,
+        int CHUNK_SIZE = ProjectRuntimeContracts.World.ChunkSize,
+        int maxRamChunks = 1000)
+    {
+        if (openFile == null)
+        {
+            throw new ArgumentNullException(nameof(openFile));
+        }
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("World layer file path is required.", nameof(filePath));
@@ -76,7 +76,10 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                 "World layer height must be positive.");
         }
 
-        _operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        if (operations == null)
+        {
+            throw new ArgumentNullException(nameof(operations));
+        }
 
         if (CHUNK_SIZE <= 0)
         {
@@ -98,18 +101,29 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         _widthChunks = WIDTH_CHUNKS;
         _heightChunks = HEIGHT_CHUNKS;
         _chunkSize = CHUNK_SIZE;
-        _chunkArea = CHUNK_SIZE * CHUNK_SIZE;
         _maxChunksInMemory = maxRamChunks;
 
-        int totalChunks = WIDTH_CHUNKS * HEIGHT_CHUNKS;
-        _chunkOffsets = new long[totalChunks];
-        Array.Fill(_chunkOffsets, -1);
+        int chunkArea = CHUNK_SIZE * CHUNK_SIZE;
+        _cache = new ChunkLruCache<T>(
+            maxRamChunks,
+            allowDirtyEviction: false);
+        _file = new WorldLayerFile<T>(
+            filePath, WIDTH_CHUNKS, HEIGHT_CHUNKS, CHUNK_SIZE, openFile, _lifetime);
+        _loader = new WorldLayerChunkLoader<T>(
+            _cache,
+            _file,
+            _lifetime,
+            operations,
+            (minX, minY, width, height) => ChunkLoaded?.Invoke(minX, minY, width, height),
+            CHUNK_SIZE,
+            chunkArea,
+            WIDTH_CHUNKS,
+            HEIGHT_CHUNKS);
+        _regionWriter = new WorldLayerRegionWriter<T>(
+            _cache, _loader, CHUNK_SIZE, chunkArea, HEIGHT_CHUNKS);
+        _dirtyWriter = new WorldLayerDirtyWriter<T>(_cache, _file, chunkArea);
 
-        _cache = new ChunkLruCache<T>(maxRamChunks, SaveChunkToDisk);
-        _loadingChunks = new HashSet<int>();
-
-        WorldLayerFileHeader.MigrateLegacyFormatIfRequired(_filePath, _widthChunks, _heightChunks, _chunkSize);
-        InitializeFile();
+        _file.Initialize();
     }
 
     public int ChunkSize => _chunkSize;
@@ -122,44 +136,14 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
 
     public event Action<int, int, int, int>? ChunkLoaded;
 
-    public void NotifyRegionLoaded(int startX, int startY, int width, int height)
-    {
-        if (width <= 0 || height <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(width),
-                $"Loaded region must be positive: ({startX},{startY}) {width}x{height}.");
-        }
+    public bool LastSetRegionOnlyMaterializedNewChunks { get; private set; }
 
-        int worldWidth = checked(_widthChunks * _chunkSize);
-        int worldHeight = checked(_heightChunks * _chunkSize);
-        long endX = (long)startX + width;
-        long endY = (long)startY + height;
-        if (startX < 0 || startY < 0 || endX > worldWidth || endY > worldHeight)
-        {
-            string message = $"Loaded region ({startX},{startY}) {width}x{height} is outside " +
-                $"the layer of {worldWidth}x{worldHeight} cells.";
-            throw new ArgumentOutOfRangeException(
-                nameof(startX),
-                message);
-        }
+    public void BeginChunkLoadBatch() => _loader.BeginBatch();
 
-        int firstChunkX = startX / _chunkSize;
-        int firstChunkY = startY / _chunkSize;
-        int lastChunkX = ((int)endX - 1) / _chunkSize;
-        int lastChunkY = ((int)endY - 1) / _chunkSize;
-        for (int chunkX = firstChunkX; chunkX <= lastChunkX; chunkX++)
-        {
-            for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
-            {
-                ChunkLoaded?.Invoke(
-                    chunkX * _chunkSize,
-                    chunkY * _chunkSize,
-                    _chunkSize,
-                    _chunkSize);
-            }
-        }
-    }
+    public void EndChunkLoadBatch() => _loader.EndBatch();
+
+    public void NotifyRegionLoaded(int startX, int startY, int width, int height) =>
+        _loader.NotifyRegionLoaded(startX, startY, width, height);
 
     public T this[int x, int y]
     {
@@ -170,7 +154,7 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
 
     // --- Debug Access ---
     [ExcludeFromCodeCoverage]
-    internal long[] GetChunkOffsets() => _chunkOffsets;
+    internal long[] GetChunkOffsets() => _file.ChunkOffsets;
 
     public IEnumerable<int> GetLoadedChunkIndices()
     {
@@ -199,7 +183,7 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                 $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
         }
 
-        T[] chunk = GetOrCreateChunk(chunkIndex, touchLru);
+        T[] chunk = _loader.GetOrCreateChunk(chunkIndex, touchLru);
 
         return chunk[localIndex];
     }
@@ -213,7 +197,7 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                 $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
         }
 
-        T[] chunk = GetOrCreateChunk(chunkIndex, touchLru);
+        T[] chunk = _loader.GetOrCreateChunk(chunkIndex, touchLru);
 
         return chunk[localIndex];
     }
@@ -244,12 +228,13 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                 $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
         }
 
-        T[] chunk = GetOrCreateChunk(chunkIndex, touchLru: true);
+        T[] chunk = _loader.GetOrCreateChunk(chunkIndex, touchLru: true);
 
         if (!EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
         {
+            chunk = _cache.PrepareForWrite(chunkIndex, chunk);
             chunk[localIndex] = value;
-            MarkDirty(chunkIndex);
+            _loader.MarkDirty(chunkIndex);
         }
     }
 
@@ -284,6 +269,7 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         ReadOnlySpan<T> cells,
         int cellsOffset = 0)
     {
+        LastSetRegionOnlyMaterializedNewChunks = false;
         int worldWidth = _widthChunks * _chunkSize;
         int worldHeight = _heightChunks * _chunkSize;
         if (startX < 0 || startY < 0 || startX >= worldWidth || startY >= worldHeight)
@@ -302,222 +288,38 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
                 nameof(cells));
         }
 
-        int endX = Math.Min(startX + width, worldWidth);
-        int endY = Math.Min(startY + height, worldHeight);
-        int firstChunkX = startX / _chunkSize;
-        int lastChunkX = (endX - 1) / _chunkSize;
-        int firstChunkY = startY / _chunkSize;
-        int lastChunkY = (endY - 1) / _chunkSize;
-
-        int changedCount = 0;
-        for (int chunkX = firstChunkX; chunkX <= lastChunkX; chunkX++)
-        {
-            for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
-            {
-                int chunkIndex = chunkY + (chunkX * _heightChunks);
-                T[] chunk = GetOrCreateChunk(chunkIndex, touchLru: true);
-
-                int regionX0 = Math.Max(startX, chunkX * _chunkSize);
-                int regionX1 = Math.Min(endX, (chunkX + 1) * _chunkSize);
-                int regionY0 = Math.Max(startY, chunkY * _chunkSize);
-                int regionY1 = Math.Min(endY, (chunkY + 1) * _chunkSize);
-
-                bool chunkChanged = false;
-                for (int x = regionX0; x < regionX1; x++)
-                {
-                    int localX = x - (chunkX * _chunkSize);
-                    for (int y = regionY0; y < regionY1; y++)
-                    {
-                        int payloadIndex = cellsOffset + ((y - startY) * width) + (x - startX);
-                        T value = cells[payloadIndex];
-                        int localIndex = (y - (chunkY * _chunkSize)) + (localX * _chunkSize);
-                        if (!EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
-                        {
-                            chunk[localIndex] = value;
-                            chunkChanged = true;
-                            changedCount++;
-                        }
-                    }
-                }
-
-                if (chunkChanged)
-                {
-                    MarkDirty(chunkIndex);
-                }
-            }
-        }
-
+        (int changedCount, bool onlyNewChunks) = _regionWriter.Write(
+            startX,
+            startY,
+            width,
+            height,
+            cells,
+            cellsOffset,
+            worldWidth,
+            worldHeight);
+        LastSetRegionOnlyMaterializedNewChunks = onlyNewChunks;
         return changedCount;
     }
 
-    // --- Core Paging Logic ---
-    public T[] GetOrCreateChunk(int chunkIndex, bool touchLru = true)
-    {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(WorldLayer<T>));
-        }
+    public T[] GetOrCreateChunk(int chunkIndex, bool touchLru = true) =>
+        _loader.GetOrCreateChunk(chunkIndex, touchLru);
 
-        if (chunkIndex < 0 || chunkIndex >= _chunkOffsets.Length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(chunkIndex), chunkIndex, "Chunk index is outside the world layer.");
-        }
+    public ChunkReadResult<T> ReadChunk(int chunkIndex, bool touchLru = true) =>
+        _loader.ReadChunk(chunkIndex, touchLru);
 
-        if (_cache.TryGet(chunkIndex, out T[]? chunk) && chunk != null)
-        {
-            if (touchLru)
-            {
-                _cache.Touch(chunkIndex);
-            }
+    public void Flush(bool flushToDisk = false) => _dirtyWriter.Flush(flushToDisk);
 
-            return chunk;
-        }
+    public List<(int Index, T[] Chunk)> TakeDirtySnapshot() => _dirtyWriter.TakeSnapshot();
 
-        try
-        {
-            chunk = LoadChunkFromDisk(chunkIndex);
-            if (chunk == null)
-            {
-                // Sparse layers are expected while the server streams
-                // regions. A synchronous write materializes the chunk;
-                // read-only streaming keeps missing chunks distinct.
-                chunk = new T[_chunkArea];
-            }
+    public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot) =>
+        _dirtyWriter.RestoreDirty(snapshot);
 
-            AddToCache(chunkIndex, chunk);
-            return chunk;
-        }
-        catch (IOException ioEx)
-        {
-            throw new IOException($"[WorldLayer] Could not load/create chunk {chunkIndex}: {ioEx.Message}", ioEx);
-        }
-        catch (UnauthorizedAccessException authEx)
-        {
-            throw new UnauthorizedAccessException($"[WorldLayer] Access denied for chunk {chunkIndex}: {authEx.Message}", authEx);
-        }
-        catch (OutOfMemoryException)
-        {
-            throw;
-        }
-    }
+    public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk) =>
+        _dirtyWriter.WriteSnapshot(snapshot, flushToDisk);
 
-    public ChunkReadResult<T> ReadChunk(int chunkIndex, bool touchLru = true)
-    {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(WorldLayer<T>));
-        }
+    public void CreateDurableBackup(string backupPath) =>
+        _file.CreateDurableBackup(backupPath);
 
-        if (chunkIndex < 0 || chunkIndex >= _chunkOffsets.Length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(chunkIndex), chunkIndex, "Chunk index is outside the world layer.");
-        }
-
-        if (_cache.TryGet(chunkIndex, out T[]? chunk) && chunk != null)
-        {
-            if (touchLru)
-            {
-                _cache.Touch(chunkIndex);
-            }
-
-            return new ChunkReadResult<T>(ChunkReadStatus.Available, chunk, null);
-        }
-
-        lock (_loadingLock)
-        {
-            if (_failedChunkLoads.TryGetValue(chunkIndex, out Exception? failure))
-            {
-                return new ChunkReadResult<T>(ChunkReadStatus.Failed, null, failure);
-            }
-
-            if (_chunkOffsets[chunkIndex] < 0)
-            {
-                return new ChunkReadResult<T>(ChunkReadStatus.Missing, null, null);
-            }
-
-            if (!_loadingChunks.Add(chunkIndex))
-            {
-                return new ChunkReadResult<T>(ChunkReadStatus.Loading, null, null);
-            }
-        }
-
-        _operations.Run(
-            $"load_world_chunk_{chunkIndex}",
-            _ => LoadChunkAsync(chunkIndex));
-        return new ChunkReadResult<T>(ChunkReadStatus.Loading, null, null);
-    }
-
-    public void Flush(bool flushToDisk = false)
-    {
-        List<(int Index, T[] Chunk)> snapshot = TakeDirtySnapshot();
-        try
-        {
-            WriteSnapshot(snapshot, flushToDisk);
-        }
-        catch
-        {
-            RestoreDirty(snapshot);
-            throw;
-        }
-    }
-
-    // Снимок грязных чанков берётся на том потоке, который меняет кэш, — на
-    // главном. Раньше MapStorage.FlushAsync перебирал грязные индексы и читал
-    // словарь чанков прямо в пуле потоков, пока главный поток писал клетки и
-    // грузил чанки: перебор падал с «Collection was modified», а ClearDirty
-    // после записи снимал отметку и с чанков, изменённых во время записи, —
-    // такие правки молча не доходили до диска. Массивы копируются, поэтому на
-    // диск уходит целое состояние, а не чанк посреди перезаписи.
-    public List<(int Index, T[] Chunk)> TakeDirtySnapshot()
-    {
-        var snapshot = new List<(int Index, T[] Chunk)>(_cache.DirtyCount);
-        foreach (int index in _cache.DirtyIndices)
-        {
-            if (_cache.TryGet(index, out T[]? chunk) && chunk != null)
-            {
-                snapshot.Add((index, (T[])chunk.Clone()));
-            }
-        }
-
-        _cache.ClearDirty();
-        return snapshot;
-    }
-
-    // Запись не удалась — отметки возвращаются, следующее сохранение повторит.
-    // Вызывать на главном потоке, как и TakeDirtySnapshot.
-    public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot)
-    {
-        foreach ((int index, _) in snapshot)
-        {
-            _cache.MarkDirty(index);
-        }
-    }
-
-    // Можно из любого потока: снимок ни с кем не разделён, файл — под _ioLock.
-    public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk)
-    {
-        foreach ((int index, T[] chunk) in snapshot)
-        {
-            SaveChunkToDisk(index, chunk);
-        }
-
-        lock (_ioLock)
-        {
-            if (_fileStream == null)
-            {
-                return;
-            }
-
-            if (flushToDisk)
-            {
-                _fileStream.Flush(true);
-            }
-            else
-            {
-                _fileStream.Flush();
-            }
-        }
-    }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool GetChunkIndexAndLocal(int x, int y, out int chunkIndex, out int localIndex)
     {
@@ -539,13 +341,9 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         return true;
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "SonarAnalyzer.CSharp",
-        "S3877",
-        Justification = "Persistent map close failures must propagate instead of becoming silent data loss.")]
     public void Dispose()
     {
-        if (_disposed)
+        if (_lifetime.Disposed)
         {
             return;
         }
@@ -563,27 +361,10 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
             disposeFailure = ex;
         }
 
-        lock (_ioLock)
-        {
-            _disposed = true;
-            try
-            {
-                _reader?.Dispose();
-                _reader = null;
-                _fileStream?.Dispose();
-            }
-            catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException)
-            {
-                disposeFailure ??= ex;
-            }
-        }
+        disposeFailure ??= _file.DisposeStreams();
 
         _cache.Clear();
-        lock (_loadingLock)
-        {
-            _loadingChunks.Clear();
-            _failedChunkLoads.Clear();
-        }
+        _loader.ClearLoadingState();
 
         if (disposeFailure != null)
         {
@@ -593,224 +374,6 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         }
     }
 
-    private void InitializeFile()
-    {
-        _fileStream = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096);
-
-        bool valid = WorldLayerFileHeader.TryReadHeader(
-            _fileStream,
-            _widthChunks,
-            _heightChunks,
-            _chunkSize,
-            _chunkOffsets);
-
-        if (!valid)
-        {
-            if (_fileStream.Length > 0)
-            {
-                // Fail-fast: a damaged map file must never be silently
-                // recreated as an empty world. Surface the failure instead.
-                _fileStream.Dispose();
-                _fileStream = null;
-                throw new IOException($"Map file '{_filePath}' is corrupt or its header does not match the expected world dimensions. Refusing to recreate it.");
-            }
-
-            WorldLayerFileHeader.WriteHeader(
-                _fileStream,
-                _widthChunks,
-                _heightChunks,
-                _chunkSize,
-                _chunkOffsets);
-        }
-    }
-
-    private async Cysharp.Threading.Tasks.UniTask LoadChunkAsync(int chunkIndex)
-    {
-        T[]? chunk = null;
-        Exception? failure = null;
-        try
-        {
-            chunk = await Cysharp.Threading.Tasks.UniTask.RunOnThreadPool(() => LoadChunkFromDisk(chunkIndex));
-        }
-        catch (IOException ioEx)
-        {
-            failure = ioEx;
-        }
-        catch (ObjectDisposedException disposedEx)
-        {
-            failure = disposedEx;
-        }
-        catch (UnauthorizedAccessException authEx)
-        {
-            failure = authEx;
-        }
-        catch (InvalidDataException invalidDataEx)
-        {
-            failure = invalidDataEx;
-        }
-        catch (OutOfMemoryException outOfMemoryEx)
-        {
-            failure = outOfMemoryEx;
-        }
-
-        await Cysharp.Threading.Tasks.UniTask.SwitchToMainThread();
-
-        ClearLoadingChunk(chunkIndex);
-        if (_disposed)
-        {
-            return;
-        }
-
-        if (failure != null)
-        {
-            lock (_loadingLock)
-            {
-                _failedChunkLoads[chunkIndex] = failure;
-            }
-
-            LogChunkDiskFailure(
-                _loggedChunkLoadFailures,
-                chunkIndex,
-                $"[WorldLayer] Failed to load chunk {chunkIndex}: {failure.Message}");
-            return;
-        }
-
-        // A synchronous request may have filled this slot while the disk
-        // read was in flight. Do not overwrite it and, more importantly,
-        // do not append a second LRU node for the same chunk.
-        if (_cache.Contains(chunkIndex))
-        {
-            return;
-        }
-
-        // A sparse map is expected while the server is streaming regions.
-        // Missing data is not an empty chunk: keep it unloaded so consumers
-        // can render the explicit unloaded/black state and retry only after
-        // an actual region is received.
-        if (chunk == null)
-        {
-            return;
-        }
-
-        AddToCache(chunkIndex, chunk);
-        int chunkX = chunkIndex / _heightChunks;
-        int chunkY = chunkIndex % _heightChunks;
-        ChunkLoaded?.Invoke(
-            chunkX * _chunkSize,
-            chunkY * _chunkSize,
-            _chunkSize,
-            _chunkSize);
-    }
-
-    private void ClearLoadingChunk(int chunkIndex)
-    {
-        lock (_loadingLock)
-        {
-            _loadingChunks.Remove(chunkIndex);
-        }
-    }
-
-    private void AddToCache(int chunkIndex, T[] chunk)
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _cache.AddOrUpdate(chunkIndex, chunk);
-        lock (_loadingLock)
-        {
-            _failedChunkLoads.Remove(chunkIndex);
-        }
-    }
-
-    private void LogChunkDiskFailure(HashSet<int> reported, int chunkIndex, string message)
-    {
-        if (!reported.Add(chunkIndex))
-        {
-            return;
-        }
-
-        Debug.LogWarning(message);
-        if (!_chunkDiskFailureCapLogged && reported.Count >= MAX_LOGGED_CHUNK_DISK_FAILURES)
-        {
-            _chunkDiskFailureCapLogged = true;
-            Debug.LogWarning(
-                "[WorldLayer] Further per-chunk disk failure warnings are suppressed for this session.");
-        }
-    }
-
-    private void MarkDirty(int chunkIndex)
-    {
-        _cache.MarkDirty(chunkIndex);
-        lock (_loadingLock)
-        {
-            _failedChunkLoads.Remove(chunkIndex);
-        }
-    }
-
-    private T[]? LoadChunkFromDisk(int index)
-    {
-        if (index < 0 || index >= _chunkOffsets.Length)
-        {
-            return null;
-        }
-
-        lock (_ioLock)
-        {
-            if (_disposed)
-            {
-                return null;
-            }
-
-            long offset = _chunkOffsets[index];
-            if (offset < 0 || _fileStream == null)
-            {
-                return null;
-            }
-
-            _fileStream.Seek(offset, SeekOrigin.Begin);
-            _reader ??= new BinaryReader(_fileStream, System.Text.Encoding.UTF8, leaveOpen: true);
-            return WorldChunkRleCodec.DecodeChunk<T>(_reader, _chunkArea);
-        }
-    }
-
-    private void SaveChunkToDisk(int index, T[] chunk)
-    {
-        if (_fileStream == null)
-        {
-            throw new ObjectDisposedException(
-                nameof(WorldLayer<T>),
-                $"World layer '{_filePath}' has no open file stream.");
-        }
-
-        lock (_ioLock)
-        {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(WorldLayer<T>));
-            }
-
-            _fileStream.Seek(0, SeekOrigin.End);
-            long newOffset = _fileStream.Position;
-
-            using var writer = new BinaryWriter(_fileStream, System.Text.Encoding.UTF8, true);
-            WorldChunkRleCodec.EncodeChunk(writer, chunk, _chunkArea);
-
-            _chunkOffsets[index] = newOffset;
-            WorldLayerFileHeader.WriteChunkOffset(_fileStream, index, newOffset);
-        }
-    }
-
-    private void SaveOffsetTable()
-    {
-        if (_fileStream == null)
-        {
-            return;
-        }
-
-        _fileStream.Seek(WorldLayerFileHeader.HeaderSize, SeekOrigin.Begin);
-        var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
-        _fileStream.Write(byteSpan);
-    }
+    internal static Stream OpenMapFile(string path) =>
+        new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096);
 }

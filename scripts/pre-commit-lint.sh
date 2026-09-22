@@ -11,27 +11,42 @@ export DOTNET_CLI_HOME="$LINT_DOTNET_HOME"
 echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
+# Линтер запускается с --no-build, иначе каждый коммит пересобирал бы его
+# заново. Значит собрать его обязан сам хук: без этого правка правила молча
+# не доезжает до проверки, и коммит проверяется вчерашним набором правил.
+# Сборка инкрементальная — когда исходники не менялись, она почти бесплатна.
+echo "--- Step 0: Building the architecture linter ---"
+dotnet build tools/Kern.ArchitectureLinter --nologo --verbosity quiet
+
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
-dotnet run --project tools/Fodinae.ArchitectureLinter --no-build --no-restore
+dotnet run --project tools/Kern.ArchitectureLinter --no-build --no-restore
 
 # Настройки описываются атрибутами и читаются рефлексией: ни компилятор, ни
 # линтер не могут сказать, что диапазон над полем осмыслен, что значение по
 # умолчанию в него попадает и что ветка разбора для этого типа существует.
-# Settings probe checks are now part of ArchitectureLinter (FOD-SETTINGS-PROBE rule).
+# Settings probe checks are now part of ArchitectureLinter (KERN-SETTINGS-PROBE rule).
 # Run the unified linter which includes all settings validation.
 echo "--- Step 0.1: Executing architecture linter (includes settings probe) ---"
 if command -v dotnet >/dev/null 2>&1; then
     DOTNET_NOLOGO=1 dotnet run \
-        --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+        --project "$(dirname "$0")/../tools/Kern.ArchitectureLinter" \
         --no-build \
         --no-restore \
         --verbosity quiet -- \
         --project-root "$(dirname "$0")/.." \
-        --rule FOD-DISPLAY-TRANSFORM \
-        --rule FOD-LOCALIZATION \
-        --rule FOD-PATTERN
+        --rule KERN-DISPLAY-TRANSFORM \
+        --rule KERN-LOCALIZATION \
+        --rule KERN-PATTERN
 else
     echo "Notice: dotnet not found; C# architecture linter skipped."
+fi
+
+echo "--- Step 0.2: Validating lighting HLSL transport ---"
+if command -v dotnet >/dev/null 2>&1; then
+    DOTNET_NOLOGO=1 dotnet run \
+        --project "$(dirname "$0")/../tools/lighting-tests/Kern.LightingTests.csproj" \
+        --no-restore \
+        -- transport
 fi
 
 if [ "$CI" != "true" ]; then
@@ -64,7 +79,8 @@ ensure_restore_assets() {
     fi
 }
 
-# Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build
+# Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build.
+# Any existing dependency is mandatory: a failed build must fail the gate.
 DEPENDENCIES=(
     "Effekseer.csproj"
     "EffekseerEditor.csproj"
@@ -82,34 +98,43 @@ for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     if [ ! -f "$DEPENDENCY" ]; then
         continue
     fi
-    if ! dotnet restore "$DEPENDENCY" --ignore-failed-sources --disable-parallel >/dev/null 2>&1; then
-        echo "Skipping $DEPENDENCY: restore failed (likely missing targeting pack on this platform)"
-        continue
-    fi
+    dotnet restore "$DEPENDENCY" --ignore-failed-sources --disable-parallel
     echo "Building $DEPENDENCY..."
-    if ! dotnet build "$DEPENDENCY" --no-restore -maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false -clp:NoSummary >/dev/null 2>&1; then
-        echo "Skipping $DEPENDENCY: build failed (likely missing targeting pack on this platform)"
-        continue
-    fi
+    dotnet build "$DEPENDENCY" --no-restore -maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false -clp:NoSummary
 done
+
+# Настоящая тип-проверка C#: отклики Roslyn из Library/Bee, компилятор зовётся
+# напрямую. Ниже идёт разбор по сгенерированным Unity .csproj — они устарели
+# (Kern.Runtime.csproj перечисляет файлы, которых нет), и на отсутствующих
+# проектах этот шаг молча печатал «Skipping… likely missing targeting pack»,
+# то есть выглядел проверкой компиляции, не будучи ею. Проверяем здесь.
+echo "--- Step 2: Тип-проверка сборок без Unity ---"
+if ! "$(dirname "$0")/check-compile.sh"; then
+    echo -e "\n\033[0;31mКомпиляция сборок Kern упала.\033[0m"
+    exit 1
+fi
 
 # Build the runtime project before editor projects. The editor assembly references
 # Assembly-CSharp.dll, so filesystem-dependent find order can otherwise validate
 # editor code against a stale runtime assembly and report false missing members.
 PROJECTS=()
 for PROJECT_FILE in \
-    "./Fodinae.Runtime.csproj" \
-    "./Fodinae.Editor.csproj" \
-    "./Fodinae.Tests.Editor.csproj"; do
+    "./Kern.Core.csproj" \
+    "./Kern.Infrastructure.csproj" \
+    "./Kern.Application.csproj" \
+    "./Kern.Presentation.csproj" \
+    "./Kern.Runtime.csproj" \
+    "./Kern.Editor.csproj" \
+    "./Kern.Tests.Editor.csproj"; do
     if [ -f "$PROJECT_FILE" ]; then
         PROJECTS+=("$PROJECT_FILE")
     fi
 done
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
-    echo "Notice: No Assembly-CSharp*.csproj files found in repository root."
-    echo "Skipping C# Roslyn analyzer checks."
-    exit 0
+    echo "Error: No Assembly-CSharp*.csproj files found in repository root."
+    echo "The C# compilation/analyzer gate cannot be verified."
+    exit 1
 fi
 
 echo "--- Step 2: Analyzing Assembly-CSharp projects ---"
@@ -196,13 +221,13 @@ fi
 # above. Running them earlier would inspect stale Library/ScriptAssemblies output.
 echo "--- Step 3: Executing C# runtime architecture rules ---"
 DOTNET_NOLOGO=1 dotnet run \
-    --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+    --project "$(dirname "$0")/../tools/Kern.ArchitectureLinter" \
     --verbosity quiet -- \
     --project-root "$(dirname "$0")/.." \
-    --rule FOD-BLOCK-NAMESPACE \
-    --rule FOD-EXECUTION-ORDER \
-    --rule FOD-FORBIDDEN-API \
-    --rule FOD-POSTPROCESS-RUNTIME
+    --rule KERN-BLOCK-NAMESPACE \
+    --rule KERN-EXECUTION-ORDER \
+    --rule KERN-FORBIDDEN-API \
+    --rule KERN-POSTPROCESS-RUNTIME
 
 echo "All C# Roslyn analyzer checks passed successfully!"
 exit 0

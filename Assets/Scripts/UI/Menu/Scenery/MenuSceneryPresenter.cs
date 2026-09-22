@@ -2,47 +2,31 @@
 
 using System;
 using System.IO;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
+using Kern.Core;
+using Kern.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
 {
     private readonly IRuntimeAssetPaths _runtimeAssetPaths = runtimeAssetPaths;
-
-    // Единый источник направления точки высадки: его используют и камера
-    // подлёта, и ретикль на поверхности. Дублировать константу в двух
-    // местах значило бы рискнуть тихим расхождением цели и маркера.
-    internal static readonly Vector3 LandingSiteDirection = new(-0.48f, 0.10f, -0.87f);
     private const float DescentAnimationSeconds = 2.6f;
 
     private VisualElement? _tree;
     private Image? _spaceBgImage;
-    private Image? _planetBodyImage;
+    private Image? _sceneryImage;
     private Image? _loaderShade;
-    private Image? _planetIcon;
+    private Image? _logoIcon;
     private VisualElement? _beacon;
     private VisualElement? _beaconPing;
     private VisualElement? _stationBadge;
     private VisualElement? _sidebar;
-    private VisualElement? _targetReticle;
-
     private MenuSceneryController? _scenery;
     private MenuStarfield? _starfield;
-    private float _scenerySearchStartedAt = -1f;
-    private bool _scenerySearchWarned;
-
     private float _descentCameraProgress;
     private float _descentCameraTarget;
-
-#if UNITY_EDITOR
-    private float _uiBuiltAt;
-    private int _uiBuiltFrame;
-    private bool _planetTimingLogged;
-#endif
     private bool _uiTexturesReady;
 
     public float DescentTarget
@@ -53,10 +37,41 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
 
     public bool IsSceneryReady =>
         _uiTexturesReady &&
-        _planetBodyImage != null &&
-        _planetBodyImage.image != null &&
-        _spaceBgImage != null &&
-        _spaceBgImage.image != null;
+        _sceneryImage?.image != null &&
+        _spaceBgImage?.image != null;
+
+    /// <summary>
+    /// Почему сценка не готова — по каждому условию отдельно.
+    /// </summary>
+    ///
+    /// Готовность складывается из пяти независимых вещей: объекты сцены
+    /// привязаны, элементы разметки найдены, текстуры интерфейса разложены, и
+    /// у обеих картинок появилось содержимое. Пока отказ говорил просто «не
+    /// готово за три секунды», из строки нельзя было понять ни одну из пяти, и
+    /// следующий шаг назначался гаданием. Здесь они названы поимённо вместе с
+    /// разрешённым размером: обе картинки берут содержимое только после
+    /// раскладки, и нулевой размер — самый частый ответ.
+    public string DescribeReadiness()
+    {
+        // KERN-HARDCODED-TEXT: диагностика, см. пояснение у return.
+        string sceneryImageSize = _sceneryImage == null
+            ? "элемента нет"
+            : $"{_sceneryImage.resolvedStyle.width:F0}×{_sceneryImage.resolvedStyle.height:F0}";
+        // KERN-HARDCODED-TEXT: диагностика, см. пояснение у return.
+        string spaceImageSize = _spaceBgImage == null
+            ? "элемента нет"
+            : $"{_spaceBgImage.resolvedStyle.width:F0}×{_spaceBgImage.resolvedStyle.height:F0}";
+        // KERN-HARDCODED-TEXT: диагностика — строка читается человеком в логе и
+        // в дев-панели; ключа у неё нет и перевода она не требует.
+        return
+            $"текстуры интерфейса={_uiTexturesReady}, " +
+            $"MenuStarfield={(_starfield != null ? "привязан" : "НЕТ")}, " +
+            $"MenuSceneryController={(_scenery != null ? "привязан" : "НЕТ")}, " +
+            $"MainMenuSceneryImage: содержимое={(_sceneryImage?.image != null ? "есть" : "НЕТ")}, размер={sceneryImageSize}, " +
+            $"SpaceBgImage: содержимое={(_spaceBgImage?.image != null ? "есть" : "НЕТ")}, размер={spaceImageSize}, " +
+            $"MenuStarfield.Texture={(_starfield?.Texture != null ? "есть" : "НЕТ")}, " +
+            $"MenuSceneryController.OutputTexture={(_scenery?.OutputTexture != null ? "есть" : "НЕТ")}";
+    }
 
     public void Tick(ref Texture2D? spaceBgTexture)
     {
@@ -75,40 +90,23 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
     {
         _tree = tree;
         _spaceBgImage = tree.Q<Image>("SpaceBgImage");
-        _planetBodyImage = tree.Q<Image>("MainMenuPlanetImage");
-        if (_planetBodyImage != null && _scenery?.OutputTexture != null)
-        {
-            _planetBodyImage.image = _scenery.OutputTexture;
-        }
-
+        _sceneryImage = tree.Q<Image>("MainMenuSceneryImage");
         _loaderShade = tree.Q<Image>("LoaderShade");
-        _planetIcon = tree.Q<Image>("MainMenuPlanetIcon");
+        _logoIcon = tree.Q<Image>("MainMenuLogoIcon");
         _beacon = tree.Q<VisualElement>("MainMenuBeacon");
         _beaconPing = tree.Q<VisualElement>("BeaconPing");
         _stationBadge = tree.Q<VisualElement>("StationBadge");
         _sidebar = tree.Q<VisualElement>(className: "mm-sidebar");
-        _targetReticle = tree.Q<VisualElement>("TargetReticle");
     }
 
     public void MarkUIBuilt()
     {
-#if UNITY_EDITOR
-        _uiBuiltAt = Time.realtimeSinceStartup;
-        _uiBuiltFrame = Time.frameCount;
-        _planetTimingLogged = false;
-#endif
     }
+
     public void ResumeRenderers()
     {
-        if (_scenery != null)
-        {
-            _scenery.gameObject.SetActive(true);
-        }
-
-        if (_starfield != null)
-        {
-            _starfield.gameObject.SetActive(true);
-        }
+        _scenery?.gameObject.SetActive(true);
+        _starfield?.gameObject.SetActive(true);
     }
 
     public void ApplyTextures(ref Texture2D? shadeTexture, ref Texture2D? spaceBgTexture)
@@ -120,11 +118,10 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
 
         TryApplyStarfieldTexture(ref spaceBgTexture);
         TryApplySceneryTexture();
-
         ApplyImageTexture(_loaderShade, ref shadeTexture, "Assets/Textures/UI/mm_shade.png", nameof(_loaderShade));
 
-        Texture2D? unusedLogoCache = null;
-        ApplyImageTexture(_planetIcon, ref unusedLogoCache, "Assets/Textures/UI/mm_logo.png", nameof(_planetIcon));
+        Texture2D? logoCache = null;
+        ApplyImageTexture(_logoIcon, ref logoCache, "Assets/Textures/UI/mm_logo.png", nameof(_logoIcon));
 
         ApplyIconTexture("SideChronicleIcon", "Assets/Textures/UI/mm_icon_chronicle.png");
         ApplyIconTexture("SideSettingsIcon", "Assets/Textures/UI/mm_icon_settings.png");
@@ -142,22 +139,17 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
     {
         if (image == null)
         {
-            Debug.LogWarning($"[MainMenu] Optional image '{debugName}' is missing from Uxml ({assetPath}).");
             return;
         }
 
-        if (cache == null)
-        {
-            cache = LoadDirectTexture(assetPath);
-        }
-
+        cache ??= LoadDirectTexture(assetPath);
         if (cache != null)
         {
             image.image = cache;
         }
         else
         {
-            Debug.LogWarning($"[MainMenu] {debugName}: texture FAILED to load from '{assetPath}'");
+            Debug.LogWarning($"[MainMenu] {debugName}: texture failed to load from '{assetPath}'.");
         }
     }
 
@@ -165,25 +157,14 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
     {
         if (_tree == null)
         {
-            Debug.LogWarning($"[MainMenu] ApplyIconTexture('{elementName}'): _tree is null, UI not built yet");
             return;
         }
 
-        var element = _tree.Q<VisualElement>(elementName);
-        if (element == null)
+        VisualElement? element = _tree.Q<VisualElement>(elementName);
+        Texture2D? iconTexture = LoadDirectTexture(assetPath);
+        if (element != null && iconTexture != null)
         {
-            Debug.LogWarning($"[MainMenu] ApplyIconTexture: element '{elementName}' not found in Uxml tree");
-            return;
-        }
-
-        Texture2D? iconTex = LoadDirectTexture(assetPath);
-        if (iconTex != null)
-        {
-            element.style.backgroundImage = new StyleBackground(iconTex);
-        }
-        else
-        {
-            Debug.LogWarning($"[MainMenu] ApplyIconTexture('{elementName}'): texture FAILED to load from '{assetPath}'");
+            element.style.backgroundImage = new StyleBackground(iconTexture);
         }
     }
 
@@ -196,21 +177,16 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
 
         if (_starfield != null)
         {
-            float resolvedWidth = _spaceBgImage.resolvedStyle.width;
-            float resolvedHeight = _spaceBgImage.resolvedStyle.height;
-
-            if (float.IsNaN(resolvedWidth) || resolvedWidth <= 1f ||
-                float.IsNaN(resolvedHeight) || resolvedHeight <= 1f)
+            float width = _spaceBgImage.resolvedStyle.width;
+            float height = _spaceBgImage.resolvedStyle.height;
+            if (float.IsNaN(width) || width <= 1f || float.IsNaN(height) || height <= 1f)
             {
                 return;
             }
 
-            float panelScale = _spaceBgImage.panel?.scaledPixelsPerPoint ?? 1f;
-            _starfield.SetDisplaySize(
-                Mathf.RoundToInt(resolvedWidth * panelScale),
-                Mathf.RoundToInt(resolvedHeight * panelScale));
-
-            if (_starfield.Texture != null && !ReferenceEquals(_spaceBgImage.image, _starfield.Texture))
+            float scale = _spaceBgImage.panel?.scaledPixelsPerPoint ?? 1f;
+            _starfield.SetDisplaySize(Mathf.RoundToInt(width * scale), Mathf.RoundToInt(height * scale));
+            if (_starfield.Texture != null)
             {
                 _spaceBgImage.image = _starfield.Texture;
             }
@@ -223,80 +199,61 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
 
     private void TryApplySceneryTexture()
     {
-        if (_planetBodyImage == null)
-        {
-            if (!_scenerySearchWarned)
-            {
-                Debug.LogWarning("[MainMenu] Optional 'MainMenuPlanetImage' element is missing from Uxml.");
-                _scenerySearchWarned = true;
-            }
-
-            return;
-        }
-
-        if (_scenery == null)
-        {
-            if (_scenerySearchStartedAt < 0f)
-            {
-                _scenerySearchStartedAt = Time.realtimeSinceStartup;
-            }
-
-            if (!_scenerySearchWarned &&
-                Time.realtimeSinceStartup - _scenerySearchStartedAt > 3f)
-            {
-                Debug.LogWarning(
-                    "[MainMenu] MenuSceneryController не зарегистрировался за 3 с — планета останется пустой.");
-                _scenerySearchWarned = true;
-            }
-
-            return;
-        }
-
-        _scenerySearchStartedAt = -1f;
-
-        if (_scenery.OutputTexture != null &&
-            !ReferenceEquals(_planetBodyImage.image, _scenery.OutputTexture))
-        {
-            _planetBodyImage.image = _scenery.OutputTexture;
-
-#if UNITY_EDITOR
-            if (!_planetTimingLogged)
-            {
-                _planetTimingLogged = true;
-                Debug.Log(
-                    $"[Планета] Текстура подставлена через {(Time.realtimeSinceStartup - _uiBuiltAt) * 1000f:F0} мс " +
-                    $"после сборки UI, кадр {Time.frameCount - _uiBuiltFrame} от неё.");
-            }
-#endif
-        }
-
-        float resolvedWidth = _planetBodyImage.resolvedStyle.width;
-        float resolvedHeight = _planetBodyImage.resolvedStyle.height;
-
-        if (float.IsNaN(resolvedWidth) || resolvedWidth <= 1f ||
-            float.IsNaN(resolvedHeight) || resolvedHeight <= 1f)
+        if (_sceneryImage == null || _scenery == null)
         {
             return;
         }
 
-        float panelScale = _planetBodyImage.panel?.scaledPixelsPerPoint ?? 1f;
-        _scenery.SetDisplaySize(
-            Mathf.RoundToInt(resolvedWidth * panelScale),
-            Mathf.RoundToInt(resolvedHeight * panelScale));
+        if (_scenery.OutputTexture != null)
+        {
+            _sceneryImage.image = _scenery.OutputTexture;
+        }
+
+        float width = _sceneryImage.resolvedStyle.width;
+        float height = _sceneryImage.resolvedStyle.height;
+        if (float.IsNaN(width) || width <= 1f || float.IsNaN(height) || height <= 1f)
+        {
+            return;
+        }
+
+        float scale = _sceneryImage.panel?.scaledPixelsPerPoint ?? 1f;
+        _scenery.SetDisplaySize(Mathf.RoundToInt(width * scale), Mathf.RoundToInt(height * scale));
     }
 
     private Texture2D? LoadDirectTexture(string assetPath)
     {
         string relativePath = assetPath.StartsWith("Assets/Textures/", StringComparison.Ordinal)
-            ? assetPath.Substring("Assets/Textures/".Length)
-            : (assetPath.StartsWith("Assets/", StringComparison.Ordinal)
-                ? assetPath.Substring("Assets/".Length)
-                : assetPath);
+            ? assetPath["Assets/Textures/".Length..]
+            : assetPath.StartsWith("Assets/", StringComparison.Ordinal)
+                ? assetPath["Assets/".Length..]
+                : assetPath;
 
-        string? absolutePath = _runtimeAssetPaths.FindBundledTextureFile(relativePath);
-
+        // The editor and the player can have the same authored UI asset in
+        // different roots: the editor reads Assets/Textures, while a previous
+        // run may have already persisted the extracted copy. Resolve the
+        // canonical file through the public combined lookup instead of assuming
+        // the bundled root is the only valid runtime location.
+        string? absolutePath = _runtimeAssetPaths.FindTextureFile(relativePath);
+        if (absolutePath == null && Application.isEditor)
+        {
+            // The editor can enter MainMenu before RuntimeAssetPaths has
+            // resolved its bundled root. Keep authored UI textures available
+            // during that transition; player builds still use the managed
+            // bundled/persistent lookup above.
+            string editorPath = Path.Combine(
+                Application.dataPath,
+                "Textures",
+                relativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(editorPath))
+            {
+                absolutePath = editorPath;
+            }
+        }
         if (absolutePath == null)
         {
+            Debug.LogError(
+                $"[MainMenu] Required UI texture is missing: '{relativePath}'. " +
+                $"BundledRoot='{_runtimeAssetPaths.BundledTexturesRoot}'.");
             return null;
         }
 
@@ -311,9 +268,9 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
                 TextureWrapMode.Clamp,
                 makeNoLongerReadable: false);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Debug.LogWarning($"[MainMenu] Failed to load direct texture '{absolutePath}': {ex.Message}");
+            Debug.LogWarning($"[MainMenu] Failed to load texture '{absolutePath}': {exception.Message}");
             return null;
         }
     }
@@ -330,21 +287,19 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
             _descentCameraTarget,
             Time.unscaledDeltaTime / DescentAnimationSeconds);
 
-        _scenery?.SetDescentFraming(_descentCameraProgress, LandingSiteDirection);
+        _scenery?.SetDescentFraming(_descentCameraProgress, Vector3.back);
     }
 
-    public void Animate()
+    private void Animate()
     {
-        float time = Time.time;
         UpdateDescentCamera();
         MenuSceneryMarkers.Animate(
-            time,
+            Time.time,
             _beacon,
             _beaconPing,
             _stationBadge,
             _sidebar,
-            _targetReticle,
-            _planetBodyImage,
+            _sceneryImage,
             _scenery);
     }
 }

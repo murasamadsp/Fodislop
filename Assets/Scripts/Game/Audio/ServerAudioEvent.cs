@@ -2,27 +2,26 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
-using Fodinae.Audio.Backend;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Effekseer;
-using Fodinae.Game.Managers;
-using Fodinae.World;
-using Fodinae.World.Terrain;
+using Kern.Audio.Backend;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Effekseer;
+using Kern.Game.Managers;
+using Kern.World;
+using Kern.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 
-namespace Fodinae.Game;
-[SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any dynamic asset load/play errors.")]
+namespace Kern.Game;
 public sealed class ServerAudioEvent : IDisposable
 {
-    private readonly SFX _effectType;
+    private readonly SFX? _audioEffectType;
+    private readonly string _visualEffectName;
     private readonly ushort _sourceX;
     private readonly ushort _sourceY;
     private readonly ushort _targetBotID;
@@ -71,11 +70,69 @@ public sealed class ServerAudioEvent : IDisposable
         MapManager mapManager,
         IVfxService vfxPool,
         IAsyncOperationSupervisor operations)
+        : this(
+            packet.EffectType,
+            packet.EffectType.ToString(),
+            packet.TargetBotId,
+            packet.X,
+            packet.Y,
+            packet.Parameters,
+            slot,
+            robotService,
+            audioSystem,
+            assetLoader,
+            mapManager,
+            vfxPool,
+            operations)
     {
-        _effectType = packet.EffectType;
-        _sourceX = packet.X;
-        _sourceY = packet.Y;
-        _targetBotID = packet.TargetBotId;
+    }
+
+    public ServerAudioEvent(
+        VFXPacket packet,
+        IVfxSlot? slot,
+        IRobotService robotService,
+        IAudioSystem audioSystem,
+        IAssetLoader assetLoader,
+        MapManager mapManager,
+        IVfxService vfxPool,
+        IAsyncOperationSupervisor operations)
+        : this(
+            null,
+            packet.EffectType.ToString(),
+            packet.TargetBotId,
+            packet.X,
+            packet.Y,
+            packet.Parameters,
+            slot,
+            robotService,
+            audioSystem,
+            assetLoader,
+            mapManager,
+            vfxPool,
+            operations)
+    {
+    }
+
+    private ServerAudioEvent(
+        SFX? audioEffectType,
+        string visualEffectName,
+        ushort targetBotId,
+        ushort sourceX,
+        ushort sourceY,
+        IReadOnlyList<StringPairPacket> parameters,
+        IVfxSlot? slot,
+        IRobotService robotService,
+        IAudioSystem audioSystem,
+        IAssetLoader assetLoader,
+        MapManager mapManager,
+        IVfxService vfxPool,
+        IAsyncOperationSupervisor operations)
+    {
+        _audioEffectType = audioEffectType;
+        _visualEffectName = visualEffectName;
+        _sourceX = sourceX;
+        _sourceY = sourceY;
+        _targetBotID = targetBotId;
         _slot = slot;
         _robotService = robotService;
         _audioSystem = audioSystem;
@@ -88,9 +145,12 @@ public sealed class ServerAudioEvent : IDisposable
             _gameObject = slot.GameObject;
         }
 
-        _parsedParams = ServerAudioParameters.Parse(packet.Parameters);
+        _parsedParams = ServerAudioParameters.Parse(parameters);
         SetupSlotPosition();
-        PlayAudio();
+        if (_audioEffectType is SFX effectType)
+        {
+            PlayAudio(effectType);
+        }
 
         if (slot != null)
         {
@@ -189,40 +249,6 @@ public sealed class ServerAudioEvent : IDisposable
         ReleaseSlot();
     }
 
-    private static readonly Dictionary<SFX, string> _SfxEventNameCache = new();
-
-    private static string GetSfxEventName(SFX sfx)
-    {
-        if (_SfxEventNameCache.TryGetValue(sfx, out var cachedName))
-        {
-            return cachedName;
-        }
-
-        var name = sfx.ToString();
-        var sb = new System.Text.StringBuilder("sfx/");
-        for (int i = 0; i < name.Length; i++)
-        {
-            char c = name[i];
-            if (char.IsUpper(c))
-            {
-                if (i > 0)
-                {
-                    sb.Append('_');
-                }
-
-                sb.Append(char.ToLowerInvariant(c));
-            }
-            else
-            {
-                sb.Append(c);
-            }
-        }
-
-        var result = sb.ToString();
-        _SfxEventNameCache[sfx] = result;
-        return result;
-    }
-
     private void SetupSlotPosition()
     {
         Vector3 pos;
@@ -267,9 +293,9 @@ public sealed class ServerAudioEvent : IDisposable
         _slot?.SetSprite(null);
     }
 
-    private void PlayAudio()
+    private void PlayAudio(SFX effectType)
     {
-        string eventName = GetSfxEventName(_effectType);
+        string eventName = SfxEventNames.Get(effectType);
         _audioSystem.PlayAt(eventName, _intendedWorldPosition);
     }
 
@@ -287,60 +313,41 @@ public sealed class ServerAudioEvent : IDisposable
     {
         try
         {
-            var filename = $"VFX/{_effectType.ToString().ToLowerInvariant()}";
-            var animData = await _assetLoader.GetAnimatedSpritesAsync(filename, token);
+            ServerAudioVisual visual =
+                await new ServerAudioVisualLoader(_assetLoader).LoadAsync(_visualEffectName, token);
             if (token.IsCancellationRequested)
             {
                 return;
             }
 
-            if (animData.Frames != null && animData.Frames.Length > 0)
+            if (visual.Frames != null)
             {
-                _animationFrames = animData.Frames;
+                _animationFrames = visual.Frames;
                 _currentFrame = 0;
-                _frameDuration = animData.FrameDuration / Mathf.Max(0.01f, _speed);
+                _frameDuration = visual.FrameDuration / Mathf.Max(0.01f, _speed);
                 _isAnimated = true;
                 _slot?.SetSprite(_animationFrames[0]);
                 _slot?.SetEnabled(true);
-
                 _maxLifetime = (_animationFrames.Length * _frameDuration) + 0.5f;
                 return;
             }
 
-            var texture = await _assetLoader.GetTextureAsync(filename, token);
-            if (token.IsCancellationRequested)
+            if (visual.StaticSprite != null)
             {
-                return;
-            }
-
-            if (texture != null)
-            {
-                _ownedStaticSprite = Sprite.Create(
-                    texture,
-                    new Rect(0, 0, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f),
-                    RenderingConstants.PIXELS_PER_UNIT);
+                _ownedStaticSprite = visual.StaticSprite;
                 _slot?.SetSprite(_ownedStaticSprite);
                 _slot?.SetEnabled(true);
-
                 _maxLifetime = 1f;
                 return;
             }
 
-            var bytes = await _assetLoader.GetAssetBytesAsync(filename, token, timeoutSeconds: 10);
-            if (token.IsCancellationRequested)
+            if (visual.EffectBytes != null)
             {
+                await TryLoadEffekseerAsync(visual.EffectBytes, token);
                 return;
             }
 
-            if (bytes != null && bytes.Length > 0)
-            {
-                await TryLoadEffekseerAsync(bytes, token);
-            }
-            else
-            {
-                MarkVisualCompleted();
-            }
+            MarkVisualCompleted();
         }
         catch (OperationCanceledException)
         {
@@ -361,7 +368,7 @@ public sealed class ServerAudioEvent : IDisposable
         {
             var effectAsset = await RuntimeEffekseerLoader.LoadEffectAsync(
                 bytes,
-                _effectType.ToString(),
+                _visualEffectName,
                 _assetLoader,
                 texturePathMapper: path =>
                 {

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.UI.Programmator;
+namespace Kern.UI.Programmator;
 
 public static class ProgrammatorOperators
 {
@@ -64,7 +64,6 @@ public static class ProgrammatorOperators
             ProgAction.CallState, ProgAction.ReturnState,
             ProgAction.DebugPause, ProgAction.DebugShow,
             ProgAction.EnableAutoDig, ProgAction.DisableAutoDig,
-            ProgAction.EnableAggression, ProgAction.DisableAggression,
             ProgAction.EnableHand, ProgAction.DisableHand,
             ProgAction.SetStartWhenDied, ProgAction.SetStartWhenHurt,
             ProgAction.SetStartWhenBotNearby,

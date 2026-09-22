@@ -4,13 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
-using Fodinae.UI.HUD.Player.Model;
+using Kern.Core.Interfaces;
+using Kern.UI.HUD.Player.Model;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.HUD.Player.View;
+namespace Kern.UI.HUD.Player.View;
 
 public sealed class PlayerHUDBasketView
 {
@@ -44,6 +44,10 @@ public sealed class PlayerHUDBasketView
             }
             catch (OperationCanceledException)
             {
+                // The loader can be torn down before the HUD receives its own
+                // destroy cancellation during a scene transition. In that case
+                // the request is intentionally abandoned, not an optional asset
+                // failure worth reporting as a warning.
                 return;
             }
             catch (Exception exception)

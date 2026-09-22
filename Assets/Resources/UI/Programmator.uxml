@@ -24,6 +24,7 @@
                         <ui:Button name="RunButton" class="prog-run-btn" text="▶" />
                         <ui:Button name="StopButton" class="prog-stop-btn" text="■" />
                     </ui:VisualElement>
+                    <ui:Label name="ProgramError" class="prog-error is-hidden" text="" />
                 </ui:VisualElement>
                 <ui:Button name="ProgrammatorCloseButton" class="prog-close-btn" text="×" />
             </ui:VisualElement>

@@ -3,9 +3,9 @@
 using System;
 using System.Net;
 using System.Net.Sockets;
-using Fodinae.Core;
+using Kern.Core;
 
-namespace Fodinae.Networking.Connection;
+namespace Kern.Networking.Connection;
 public enum ConnectionTransportKind
 {
     Dummy,
@@ -22,35 +22,6 @@ public static class ConnectionTransportConfig
         return useDummyConnection
             ? ConnectionTransportKind.Dummy
             : ConnectionTransportKind.Tcp;
-    }
-
-    public static bool TryParseEndpoint(string? value, out string host, out int port)
-    {
-        host = DefaultServerHost;
-        port = DefaultServerPort;
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return true;
-        }
-
-        string candidate = value.Trim();
-        if (!candidate.Contains(':'))
-        {
-            host = candidate;
-            return true;
-        }
-
-        if (!Uri.TryCreate($"tcp://{candidate}", UriKind.Absolute, out Uri? endpoint) ||
-            string.IsNullOrWhiteSpace(endpoint.Host) ||
-            endpoint.Port <= 0 ||
-            endpoint.Port > 65535)
-        {
-            return false;
-        }
-
-        host = endpoint.Host;
-        port = endpoint.Port;
-        return true;
     }
 
     public static bool TryResolveEndpoint(

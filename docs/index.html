@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kern — каталог проекта</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { max-width: 920px; margin: 0 auto; padding: 32px 20px 64px; background: #111318; color: #e8eaf0; line-height: 1.55; }
+    a { color: #8ecbff; }
+    code { padding: 2px 5px; border-radius: 4px; background: #242833; }
+    section { margin: 28px 0; padding: 18px 20px; border: 1px solid #303542; border-radius: 10px; background: #171a21; }
+    ul { margin-bottom: 0; }
+    .muted { color: #a8adba; }
+  </style>
+</head>
+<body>
+  <h1>Kern — каталог проекта</h1>
+  <p class="muted">Навигация по репозиторию. Это индекс, а не источник архитектурных правил.</p>
+
+  <section>
+    <h2>С чего начать</h2>
+    <ul>
+      <li><a href="../.agents/repository-map.md">Карта репозитория</a> — границы директорий и asmdef.</li>
+      <li><a href="../AGENTS.md">AGENTS.md</a> — обязательные правила работы агента.</li>
+      <li><a href="../.agents/project-context.md">Контекст проекта</a> — сцены, DI, UI, мир и диагностика.</li>
+      <li><a href="../README.md">README</a> — краткая точка входа проекта.</li>
+      <li><a href="../tools/README.md">tools/README</a> — каталог standalone-инструментов.</li>
+      <li><a href="../visual/README.md">visual/README</a> — граница UI lab и production.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Архитектура и production-контракты</h2>
+    <ul>
+      <li><a href="architecture/LIGHTING_ARCHITECTURE.md">Lighting architecture</a></li>
+      <li><a href="architecture/SCENE_STANDARD.md">Scene standard</a></li>
+      <li><a href="architecture/TEXTURE_FORMAT_DECISION.md">Texture format decision</a></li>
+      <li><a href="architecture/PIPELINE.md">Render pipeline</a></li>
+      <li><a href="architecture-rules.html">Architecture rules</a></li>
+      <li><a href="cell-config-contract-extension.html">Cell config contract extension</a></li>
+      <li><a href="display-output-validation.html">Display output validation</a></li>
+      <li><a href="lighting-transport.html">Lighting transport</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Аудиты и handoff</h2>
+    <ul>
+      <li><a href="alpha-readiness-audit.html">Alpha readiness audit</a></li>
+      <li><a href="operations/LIGHTING_MAP.md">Lighting map</a></li>
+      <li><a href="operations/protocol-trust-audit.md">Protocol trust audit</a></li>
+      <li><a href="design/design-visual-changes.md">Design visual changes</a></li>
+      <li><a href="design/design-text-overflow.md">Design text overflow</a></li>
+      <li><a href="design/design-component-drift.md">Design component drift</a></li>
+      <li><a href="design/design-debt-uss.md">USS design debt</a></li>
+      <li><a href="planning/TODO.md">Planning TODO</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Lighting research</h2>
+    <ul>
+      <li><a href="lighting-research/README.md">README</a> — обзор исследований по GI.</li>
+      <li><a href="lighting-research/SOURCES.md">SOURCES</a> — список источников и статей.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Ограничение индекса</h2>
+    <p>Локальные копии worktree, Unity cache, build output, логи и .NET
+      <code>bin/</code>/<code>obj/</code> намеренно не перечисляются. Они не
+      являются частью карты исходного проекта.</p>
+  </section>
+</body>
+</html>

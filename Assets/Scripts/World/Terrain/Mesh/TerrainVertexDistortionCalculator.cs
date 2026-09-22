@@ -4,19 +4,45 @@ using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
+
+public readonly record struct TerrainVertexOffset(int XSteps, int YSteps, int ZSteps)
+{
+    public const int GridSize = 32;
+
+    public static TerrainVertexOffset Zero => new(0, 0, 0);
+
+    public Vector3 ToVector3()
+    {
+        return new Vector3(
+            XSteps / (float)GridSize,
+            YSteps / (float)GridSize,
+            ZSteps / (float)GridSize);
+    }
+}
 
 public sealed class TerrainVertexDistortionCalculator
 {
-    public Vector3[,] GridVertexOffsets { get; private set; } = null!;
+    // Сила искажения: сколько шагов сетки 1/32 приходится на единицу
+    // randxd/randyd. Оригинал Mines делит те же хэши на 16, мы храним
+    // смещение шагами по 1/32 — поэтому двойка и есть оригинальная
+    // амплитуда, а не удвоенная. Единица оставит вдвое более спокойную
+    // сетку; ноль равносилен выключенному искажению.
+    public const int DistortionStrengthSteps = 2;
+
+    // Середина свободного джиттера. Хэш даёт 0..6, вычитание трёх центрирует
+    // его в ноль, то есть узел уезжает в обе стороны, а не только наружу.
+    private const int FreeJitterCenterSteps = 3 * DistortionStrengthSteps;
+
+    public TerrainRingGrid<TerrainVertexOffset> GridVertexOffsets { get; } = new();
 
     public bool EnableDistortion { get; set; } = true;
 
     public void EnsureCapacity(int meshWidth, int meshHeight)
     {
-        if (GridVertexOffsets == null || GridVertexOffsets.GetLength(0) != meshWidth + 1 || GridVertexOffsets.GetLength(1) != meshHeight + 1)
+        if (GridVertexOffsets.Width != meshWidth + 1 || GridVertexOffsets.Height != meshHeight + 1)
         {
-            GridVertexOffsets = new Vector3[meshWidth + 1, meshHeight + 1];
+            GridVertexOffsets.EnsureSize(meshWidth + 1, meshHeight + 1);
         }
     }
 
@@ -58,78 +84,32 @@ public sealed class TerrainVertexDistortionCalculator
     {
         EnsureCapacity(meshWidth, meshHeight);
 
+        // Сетка узлов на единицу больше сетки клеток: у окна w×h ровно
+        // (w+1)×(h+1) углов.
         int gw = meshWidth + 1;
         int gh = meshHeight + 1;
 
-        TerrainCellCache.Scroll2DArray(GridVertexOffsets, gw, gh, dx, dy);
+        GridVertexOffsets.Scroll(dx, dy);
 
-        int vxStart = 0;
-        int vxLen = 0;
-        int vyStart = 0;
-        int vyLen = 0;
+        // Кайма в один узел: узел смещается по четырём клеткам вокруг себя, и
+        // у узла на старой границе клетка снаружи только что появилась.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(
+            gw, gh, dx, dy, neighbourMargin: 1);
+        CalculateBand(cellCache, bands.ColumnBand, worldWidth, worldHeight);
+        CalculateBand(cellCache, bands.RowBand, worldWidth, worldHeight);
+    }
 
-        if (dx > 0)
+    private void CalculateBand(
+        TerrainCellCache cellCache,
+        RectInt band,
+        int worldWidth,
+        int worldHeight)
+    {
+        for (int x = band.xMin; x < band.xMax; x++)
         {
-            vxStart = Mathf.Max(0, gw - dx - 1);
-            vxLen = gw - vxStart;
-        }
-        else if (dx < 0)
-        {
-            vxStart = 0;
-            vxLen = Mathf.Min(gw, -dx + 1);
-        }
-
-        if (dy > 0)
-        {
-            vyStart = Mathf.Max(0, gh - dy - 1);
-            vyLen = gh - vyStart;
-        }
-        else if (dy < 0)
-        {
-            vyStart = 0;
-            vyLen = Mathf.Min(gh, -dy + 1);
-        }
-
-        if (vxLen > 0 || vyLen > 0)
-        {
-            if (vxLen > 0)
+            for (int y = band.yMin; y < band.yMax; y++)
             {
-                for (int x = vxStart; x < vxStart + vxLen; x++)
-                {
-                    for (int y = 0; y < gh; y++)
-                    {
-                        CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
-                    }
-                }
-            }
-
-            if (vyLen > 0 && vxLen < gw)
-            {
-                int xStart = 0;
-                int xEnd = gw;
-
-                if (vxLen > 0)
-                {
-                    if (dx > 0)
-                    {
-                        xEnd = vxStart;
-                    }
-                    else
-                    {
-                        xStart = vxLen;
-                    }
-                }
-
-                if (xStart < xEnd)
-                {
-                    for (int y = vyStart; y < vyStart + vyLen; y++)
-                    {
-                        for (int x = xStart; x < xEnd; x++)
-                        {
-                            CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
-                        }
-                    }
-                }
+                CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
             }
         }
     }
@@ -138,7 +118,7 @@ public sealed class TerrainVertexDistortionCalculator
     {
         if (!EnableDistortion)
         {
-            GridVertexOffsets[x, y] = Vector3.zero;
+            GridVertexOffsets[x, y] = TerrainVertexOffset.Zero;
             return;
         }
 
@@ -155,7 +135,7 @@ public sealed class TerrainVertexDistortionCalculator
         GridVertexOffsets[x, y] = ComputeOffset(tl, tr, bl, br, worldX, worldY, worldWidth, worldHeight);
     }
 
-    public static Vector3 ComputeOffset(
+    public static TerrainVertexOffset ComputeOffset(
         CachedCellData tl,
         CachedCellData tr,
         CachedCellData bl,
@@ -167,78 +147,99 @@ public sealed class TerrainVertexDistortionCalculator
     {
         if (worldX <= 0 || worldX >= worldWidth || worldY <= 0 || worldY >= worldHeight)
         {
-            return Vector3.zero;
+            return TerrainVertexOffset.Zero;
         }
 
-        float rx = RandXd(worldX, worldY) / 16f;
-        float ry = RandYd(worldX, worldY) / 16f;
+        // Loose cells have their own single-cell contour in the terrain
+        // shader. A shared node offset here would apply a second distortion to
+        // the same cell and produce stretched lava/sand silhouettes.
+        if (IsRoundableLoose(tl) || IsRoundableLoose(tr) ||
+            IsRoundableLoose(bl) || IsRoundableLoose(br))
+        {
+            return TerrainVertexOffset.Zero;
+        }
 
+        int rx = (int)RandXd(worldX, worldY) * DistortionStrengthSteps;
+        int ry = (int)RandYd(worldX, worldY) * DistortionStrengthSteps;
+
+        // Внутри сплошного массива узел колышется свободно в обе стороны:
+        // здесь нет внешней стороны, к которой нужно привязывать знак.
         if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
         {
-            return Vector3.zero;
+            return new TerrainVertexOffset(
+                rx - FreeJitterCenterSteps,
+                -(ry - FreeJitterCenterSteps),
+                0);
         }
 
         if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))
         {
-            return Vector3.zero;
+            return TerrainVertexOffset.Zero;
         }
 
         if (worldY == 0 || (IsCause(tl) && IsCause(br)) || (IsCause(tr) && IsCause(bl)))
         {
-            return Vector3.zero;
+            return TerrainVertexOffset.Zero;
         }
 
         if (IsCause(tl) && IsCause(tr))
         {
-            return new Vector3(0, -ry, 0);
+            return new TerrainVertexOffset(0, -ry, 0);
         }
 
         if (IsCause(tl) && IsCause(bl))
         {
-            return new Vector3(-rx, 0, 0);
+            return new TerrainVertexOffset(-rx, 0, 0);
         }
 
         if (IsCause(tr) && IsCause(br))
         {
-            return new Vector3(rx, 0, 0);
+            return new TerrainVertexOffset(rx, 0, 0);
         }
 
         if (IsCause(bl) && IsCause(br))
         {
-            return new Vector3(0, ry, 0);
+            return new TerrainVertexOffset(0, ry, 0);
         }
 
         if (IsCause(tl))
         {
-            return new Vector3(-rx, -ry, 0);
+            return new TerrainVertexOffset(-rx, -ry, 0);
         }
 
         if (IsCause(tr))
         {
-            return new Vector3(rx, -ry, 0);
+            return new TerrainVertexOffset(rx, -ry, 0);
         }
 
         if (IsCause(bl))
         {
-            return new Vector3(-rx, ry, 0);
+            return new TerrainVertexOffset(-rx, ry, 0);
         }
 
         if (IsCause(br))
         {
-            return new Vector3(rx, ry, 0);
+            return new TerrainVertexOffset(rx, ry, 0);
         }
 
-        return Vector3.zero;
+        return TerrainVertexOffset.Zero;
     }
 
     public static bool IsCause(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Cause;
+        return data.Distortion == CellDistortionType.Cause &&
+            !MapCellConfigCatalog.HasFixedTerrainGeometry(data.Type);
     }
 
     public static bool IsBlock(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Block;
+        return data.Distortion == CellDistortionType.Block ||
+            MapCellConfigCatalog.HasFixedTerrainGeometry(data.Type);
+    }
+
+    public static bool IsRoundableLoose(CachedCellData data)
+    {
+        return MapCellConfigCatalog.IsRoundableLoose(data.Type);
     }
 
     public static float RandXd(int x, int y)

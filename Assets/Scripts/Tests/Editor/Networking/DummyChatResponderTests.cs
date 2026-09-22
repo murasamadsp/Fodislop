@@ -8,7 +8,7 @@ using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 public sealed class DummyChatResponderTests
 {
@@ -19,7 +19,7 @@ public sealed class DummyChatResponderTests
     public void SetUp()
     {
         _sent = [];
-        _responder = new DummyChatResponder(_sent.Add);
+        _responder = new DummyChatResponder(_sent.Add, new VirtualDummyClock(seed: 1));
     }
 
     [Test]
@@ -30,7 +30,7 @@ public sealed class DummyChatResponderTests
         Assert.That(_sent, Has.Count.EqualTo(1));
         var payload = (ChatMessageListPacket)_sent[0].Payload;
         Assert.That(payload.Tag, Is.EqualTo("global"));
-        Assert.That(payload.Messages, Has.Count.EqualTo(10));
+        Assert.That(payload.Messages, Has.Length.EqualTo(10));
     }
 
     [Test]

@@ -1,19 +1,19 @@
 #nullable enable
 
 using UnityEngine.UIElements;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.Tools;
-using Fodinae.Tools.Imgui;
-using Fodinae.Tools.Imgui.Windows;
-using Fodinae.World;
-using Fodinae.World.Lighting;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
+using Kern.Tools;
+using Kern.Tools.Imgui;
+using Kern.Tools.Imgui.Windows;
+using Kern.World;
+using Kern.World.Lighting;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     [DisallowMultipleComponent]
     public sealed class InGameDebugOverlay : MonoBehaviour
@@ -35,12 +35,18 @@ namespace Fodinae.UI
         [Inject]
         private SurfaceRenderer _surfaceRenderer = null!;
         [Inject]
-        private Fodinae.Game.WorldEntityBatchRenderer _entityRenderer = null!;
+        private Kern.Game.WorldEntityBatchRenderer _entityRenderer = null!;
         [Inject]
         private UIDocument _gameUIDocument = null!;
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
+        [Inject]
+        private Kern.Rendering.DisplayManager _displayManager = null!;
+        [Inject]
+        private Kern.World.Terrain.TerrainRenderer _terrainRenderer = null!;
 
         private readonly WorldGizmoOptions _gizmos = new();
-        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[7];
+        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[9];
         private RenderBypassWindow? _bypassWindow;
         private bool _registered;
 
@@ -100,7 +106,11 @@ namespace Fodinae.UI
 
         private void EnsureWindows()
         {
-            if (_telemetry == null || _debugSettings == null)
+            if (_telemetry == null ||
+                _debugSettings == null ||
+                _clientConfig == null ||
+                _displayManager == null ||
+                _terrainRenderer == null)
             {
                 return;
             }
@@ -118,7 +128,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            var toolbar = new ToolbarWindow();
+            var toolbar = new ToolbarWindow(_lighting);
             var stats = new FrameStatsWindow(_telemetry, _lighting);
             var world = new WorldInfoWindow(
                 _telemetry,
@@ -135,10 +145,14 @@ namespace Fodinae.UI
                 _gizmos,
                 _surfaceRenderer,
                 _entityRenderer,
-                _gameUIDocument);
+                _gameUIDocument,
+                _clientConfig,
+                _terrainRenderer);
             var lightingCost = new LightingCostWindow(_lighting, _telemetry);
             var breakdown = new FrameBreakdownWindow();
             var packets = new PacketTrafficWindow();
+            var color = new ColorOutputWindow(_clientConfig, _displayManager, _lighting);
+            var terrainDebug = new TerrainDebugWindow(_terrainRenderer);
             _bypassWindow = bypass;
             _ownedWindows[0] = toolbar;
             _ownedWindows[1] = stats;
@@ -147,6 +161,8 @@ namespace Fodinae.UI
             _ownedWindows[4] = lightingCost;
             _ownedWindows[5] = breakdown;
             _ownedWindows[6] = packets;
+            _ownedWindows[7] = color;
+            _ownedWindows[8] = terrainDebug;
 
             foreach (ToolWindow? window in _ownedWindows)
             {

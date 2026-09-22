@@ -5,15 +5,14 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace Fodinae.Rendering.PostProcessing
+namespace Kern.Rendering.PostProcessing
 {
     [Serializable]
-    [VolumeComponentMenu("Fodinae/Color Grading")]
+    [VolumeComponentMenu("Kern/Color Grading")]
     [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public class ColorGradingComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter names stable for existing profiles.
-#pragma warning disable SA1307
         [Tooltip("Exposure compensation in stops. Zero is neutral.")]
         public ClampedFloatParameter exposure = PostProcessDefaults.ColorGradingExposure();
 

@@ -1,5 +1,5 @@
-#ifndef FODINAE_TERRAIN_CELL_DATA_INCLUDED
-#define FODINAE_TERRAIN_CELL_DATA_INCLUDED
+#ifndef KERN_TERRAIN_CELL_DATA_INCLUDED
+#define KERN_TERRAIN_CELL_DATA_INCLUDED
 
 // Квад террейна из текстур данных клетки (TerrainCellDataTextures).
 //
@@ -15,10 +15,10 @@ Texture2D<float4> _TerrainCellTileSize;
 Texture2D<float4> _TerrainCellAnimation;
 Texture2D<float4> _TerrainCellWorld;
 Texture2D<float4> _TerrainCellGlow;
-Texture2D<float4> _TerrainGridOffsets;
+Texture2D<float4> _TerrainCellGeometryX;
+Texture2D<float4> _TerrainCellGeometryY;
 
-// x, y — размер сетки в клетках; z — размер клетки в мире; w — искажение
-// включено (1) или нет (0): без него смещения узлов не читаются вовсе.
+// x, y — размер сетки в клетках; z — размер клетки в мире.
 float4 _TerrainCellGridSize;
 
 // Мировая клетка локального (0, 0) окна. Тексели лежат по кольцевому
@@ -31,7 +31,8 @@ float4 _TerrainCellViewOffset;
 
 int TerrainRing(int value, int size)
 {
-    int remainder = value % size;
+    int quotient = value / size;
+    int remainder = value - quotient * size;
     return remainder < 0 ? remainder + size : remainder;
 }
 
@@ -46,21 +47,11 @@ struct TerrainCellVertex
     float4 animData;
     float4 packedData;
     float4 glowData;
+    float4 geometryCornersX;
+    float4 geometryCornersY;
     float atlasIndex;
     float layer;
 };
-
-// node — локальный узел окна.
-float3 TerrainGridOffset(int2 node)
-{
-    int2 origin = (int2)round(_TerrainCellOrigin.xy);
-    int nodesWide = (int)round(_TerrainCellGridSize.x) + 1;
-    int nodesHigh = (int)round(_TerrainCellGridSize.y) + 1;
-    int2 ring = int2(
-        TerrainRing(origin.x + node.x, nodesWide),
-        TerrainRing(origin.y + node.y, nodesHigh));
-    return _TerrainGridOffsets.Load(int3(ring, 0)).xyz;
-}
 
 TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
 {
@@ -104,27 +95,41 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
     v.animData = _TerrainCellAnimation.Load(texel);
     v.glowData = _TerrainCellGlow.Load(texel);
 
-    // Якорь: флаг ставится, если сдвинут хоть один из четырёх узлов квада,
-    // а сам якорь угла — это угол плюс смещение его узла.
-    bool anchored = false;
-    float3 offset = 0.0;
-    if (_TerrainCellGridSize.w > 0.5)
+    float4 geometryX = _TerrainCellGeometryX.Load(texel);
+    float4 geometryY = _TerrainCellGeometryY.Load(texel);
+    // Geometry is a foreground-only contract.  Background texels can share
+    // the same ring address and must never inherit a stale anchor bit from a
+    // previous cell upload.
+    bool anchored = layer > 0 && meta.a > 0.5;
+    // Rasterize a carrier enclosing the ENTIRE pixel silhouette. Rasterizing
+    // the displaced polygon first loses fragments on the outward half of every
+    // staircase; fragment clipping cannot bring those fragments back.
+    // Corners are cell-local, so the interpolant and POSITION use one scale.
+    float2 carrierCorner = cornerBase;
+    if (anchored)
     {
-        float3 offset00 = TerrainGridOffset(int2(x, y));
-        float3 offset10 = TerrainGridOffset(int2(x + 1, y));
-        float3 offset11 = TerrainGridOffset(int2(x + 1, y + 1));
-        float3 offset01 = TerrainGridOffset(int2(x, y + 1));
-        anchored = any(offset00 != 0.0) || any(offset10 != 0.0) ||
-            any(offset11 != 0.0) || any(offset01 != 0.0);
-        offset = TerrainGridOffset(int2(x, y) + cornerStep);
+        float2 boundsMin = float2(
+            min(min(geometryX.x, geometryX.y), min(geometryX.z, geometryX.w)),
+            min(min(geometryY.x, geometryY.y), min(geometryY.z, geometryY.w)));
+        float2 boundsMax = float2(
+            max(max(geometryX.x, geometryX.y), max(geometryX.z, geometryX.w)),
+            max(max(geometryY.x, geometryY.y), max(geometryY.z, geometryY.w)));
+        boundsMin = floor(boundsMin * 32.0) / 32.0;
+        boundsMax = ceil(boundsMax * 32.0) / 32.0;
+        carrierCorner = lerp(boundsMin, boundsMax, cornerBase);
     }
-    v.packedData = float4(anchored ? 1.0 : 0.0, cornerBase + offset.xy, 0.0);
-
+    v.packedData = float4(anchored ? 1.0 : 0.0, carrierCorner, 0.0);
+    v.geometryCornersX = anchored
+        ? geometryX
+        : float4(0.0, 1.0, 1.0, 0.0);
+    v.geometryCornersY = anchored
+        ? geometryY
+        : float4(0.0, 0.0, 1.0, 1.0);
     float cellSize = _TerrainCellGridSize.z;
     v.positionOS = float3(
-        (x + cornerBase.x) * cellSize,
-        (y + cornerBase.y) * cellSize,
-        layer == 0 ? 0.1 : 0.0) + offset;
+        (x + carrierCorner.x) * cellSize,
+        (y + carrierCorner.y) * cellSize,
+        layer == 0 ? 0.1 : 0.0);
     return v;
 }
 

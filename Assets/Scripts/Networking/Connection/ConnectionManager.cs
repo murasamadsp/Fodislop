@@ -1,16 +1,16 @@
 #nullable enable
 
-using Fodinae.Core.Interfaces.Diagnostics;
+using Kern.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Networking.Diagnostics;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Networking.Auth;
+using Kern.Networking.Diagnostics;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Networking.Auth;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Connection;
@@ -23,12 +23,12 @@ using Unity.Profiling;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Networking.Connection
+namespace Kern.Networking.Connection
 {
-    public class ConnectionManager : MonoBehaviour, IConnectionService
+    public class ConnectionManager : MonoBehaviour, IConnectionService, IWorldRegionRequester
     {
         private static readonly ProfilerMarker _PacketDrainMarker =
-            new("Fodinae.Net.DrainPacketQueue");
+            new("Kern.Net.DrainPacketQueue");
 
         private static readonly AllocationLedger.Entry _AllocationEntry =
             AllocationLedger.Register("Сеть — разбор очереди");
@@ -44,6 +44,15 @@ namespace Fodinae.Networking.Connection
         public IServerConnection? Connection { get; private set; }
         public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
         public bool IsOffline => Connection is IOfflineConnection;
+
+        public void RequestWorldRegion(string worldCodeName, RectInt serverRegion)
+        {
+            if (IsConnected && Connection is IWorldRegionRequester requester)
+            {
+                requester.RequestWorldRegion(worldCodeName, serverRegion);
+            }
+        }
+
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;
         public event Action<string>? OnReconnectStatusChanged;
@@ -71,11 +80,11 @@ namespace Fodinae.Networking.Connection
         private float _reconnectCountdown;
         private string _reconnectStatus = string.Empty;
         private bool _tearingDown;
+        private bool _returningToMenu;
         private bool _restartWorldOnConnect;
 
         // НУЖЕН: сохраняет причину серверного дисконнекта — используется при реконнекте
         // и для диагностики в ReconnectUI. НЕ УДАЛЯТЬ (см. HandleServerDisconnect).
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052", Justification = "Хранит причину дисконнекта для реконнект-статуса")]
         private string _disconnectReason = string.Empty;
 
         protected void OnDestroy()
@@ -173,7 +182,15 @@ namespace Fodinae.Networking.Connection
                 Connection.OnReceived -= OnReceived;
                 Connection.OnConnected -= OnConnected;
                 Connection.OnDisconnected -= OnDisconnected;
-                (Connection as IDisposable)?.Dispose();
+
+                // DummyConnection — синглтон Bootstrap и переиспользуется на
+                // следующем подключении; Dispose закрыл бы его состояние мира
+                // навсегда. Освобождается только одноразовый сокетный транспорт.
+                if (!ReferenceEquals(Connection, _dummyConnection))
+                {
+                    (Connection as IDisposable)?.Dispose();
+                }
+
                 Connection = null;
             }
 
@@ -280,6 +297,7 @@ namespace Fodinae.Networking.Connection
             _disconnectReason = reason;
             Disconnect();
             OnDisconnectReason?.Invoke(reason);
+            ReturnToMainMenuAfterDisconnect();
         }
 
         public void HandleServerReconnect()
@@ -333,16 +351,29 @@ namespace Fodinae.Networking.Connection
             _reconnectStatus = string.Empty;
             OnReconnectHidden?.Invoke();
 
-            int version = _useOldClient ? 0 : 1;
+            int version = _useOldClient ? 0 : ProjectRuntimeContracts.Networking.ClientVersion;
             string token = _tokens.Load();
             Debug.Log($"[Auth] Sending ClientHello with token: {(string.IsNullOrEmpty(token) ? "EMPTY" : "PRESENT")}");
             Connection?.SendAsync(new ClientPacket(
                 (uint)DateTimeOffset.UtcNow.Ticks,
-                new ClientHelloPacket(version, "Windows", 10, "fingerprint", token)));
+                new ClientHelloPacket(
+                    version,
+                    GetClientOperatingSystem(),
+                    Environment.OSVersion.Version.Major,
+                    SystemInfo.deviceUniqueIdentifier,
+                    token)));
             Connection?.SendAsync(new ClientPacket(
                 (uint)DateTimeOffset.UtcNow.Ticks,
                 new OpenHelpClickPacket()));
         }
+
+        private static string GetClientOperatingSystem() =>
+            Application.platform switch
+            {
+                RuntimePlatform.OSXPlayer or RuntimePlatform.OSXEditor => "macOS",
+                RuntimePlatform.WindowsPlayer or RuntimePlatform.WindowsEditor => "Windows",
+                _ => Application.platform.ToString(),
+            };
 
         private void OnDisconnected()
         {
@@ -363,6 +394,43 @@ namespace Fodinae.Networking.Connection
                 _reconnectCountdown = _reconnectBackoff.CurrentDelay;
                 _reconnectStatus = _loc.Get("network.reconnect.retry", Mathf.CeilToInt(_reconnectCountdown));
                 OnReconnectStatusChanged?.Invoke(_reconnectStatus);
+                return;
+            }
+
+            Connection = null;
+            _disconnectReason = _loc.Get("network.error.connection_lost");
+            OnDisconnectReason?.Invoke(_disconnectReason);
+            ReturnToMainMenuAfterDisconnect();
+        }
+
+        private void ReturnToMainMenuAfterDisconnect()
+        {
+            if (_returningToMenu || string.Equals(
+                    _sceneNavigator.CurrentSceneName,
+                    ProjectRuntimeContracts.SceneNames.MainMenu,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _returningToMenu = true;
+            _operations.Run("connection_lost_to_main_menu", ReturnToMainMenuAfterDisconnectAsync);
+        }
+
+        private async UniTask ReturnToMainMenuAfterDisconnectAsync(CancellationToken supervisorToken)
+        {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                destroyCancellationToken);
+            try
+            {
+                await _sceneNavigator.TransitionAsync(
+                    ProjectRuntimeContracts.SceneNames.MainMenu,
+                    linkedCancellation.Token);
+            }
+            finally
+            {
+                _returningToMenu = false;
             }
         }
 

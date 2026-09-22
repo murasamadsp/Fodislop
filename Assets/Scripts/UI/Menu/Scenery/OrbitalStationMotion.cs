@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     // ExecuteAlways so the station sits at its correct orbital position (and
     // can be previewed/captured) in Edit Mode too, not only once Play Mode
@@ -11,11 +11,11 @@ namespace Fodinae.UI
     public class OrbitalStationMotion : MonoBehaviour
     {
         [SerializeField]
-        private Transform? _center;
+        private Transform? _center = null;
         [SerializeField]
         private float _radius = MenuSceneryDefaults.OrbitRadius;
         [SerializeField]
-        private float _startAngleDegrees;
+        private float _startAngleDegrees = 0f;
         [SerializeField]
         private Vector3 _orbitPlaneEulerAngles = MenuSceneryDefaults.OrbitPlaneEulerAngles;
 

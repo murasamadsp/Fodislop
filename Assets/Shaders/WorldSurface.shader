@@ -1,4 +1,4 @@
-Shader "Fodinae/World Surface"
+Shader "Kern/World Surface"
 {
     Properties
     {
@@ -33,7 +33,7 @@ Shader "Fodinae/World Surface"
             HLSLPROGRAM
             #pragma vertex VisibleVert
             #pragma fragment VisibleFrag
-            #pragma multi_compile_local_fragment _ FODINAE_SURFACE_REDROCK FODINAE_SURFACE_TRANSIT FODINAE_SURFACE_PERSPECTIVE
+            #pragma multi_compile_local_fragment _ KERN_SURFACE_REDROCK KERN_SURFACE_TRANSIT KERN_SURFACE_PERSPECTIVE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "WorldSurfaceCommon.hlsl"
@@ -55,12 +55,9 @@ Shader "Fodinae/World Surface"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
-            Texture2D<float4> _WorldLightTexture;
-            SamplerState sampler_WorldLightTexture;
-            float4 _WorldLightRect;
-            float4 _WorldLightTextureSize;
+            #include "WorldLightSampling.hlsl"
+
             float _WorldEmissionScale;
-            int _WorldLightDebugView;
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _EmissionColor;
@@ -69,22 +66,6 @@ Shader "Fodinae/World Surface"
                 float4 _BaseMapTileCount;
                 float4 _WorldSize;
             CBUFFER_END
-
-            float3 SampleWorldLight(float2 worldPosition)
-            {
-                float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
-                float2 lightUV = (worldPosition - _WorldLightRect.xy) / rectSize;
-                if (_WorldLightDebugView != 0)
-                {
-                    int2 debugPixel = clamp(
-                        int2(lightUV * _WorldLightTextureSize.xy),
-                        int2(0, 0),
-                        int2(_WorldLightTextureSize.xy) - 1);
-                    return _WorldLightTexture.Load(int3(debugPixel, 0)).rgb;
-                }
-
-                return _WorldLightTexture.Sample(sampler_WorldLightTexture, lightUV).rgb;
-            }
 
             Varyings VisibleVert(Attributes input)
             {
@@ -98,10 +79,10 @@ Shader "Fodinae/World Surface"
 
             half4 VisibleFrag(Varyings input) : SV_Target
             {
-#if !defined(FODINAE_SURFACE_REDROCK) && !defined(FODINAE_SURFACE_TRANSIT) && !defined(FODINAE_SURFACE_PERSPECTIVE)
+#if !defined(KERN_SURFACE_REDROCK) && !defined(KERN_SURFACE_TRANSIT) && !defined(KERN_SURFACE_PERSPECTIVE)
                 clip(-1.0);
 #endif
-                float2 baseMapUV = FodinaeResolveSurfaceUv(
+                float2 baseMapUV = KernResolveSurfaceUv(
                     input.uv,
                     input.worldPosition,
                     _BaseMapTileCount.xy,
@@ -111,7 +92,7 @@ Shader "Fodinae/World Surface"
                     sampler_BaseMap,
                     baseMapUV,
                     0);
-                float3 worldLight = SampleWorldLight(input.worldPosition);
+                float3 worldLight = SampleWorldLightColorUnclamped(input.worldPosition).rgb;
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(worldLight, surface.a);
@@ -128,7 +109,7 @@ Shader "Fodinae/World Surface"
         Pass
         {
             Name "LightingMaterialField"
-            Tags { "LightMode" = "FodinaeLightingMaterialField" }
+            Tags { "LightMode" = "KernLightingMaterialField" }
 
             Blend One One
             BlendOp Max
@@ -140,7 +121,7 @@ Shader "Fodinae/World Surface"
             #pragma target 4.5
             #pragma vertex LightingFieldVert
             #pragma fragment LightingFieldFrag
-            #pragma multi_compile_local_fragment _ FODINAE_SURFACE_REDROCK FODINAE_SURFACE_TRANSIT FODINAE_SURFACE_PERSPECTIVE
+            #pragma multi_compile_local_fragment _ KERN_SURFACE_REDROCK KERN_SURFACE_TRANSIT KERN_SURFACE_PERSPECTIVE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "WorldSurfaceCommon.hlsl"
@@ -189,10 +170,10 @@ Shader "Fodinae/World Surface"
 
             LightingFieldOutput LightingFieldFrag(Varyings input)
             {
-#if !defined(FODINAE_SURFACE_REDROCK) && !defined(FODINAE_SURFACE_TRANSIT) && !defined(FODINAE_SURFACE_PERSPECTIVE)
+#if !defined(KERN_SURFACE_REDROCK) && !defined(KERN_SURFACE_TRANSIT) && !defined(KERN_SURFACE_PERSPECTIVE)
                 clip(-1.0);
 #endif
-                float2 baseMapUV = FodinaeResolveSurfaceUv(
+                float2 baseMapUV = KernResolveSurfaceUv(
                     input.uv,
                     input.worldPosition,
                     _BaseMapTileCount.xy,

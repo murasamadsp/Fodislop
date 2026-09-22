@@ -32,13 +32,13 @@ internal static class DummyCellConfigurationUtilities
 
         const CellConfigProperties ROAD_PROPS = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
         const CellConfigProperties SAND_BOULDER_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-        const CellConfigProperties ARTIFICIAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing;
+        const CellConfigProperties ARTIFICIAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
         const CellConfigProperties ROCK_CRYSTAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
         const CellConfigProperties GLOWING_CRYSTAL_PROPS = ROCK_CRYSTAL_PROPS | CellConfigProperties.Glowing;
         const CellConfigProperties INDESTRUCTIBLE_PROPS = CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-        const CellConfigProperties BOX_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing;
+        const CellConfigProperties BOX_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
 
-        SetConfig(configs, CellType.BuildingRoad, ROAD_PROPS | CellConfigProperties.Glowing, 0, color: unchecked((int)0xFFCCCCCC));
+        SetConfig(configs, CellType.BuildingRoad, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
         SetConfig(configs, CellType.VolcanoBackground, ROAD_PROPS | CellConfigProperties.Glowing, 0);
         SetConfig(configs, CellType.Empty, ROAD_PROPS, 0, color: unchecked((int)0xFF808080));
         SetConfig(configs, CellType.Road, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
@@ -87,27 +87,32 @@ internal static class DummyCellConfigurationUtilities
         SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
         SetConfig(configs, CellType.BuildingWall, INDESTRUCTIBLE_PROPS, 2, color: unchecked((int)0xFF666666), distortion: CellDistortionType.Block);
 
+        // Рельефная группа — семья, внутри которой клетки сливаются в один
+        // массив. По границе между разными группами рисуется кайма, поэтому
+        // группа 3 (кристаллы) и группа 5 (порода) разведены намеренно: пока
+        // они делили один номер, кристалл врастал в породу и жила читалась
+        // куском той же стены. В оригинале это тоже две разные семьи.
         SetConfig(configs, CellType.XGreen, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF3D), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XViolet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.DeepTurquoiseRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.DeepRainbowRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Green, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Red, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Blue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Violet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.White, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.Cyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.AcidRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
+        SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 5, distortion: CellDistortionType.Cause);
 
         SetConfig(configs, CellType.AliveCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.AliveRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
@@ -124,8 +129,8 @@ internal static class DummyCellConfigurationUtilities
         SetConfig(configs, CellType.NiggerRock, INDESTRUCTIBLE_PROPS, 4, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.LivingBlackRock, INDESTRUCTIBLE_PROPS, 4, distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.RedRock, INDESTRUCTIBLE_PROPS, 4, distortion: CellDistortionType.Cause);
-        SetConfig(configs, CellType.Gate, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);
-        SetConfig(configs, CellType.TeleportBlock, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);
+        SetConfig(configs, CellType.Gate, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow, 0);
+        SetConfig(configs, CellType.TeleportBlock, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow, 0);
 
         RequireEveryCellTypeConfigured();
         ApplyMapColors(configs);
@@ -134,9 +139,9 @@ internal static class DummyCellConfigurationUtilities
 
     private static void ApplyMapColors(CellConfigurationPacket[] configs)
     {
-        for (int cellId = 0; cellId < configs.Length; cellId++)
+        for (int cellID = 0; cellID < configs.Length; cellID++)
         {
-            configs[cellId] = configs[cellId] with { Color = DummyMapColors.Get(cellId) };
+            configs[cellID] = configs[cellID] with { Color = DummyMapColors.Get(cellID) };
         }
     }
 
@@ -226,7 +231,7 @@ internal static class DummyCellConfigurationUtilities
         if (missing.Count > 0)
         {
             // Ошибка в лог, а не исключение. CellType живёт во внешнем пакете
-            // (darkar25.fodinae.data), и обновление зависимости добавляет
+            // (darkar25.kern.data), и обновление зависимости добавляет
             // значения без участия этого файла. Падать на инициализации мира
             // из-за чужого коммита — хуже той тишины, которую здесь чинят:
             // клетка без конфигурации отрисуется серой заглушкой, как и

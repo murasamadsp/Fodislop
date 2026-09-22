@@ -4,17 +4,17 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World;
+using Kern.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.World
+namespace Kern.World
 {
     [DefaultExecutionOrder(-10000)]
     public class MapManager : MonoBehaviour, IMapDataProvider
@@ -155,7 +155,25 @@ namespace Fodinae.World
 
         protected void Update()
         {
-            if (!IsWorldInitialized || Time.unscaledTime < _nextMapFlushTime)
+            if (!IsWorldInitialized)
+            {
+                return;
+            }
+
+            // Сброс на диск идёт по таймеру, но есть вторая причина его
+            // позвать — переполнение кэша чанков.
+            //
+            // Кэш мира настроен беречь грязные чанки, поэтому пока сброса не
+            // было, вытеснять ему нечего, и он растёт ВЫШЕ своей ёмкости.
+            // Всё, что приезжает со стримера, грязное до записи на диск, так
+            // что при долгой ходьбе кэш растёт всю дорогу и по таймеру
+            // подрезается только раз в пять секунд. Давление снимается
+            // досрочным сбросом: он делает чанки чистыми, и кэш сразу
+            // обрезается до ёмкости сам.
+            bool overCapacity =
+                _worldStorage?.CellLayer is { } layer &&
+                layer.GetLoadedCount() > layer.MaxChunksInMemory;
+            if (!overCapacity && Time.unscaledTime < _nextMapFlushTime)
             {
                 return;
             }
@@ -259,7 +277,7 @@ namespace Fodinae.World
 
         public static bool IsRoundableLoose(CellType type) => MapCellConfigCatalog.IsRoundableLoose(type);
 
-        public bool TryGetTileGroup(CellType type, out int groupId) => _cellCatalog.TryGetTileGroup(type, out groupId);
+        public bool TryGetTileGroup(CellType type, out int groupID) => _cellCatalog.TryGetTileGroup(type, out groupID);
 
         public Color GetCellMinimapColor(CellType type) => _cellCatalog.GetCellMinimapColor(type);
 
@@ -298,7 +316,7 @@ namespace Fodinae.World
 
             Gizmos.color = Color.magenta;
             Gizmos.DrawSphere(Vector3.zero, 0.5f);
-            Fodinae.World.FodinaeGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
+            Kern.World.KernGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
 
             var storage = WorldStorage;
             if (storage != null && storage.IsReady && storage.CellLayer != null)
@@ -315,13 +333,13 @@ namespace Fodinae.World
                     float unityY = (cy * chunkSize) + (chunkSize * 0.5f);
                     Vector3 chunkPos = new Vector3((cx * chunkSize) + (chunkSize * 0.5f), unityY, 0);
 
-                    Fodinae.World.FodinaeGizmos.DrawSolidRect(chunkPos, new Vector2(chunkSize - 0.2f, chunkSize - 0.2f),
+                    Kern.World.KernGizmos.DrawSolidRect(chunkPos, new Vector2(chunkSize - 0.2f, chunkSize - 0.2f),
                         new Color(0, 1, 0, 0.02f), new Color(0, 1, 0, 0.1f));
                 }
 
                 Vector3 labelPos = worldCenter + (Vector3.down * ((WorldHeight * 0.5f) + 2f));
                 string stats = $"Chunks: {layer.GetLoadedCount()}/{layer.MaxChunksInMemory} loaded | {layer.GetDirtyCount()} dirty";
-                Fodinae.World.FodinaeGizmos.DrawLabel(labelPos, stats, Color.green);
+                Kern.World.KernGizmos.DrawLabel(labelPos, stats, Color.green);
 
                 Camera cam = MainCamera;
                 if (cam != null && Application.isPlaying)

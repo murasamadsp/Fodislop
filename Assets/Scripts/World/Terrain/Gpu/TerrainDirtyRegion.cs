@@ -1,9 +1,10 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 // Изменённые тексели текстур клетки с прошлой выгрузки.
 //
@@ -12,15 +13,17 @@ namespace Fodinae.World.Terrain;
 // текстурой на каждом таком шаге. Прямоугольники приходят в кольцевых
 // координатах клеток и режутся на шве кольца. Отдельный тип без Texture2D —
 // чтобы учёт мерился и проверялся вне Unity.
+//
+// Не путать с DirtyRectSet: тот учитывает изменённые КЛЕТКИ МИРА в координатах
+// Unity, шва кольца не знает и режет по границам окна. Разные системы
+// координат и разные правила слияния — поэтому два типа, а не один.
 public sealed class TerrainDirtyRegion
 {
-    public const int MaxRects = 4;
-
-    private readonly RectInt[] _rects = new RectInt[MaxRects];
+    private readonly List<RectInt> _rects = new(4);
     private int _cellWidth;
     private int _cellHeight;
 
-    public int Count { get; private set; }
+    public int Count => _rects.Count;
 
     public bool IsAll { get; private set; }
 
@@ -53,16 +56,28 @@ public sealed class TerrainDirtyRegion
     public void MarkAll()
     {
         IsAll = true;
-        Count = 0;
+        _rects.Clear();
     }
 
     public void Clear()
     {
         IsAll = false;
-        Count = 0;
+        _rects.Clear();
     }
 
     public void MarkCells(int ringX, int ringY, int width, int height)
+    {
+        if (IsAll || width <= 0 || height <= 0 || _cellWidth <= 0 || _cellHeight <= 0)
+        {
+            return;
+        }
+
+        width = Math.Min(width, _cellWidth);
+        height = Math.Min(height, _cellHeight);
+        MarkRect(ringX, ringY, width, height, TerrainCellDataPacker.LayersPerCell);
+    }
+
+    private void MarkRect(int ringX, int ringY, int width, int height, int layersPerCell)
     {
         if (IsAll || width <= 0 || height <= 0 || _cellWidth <= 0 || _cellHeight <= 0)
         {
@@ -76,29 +91,29 @@ public sealed class TerrainDirtyRegion
         int leftWidth = width - Math.Max(0, rightPart);
         int bottomHeight = height - Math.Max(0, topPart);
 
-        AddCellRect(ringX, ringY, leftWidth, bottomHeight);
+        AddRect(ringX, ringY, leftWidth, bottomHeight, layersPerCell);
         if (rightPart > 0)
         {
-            AddCellRect(0, ringY, rightPart, bottomHeight);
+            AddRect(0, ringY, rightPart, bottomHeight, layersPerCell);
         }
 
         if (topPart > 0)
         {
-            AddCellRect(ringX, 0, leftWidth, topPart);
+            AddRect(ringX, 0, leftWidth, topPart, layersPerCell);
             if (rightPart > 0)
             {
-                AddCellRect(0, 0, rightPart, topPart);
+                AddRect(0, 0, rightPart, topPart, layersPerCell);
             }
         }
     }
 
-    private void AddCellRect(int x, int y, int width, int height)
+    private void AddRect(int x, int y, int width, int height, int layersPerCell)
     {
         var rect = new RectInt(
             x,
-            y * TerrainCellDataPacker.LayersPerCell,
+            y * layersPerCell,
             width,
-            height * TerrainCellDataPacker.LayersPerCell);
+            height * layersPerCell);
         // Сливается только то, что не раздувает площадь: перекрытие или стык
         // по целой стороне. Раньше сливалось всё соприкасающееся, и полосы x
         // и y диагонального шага, касаясь в углу, давали прямоугольник во всю
@@ -112,43 +127,7 @@ public sealed class TerrainDirtyRegion
             }
         }
 
-        if (Count < MaxRects)
-        {
-            _rects[Count++] = rect;
-            return;
-        }
-
-        // Сверх лимита склеивается пара с наименьшим лишним приростом площади,
-        // а не все сразу: рассыпанные заплатки остаются маленькими.
-        int bestA = -1;
-        int bestB = -1;
-        long bestWaste = long.MaxValue;
-        for (int a = 0; a < Count; a++)
-        {
-            long waste = Waste(_rects[a], rect);
-            if (waste < bestWaste)
-            {
-                (bestWaste, bestA, bestB) = (waste, a, -1);
-            }
-
-            for (int b = a + 1; b < Count; b++)
-            {
-                waste = Waste(_rects[a], _rects[b]);
-                if (waste < bestWaste)
-                {
-                    (bestWaste, bestA, bestB) = (waste, a, b);
-                }
-            }
-        }
-
-        if (bestB < 0)
-        {
-            _rects[bestA] = Union(_rects[bestA], rect);
-            return;
-        }
-
-        _rects[bestA] = Union(_rects[bestA], _rects[bestB]);
-        _rects[bestB] = rect;
+        _rects.Add(rect);
     }
 
     private static long RectArea(RectInt rect) => (long)rect.width * rect.height;

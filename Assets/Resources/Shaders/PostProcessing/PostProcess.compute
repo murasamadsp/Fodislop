@@ -5,6 +5,10 @@
 #pragma kernel DisplayFinal
 #pragma kernel BakeGradeLut
 #pragma multi_compile _ HDR_COLORSPACE_CONVERSION
+// Отладочные виды и шторка сравнения — инструмент колориста, а не кадр игрока.
+// Без этого варианта одиннадцать ветвей ложного цвета, отсечки и линия шторки
+// компилировались в самый горячий kernel кадра и держали регистры у всех.
+#pragma multi_compile _ KERN_POST_DIAGNOSTICS
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
@@ -14,6 +18,7 @@ Texture2D<float4> _InputTex;
 Texture2D<float4> _SourceTex;
 Texture2D<float4> _BaseTex;
 Texture2D<float4> _BloomTex;
+Texture2D<float4> _EmissionTex;
 Texture2D<float4> _HistoryTex;
 
 RWTexture2D<float4> _DestTex;
@@ -33,6 +38,7 @@ float _BloomRadius;
 float _BloomScatter;
 float4 _BloomTint;
 float _BloomIntensity;
+float4 _ScreenToEmission; // xy = scale, zw = offset from screen UV to emission field UV
 
 float _VignetteIntensity;
 float4 _VignetteColor;
@@ -45,7 +51,6 @@ float _Contrast;
 float4 _ContrastControls;
 float _Saturation;
 float _CdlSaturation;
-float _Gamma;
 float _DisplayPaperWhiteNits;
 float _DisplayPeakRelative;
 
@@ -71,8 +76,7 @@ float4 _PrimaryMaster; // lift, gamma, gain, offset master values
 float _Vibrance;
 float _Hue;
 float4 _DisplayGrade0; // white point, grey output, curve slope, transform
-float4 _DisplayGrade1; // shoulder power, toe power, toe stops, path-to-white
-float _DisplayGradePathPower;
+float4 _DisplayGrade1; // shoulder power, toe power, toe stops, reserved
 float _GamutCompression; // 0 выкл, 1 полное сжатие гамута на выводе
 float4 _Qualifier0; // hue center/width/softness, enabled(+)/invert(-)
 float4 _Qualifier1; // sat center/width/softness, luma center
@@ -97,13 +101,44 @@ float _EigengrauDarknessThreshold;
 float _EigengrauNoiseScale;
 float _EigengrauAnimationSpeed;
 float _Time;
+float _FrameIndex;
+
+// Калибровка дисплея. 0 — узор не рисуется, 1 — белая точка, 2 — лестница
+// пиковой яркости. _CalibrationValue несёт выбранное пользователем значение
+// в нитах: белую точку для режима 1, пик для режима 2.
+float _CalibrationPattern;
+float _CalibrationValue;
 
 float _MotionBlurHistory; // доля истории в смазе движения
+
+// Репроекция истории: clip прошлого кадра из clip текущего, то есть
+// VP_prev * inverse(VP_cur). Камера проекта ортографическая, и при ортографии
+// x и y результата не зависят от глубины — поэтому одной матрицы хватает,
+// чтобы точно найти пиксель прошлого кадра для всей статичной геометрии, без
+// буфера векторов движения. Раньше история просто объявлялась негодной при
+// любом сдвиге камеры, то есть смаз не работал ровно во время движения.
+float4x4 _HistoryReprojection;
 
 // Color grading functions must see the complete parameter block above. Keeping
 // this include after the declarations also makes Metal compile every kernel
 // consistently; Metal does not allow a function to reference a later global.
 #include "ColorGrading.hlsl"
+
+#if !defined(KERN_POST_DIAGNOSTICS)
+
+// Вариант игрока: сравнения нет, шторки нет. Обе функции — тождества, и
+// компилятор выкидывает вместе с ними все ветви ложного цвета и отсечки.
+inline bool CompareShowsBefore(float2 screenUv)
+{
+    return false;
+}
+
+inline float3 ApplyCompareDivider(float3 color, float2 pixel)
+{
+    return color;
+}
+
+#else
 
 inline bool CompareShowsBefore(float2 screenUv)
 {
@@ -154,12 +189,22 @@ inline float3 ApplyCompareDivider(float3 color, float2 pixel)
     return lerp(result, float3(1.0, 1.0, 1.0), core);
 }
 
+#endif // KERN_POST_DIAGNOSTICS
+
 float LinearToPerceptual(float linearValue)
 {
     linearValue = max(linearValue, 0.0);
     return linearValue <= 0.0031308
         ? linearValue * 12.92
         : 1.055 * pow(linearValue, 1.0 / 2.4) - 0.055;
+}
+
+float PerceptualToLinear(float perceptualValue)
+{
+    perceptualValue = max(perceptualValue, 0.0);
+    return perceptualValue <= 0.04045
+        ? perceptualValue / 12.92
+        : pow((perceptualValue + 0.055) / 1.055, 2.4);
 }
 
 float Hash31(float3 p)
@@ -175,14 +220,19 @@ float FilmGrain(float2 pixel)
     // scale values are clamped here so they can never create giant cells.
     float grainSize = clamp(_EigengrauNoiseScale, 0.75, 2.0);
     float2 grainPixel = floor(pixel / grainSize);
-    float frame = _Time * clamp(_EigengrauAnimationSpeed, 1.0, 60.0);
-    float epoch = floor(frame);
-    float phase = frac(frame);
-    float blend = phase * phase * (3.0 - 2.0 * phase);
+    // Эпоха считается по номеру кадра, а не по времени: шум зрения обновляется
+    // каждый кадр, и привязка к секундам этого не даёт — при частоте кадров выше
+    // заданной один узор держался бы по нескольку кадров, что читается как
+    // подрагивание картинки, а не как зерно.
+    //
+    // Animation Speed задаёт удержание: 60 (штатное) — новый узор каждый кадр,
+    // меньшие значения держат узор по нескольку кадров для тех, кому нужно
+    // спокойнее. Межкадровое смешивание убрано — усреднять белый шум значит
+    // делать его серым.
+    float holdFrames = max(1.0, round(60.0 / clamp(_EigengrauAnimationSpeed, 1.0, 60.0)));
+    float epoch = floor(_FrameIndex / holdFrames);
 
-    float previous = Hash31(float3(grainPixel, epoch * 1.618 + 17.0));
-    float next = Hash31(float3(grainPixel, (epoch + 1.0) * 1.618 + 17.0));
-    return lerp(previous, next, blend) * 2.0 - 1.0;
+    return Hash31(float3(grainPixel, epoch * 1.618 + 17.0)) * 2.0 - 1.0;
 }
 
 float3 ApplyCreativeGrade(float3 color)
@@ -223,7 +273,7 @@ float3 ApplyCreativeGrade(float3 color)
     // The creative grade is independent from the display curve. Previously
     // bypassing/soloing the curve also bypassed CDL, and the comparison split
     // compared two different grades instead of only showing curve before/after.
-    float3 logColor = FodinaeLogEncode(color);
+    float3 logColor = KernLogEncode(color);
     logColor = ApplyCdl(
         logColor,
         _CdlSlope.rgb * _CdlMaster.x,
@@ -242,7 +292,7 @@ float3 ApplyCreativeGrade(float3 color)
         logColor = ApplyContrastControls(logColor, _Contrast, _ContrastControls, _ContrastControls2);
     }
 
-    float3 gradedLinear = FodinaeLogDecode(logColor);
+    float3 gradedLinear = KernLogDecode(logColor);
     if (abs(_CdlSaturation - 1.0) > 0.001)
     {
         gradedLinear = ApplySaturation(gradedLinear, _CdlSaturation, lumaWeights);
@@ -274,8 +324,8 @@ void BakeGradeLut(uint3 id : SV_DispatchThreadID)
     if (any(id >= (uint3)BakedGradeLutSize)) return;
 
     float3 encoded = float3(id) / (BakedGradeLutSize - 1.0);
-    float3 graded = ApplyCreativeGrade(FodinaeLogDecode(encoded));
-    _BakedGradeLut[id] = float4(FodinaeLogEncode(graded), 1.0);
+    float3 graded = ApplyCreativeGrade(KernLogDecode(encoded));
+    _BakedGradeLut[id] = float4(KernLogEncode(graded), 1.0);
 }
 
 // Отрицательные входы идут как ноль: таблица построена на неотрицательной
@@ -285,12 +335,12 @@ float3 SampleBakedGrade(float3 color)
 {
     float3 positive = max(color, 0.0);
     float peak = max(positive.r, max(positive.g, positive.b));
-    float headLimit = FodinaeMidGrey * (exp2(FodinaeSceneHeadStops) - exp2(-FodinaeSceneToeStops));
+    float headLimit = KernMidGrey * (exp2(KernSceneHeadStops) - exp2(-KernSceneToeStops));
     float scale = max(peak / headLimit, 1.0);
-    float3 encoded = saturate(FodinaeLogEncode(positive / scale));
+    float3 encoded = saturate(KernLogEncode(positive / scale));
     float3 uvw = encoded * ((BakedGradeLutSize - 1.0) / BakedGradeLutSize) + 0.5 / BakedGradeLutSize;
     float3 gradedEncoded = _BakedGradeLutTex.SampleLevel(sampler_LinearClamp, uvw, 0).rgb;
-    return FodinaeLogDecode(gradedEncoded) * scale;
+    return KernLogDecode(gradedEncoded) * scale;
 }
 
 [numthreads(8, 8, 1)]
@@ -299,39 +349,49 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
     if (id.x >= (uint)_ScreenSize.x || id.y >= (uint)_ScreenSize.y) return;
 
     float2 uv = (id.xy + 0.5) * _ScreenSize.zw;
+    float2 emissionUv = uv * _ScreenToEmission.xy + _ScreenToEmission.zw;
 
-    // Prefilter directly to half resolution. Four source taps retain small
-    // emissive sprites without paying for a separate full-resolution pass.
-    float2 halfTexel = _SourceTexelSize.xy * 0.5;
-    float4 sample0 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2(-halfTexel.x, -halfTexel.y),
-        0);
-    float4 sample1 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2( halfTexel.x, -halfTexel.y),
-        0);
-    float4 sample2 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2(-halfTexel.x,  halfTexel.y),
-        0);
-    float4 sample3 = _InputTex.SampleLevel(
-        sampler_LinearClamp,
-        uv + float2( halfTexel.x,  halfTexel.y),
-        0);
-    float3 workingBloom = sample0.rgb + sample1.rgb + sample2.rgb + sample3.rgb;
-    float4 color = float4(
-        workingBloom * 0.25,
-        (sample0.a + sample1.a + sample2.a + sample3.a) * 0.25);
+    // Reject pixels outside the world emission field
+    if (any(emissionUv < 0.0) || any(emissionUv > 1.0))
+    {
+        _DestTex[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
 
-    float lum = Luminance(color.rgb);
-    float knee = max(_BloomThreshold * _BloomSoftKnee, 0.0001);
-    float soft = clamp(lum - _BloomThreshold + knee, 0.0, 2.0 * knee);
-    soft = soft * soft / (4.0 * knee + 0.0001);
-    float contribution = max(lum - _BloomThreshold, soft) / max(lum, 0.0001);
-    float3 brightColor = color.rgb * contribution;
+    // Point-выборка гарантирует чёткую границу клетки: пустые соседи не получают паразитного ореола
+    float4 emissionSample = _EmissionTex.SampleLevel(sampler_PointClamp, emissionUv, 0);
 
-    _DestTex[id.xy] = float4(brightColor * _BloomTint.rgb, color.a);
+    // Блум разрешён ТОЛЬКО для блоков с эмиссией (руды, кристаллы, светящиеся блоки).
+    // Неэмиссионные поверхности (стены, пол, роботы, UI) отсекаются мгновенно без
+    // чтений входного HDR-буфера.
+    if (emissionSample.a <= 0.001)
+    {
+        _DestTex[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
+
+    float4 sourceColor = _InputTex.SampleLevel(sampler_PointClamp, uv, 0);
+    float lum = Luminance(sourceColor.rgb);
+
+    // Плавная кривая отсечки (мягкое колено): отбирает только яркие пики и блики
+    float threshold = _BloomThreshold;
+    float knee = max(threshold * _BloomSoftKnee, 1e-4);
+    float soft = lum - threshold + knee;
+    soft = clamp(soft, 0.0, 2.0 * knee);
+    soft = (soft * soft) / (4.0 * knee);
+    float weight = max(soft, lum - threshold) / max(lum, 1e-4);
+
+    // Отбирается только чистое превышение яркости с сохранением сочного цвета и силы эмиссии
+    float3 brightColor = sourceColor.rgb * saturate(weight) * saturate(emissionSample.a);
+
+    // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
+    // целиком: один такой пиксель на входе даёт серое полотно на выходе.
+    // NaN ловится сравнением (NaN != NaN), а не isnan(): Metal доказывает
+    // отсутствие NaN и вырезает вызов вместе с защитой.
+    brightColor = min(max(brightColor, 0.0), 65504.0);
+    brightColor = any(brightColor != brightColor) ? float3(0.0, 0.0, 0.0) : brightColor;
+
+    _DestTex[id.xy] = float4(brightColor * _BloomTint.rgb, sourceColor.a);
 }
 
 [numthreads(8, 8, 1)]
@@ -397,8 +457,12 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     // физически. Оставлено потому, что прибитая единица — это молчаливая
     // потеря данных, которая всплывёт ровно в тот день, когда буфер станет
     // 64-битным, и искать её будут долго.
-    float srcAlpha = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).a;
-    float3 color = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).rgb;
+    // Одно чтение, а не два по одному и тому же uv: раньше «.a» и «.rgb»
+    // брались отдельными вызовами, то есть на каждый пиксель кадра приходилось
+    // две выборки текстуры вместо одной.
+    float4 sourceSample = _InputTex.SampleLevel(sampler_PointClamp, uv, 0);
+    float srcAlpha = sourceSample.a;
+    float3 color = sourceSample.rgb;
 
     // 2. Bloom Composition
     if (_BloomIntensity > 0.001)
@@ -480,6 +544,22 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
 #endif
     bool showBefore = CompareShowsBefore(screenUv);
 
+    // ------------------------------------------------------------------
+    // ПОРЯДОК СЛОЁВ. Сначала кадр приводится к дисплею, и только потом на
+    // него ложится то, что принадлежит экрану, а не сцене.
+    //
+    // Раньше виньетка и зерно стояли ДО кривой вывода, и кривая переделывала
+    // их: носок поднимал затемнение виньетки, а наклон менял амплитуду зерна.
+    // Калибровка обязана быть последней операцией на пути к экрану, иначе она
+    // калибрует не экран.
+    // ------------------------------------------------------------------
+    if (!showBefore)
+    {
+        color = ApplyDisplayTransform(color);
+        color = ApplyCubeLut(color);
+        color = ApplyDisplayCurves(color);
+    }
+
     // 5. Vignette
     if (_VignetteIntensity > 0.001)
     {
@@ -493,68 +573,153 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         color = lerp(color, _VignetteColor.rgb, saturate(edgeMask * _VignetteIntensity));
     }
 
-    // 6. Eigengrau: fine, zero-mean film grain in dark areas. This is not a
-    // bright overlay and contains no low-frequency or scrolling texture.
+    // 6. Eigengrau — «собственный серый»: то, что видит глаз в полной
+    // темноте. Это не зерно поверх картинки, а пол зрения: сетчатка не
+    // отдаёт чёрного, её тепловой шум держит восприятие на уровне около
+    // #16161D, и этот уровень обновляется каждый кадр.
+    //
+    // ПРОСТРАНСТВО. Кадр здесь прошёл ApplyDisplayTransform и кривые, то есть
+    // он линейный относительно белого экрана (кодирование в sRGB/PQ делает
+    // URP после нас). Отсюда два разных перевода, и путать их нельзя:
+    //   * цвет пола и порог заданы уровнями кодирования (#16161D — это то,
+    //     что показывает пипетка), поэтому на вход им нужен PerceptualToLinear
+    //     и LinearToPerceptual соответственно;
+    //   * сама прибавка света считается в линейном, потому что свет
+    //     складывается линейно, а не в гамме.
     if (_EigengrauIntensity > 0.001)
     {
-        // The camera target is linear. Darkness Threshold is exposed in
-        // perceptual space; comparing it directly to linear luminance made
-        // ordinary lit pixels look "dark" and spread grain over the screen.
-        float perceptualLuminance = LinearToPerceptual(Luminance(color));
-        float threshold = max(_EigengrauDarknessThreshold, 0.0001);
-        float darkness = 1.0 - smoothstep(threshold * 0.2, threshold, perceptualLuminance);
-        darkness = darkness * darkness * darkness;
+        // Пол переводится из уровня кодирования в линейный один раз и здесь.
+        // Держать в VisualTuning уже пересчитанные числа нельзя: там перестало
+        // бы читаться, что это #16161D, и любой правке цвета пришлось бы
+        // повторять этот перевод на глаз.
+        float3 floorColor = float3(
+            PerceptualToLinear(_EigengrauColor.r),
+            PerceptualToLinear(_EigengrauColor.g),
+            PerceptualToLinear(_EigengrauColor.b)) * saturate(_EigengrauIntensity);
 
+        // Тепловой шум сетчатки модулирует сам пол, а не кадр: где сцена
+        // светит, подниматься нечему — значит и шевелиться нечему. Узор
+        // обновляется каждый кадр, см. FilmGrain.
         float grain = FilmGrain(id.xy + 0.5);
-        float amplitude = 0.01 * saturate(_EigengrauIntensity) * darkness;
-        float maxTint = max(max(_EigengrauColor.r, _EigengrauColor.g), _EigengrauColor.b);
-        float3 grainTint = maxTint > 0.0001
-            ? lerp(float3(1.0, 1.0, 1.0), _EigengrauColor.rgb / maxTint, 0.35)
-            : float3(1.0, 1.0, 1.0);
-        color = max(0.0, color + grain * amplitude * grainTint);
+        floorColor *= 1.0 + grain * 0.35;
+
+        // Darkness Threshold задан уровнем кодирования, значит и сравнивать
+        // его надо с закодированной яркостью, а не с линейной. Нижняя граница
+        // спада — яркость самого пола: гаснуть прибавка обязана относительно
+        // того, что поднимаем, а не относительно доли порога.
+        float floorLuma = LinearToPerceptual(Luminance(floorColor));
+        float sceneLuma = LinearToPerceptual(Luminance(color));
+        float reach = max(_EigengrauDarknessThreshold, floorLuma * 2.0);
+        floorColor *= 1.0 - smoothstep(floorLuma, reach, sceneLuma);
+
+        // Мягкий пол, а не подъём чёрной точки. Подъём (floor + c * (1 - floor))
+        // сдвигал всю тёмную зону целиком и съедал в ней контраст: полтона ниже
+        // пола становились одной плашкой на весь экран. Здесь прибавка гаснет
+        // экспоненциально по мере того, как сцена выходит из-под собственного
+        // шума глаза: сигнал слабее шума не виден, сигнал сильнее виден как
+        // есть. На чёрном прибавка равна полу, на уровне пола — треть от него,
+        // втрое выше пола её нет.
+        color += floorColor * exp(-color / max(floorColor, 1e-6));
     }
 
-    // SDR calibration remains relative to the neutral 2.2 preference.
-    // No PQ/sRGB output encoding occurs here: URP performs it once, later.
-    if (_DisplayPeakRelative <= 0.01 && abs(_Gamma - 2.2) > 0.001)
+    // Калибровочный узор. Рисуется здесь и только здесь: это единственная
+    // точка кадра, где величина задаётся в долях paper white и не будет потом
+    // переделана ни кривой вывода, ни грейдом. Узор заменяет кадр целиком —
+    // сравнивать яркость можно только с чёрным, а не с игрой за ним.
+    //
+    // Дальше идёт временной смаз: он мешал бы ступени проявиться сразу, и
+    // ниже узор выходит из функции, не доходя до него.
+    if (_CalibrationPattern > 0.5)
     {
-        color = pow(max(color, 0.0), 2.2 / max(_Gamma, 0.1));
-    }
+        float paperWhite = max(_DisplayPaperWhiteNits, 1.0);
+        float3 patternColor = float3(0.0, 0.0, 0.0);
 
-    if (!showBefore)
-    {
-        color = ApplyDisplayTransform(color);
-        color = ApplyCubeLut(color);
-        color = ApplyDisplayCurves(color);
-    }
-
-    if (_MotionBlurHistory > 0.001)
-    {
-        float3 history = _HistoryTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb / paperWhite;
-#if defined(HDR_COLORSPACE_CONVERSION)
-        history = RotateOutputSpaceToRec709(history);
-#endif
-        float3 neighbourhoodMin = color;
-        float3 neighbourhoodMax = color;
-        for (int y = -1; y <= 1; y++)
+        if (_CalibrationPattern < 1.5)
         {
-            for (int x = -1; x <= 1; x++)
+            // Белая точка: одно большое поле ровно в paper white на чёрном.
+            // Человек поднимает ползунок, пока белое не станет бумагой при
+            // его освещении в комнате, а не лампой.
+            float2 half = _ScreenSize.xy * 0.5;
+            float2 distanceFromCenter = abs(screenUv * _ScreenSize.xy - half);
+            bool insidePatch = distanceFromCenter.x < half.x * 0.35 &&
+                distanceFromCenter.y < half.y * 0.45;
+            patternColor = insidePatch ? float3(1.0, 1.0, 1.0) : float3(0.0, 0.0, 0.0);
+        }
+        else
+        {
+            // Лестница пика. Ступени логарифмические: восприятие яркости
+            // логарифмично, и равномерный шаг в нитах дал бы внизу лестницы
+            // неразличимые ступени, а наверху — провалы.
+            //
+            // Выбранный пик обведён рамкой. Смысл процедуры: найти верхнюю
+            // ступень, которая ещё светлее соседней снизу, и поставить пик
+            // туда. Выше неё дисплей уже не различает — обещать ему больше
+            // значит отдать блики в плоскую заливку.
+            const float stepCount = 12.0;
+            float2 pixel = screenUv * _ScreenSize.xy;
+            float2 ladderSize = float2(_ScreenSize.x * 0.75, _ScreenSize.y * 0.3);
+            float2 ladderOrigin = (_ScreenSize.xy - ladderSize) * 0.5;
+            float2 local = pixel - ladderOrigin;
+            if (local.x >= 0.0 && local.y >= 0.0 && local.x < ladderSize.x && local.y < ladderSize.y)
             {
-                float3 sampleColor = _InputTex.SampleLevel(sampler_LinearClamp,
-                    uv + float2(x, y) * _ScreenSize.zw, 0).rgb / paperWhite;
-#if defined(HDR_COLORSPACE_CONVERSION)
-                sampleColor = RotateOutputSpaceToRec709(sampleColor);
-#endif
-                neighbourhoodMin = min(neighbourhoodMin, sampleColor);
-                neighbourhoodMax = max(neighbourhoodMax, sampleColor);
+                float stepWidth = ladderSize.x / stepCount;
+                float stepIndex = floor(local.x / stepWidth);
+                float t = stepIndex / (stepCount - 1.0);
+                float peakNits = max(_CalibrationValue, paperWhite);
+                float topNits = max(peakNits, paperWhite * 2.0) * 1.5;
+                float stepNits = paperWhite * pow(topNits / paperWhite, t);
+                patternColor = float3(stepNits, stepNits, stepNits) / paperWhite;
+
+                // Рамка вокруг ступени, ближайшей к выбранному пику.
+                float selected = round(log(peakNits / paperWhite) / log(topNits / paperWhite) * (stepCount - 1.0));
+                float withinStep = local.x - stepIndex * stepWidth;
+                bool onFrame = abs(stepIndex - selected) < 0.5 &&
+                    (withinStep < 3.0 || withinStep > stepWidth - 3.0 ||
+                     local.y < 3.0 || local.y > ladderSize.y - 3.0);
+                patternColor = onFrame ? float3(0.0, 0.0, 0.0) : patternColor;
             }
         }
 
-        float3 stableHistory = clamp(history, neighbourhoodMin, neighbourhoodMax);
+        _OutputTex[id.xy] = float4(ToDisplayOutput(patternColor), srcAlpha);
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // Временной смаз. Стоит последним: история — это готовый кадр прошлого
+    // раза, и сравнивать с ней можно только готовый кадр этого, иначе обе
+    // величины живут в разных пространствах.
+    //
+    // История читается с репроекцией. Прежний код вместо этого объявлял её
+    // негодной при любом сдвиге камеры (PostProcessRenderPass сбрасывал
+    // _historyValid по смене view-projection), то есть смаз выключался ровно
+    // на время движения — единственное время, когда он имеет смысл. При этом
+    // полноэкранная текстура истории и её копия оплачивались каждый кадр.
+    //
+    // Соседского окна больше нет. Оно стояло вместо репроекции: гасило
+    // расхождение, вызванное сдвигом камеры, ценой девяти чтений полного
+    // кадра на пиксель. Когда сдвиг камеры снят точно, остаточная разница —
+    // это движение самих объектов, то есть ровно то, что смаз обязан
+    // размазывать, а не подавлять.
+    if (_MotionBlurHistory > 0.001)
+    {
+        float2 ndc = screenUv * 2.0 - 1.0;
+        float4 previousClip = mul(_HistoryReprojection, float4(ndc, 0.0, 1.0));
+        float2 previousUv =
+            (previousClip.xy / max(abs(previousClip.w), 1e-6)) * 0.5 + 0.5;
+
+        // За краем прошлого кадра истории нет: там раскрытие, а не движение.
+        float2 inside = step(0.0, previousUv) * step(previousUv, 1.0);
+        float valid = inside.x * inside.y;
+
+        float3 history =
+            _HistoryTex.SampleLevel(sampler_LinearClamp, previousUv, 0).rgb / paperWhite;
+#if defined(HDR_COLORSPACE_CONVERSION)
+        history = RotateOutputSpaceToRec709(history);
+#endif
         float temporalDifference = Luminance(abs(color - history));
         float motionWeight = saturate(temporalDifference * 4.0) *
-            saturate(_MotionBlurHistory) * 0.5;
-        color = lerp(color, stableHistory, motionWeight);
+            saturate(_MotionBlurHistory) * 0.5 * valid;
+        color = lerp(color, history, motionWeight);
     }
 
     // ------------------------------------------------------------------
@@ -565,6 +730,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
     // это уже принятый в проекте способ смотреть на кадр числами, и второй
     // способ означал бы, что их надо помнить оба.
     // ------------------------------------------------------------------
+#if defined(KERN_POST_DIAGNOSTICS)
     if (_PostDebugView != 0)
     {
         // Считаем в перцептивном кодировании: зоны экспозиции — понятие
@@ -611,17 +777,11 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         }
         else if (_PostDebugView == 7)
         {
-            color = float3(color.r, color.r, color.r);
+            // RGB parade in one view: thirds show R|G|B as mono.
+            float third = screenUv.x < 0.3333 ? color.r : (screenUv.x < 0.6667 ? color.g : color.b);
+            color = float3(third, third, third);
         }
-        else if (_PostDebugView == 8)
-        {
-            color = float3(color.g, color.g, color.g);
-        }
-        else if (_PostDebugView == 9)
-        {
-            color = float3(color.b, color.b, color.b);
-        }
-        else if (_PostDebugView == 10 || _PostDebugView == 11)
+        else if (_PostDebugView == 8 || _PostDebugView == 9)
         {
             float maxChannel = max(color.r, max(color.g, color.b));
             float minChannel = min(color.r, min(color.g, color.b));
@@ -630,8 +790,8 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
                 : 0.999;
             bool highlightClipped = maxChannel >= clippingCeiling;
             bool shadowClipped = minChannel <= 0.0005;
-            bool marked = _PostDebugView == 10 ? highlightClipped : shadowClipped;
-            float3 marker = _PostDebugView == 10
+            bool marked = _PostDebugView == 8 ? highlightClipped : shadowClipped;
+            float3 marker = _PostDebugView == 8
                 ? float3(1.0, 0.0, 0.0)
                 : float3(0.0, 0.3, 1.0);
             color = marked ? lerp(color, marker, 0.8) : color;
@@ -709,6 +869,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         _OutputTex[id.xy] = float4(ToDisplayOutput(ApplyCompareDivider(result, id.xy + 0.5)), srcAlpha);
         return;
     }
+#endif // KERN_POST_DIAGNOSTICS
 
     color = ApplyCompareDivider(color, id.xy + 0.5);
     _OutputTex[id.xy] = float4(ToDisplayOutput(color), srcAlpha);

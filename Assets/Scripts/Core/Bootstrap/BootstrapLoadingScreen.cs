@@ -2,14 +2,14 @@
 
 using System;
 
-using Fodinae.Core.Localization;
-using Fodinae.Core.Interfaces;
-using Fodinae.UI;
+using Kern.Core.Localization;
+using Kern.Core.Interfaces;
+using Kern.UI;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Core
+namespace Kern.Core
 {
     [RequireComponent(typeof(UIDocument))]
     public sealed class BootstrapLoadingScreen : MonoBehaviour, ILocalizableUI
@@ -130,7 +130,7 @@ namespace Fodinae.Core
         private void Show(string sceneName)
         {
             // The MainMenu -> MainGame transition is owned entirely by the MainMenu
-            // descent screen and loader (LoaderContainer with planet animation & phase steps).
+            // descent screen and loader (LoaderContainer with descent animation & phase steps).
             // Do not show the generic bootstrap overlay over it.
             if (string.Equals(
                     sceneName,

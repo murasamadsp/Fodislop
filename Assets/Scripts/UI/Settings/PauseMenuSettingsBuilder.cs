@@ -2,20 +2,20 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Audio;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Game;
-using Fodinae.Networking;
-using Fodinae.Networking.Connection;
-using Fodinae.Rendering;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World.Lighting;
+using Kern.Audio;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Game;
+using Kern.Networking;
+using Kern.Networking.Connection;
+using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
+using Kern.World.Lighting;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 internal sealed class PauseMenuSettingsBuilder
 {
     private readonly UIDocument _doc;
@@ -87,7 +87,7 @@ internal sealed class PauseMenuSettingsBuilder
 
     public VisualElement BuildDisplayPage(ScrollView displayScroll)
     {
-        var builder = new PauseMenuDisplayTabBuilder(_clientConfig, _displayManager, _refreshers, _loc);
+        var builder = new PauseMenuDisplayTabBuilder(_doc, _clientConfig, _displayManager, _refreshers, _loc);
         return builder.Build(displayScroll);
     }
 
@@ -160,49 +160,11 @@ internal sealed class PauseMenuSettingsBuilder
             return;
         }
 
-        string[] lightingDebugNames =
-        [
-            "settings.debug.final_lighting",
-            "settings.debug.occupancy",
-            "settings.debug.albedo",
-            "settings.debug.emission",
-            "settings.debug.transmission",
-            "settings.debug.direct_radiance",
-            "settings.debug.diffuse_bounce",
-            "settings.debug.exposure",
-        ];
-        int activeDebugView = (int)_lightingEngine.ActiveDebugView;
-        var lightingDebugView = new Button();
-        void UpdateLightingDebugButton()
-        {
-            lightingDebugView.text =
-                _loc.Get("settings.debug.lighting_label") + ": " +
-                _loc.Get(lightingDebugNames[activeDebugView]);
-        }
-
-        lightingDebugView.clicked += () =>
-        {
-            activeDebugView = (activeDebugView + 1) % lightingDebugNames.Length;
-            _lightingEngine.SetDebugView(
-                (LightingEngine.DebugView)activeDebugView);
-
-            UpdateLightingDebugButton();
-        };
-        lightingDebugView.AddToClassList("pause-btn");
-        UpdateLightingDebugButton();
-        debugSection.Add(lightingDebugView);
-
-        Toggle bypassPostProcessToggle = PauseMenuUIFactory.CreateBoundToggle(
-            "Bypass Post-Process (Bisect)",
-            () => PostProcessRuntimeState.BypassPostProcessEffects,
-            value =>
-            {
-                PostProcessRuntimeState.BypassPostProcessEffects = value;
-                Debug.Log($"[PostProcess] BypassPostProcessEffects = {value}");
-            },
-            _refreshers);
-        debugSection.Add(bypassPostProcessToggle);
-
+        // Перебор видов освещения и тумблеры постпроцесса живут в
+        // инструментах (F1, «Диагностика рендера»). Здесь они дублировались, и
+        // дубль был хуже оригинала: меню паузы закрывает собой ту самую
+        // картинку, по которой смотрят вид освещения. Осталась только
+        // диагностика, которой в инструментах пока нет.
         debugSection.Add(PauseMenuUIFactory.CreateLabel(_loc.Get("settings.lighting.actual_params")));
         var lightingDiagnostics = new Label();
         lightingDiagnostics.AddToClassList("pause-slider-label");
@@ -212,14 +174,10 @@ internal sealed class PauseMenuSettingsBuilder
                 $"Quality={_lightingEngine.ActiveGraphicsPreset}\n" +
                 $"Config={_lightingEngine.RuntimeConfigFilePath}\n" +
                 $"Debug={_lightingEngine.ActiveDebugView}\n" +
-                $"DiffuseBounce={(_lightingEngine.DiffuseBounceEnabled ? 1 : 0)} " +
-                $"strength={_lightingEngine.BounceStrength:F3}\n" +
                 $"Ambient={_lightingEngine.AmbientIntensity:F3} " +
-                $"Emission={_lightingEngine.EmissionScale:F3} " +
-                $"DynamicRate={_lightingEngine.DynamicLightUpdatesPerSecond:F1}\n" +
+                $"Emission={_lightingEngine.EmissionScale:F3}\n" +
                 $"EmptyExtinction={_lightingEngine.EmptyExtinctionMultiplier:F3} " +
                 $"SolidExtinction={_lightingEngine.SolidExtinctionMultiplier:F3}\n" +
-                $"MinimumTransmission={_lightingEngine.MinimumTransmission:F4} " +
                 $"MaximumLight={_lightingEngine.MaximumLightMultiplier:F3}\n" +
                 $"SafeBorder={_lightingEngine.LightSafeBorder} " +
                 $"TransmissionDistance={_lightingEngine.TransmittanceDebugDistanceCells:F2}\n" +
@@ -228,7 +186,7 @@ internal sealed class PauseMenuSettingsBuilder
                 $"DynamicLights={_lightingEngine.DynamicLightCount} " +
                 $"Uploaded={_lightingEngine.UploadedDynamicLightCount} " +
                 $"Dropped={_lightingEngine.DroppedDynamicLightCount} " +
-                $"DroppedIds=[{string.Join(",", _lightingEngine.DroppedDynamicLightIds)}]\n" +
+                $"DroppedIds=[{string.Join(",", _lightingEngine.DroppedDynamicLightIDs)}]\n" +
                 $"ComputeAmbient={_lightingEngine.ComputeAmbientColor} " +
                 $"ComputeEmptyExtinction={_lightingEngine.ComputeEmptyExtinction} " +
                 $"ComputeSolidExtinction={_lightingEngine.ComputeSolidExtinction}\n" +

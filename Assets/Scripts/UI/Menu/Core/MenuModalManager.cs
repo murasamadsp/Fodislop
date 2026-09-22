@@ -2,21 +2,18 @@
 
 using System;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Networking.Connection;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Networking.Connection;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 
 public sealed class MenuModalManager
 {
     private const string SettingsPaneActiveClass = "mm-tab-pane--active";
-    private const int TartarusServerPort = 7778;
-    private const int CyberServerPort = 7779;
-
     private VisualElement? _modalOverlay;
     private VisualElement? _serverBrowserModal;
     private VisualElement? _settingsModal;
@@ -36,8 +33,7 @@ public sealed class MenuModalManager
     private VisualElement? _settingsPaneNetwork;
 
     private Button? _serverItemHades;
-    private Button? _serverItemTartarus;
-    private Button? _serverItemCyber;
+    private Button? _serverItemDummy;
     private Button? _confirmServerButton;
 
     public bool HasActiveModal => _activeModal != null;
@@ -62,8 +58,7 @@ public sealed class MenuModalManager
         _settingsPaneNetwork = tree.Q<VisualElement>("SettingsPaneNetwork");
 
         _serverItemHades = tree.Q<Button>("ServerItemHades");
-        _serverItemTartarus = tree.Q<Button>("ServerItemTartarus");
-        _serverItemCyber = tree.Q<Button>("ServerItemCyber");
+        _serverItemDummy = tree.Q<Button>("ServerItemDummy");
         _confirmServerButton = tree.Q<Button>("ConfirmServerButton");
 
         UIState.Hide(_modalOverlay);
@@ -122,9 +117,6 @@ public sealed class MenuModalManager
             });
         }
 
-        var serverItemDummy = tree.Q<Button>("ServerItemDummy");
-        var directIpInput = tree.Q<TextField>("DirectServerIpInput");
-        var directConnectBtn = tree.Q<Button>("DirectConnectButton");
         var srvTitle = tree.Q<Label>("ServerDetailTitle");
         var srvDesc = tree.Q<Label>("ServerDetailDesc");
         var srvDepth = tree.Q<Label>("ServerDetailDepth");
@@ -152,51 +144,11 @@ public sealed class MenuModalManager
             };
         }
 
-        if (_serverItemTartarus != null)
+        if (_serverItemDummy != null)
         {
-            _serverItemTartarus.clicked += () =>
+            _serverItemDummy.clicked += () =>
             {
-                SelectServer(_serverItemTartarus);
-                if (srvTitle != null) srvTitle.text = "TARTARUS-02";
-                if (srvDesc != null) srvDesc.text = loc?.Get("server.tartarus.desc") ?? "TARTARUS-02";
-                if (srvDepth != null) srvDepth.text = "-1920m";
-                if (srvSeed != null) srvSeed.text = "#104928";
-                if (srvPing != null) srvPing.text = "44 ms";
-                if (srvHazard != null) srvHazard.text = loc?.Get("server.hazard.extreme") ?? "Extreme";
-                clientConfig?.UpdateAndSave(cfg =>
-                {
-                    cfg.Connection.UseDummyConnection = false;
-                    cfg.Connection.ServerHost = ConnectionTransportConfig.DefaultServerHost;
-                    cfg.Connection.ServerPort = TartarusServerPort;
-                });
-            };
-        }
-
-        if (_serverItemCyber != null)
-        {
-            _serverItemCyber.clicked += () =>
-            {
-                SelectServer(_serverItemCyber);
-                if (srvTitle != null) srvTitle.text = "CYBER-PROSPECTORS";
-                if (srvDesc != null) srvDesc.text = loc?.Get("server.cyber.desc") ?? "CYBER-PROSPECTORS";
-                if (srvDepth != null) srvDepth.text = "-950m";
-                if (srvSeed != null) srvSeed.text = "#559102";
-                if (srvPing != null) srvPing.text = "118 ms";
-                if (srvHazard != null) srvHazard.text = loc?.Get("server.hazard.medium") ?? "Medium";
-                clientConfig?.UpdateAndSave(cfg =>
-                {
-                    cfg.Connection.UseDummyConnection = false;
-                    cfg.Connection.ServerHost = ConnectionTransportConfig.DefaultServerHost;
-                    cfg.Connection.ServerPort = CyberServerPort;
-                });
-            };
-        }
-
-        if (serverItemDummy != null)
-        {
-            serverItemDummy.clicked += () =>
-            {
-                SelectServer(serverItemDummy);
+                SelectServer(_serverItemDummy);
                 if (srvTitle != null) srvTitle.text = "DUMMY OFFLINE";
                 if (srvDesc != null) srvDesc.text = loc?.Get("server.dummy.desc") ?? "Offline Sandbox";
                 if (srvDepth != null) srvDepth.text = "-100m";
@@ -204,30 +156,6 @@ public sealed class MenuModalManager
                 if (srvPing != null) srvPing.text = "0 ms";
                 if (srvHazard != null) srvHazard.text = loc?.Get("server.hazard.test") ?? "Test";
                 clientConfig?.UpdateAndSave(cfg => cfg.Connection.UseDummyConnection = true);
-            };
-        }
-
-        if (directConnectBtn != null && directIpInput != null)
-        {
-            directConnectBtn.clicked += () =>
-            {
-                if (!ConnectionTransportConfig.TryParseEndpoint(
-                        directIpInput.value,
-                        out string host,
-                        out int port))
-                {
-                    Debug.LogWarning($"[MenuModalManager] Invalid direct-connect endpoint: '{directIpInput.value}'.");
-                    return;
-                }
-
-                clientConfig?.UpdateAndSave(cfg =>
-                {
-                    cfg.Connection.UseDummyConnection = false;
-                    cfg.Connection.ServerHost = host;
-                    cfg.Connection.ServerPort = port;
-                });
-                CloseCurrentModal();
-                onPlay();
             };
         }
 
@@ -373,7 +301,7 @@ public sealed class MenuModalManager
         // Theme.uss. Раньше код писал поверх неё инлайн, и класс не значил
         // ничего: активная вкладка оставалась активной навсегда, потому что
         // снять инлайн можно только инлайном.
-        foreach (var pane in new[] { _settingsPaneGraphics, _settingsPaneAudio, _settingsPaneControls, _settingsPaneNetwork })
+        foreach (var pane in (ReadOnlySpan<VisualElement?>)[_settingsPaneGraphics, _settingsPaneAudio, _settingsPaneControls, _settingsPaneNetwork])
         {
             pane?.EnableInClassList(SettingsPaneActiveClass, ReferenceEquals(pane, targetPane));
         }
@@ -384,8 +312,7 @@ public sealed class MenuModalManager
     private void SelectServer(Button serverCard)
     {
         _serverItemHades?.RemoveFromClassList("mm-server-card--active");
-        _serverItemTartarus?.RemoveFromClassList("mm-server-card--active");
-        _serverItemCyber?.RemoveFromClassList("mm-server-card--active");
+        _serverItemDummy?.RemoveFromClassList("mm-server-card--active");
 
         serverCard.AddToClassList("mm-server-card--active");
     }

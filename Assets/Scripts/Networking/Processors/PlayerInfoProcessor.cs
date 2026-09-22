@@ -1,14 +1,14 @@
 #nullable enable
 
 using System;
-using Fodinae.Core.Interfaces;
+using Kern.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Networking.Processors;
+namespace Kern.Networking.Processors;
 
 public sealed class PlayerInfoProcessor(
     IRobotService robotManager,
@@ -20,8 +20,7 @@ public sealed class PlayerInfoProcessor(
     IPacketProcessor<TeleportPacket>,
     IPacketProcessor<RobotInfoPacket>,
     IPacketProcessor<RobotPositionPacket>,
-    IPacketProcessor<AutoMineStatePacket>,
-    IPacketProcessor<AggressionStatePacket>
+    IPacketProcessor<AutoMineStatePacket>
 {
     public void Process(PlayerInfoPacket packet)
     {
@@ -70,6 +69,7 @@ public sealed class PlayerInfoProcessor(
     public void Process(RobotPositionPacket packet)
     {
         robotManager.UpdateRobotPosition(packet.BotId, packet.X, packet.Y, packet.Rotation);
+        robotManager.PruneStaleRobots();
         if (packet.BotId != 0 && packet.BotId == robotManager.LocalPlayerBotID)
         {
             localPlayer.Current?.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));
@@ -85,12 +85,4 @@ public sealed class PlayerInfoProcessor(
         }
     }
 
-    public void Process(AggressionStatePacket packet)
-    {
-        var player = localPlayer.Current;
-        if (player != null)
-        {
-            player.Aggression = packet.Enabled;
-        }
-    }
 }

@@ -5,13 +5,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
+using Kern.Core;
+using Kern.Core.Interfaces;
 using MinesServer.Networking.Server.Packets;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae
+namespace Kern
 {
     [DefaultExecutionOrder(-10000)]
     public class ClientAssetLoader : MonoBehaviour, IAssetLoader, IAssetSubscription
@@ -19,6 +19,7 @@ namespace Fodinae
         private AssetCache _cache = null!;
         private readonly AssetBatchDispatcher _dispatcher = new();
         private bool _batchLoopStarted;
+        private bool _destroyed;
 
         private AssetCache _Cache => _cache ??
             throw new ObjectDisposedException(nameof(ClientAssetLoader));
@@ -57,13 +58,22 @@ namespace Fodinae
 
         protected void Start()
         {
-            if (_operations == null)
-            {
-                throw new InvalidOperationException(
-                    "ClientAssetLoader requires IAsyncOperationSupervisor before startup.");
-            }
+            TryStartBatchLoop();
+        }
 
-            if (_batchLoopStarted)
+        protected void Update()
+        {
+            // Authored Bootstrap components can receive VContainer injection
+            // after Unity invokes Start because this component has an early
+            // execution order. Retry only the one-time startup until the
+            // dependency is available; asset requests remain unavailable until
+            // the supervised loop has actually started.
+            TryStartBatchLoop();
+        }
+
+        private void TryStartBatchLoop()
+        {
+            if (_batchLoopStarted || _operations == null)
             {
                 return;
             }
@@ -76,6 +86,7 @@ namespace Fodinae
 
         protected void OnDestroy()
         {
+            _destroyed = true;
             _dispatcher.Dispose();
             if (_cache != null)
             {
@@ -132,18 +143,26 @@ namespace Fodinae
             _assetSubscriptionEstablished = false;
         }
 
-        public UniTask<byte[]?> GetAssetBytesAsync(
+        public async UniTask<byte[]?> GetAssetBytesAsync(
             string filename,
             CancellationToken cancellationToken = default,
             int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.AssetRequestTimeoutSeconds)
         {
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
             string cleanFilename = filename.TrimStart('/').ToLowerInvariant();
             if (AssetBatchDispatcher.IsAudioBank(cleanFilename) && _dispatcher.IsKnownMissing(cleanFilename))
             {
-                return UniTask.FromResult<byte[]?>(null);
+                return null;
             }
 
-            return _Cache.GetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
+            return await _Cache.GetBytesAsync(
+                cleanFilename,
+                linkedCancellation.Token,
+                timeoutSeconds);
         }
 
         public async UniTask<string> GetAssetPathAsync(
@@ -180,25 +199,62 @@ namespace Fodinae
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
-            Texture2D? texture = await _Cache.GetTextureAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            Texture2D? texture = await _Cache.GetTextureAsync(
+                filename,
+                linkedCancellation.Token);
             return texture ?? throw new FileNotFoundException(
                 $"Required texture '{filename}' could not be loaded.",
                 filename);
         }
 
-        public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _Cache.GetAudioAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            return await _Cache.GetAudioAsync(filename, linkedCancellation.Token);
         }
 
-        public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _Cache.GetSpritesAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            return await _Cache.GetSpritesAsync(filename, linkedCancellation.Token);
         }
 
-        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(
+            string filename,
+            CancellationToken cancellationToken = default)
         {
-            return _Cache.GetAnimatedSpritesAsync(filename, cancellationToken);
+            ThrowIfDestroyed(cancellationToken);
+            using CancellationTokenSource linkedCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    destroyCancellationToken);
+            return await _Cache.GetAnimatedSpritesAsync(filename, linkedCancellation.Token);
+        }
+
+        private void ThrowIfDestroyed(CancellationToken cancellationToken)
+        {
+            if (!_destroyed)
+            {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new OperationCanceledException(
+                "ClientAssetLoader was destroyed while an asset request was active.",
+                cancellationToken);
         }
         public void ClearCache()
         {

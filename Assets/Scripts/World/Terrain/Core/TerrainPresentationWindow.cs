@@ -1,0 +1,86 @@
+#nullable enable
+
+using System;
+using Kern.World.Streaming;
+using UnityEngine;
+
+namespace Kern.World.Terrain;
+
+/// <summary>
+/// Меш, которым террейн рисуется на экране, внутри сетки, которой он живёт.
+/// </summary>
+///
+/// Сетка больше кадра: её размер задан освещением и сдвигом, а не камерой.
+/// Рисовать её целиком значит гонять квады, которых на экране нет. Поэтому
+/// экран рисует свой меш поменьше, а его положение внутри сетки едет смещением
+/// в шейдере — сами тексели при этом не двигаются, у них кольцевой адрес.
+///
+/// Запас в четыре клетки по краям — физический: камера стоит между границами
+/// клеток непрерывно, а адрес текселя целочисленный.
+public sealed class TerrainPresentationWindow : IDisposable
+{
+    private const int PresentationMarginCells = 4;
+
+    private readonly TerrainCellIDMesh _mesh = new();
+    private Vector4 _viewOffset;
+    private int _visibleWidth;
+    private int _visibleHeight;
+    private int _gridWidth;
+    private int _gridHeight;
+
+    public Mesh? Mesh => _mesh.Mesh;
+
+    public Vector4 ViewOffset => _viewOffset;
+
+    public void Update(
+        StreamingPolicy policy,
+        RectInt cameraViewport,
+        Vector2Int windowOrigin,
+        int meshWidth,
+        int meshHeight,
+        float cellSize,
+        MeshFilter? meshFilter)
+    {
+        // Размер окна растёт по общей политике governor'а. Это сохраняет
+        // стабильный mesh при движении камеры и не вводит отдельный
+        // terrain-only порог.
+        if (_gridWidth != meshWidth || _gridHeight != meshHeight)
+        {
+            _gridWidth = meshWidth;
+            _gridHeight = meshHeight;
+            _visibleWidth = 0;
+            _visibleHeight = 0;
+        }
+
+        int wantedWidth = policy.QuantizeDimension(
+            cameraViewport.width + (PresentationMarginCells * 2));
+        int wantedHeight = policy.QuantizeDimension(
+            cameraViewport.height + (PresentationMarginCells * 2));
+        _visibleWidth = Mathf.Clamp(Mathf.Max(_visibleWidth, wantedWidth), 1, meshWidth);
+        _visibleHeight = Mathf.Clamp(Mathf.Max(_visibleHeight, wantedHeight), 1, meshHeight);
+        int width = _visibleWidth;
+        int height = _visibleHeight;
+        int extraWidth = Mathf.Max(0, width - cameraViewport.width - (PresentationMarginCells * 2));
+        int extraHeight = Mathf.Max(0, height - cameraViewport.height - (PresentationMarginCells * 2));
+        int presentationMinX = cameraViewport.xMin - PresentationMarginCells - (extraWidth / 2);
+        int presentationMinY = cameraViewport.yMin - PresentationMarginCells - (extraHeight / 2);
+        int offsetX = Mathf.Clamp(presentationMinX - windowOrigin.x, 0, meshWidth - width);
+        int offsetY = Mathf.Clamp(presentationMinY - windowOrigin.y, 0, meshHeight - height);
+
+        _mesh.EnsureSize(width, height, cellSize, meshWidth, meshHeight);
+        var offset = new Vector4(offsetX, offsetY, 0f, 0f);
+        if (offset != _viewOffset)
+        {
+            _viewOffset = offset;
+            Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, offset);
+        }
+
+        if (meshFilter != null && meshFilter.sharedMesh != _mesh.Mesh)
+        {
+            meshFilter.sharedMesh = _mesh.Mesh;
+            Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, _viewOffset);
+        }
+    }
+
+    public void Dispose() => _mesh.Dispose();
+}

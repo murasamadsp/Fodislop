@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using UnityEngine;
 
@@ -10,33 +12,28 @@ namespace VContainer.Unity
         public string TypeName;
 
         [NonSerialized]
-        public LifetimeScope Object;
+        public LifetimeScope? Object;
 
-        public Type Type { get; private set; }
+        public Type? Type { get; private set; }
 
         ParentReference(Type type)
         {
             Type = type;
-            TypeName = type.FullName;
+            TypeName = type.AssemblyQualifiedName ?? type.FullName ?? throw new InvalidOperationException(
+                $"Type '{type}' has no serializable name.");
             Object = null;
         }
 
         void ISerializationCallbackReceiver.OnBeforeSerialize()
         {
-            TypeName = Type?.FullName;
+            TypeName = Type?.AssemblyQualifiedName ?? string.Empty;
         }
 
         void ISerializationCallbackReceiver.OnAfterDeserialize()
         {
-            if (!string.IsNullOrEmpty(TypeName))
-            {
-                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    Type = assembly.GetType(TypeName);
-                    if (Type != null)
-                        break;
-                }
-            }
+            Type = string.IsNullOrWhiteSpace(TypeName)
+                ? null
+                : System.Type.GetType(TypeName, throwOnError: false);
         }
 
         public static ParentReference Create<T>() where T : LifetimeScope
