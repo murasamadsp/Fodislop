@@ -4,22 +4,22 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.Interfaces;
-using Fodinae.Game;
-using Fodinae.Game.Managers;
-using Fodinae.Networking;
-using Fodinae.Networking.Connection;
-using Fodinae.Rendering;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.UI.Inventory;
-using Fodinae.UI.HUD.Player.View;
-using Fodinae.World;
-using Fodinae.World.Lighting;
-using Fodinae.World.Terrain;
+using Kern.Core.Interfaces;
+using Kern.Game;
+using Kern.Game.Managers;
+using Kern.Networking;
+using Kern.Networking.Connection;
+using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
+using Kern.UI.Inventory;
+using Kern.UI.HUD.Player.View;
+using Kern.World;
+using Kern.World.Lighting;
+using Kern.World.Terrain;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 internal enum StartupIssueSeverity
 {
@@ -37,7 +37,6 @@ internal sealed class GameStartupReport
 {
     private readonly List<StartupIssue> _issues = [];
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public IReadOnlyList<StartupIssue> Issues => _issues;
 
     public void Critical(string system, string message, Exception? exception = null)
@@ -181,7 +180,7 @@ public sealed class GamePresentationStartup
                 float effectiveScale = UIScaleUtility.ResolveEffectiveScale(
                     _clientConfig.Config.Interface.UIScale);
                 _uiDocument.panelSettings.scale = effectiveScale;
-                Fodinae.UI.DynamicAtlasConfigurator.Apply(_uiDocument.panelSettings);
+                Kern.UI.DynamicAtlasConfigurator.Apply(_uiDocument.panelSettings);
             }
         });
         report.RunCritical("game_ui", _gameManager.EnsureUISetup);
@@ -189,9 +188,9 @@ public sealed class GamePresentationStartup
         report.RunCritical("inventory", _inventory.EnsureInitialized);
 
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.Terrain);
-        ValidateShader(report, ProjectRuntimeContracts.ShaderNames.DynamicEmission);
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.WorldSurface);
         ValidateShader(report, ProjectRuntimeContracts.ShaderNames.WorldEntity);
+        ValidateShader(report, ProjectRuntimeContracts.ShaderNames.MissionVirtualRing);
 
         var lightingCompute = Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute);
         if (lightingCompute == null)

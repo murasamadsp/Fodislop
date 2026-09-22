@@ -2,23 +2,27 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World;
+using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
-public class TerrainCellCache
+namespace Kern.World.Terrain;
+// Реализует ICachedCellDataProvider сам: заливке фона нужен тип и свойства
+// клетки, и брать их больше неоткуда. Раньше переходником служил
+// TerrainRenderer — MonoBehaviour в роли адаптера над собственным полем.
+public class TerrainCellCache : ICachedCellDataProvider
 {
-    private CachedCellData[,] _cellCache = new CachedCellData[0, 0];
+    private readonly TerrainRingGrid<CachedCellData> _cellCache = new();
     private int _cacheMinX = int.MinValue;
     private int _cacheMinY = int.MinValue;
     private int _cacheWidth;
     private int _cacheHeight;
-
-    // IsPopulated flag lives inside CellMetadata itself — one array instead of two
-    private readonly CellMetadata[] _metadataLookup = new CellMetadata[65536];
+    private readonly CellTypeSpatialIndex _cellsByType = new();
+    private readonly List<(long Key, CellType Type)> _refreshEntries = [];
+    private readonly TerrainCellMetadataCache _metadataCache = new();
 
     private static CachedCellData _UnloadedCellData => new()
     {
@@ -36,49 +40,56 @@ public class TerrainCellCache
     {
         _cacheWidth = width + 2;
         _cacheHeight = height + 2;
-        if (_cellCache == null || _cellCache.GetLength(0) != _cacheWidth || _cellCache.GetLength(1) != _cacheHeight)
+        if (_cellCache.Width != _cacheWidth || _cellCache.Height != _cacheHeight)
         {
-            _cellCache = new CachedCellData[_cacheWidth, _cacheHeight];
+            _cellCache.EnsureSize(_cacheWidth, _cacheHeight);
+            _cellsByType.EnsureWindow(_cacheWidth, _cacheHeight);
+            _cellsByType.Clear();
         }
     }
 
+    /// <summary>Начать проход разрешения метаданных (см. TerrainCellMetadataCache).</summary>
+    public void BeginMetadataPass() => _metadataCache.BeginPass();
+
     public void ClearCaches()
     {
-        // Array.Clear zeros all bytes → IsPopulated = false for every entry (bool default = false).
-        // Faster than a manual loop: runtime uses SIMD memset internally.
-        Array.Clear(_metadataLookup, 0, _metadataLookup.Length);
+        _metadataCache.Clear();
     }
 
     public void RefreshTextureMetadata(
         HashSet<CellType> cellTypes,
-        MapManager mapManager,
+        IMapDataProvider mapManager,
         ITextureService textureService,
         IReadOnlyList<IAtlasDescriptor> atlases)
     {
-        foreach (CellType cellType in cellTypes)
-        {
-            int index = (int)cellType;
-            if ((uint)index < (uint)_metadataLookup.Length)
-            {
-                _metadataLookup[index].IsPopulated = false;
-            }
-        }
+        _metadataCache.Invalidate(cellTypes);
 
-        for (int x = 0; x < _cacheWidth; x++)
+        // Один проход по окну вместо прохода на каждый приехавший тип.
+        // Метаданные типа разрешаются по первой его клетке и дальше отдаются
+        // кэшем: внутри прохода тип уже разрешён.
+        _refreshEntries.Clear();
+        _cellsByType.CollectEntries(cellTypes, _refreshEntries);
+        _metadataCache.BeginPass();
+        for (int index = 0; index < _refreshEntries.Count; index++)
         {
-            for (int y = 0; y < _cacheHeight; y++)
+            (long key, CellType cellType) = _refreshEntries[index];
+            int x = TerrainCoordinateKey.UnpackX(key) - _cacheMinX;
+            int y = TerrainCoordinateKey.UnpackY(key) - _cacheMinY;
+            if ((uint)x >= (uint)_cacheWidth || (uint)y >= (uint)_cacheHeight)
             {
-                CellType cellType = _cellCache[x, y].Type;
-                if (!cellTypes.Contains(cellType))
-                {
-                    continue;
-                }
-
-                _cellCache[x, y] = CreateCachedData(
-                    cellType,
-                    GetMetadata(cellType, mapManager, textureService, atlases));
+                continue;
             }
+
+            CellMetadata metadata = _metadataCache.GetMetadata(
+                cellType, mapManager, textureService, atlases);
+            _cellCache[x, y] = _metadataCache.CreateCachedData(cellType, metadata);
         }
+    }
+
+    public CachedCellInfo GetCell(int x, int y)
+    {
+        CachedCellData data = GetCellData(x, y);
+        return new CachedCellInfo { Type = data.Type, Properties = data.Properties };
     }
 
     public CachedCellData GetCellData(int x, int y)
@@ -93,7 +104,7 @@ public class TerrainCellCache
         return _cellCache[x, y];
     }
 
-    public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
+    public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
     {
         if (wtm == null)
         {
@@ -120,6 +131,8 @@ public class TerrainCellCache
 
         _cacheMinX = minX - 1;
         _cacheMinY = minY - 1;
+        _cellsByType.Clear();
+        _metadataCache.BeginPass();
 
         for (int x = 0; x < _cacheWidth; x++)
         {
@@ -134,19 +147,19 @@ public class TerrainCellCache
 
                 if (type == CellType.Unloaded)
                 {
-                    _cellCache[x, y] = _UnloadedCellData;
+                    SetCachedData(x, y, _UnloadedCellData);
                     continue;
                 }
 
                 var meta = GetMetadata(type, mm, wtm, atlases);
-                _cellCache[x, y] = CreateCachedData(type, meta);
+                SetCachedData(x, y, CreateCachedData(type, meta));
             }
         }
 
         wtm.RequestTexture(CellType.Empty);
     }
 
-    public void UpdateRegion(int gridMinX, int unityMinY, int width, int height, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
+    public void UpdateRegion(int gridMinX, int unityMinY, int width, int height, IWorldDataStorage mapStorage, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
     {
         if (wtm == null || atlases == null || mm == null || mapStorage == null || !mapStorage.IsReady)
         {
@@ -161,6 +174,7 @@ public class TerrainCellCache
             return;
         }
 
+        _metadataCache.BeginPass();
         int startX = Mathf.Clamp(gridMinX - _cacheMinX, 0, _cacheWidth);
         int endX = Mathf.Clamp(gridMinX + width - _cacheMinX, 0, _cacheWidth);
         int startY = Mathf.Clamp(unityMinY - _cacheMinY, 0, _cacheHeight);
@@ -179,17 +193,17 @@ public class TerrainCellCache
 
                 if (type == CellType.Unloaded)
                 {
-                    _cellCache[x, y] = _UnloadedCellData;
+                    SetCachedData(x, y, _UnloadedCellData);
                     continue;
                 }
 
                 var meta = GetMetadata(type, mm, wtm, atlases);
-                _cellCache[x, y] = CreateCachedData(type, meta);
+                SetCachedData(x, y, CreateCachedData(type, meta));
             }
         }
     }
 
-    public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
+    public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
     {
         if (wtm == null)
         {
@@ -214,10 +228,18 @@ public class TerrainCellCache
             return;
         }
 
+        _metadataCache.BeginPass();
+
+        // Снимать уехавшие клетки с индекса типов отдельным проходом больше
+        // не нужно. Индекс адресует клетку кольцом по размеру окна, и слот
+        // уехавшей клетки — это ровно слот той, что встала на её место; Set
+        // ниже снимает прежнего жильца сам. Проход же стоил по хеш-операции
+        // на клетку полосы, и на догрузке чанка это были миллисекунды за
+        // работу, которую тут же делали второй раз.
         _cacheMinX += dx;
         _cacheMinY += dy;
 
-        Scroll2DArray(_cellCache, _cacheWidth, _cacheHeight, dx, dy);
+        _cellCache.Scroll(dx, dy);
 
         int lastChunkIndex = -1;
         CellType[]? currentChunk = null;
@@ -231,53 +253,32 @@ public class TerrainCellCache
 
             if (type == CellType.Unloaded)
             {
-                _cellCache[cx, cy] = _UnloadedCellData;
+                SetCachedData(cx, cy, _UnloadedCellData);
                 return;
             }
 
             var meta = GetMetadata(type, mm, wtm, atlases);
-            _cellCache[cx, cy] = CreateCachedData(type, meta);
+            SetCachedData(cx, cy, CreateCachedData(type, meta));
         }
 
-        if (dx > 0)
+        // Кайма нулевая: клетка кэша читается сама по себе, соседей здесь
+        // никто не смотрит. Полоса по y берёт только ту ширину, которую не
+        // накрыла полоса по x, — раньше угол заполнялся дважды.
+        TerrainScrollBands bands = TerrainScrollBands.Resolve(
+            _cacheWidth, _cacheHeight, dx, dy);
+        for (int x = bands.ColumnBand.xMin; x < bands.ColumnBand.xMax; x++)
         {
-            for (int x = _cacheWidth - dx; x < _cacheWidth; x++)
+            for (int y = bands.ColumnBand.yMin; y < bands.ColumnBand.yMax; y++)
             {
-                for (int y = 0; y < _cacheHeight; y++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
-            }
-        }
-        else if (dx < 0)
-        {
-            for (int x = 0; x < -dx; x++)
-            {
-                for (int y = 0; y < _cacheHeight; y++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
+                FillCell(x, y, ref lastChunkIndex, ref currentChunk);
             }
         }
 
-        if (dy > 0)
+        for (int x = bands.RowBand.xMin; x < bands.RowBand.xMax; x++)
         {
-            for (int y = _cacheHeight - dy; y < _cacheHeight; y++)
+            for (int y = bands.RowBand.yMin; y < bands.RowBand.yMax; y++)
             {
-                for (int x = 0; x < _cacheWidth; x++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
-            }
-        }
-        else if (dy < 0)
-        {
-            for (int y = 0; y < -dy; y++)
-            {
-                for (int x = 0; x < _cacheWidth; x++)
-                {
-                    FillCell(x, y, ref lastChunkIndex, ref currentChunk);
-                }
+                FillCell(x, y, ref lastChunkIndex, ref currentChunk);
             }
         }
 
@@ -319,93 +320,26 @@ public class TerrainCellCache
         return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
     }
 
-    public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
+    // Разрешение типа: главный поток. Пишет в кэш и дозаказывает текстуру.
+    public CellMetadata GetMetadata(CellType type, IMapDataProvider mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases) =>
+        _metadataCache.GetMetadata(type, mm, wtm, atlases);
+
+    // Чтение уже разрешённого типа: этим и только этим пользуется сборка
+    // клетки, в том числе из рабочих потоков.
+    public ITerrainMetadataLookup MetadataLookup => _metadataCache;
+
+    public CachedCellData CreateCachedData(CellType type, CellMetadata meta) =>
+        _metadataCache.CreateCachedData(type, meta);
+
+    private void SetCachedData(int x, int y, CachedCellData data)
     {
-        int idx = (int)type;
-        if ((uint)idx < (uint)_metadataLookup.Length && _metadataLookup[idx].IsPopulated)
-        {
-            return _metadataLookup[idx];
-        }
-
-        var config = mm.GetCellConfig(type);
-
-        int atlasIndex = -1;
-        for (int i = 0; i < atlases.Count; i++)
-        {
-            if (atlases[i].ContainsCell(type))
-            {
-                atlasIndex = i;
-                break;
-            }
-        }
-
-        Vector4 atlasRect = wtm.GetCellFrameRect(type);
-        int frameCount = wtm.GetAnimationFrameCount(type);
-        int frameSize = wtm.GetFrameSize(type);
-
-        var meta = new CellMetadata
-        {
-            Properties = config.Properties,
-            ReliefGroup = config.ReliefGroup,
-            Distortion = config.Distortion,
-            HasTileGroup = mm.TryGetTileGroup(type, out int gid),
-            TileGroupID = gid,
-            MinimapColor = (Color32)mm.GetCellMinimapColor(type),
-            Animation = config.Animation,
-            AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
-            AtlasRect = atlasRect,
-            AtlasIndex = atlasIndex,
-            UVTileSize = atlasIndex >= 0 && atlasIndex < atlases.Count
-                ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size
-                : 0f,
-            AnimationFrameCount = frameCount,
-            FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
-            IsTextureReady = atlasIndex >= 0 && atlasRect.z > 0f,
-            IsPopulated = true,
-        };
-
-        // The metadata is always fully populated (IsPopulated = true) once built here.
-        // Only the fast _metadataLookup cache entry is skipped while the atlas texture is
-        // not yet ready, so callers fall through to RequestTexture instead of caching an
-        // unready rect. The per-cell IsTextureReady flag (read by HasMissingTextures) is
-        // what actually gates drawing of not-yet-loaded cells.
-        if (meta.IsTextureReady && (uint)idx < (uint)_metadataLookup.Length)
-        {
-            _metadataLookup[idx] = meta;
-        }
-
-        if (!meta.IsTextureReady)
-        {
-            wtm.RequestTexture(type);
-        }
-
-        return meta;
+        // Снимать клетку с прежнего типа отдельным флагом больше не нужно:
+        // индекс адресует слот кольцом и сам видит, кто в слоте был.
+        _cellsByType.Set(
+            TerrainCoordinateKey.Pack(_cacheMinX + x, _cacheMinY + y),
+            data.Type);
+        _cellCache[x, y] = data;
     }
 
-    public CachedCellData CreateCachedData(CellType type, CellMetadata meta)
-    {
-        return new CachedCellData
-        {
-            State = TerrainCellState.Loaded,
-            Type = type,
-            Properties = meta.Properties,
-            ReliefGroup = meta.ReliefGroup,
-            Distortion = meta.Distortion,
-            HasTileGroup = meta.HasTileGroup,
-            TileGroupID = meta.TileGroupID,
-            MinimapColor = meta.MinimapColor, // Color32 = Color32, no conversion
-            Animation = meta.Animation,
-            AnimationSpeed = meta.AnimationSpeed,
-            AtlasRect = meta.AtlasRect,
-            AtlasIndex = meta.AtlasIndex,
-            UVTileSize = meta.UVTileSize,
-            AnimationFrameCount = meta.AnimationFrameCount,
-            FrameHeightTiles = meta.FrameHeightTiles,
-            IsTextureReady = meta.IsTextureReady,
-        };
-    }
-    public static void Scroll2DArray<T>(T[,] buffer, int w, int h, int dx, int dy)
-    {
-        TerrainCacheArrayScroller.Scroll(buffer, w, h, dx, dy);
-    }
+
 }

@@ -1,8 +1,10 @@
 #nullable enable
 
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Kern.Core;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Movement;
@@ -23,29 +25,40 @@ internal static class DummyBotRunner
         "Vex",
     };
 
-    public static async UniTask RunCircularBots(int count, int lifecycleVersion, Action<ServerPacket> sendPacket, Func<bool> loopAlive)
+    public static async UniTask RunCircularBots(
+        int count,
+        int lifecycleVersion,
+        IDummyClock clock,
+        Action<ServerPacket> sendPacket,
+        Func<bool> loopAlive,
+        Func<(ushort X, ushort Y)> getObserverPosition,
+        CancellationToken cancellationToken)
     {
         const int BASE_ID = 1000;
         const float CENTER_X = 30f;
         const float CENTER_Y = 50f;
+        const int InterestChunkExtent = 1;
+        const int ChunkSize = ProjectRuntimeContracts.World.ChunkSize;
         string[] names = BotNames;
-        var positions = new IHBPacket[count];
+        HashSet<ushort> visibleLastTick = [];
 
         var bots = new List<(ushort id, string name, float cx, float cy, float r, float a, float speed)>();
         for (int i = 0; i < count; i++)
         {
-            ushort botId = (ushort)(BASE_ID + i);
-            sendPacket(new ServerPacket(new RobotInfoPacket(botId, 1000, 0,
-                "Skin/bee.png", "Tail/default.png", names[i % names.Length])));
-
+            ushort botID = (ushort)(BASE_ID + i);
             float radius = 2.5f + (i % 3);
             float angle = (float)(i * (Math.PI * 2d / count));
             float speed = 0.45f + ((i % 2) * 0.1f);
-            bots.Add((botId, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
+            bots.Add((botID, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
         }
 
         while (loopAlive())
         {
+            (ushort observerX, ushort observerY) = getObserverPosition();
+            int observerChunkX = observerX / ChunkSize;
+            int observerChunkY = observerY / ChunkSize;
+            var positions = new List<IHBPacket>(bots.Count);
+            var visibleNow = new HashSet<ushort>();
             for (int i = 0; i < bots.Count; i++)
             {
                 var b = bots[i];
@@ -59,12 +72,37 @@ internal static class DummyBotRunner
                     > 45 and <= 135 => 2,
                     _ => 3,
                 };
-                positions[i] = new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot);
+                int botChunkX = x / ChunkSize;
+                int botChunkY = y / ChunkSize;
+                if (Math.Abs(botChunkX - observerChunkX) <= InterestChunkExtent &&
+                    Math.Abs(botChunkY - observerChunkY) <= InterestChunkExtent)
+                {
+                    if (!visibleLastTick.Contains(b.id))
+                    {
+                        sendPacket(new ServerPacket(new RobotInfoPacket(
+                            b.id,
+                            1000,
+                            0,
+                            "Skin/bee.png",
+                            "Tail/default.png",
+                            b.name)));
+                    }
+
+                    visibleNow.Add(b.id);
+                    positions.Add(new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot));
+                }
+
                 bots[i] = (b.id, b.name, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
             }
 
-            sendPacket(new ServerPacket(new HBPacket(positions)));
-            await UniTask.Delay(100);
+            visibleLastTick = visibleNow;
+
+            if (positions.Count > 0)
+            {
+                sendPacket(new ServerPacket(new HBPacket([.. positions])));
+            }
+
+            await clock.Delay(100, cancellationToken);
         }
     }
 }

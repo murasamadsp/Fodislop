@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Расширение контракта конфигурации клетки</title>
+<style>
+:root { color-scheme: dark; }
+body { margin: 0 auto; padding: 32px 24px 96px; max-width: 980px;
+  background: #16161d; color: #d7d7e0;
+  font: 15px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; }
+h1 { font-size: 26px; margin: 0 0 8px; color: #fff; }
+h2 { font-size: 19px; margin: 40px 0 10px; color: #fff;
+  border-bottom: 1px solid #32323f; padding-bottom: 6px; }
+h3 { font-size: 15px; margin: 24px 0 6px; color: #b9b9ff; }
+p { margin: 10px 0; }
+.lead { color: #9a9aab; margin-bottom: 28px; }
+table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13.5px; }
+th, td { border: 1px solid #32323f; padding: 7px 9px; text-align: left; vertical-align: top; }
+th { background: #21212b; color: #fff; font-weight: 600; }
+tr:nth-child(even) td { background: #1b1b24; }
+code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: #21212b; padding: 1px 5px; border-radius: 3px; color: #e6c07b; }
+.note { border-left: 3px solid #5a5ad0; background: #1d1d28; padding: 10px 14px; margin: 16px 0; }
+.warn { border-left: 3px solid #d05a5a; background: #281d1d; padding: 10px 14px; margin: 16px 0; }
+.ok { color: #7ec699; } .miss { color: #e88; } .part { color: #e6c07b; }
+ol, ul { margin: 10px 0; padding-left: 22px; } li { margin: 5px 0; }
+</style>
+</head>
+<body>
+
+<h1>Расширение контракта конфигурации клетки</h1>
+<p class="lead">Что сейчас захардкожено в клиенте, почему это должно приезжать с сервера
+и какие поля для этого нужно добавить в <code>CellConfigurationPacket</code>.</p>
+
+<h2>1. Что контракт несёт сегодня</h2>
+<p><code>MinesServer.Networking.Server.Packets.Connection.CellConfigurationPacket</code> —
+<code>readonly record struct</code>, <code>LayoutKind.Sequential, Pack = 1</code>,
+читается и пишется через <code>UnsafeRead</code>/<code>UnsafeWrite</code>. Размер фиксирован,
+поэтому любое новое поле меняет размер пакета и требует согласованной правки обеих сторон.</p>
+
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Байт</th><th>Что задаёт</th></tr>
+<tr><td><code>Properties</code></td><td><code>CellConfigProperties</code></td><td>1</td>
+  <td>Флаги: Passable, Breakable, DropsShadow, ReceivesShadow, Blending, Glowing. <strong>Биты 6 и 7 свободны.</strong></td></tr>
+<tr><td><code>Distortion</code></td><td><code>CellDistortionType</code></td><td>1</td>
+  <td>Neutral / Cause / Block — участие клетки в искажении узлов сетки.</td></tr>
+<tr><td><code>Animation</code></td><td><code>CellAnimationType</code></td><td>1</td>
+  <td>None / Blinking / Shimmer / Rainbow.</td></tr>
+<tr><td><code>AnimationSpeed</code></td><td><code>byte</code></td><td>1</td><td>Скорость анимации.</td></tr>
+<tr><td><code>FrameOffset</code></td><td><code>byte</code></td><td>1</td><td>Смещение кадра.</td></tr>
+<tr><td><code>Color</code></td><td><code>int</code></td><td>4</td><td>Цвет миникарты.</td></tr>
+<tr><td><code>ReliefGroup</code></td><td><code>byte</code></td><td>1</td>
+  <td>Рельефная семья. <strong>Единственное поле вида, которое уже приезжает с сервера.</strong></td></tr>
+</table>
+<p>Итого 10 байт на тип клетки, 256 типов — 2560 байт за соединение.</p>
+
+<h2>2. Что клиент решает сам, хотя это данные о клетке</h2>
+<p>Ниже — всё, что классифицирует клетку по её типу внутри клиента. Столбец «в оригинале» —
+откуда то же самое берёт клиент Mines: <code>CellRender.cellConfigs[id]</code>.</p>
+
+<table>
+<tr><th>Что</th><th>Где в клиенте</th><th>В оригинале</th><th>Последствие хардкода</th></tr>
+
+<tr><td>Кто адресует сплошной лист атласа, а кто тайл на клетку</td>
+  <td><code>TerrainSheetCatalog.IsContinuousSheet</code> — явный список типов</td>
+  <td><code>textureType == 1</code> (списки <code>crysy</code> и <code>rocky</code>)</td>
+  <td>Новый тип клетки с сервера рисуется тайлами и разваливается на штампы, пока список не правят руками.</td></tr>
+
+<tr><td>Кто участвует в кайме рельефа</td>
+  <td><code>TerrainReliefRimCatalog</code> — перечисление семей</td>
+  <td><code>textureType == 1</code>, семья — <code>reliefType</code></td>
+  <td>Семья уже серверная, а участие — нет. Разъезжаются два источника правды об одном и том же.</td></tr>
+
+<tr><td>Размер участка листа в клетках</td>
+  <td>выводится из размера подкартинки в атласе, делённого на размер тайла</td>
+  <td><code>wx</code>/<code>wy</code> (у кристаллов и скал 10×8), смещение <code>dx</code>/<code>dy</code></td>
+  <td>Период тайлинга задаёт размер PNG, а не замысел. У нас все листы 320×320, то есть 10×10, тогда как в оригинале период по вертикали 8.</td></tr>
+
+<tr><td>Скруглённый силуэт</td>
+  <td><code>MapCellConfigCatalog.IsRoundableLoose</code> — список из 25 типов</td>
+  <td>отдельная ветка вида</td>
+  <td>Определяет и картинку, и <em>физическую</em> занятость для света: ошибка в списке меняет тени.</td></tr>
+
+<tr><td>Дороги не перекрывают свет</td>
+  <td><code>MapCellConfigCatalog.IsRoad</code></td>
+  <td>свойства клетки</td>
+  <td>Свободный бит в <code>Properties</code> есть, а признак живёт списком.</td></tr>
+
+<tr><td>Постройки и искусственные блоки</td>
+  <td><code>MapCellConfigCatalog.IsBuildingOrArtificialBlock</code>, <code>TerrainQuadBuilder.IsBuildingBlock</code></td>
+  <td><code>blocky</code>, <code>textureType == 4</code></td>
+  <td>Гасит <code>Glowing</code> и исключает из декалей — то есть переопределяет серверный флаг клиентским списком.</td></tr>
+
+<tr><td>Профиль анимации и фаза</td>
+  <td><code>TerrainAnimationProfileCatalog.Get</code>: FacetedCrystal, PrismaticCrystal, молтен, и фазы <code>XGreen=1 … XCyan=5</code></td>
+  <td><code>animType</code>, <code>animSpeed</code>, <code>dx2</code>/<code>dy2</code></td>
+  <td><code>Animation</code> и <code>AnimationSpeed</code> в пакете есть, но клиент их частично переопределяет.</td></tr>
+
+<tr><td>Декали: семья, доля клеток, раскладка вариантов</td>
+  <td><code>TerrainDecalCatalog</code></td>
+  <td>нет прямого аналога</td>
+  <td>Плотность и состав декалей нельзя менять без пересборки клиента.</td></tr>
+</table>
+
+<div class="warn">
+<p><strong>Главный симптом.</strong> Рельефная семья приезжает с сервера, а «кто тайлится» и
+«кто с каймой» — нет. Поэтому на вопрос «по какой системе тайлить» сегодня нет ответа в данных:
+он рассыпан по трём спискам в трёх файлах клиента, и сервер на него влиять не может.</p>
+</div>
+
+<h2>3. Предлагаемые поля</h2>
+
+<h3>3.1. Два свободных бита в <code>Properties</code></h3>
+<table>
+<tr><th>Бит</th><th>Имя</th><th>Заменяет</th></tr>
+<tr><td>1 &lt;&lt; 6</td><td><code>RoundedSilhouette</code></td><td><code>IsRoundableLoose</code></td></tr>
+<tr><td>1 &lt;&lt; 7</td><td><code>TransmitsLight</code></td><td><code>IsRoad</code></td></tr>
+</table>
+<p>Размер пакета не меняется.</p>
+
+<h3>3.2. Новые поля</h3>
+<table>
+<tr><th>Поле</th><th>Тип</th><th>Байт</th><th>Значения</th><th>Заменяет</th></tr>
+<tr><td><code>TextureKind</code></td><td><code>byte</code> enum</td><td>1</td>
+  <td>Ground = 0, Sheet = 1, Block = 4, SandAutotile = 16</td>
+  <td><code>TerrainSheetCatalog</code> и участие в кайме — одним полем, как <code>textureType</code> в оригинале</td></tr>
+<tr><td><code>SheetTilesX</code></td><td><code>byte</code></td><td>1</td><td>период тайлинга по X в клетках</td><td rowspan="2">вывод размера участка из размера PNG</td></tr>
+<tr><td><code>SheetTilesY</code></td><td><code>byte</code></td><td>1</td><td>период по Y</td></tr>
+<tr><td><code>AnimationProfile</code></td><td><code>byte</code> enum</td><td>1</td>
+  <td>Default, FacetedCrystal, PrismaticCrystal, Molten</td><td><code>TerrainAnimationProfileCatalog</code></td></tr>
+<tr><td><code>AnimationPhase</code></td><td><code>byte</code></td><td>1</td>
+  <td>индекс фазы, сегодня <code>XGreen = 1 … XCyan = 5</code></td><td>таблицу фаз в клиенте</td></tr>
+<tr><td><code>DecalFamily</code></td><td><code>byte</code> enum</td><td>1</td>
+  <td>None, Stone, Sand, Road, Ground</td><td rowspan="2"><code>TerrainDecalCatalog</code></td></tr>
+<tr><td><code>DecalPercent</code></td><td><code>byte</code></td><td>1</td><td>доля клеток с декалью, 0–100</td></tr>
+</table>
+
+<div class="note">
+<p><strong>Цена.</strong> Плюс 7 байт на тип клетки: 10 → 17. На 256 типов это 4352 байта,
+один раз за соединение. Пакет по-прежнему фиксированного размера и читается одним
+<code>UnsafeRead</code>.</p>
+<p><strong>Смещение <code>dx</code>/<code>dy</code> из оригинала не нужно.</strong> Там один общий атлас
+128×128 тайлов, и участок надо адресовать абсолютно. У нас на тип клетки своя подкартинка,
+её начало уже известно из <code>AtlasRect</code>. Нужен только размер участка.</p>
+</div>
+
+<h2>4. Порядок работ</h2>
+<ol>
+<li><strong>Расширить пакет</strong> в <code>darkar25.fodinae.networking</code>: два бита в
+<code>CellConfigProperties</code> и семь новых полей. Обе стороны обязаны обновиться вместе —
+размер структуры меняется, а декодер читает её одним блоком.</li>
+<li><strong>Заполнить значения в дамми</strong> — <code>DummyCellConfigurationUtilities</code>
+становится единственным местом, где эти свойства задаются. Значения переносятся из клиентских
+списков один в один, без изменения поведения.</li>
+<li><strong>Снять хардкод в клиенте</strong>: <code>TerrainSheetCatalog</code>,
+<code>TerrainReliefRimCatalog</code>, <code>TerrainAnimationProfileCatalog</code>,
+<code>TerrainDecalCatalog</code>, предикаты <code>MapCellConfigCatalog</code> —
+все читают конфигурацию клетки.</li>
+<li><strong>Закрепить тестом</strong>, что каждый тип клетки сконфигурирован: сейчас это
+делает <code>RequireEveryCellTypeConfigured</code>, его надо расширить на новые поля, иначе
+незаполненное поле молча даст нулевое значение вместо ошибки.</li>
+</ol>
+
+<div class="warn">
+<p><strong>Порядок обязателен.</strong> Пункт 2 нельзя сделать раньше пункта 1: пока пакет не несёт
+поле, перенос «на дамми» означал бы завести второй источник правды рядом с первым, а не убрать
+хардкод. Пункт 3 нельзя делать раньше пункта 2 — клиент останется без данных.</p>
+</div>
+
+</body>
+</html>

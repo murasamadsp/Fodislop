@@ -3,14 +3,15 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Core.Models;
-using Fodinae.Networking;
-using Fodinae.Player.Logic;
-using Fodinae.UI.HUD.Player.Model;
-using Fodinae.UI.Programmator;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Core.Models;
+using Kern.Networking;
+using Kern.Networking.Processors;
+using Kern.Player.Logic;
+using Kern.UI.HUD.Player.Model;
+using Kern.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -19,7 +20,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.UI.HUD.Player.View
+namespace Kern.UI.HUD.Player.View
 {
     public class PlayerHUDView : MonoBehaviour, ILocalizableUI
     {
@@ -38,9 +39,9 @@ namespace Fodinae.UI.HUD.Player.View
         private Tooltip? _tooltip;
         private bool _isLoaded;
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
-        private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
+        private Kern.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
         private readonly PlayerHUDSkeletonPulse _skeletonPulse = new();
         private PlayerHUDModeController? _modeController;
         private TemplateContainer? _hudRoot;
@@ -70,6 +71,8 @@ namespace Fodinae.UI.HUD.Player.View
         private IAssetLoader _assetLoader = null!;
         [Inject]
         private INetworkService _networkService = null!;
+        [Inject]
+        private ProgrammatorProcessor _programmatorProtocol = null!;
         [Inject]
         private ILocalizationService _loc = null!;
         [Inject]
@@ -216,12 +219,11 @@ namespace Fodinae.UI.HUD.Player.View
                 _loc,
                 _programmatorData,
                 _uiInput,
-                _programmatorTextures);
+                _programmatorTextures,
+                _programmatorProtocol);
             _programmatorGrid?.Initialize();
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
-
-            UILayoutTier.Attach(_doc.rootVisualElement);
 
             LoadTemplate(_doc.rootVisualElement);
 
@@ -230,21 +232,14 @@ namespace Fodinae.UI.HUD.Player.View
                 _model.OnSkillProgress += OnSkillProgress;
                 _model.OnStatusLinesChanged += OnStatusLinesChanged;
                 _model.OnMissionChanged += OnMissionChanged;
-            }
-
-            if (_model != null)
-            {
                 _model.OnDailyBonusChanged += OnDailyBonusChanged;
+                _model.OnStatsChanged += RefreshAll;
+                _isLoaded = _model.Health > 0 || _model.Level > 0;
             }
 
             _bonusController.UpdateDailyBonusPanel(_model);
 
             _basketView.RebuildRows();
-            if (_model != null)
-            {
-                _model.OnStatsChanged += RefreshAll;
-                _isLoaded = _model.Health > 0 || _model.Level > 0;
-            }
 
             if (!_isLoaded && _hudRoot != null)
             {
@@ -280,6 +275,7 @@ namespace Fodinae.UI.HUD.Player.View
             TemplateContainer tree = template.Instantiate();
             tree.AddToClassList("ui-fullscreen");
             tree.pickingMode = PickingMode.Ignore;
+            UILayoutTier.Attach(tree);
             _hudRoot = tree;
             root.Add(tree);
 
@@ -358,11 +354,6 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void RefreshAll()
         {
-            if (this == null)
-            {
-                return;
-            }
-
             var stats = _model;
             if (stats == null)
             {

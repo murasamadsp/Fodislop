@@ -1,76 +1,88 @@
 ---
 name: in-memory-audit
-description: Автономный аудит кода и поиск багов исключительно в уме по загруженным в контекст файлам, без вызова инструментов, поиска и сторонних команд.
+description: Autonomous code audit and bug hunting performed mentally on files already loaded into context, without tools, search, or external commands.
 ---
 
-# In-Memory Bug Hunter (Когнитивный аудит кода в уме)
+# In-Memory Bug Hunter
 
-Навык глубокого анализа кода, архитектурных дефектов, утечек и логических ошибок **исключительно силами когнитивной модели** по уже загруженным в контекстное окно файлам, **без промежуточных вызовов инструментов, шелла или файловых поисков**.
+This skill performs a deep analysis of code defects, architectural problems,
+leaks, and logical errors using only the files already loaded into context.
+No intermediate shell, search, or file-tool calls are allowed during the audit.
 
----
+## 1. Zero-tool principle
 
-## 1. Фундаментальный принцип «Чистый разум» (Zero-Tool Rule)
+When this mode is active:
 
-Когда активирован этот режим:
-1. **Никаких дополнительных вызовов инструментов:** запрещено вызывать `run_command`, `grep_search`, `find_by_name`, `view_file` или фоновые утилиты в процессе аудита.
-2. **Вся кодовая база для проверки уже находится в контексте:** анализ строится строго по содержимому файлов, переданных пользователем или загруженных на этапе постановки задачи.
-3. **Мысленная компиляция и трассировка:** модель воспроизводит поведение рантайма, сборщика мусора, многопоточности и GPU-пайплайна «в уме» (Mental Simulation).
+1. **No additional tool calls:** do not invoke commands, searches, file viewers,
+   or background utilities during the audit.
+2. **The code under review is already in context:** reason only from files
+   supplied by the user or loaded when the task started.
+3. **Mental compilation and tracing:** simulate runtime behavior, garbage
+   collection, concurrency, and GPU execution mentally.
 
----
+## 2. Mental analysis pipeline
 
-## 2. Фазы мысленного анализа (Mental Analysis Pipeline)
+Run the loaded code through five filters:
 
-При исследовании загруженного кода агент последовательно прогоняет код через 5 когнитивных фильтров:
+### Phase 1. Lifecycle and execution order
 
-### Фаза 1. Жизненный цикл и порядок исполнения (Lifecycle & State Machine)
-- **Точки входа:** что вызывается раньше (`Awake`, `OnEnable`, `Construct`, `Start`)? Есть ли обращение к неинициализированным инъекциям или полям?
-- **Сброс и повторный вход (Re-entrance & PlaySessionReset):** очищаются ли статические коллекции, кэши, подписки событий при перезапуске сессии или смене сцены?
-- **Порядок деинициализации (`OnDisable`, `OnDestroy`, `Dispose`):** не освобождается ли ресурс, к которому ещё обращается параллельный поток или фоновая задача?
+- **Entry points:** what runs first (`Awake`, `OnEnable`, `Construct`, `Start`)?
+  Is anything using an uninitialized injection or field?
+- **Reset and re-entry:** are static collections, caches, and event subscriptions
+  cleared when a session restarts or a scene changes?
+- **Deinitialization order (`OnDisable`, `OnDestroy`, `Dispose`):** can a resource
+  be released while a worker thread or background task still uses it?
 
-### Фаза 2. Асинхронность и параллелизм (Concurrency & UniTask)
-- **Гонки состояний (Race Conditions):** может ли два асинхронных метода параллельно мутировать одно и то же поле или коллекцию без блокировки/семафора?
-- **Забытые операции и токены отмены:** пробрасывается ли `CancellationToken` во все вложенные вызовы? Что происходит при отмене — не остаётся ли система в полуразобранном состоянии?
-- **Переключение контекста потоков:** нет ли обращения к объектам Unity (`Transform`, `Texture`, `GameObject`, `Time`) из фонового пула потоков (`UniTask.RunOnThreadPool` / `Task.Run`)?
-- **Двойные вызовы и проглатывание исключений:** нет ли `async void` вне обработчиков событий? Не теряются ли критические ошибки ввода-вывода?
+### Phase 2. Asynchrony and concurrency
 
-### Фаза 3. Ресурсы, память и сборщик мусора (Memory & GC Pressure)
-- **Утечки нативных ресурсов:** для каждого `ComputeBuffer`, `RenderTexture`, `Texture2D`, `NativeArray`, `FileStream` — гарантирован ли вызов `Dispose()` / `Release()` / `Destroy()` даже при возникновении исключений (`try-finally`)?
-- **Скрытые аллокации в горячем цикле (Hot Path):**
-  - Замыкания (лямбды, захватывающие локальные переменные `this` или аргументы);
-  - Упаковка значимых типов (boxing при вызове `object`, интерфейсов или `string.Format`);
-  - Создание коллекций (`new List<T>()`, `new T[]`, linq-методы `.Where()`, `.Select()`);
-  - Интерполяция строк и конкатенация в кадровых методах (`Update`, `Tick`, `OnGUI`, `Draw`).
+- **State races:** can two async methods mutate the same field or collection
+  concurrently without a lock or semaphore?
+- **Forgotten operations and cancellation tokens:** are tokens passed through
+  every nested call? What happens on cancellation?
+- **Context switching:** does background-pool code (`UniTask.RunOnThreadPool`
+  or `Task.Run`) access Unity objects such as `Transform`, `Texture`,
+  `GameObject`, or `Time`?
+- **Duplicate calls and swallowed exceptions:** is `async void` used outside
+  event handlers? Can critical I/O failures disappear?
 
-### Фаза 4. Граничные случаи и числовая стабильность (Edge Cases & Invariants)
-- **Деление на ноль и сингулярности:** защищены ли нормализации векторов, расчеты масштаба, деление на дельту времени (`Time.deltaTime == 0`)?
-- **NaN / Infinity propagation:** проверяются ли результаты тригонометрии, корней, логарифмов и пользовательского ввода?
-- **Индексы и границы массивов (Off-by-one):** переходы через `Length`, циклические буферы `(index + 1) % size`, слайсы `ReadOnlySpan` и пустые массивы.
-- **Nullability ловушки:** места с оператором `!` (null-forgiving), которые могут оказаться `null` в рантайме.
+### Phase 3. Resources, memory, and GC pressure
 
-### Фаза 5. Архитектурная чистота и скрытые побочные эффекты (Purity & Side Effects)
-- **Геттеры с побочными эффектами:** свойства не должны неявно мутировать состояние, аллоцировать память или выполнять I/O при простом чтении.
-- **Нарушение инвариантов контракта:** проверяет ли класс свои входные параметры на старте (fail-fast), или передает невалидное состояние вглубь системы?
+- **Native-resource leaks:** for every `ComputeBuffer`, `RenderTexture`,
+  `Texture2D`, `NativeArray`, and `FileStream`, is `Dispose`/`Release`/`Destroy`
+  guaranteed even when an exception occurs (`try/finally`)?
+- **Hidden hot-path allocations:** closures, boxing, new collections, LINQ,
+  string interpolation, and concatenation in `Update`, `Tick`, `OnGUI`, or `Draw`.
 
----
+### Phase 4. Edge cases and numerical stability
 
-## 3. Формат отчёта об аудите
+- **Division by zero and singularities:** are vector normalization, scale
+  calculations, and delta-time division guarded?
+- **NaN/Infinity propagation:** are trigonometry, roots, logarithms, and user
+  input results validated?
+- **Array bounds:** check `Length`, circular buffers, spans, slices, and empty arrays.
+- **Nullability traps:** inspect every null-forgiving `!` that can be null at runtime.
 
-Результаты когнитивного аудита оформляются структурированно, лаконично и аргументированно:
+### Phase 5. Architectural purity and hidden side effects
+
+- **Side-effecting getters:** properties must not mutate state, allocate, or do
+  I/O merely when read.
+- **Contract violations:** does the class validate inputs at startup, or pass
+  invalid state deeper into the system?
+
+## 3. Audit report format
 
 ```markdown
-### 🔍 Ментальный аудит кода
+### Mental code audit
 
-#### [Уровень критичности: Критический / Высокий / Средний / Микрооптимизация] Название дефекта
-- **Местоположение:** `ИмяФайла.cs:Lномер` или сигнатура метода.
-- **Механика проявления:** точное пошаговое описание сценария, при котором происходит сбой/утечка/деградация.
-- **Почему это баг:** теоретическое доказательство дефекта без необходимости запускать код.
-- **Готовое исправление:** точный блок исправленного кода.
+#### [Severity: Critical / High / Medium / Micro-optimization] Defect name
+- **Location:** `File.cs:Lnumber` or method signature.
+- **Mechanism:** exact scenario that causes the failure, leak, or degradation.
+- **Why it is a bug:** concise reasoning without requiring runtime execution.
+- **Ready fix:** the exact corrected code block.
 ```
 
----
+## 4. Usage example
 
-## 4. Пример сценария использования
-
-1. Пользователь загружает файлы в контекст (или просит оценить фрагмент из предыдущих сообщений) со словами: «проанализируй в уме», «найди баги без вызовов инструментов», «включи in-memory аудит».
-2. Агент **не вызывает никаких инструментов**, включает мысленную симуляцию всех 5 фаз.
-3. Агент сразу же выдаёт структурированный отчёт с найденными багами и готовыми правками.
+1. The user supplies files or asks for an in-memory audit without tool calls.
+2. The agent enables mental simulation through all five phases.
+3. The agent immediately returns a structured report with concrete defects and fixes.

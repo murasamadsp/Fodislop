@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 
 internal static class PostProcessShaderConstants
 {
@@ -23,6 +23,10 @@ internal static class PostProcessShaderConstants
     public static readonly int BloomScatterID = Shader.PropertyToID("_BloomScatter");
     public static readonly int BloomTintID = Shader.PropertyToID("_BloomTint");
     public static readonly int BloomIntensityID = Shader.PropertyToID("_BloomIntensity");
+    public static readonly int EmissionTexID = Shader.PropertyToID("_EmissionTex");
+    public static readonly int ScreenToEmissionID = Shader.PropertyToID("_ScreenToEmission");
+    public static readonly int WorldEmissionTextureID = Shader.PropertyToID("_WorldEmissionTexture");
+    public static readonly int WorldLightRectID = Shader.PropertyToID("_WorldLightRect");
 
     public static readonly int VignetteIntensityID = Shader.PropertyToID("_VignetteIntensity");
     public static readonly int VignetteColorID = Shader.PropertyToID("_VignetteColor");
@@ -34,7 +38,6 @@ internal static class PostProcessShaderConstants
     public static readonly int ContrastID = Shader.PropertyToID("_Contrast");
     public static readonly int SaturationID = Shader.PropertyToID("_Saturation");
     public static readonly int CdlSaturationID = Shader.PropertyToID("_CdlSaturation");
-    public static readonly int GammaID = Shader.PropertyToID("_Gamma");
     public static readonly int DisplayPaperWhiteNitsID = Shader.PropertyToID("_DisplayPaperWhiteNits");
     public static readonly int DisplayPeakRelativeID = Shader.PropertyToID("_DisplayPeakRelative");
     public static readonly int PostDebugViewID = Shader.PropertyToID("_PostDebugView");
@@ -57,7 +60,6 @@ internal static class PostProcessShaderConstants
     public static readonly int ContrastControls2ID = Shader.PropertyToID("_ContrastControls2");
     public static readonly int DisplayGrade0ID = Shader.PropertyToID("_DisplayGrade0");
     public static readonly int DisplayGrade1ID = Shader.PropertyToID("_DisplayGrade1");
-    public static readonly int DisplayGradePathPowerID = Shader.PropertyToID("_DisplayGradePathPower");
     public static readonly int GamutCompressionID = Shader.PropertyToID("_GamutCompression");
     public static readonly int BakedGradeLutID = Shader.PropertyToID("_BakedGradeLut");
     public static readonly int BakedGradeLutTexID = Shader.PropertyToID("_BakedGradeLutTex");
@@ -101,17 +103,40 @@ internal static class PostProcessShaderConstants
     public static readonly int EigengrauNoiseScaleID = Shader.PropertyToID("_EigengrauNoiseScale");
     public static readonly int EigengrauAnimationSpeedID = Shader.PropertyToID("_EigengrauAnimationSpeed");
     public static readonly int TimeID = Shader.PropertyToID("_Time");
+    public static readonly int FrameIndexID = Shader.PropertyToID("_FrameIndex");
+    public static readonly int CalibrationPatternID = Shader.PropertyToID("_CalibrationPattern");
+    public static readonly int CalibrationValueID = Shader.PropertyToID("_CalibrationValue");
 
     public static readonly int HistoryTexID = Shader.PropertyToID("_HistoryTex");
     public static readonly int MotionBlurHistoryID = Shader.PropertyToID("_MotionBlurHistory");
+    public static readonly int HistoryReprojectionID = Shader.PropertyToID("_HistoryReprojection");
 
+    // Ключевое слово отладочных видов и шторки сравнения. Вне инструмента
+    // колориста вариант не включается, и весь этот код в kernel не попадает.
+    public const string DiagnosticsKeyword = "KERN_POST_DIAGNOSTICS";
+
+    // Глубина пирамиды блума. Уровней было по одному: цепочка «половина ->
+    // четверть -> обратно» давала охват порядка радиуса на четверти
+    // разрешения, то есть около десятка пикселей полного кадра. Такой блум
+    // физически не мог дать ореола — его нечем было раздуть, сколько ни
+    // крути радиус.
+    //
+    // Длины обоих массивов обязаны совпадать: проход строит цепочку так, что
+    // источник для уровня подъёма i лежит на уровне i+1, и последний спуск
+    // должен попасть ровно под первый подъём.
     public static readonly string[] BloomDownNames =
     [
         "_PPBloomDown_0",
+        "_PPBloomDown_1",
+        "_PPBloomDown_2",
+        "_PPBloomDown_3",
     ];
 
     public static readonly string[] BloomUpNames =
     [
         "_PPBloomUp_0",
+        "_PPBloomUp_1",
+        "_PPBloomUp_2",
+        "_PPBloomUp_3",
     ];
 }

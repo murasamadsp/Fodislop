@@ -11,8 +11,6 @@ namespace VContainer.Unity
     {
         readonly FreeList<IPlayerLoopItem> runners = new FreeList<IPlayerLoopItem>(16);
 
-        int running;
-
         public void Dispatch(IPlayerLoopItem item)
         {
             runners.Add(item);

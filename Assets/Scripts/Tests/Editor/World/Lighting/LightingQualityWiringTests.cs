@@ -2,13 +2,13 @@
 #nullable enable
 
 using System;
-using Fodinae.Rendering;
-using Fodinae.Rendering.PostProcessing;
-using Fodinae.World.Lighting.Quality;
+using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
+using Kern.World.Lighting.Quality;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World.Lighting;
+namespace Kern.Tests.World.Lighting;
 
 // Guardrail for the "many layers, any one can silently drop the value"
 // failure mode: GUI -> ClientConfig -> GraphicsQualityProfile ->
@@ -22,7 +22,7 @@ namespace Fodinae.Tests.World.Lighting;
 public sealed class LightingQualityWiringTests
 {
     [Test]
-    public void ResolverLocksUltraToPerPixelWhenLightingIsOn()
+    public void ResolverUpgradesUltraToTopTierWhenLightingIsOn()
     {
         foreach (LightingQualityMode requested in new[]
                  {
@@ -33,8 +33,8 @@ public sealed class LightingQualityWiringTests
         {
             Assert.That(
                 LightingQualityResolver.Resolve(GraphicsPreset.Ultra, requested),
-                Is.EqualTo(LightingQualityMode.PerPixel),
-                $"Ultra must resolve to PerPixel even when {requested} was requested.");
+                Is.EqualTo(LightingQualityMode.PerPixelBilinearFix),
+                $"Ultra must resolve to PerPixelBilinearFix even when {requested} was requested.");
         }
     }
 
@@ -168,7 +168,6 @@ public sealed class LightingQualityWiringTests
             lightingMaximumTextureDimension: 512,
             lightingMaximumLightCount: 64,
             lightingMaximumRaySteps: 8,
-            lightingUpdatesPerSecond: 15f,
             lightingCascadeAtlasLimit: 512,
             renderScale: 0.8f,
             antiAliasing: 0,
@@ -186,7 +185,6 @@ public sealed class LightingQualityWiringTests
             lightingMaximumTextureDimension: 128,
             lightingMaximumLightCount: 64,
             lightingMaximumRaySteps: 8,
-            lightingUpdatesPerSecond: 15f,
             lightingCascadeAtlasLimit: 512,
             renderScale: 0.8f,
             antiAliasing: 0,

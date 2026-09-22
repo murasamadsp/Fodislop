@@ -2,14 +2,14 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.World.Terrain.Background;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 
 internal static class TerrainQuadBuilder
 {
@@ -32,29 +32,36 @@ internal static class TerrainQuadBuilder
             CellType.BuildingCorner;
     }
 
-    public static int FillQuadData(
-        TerrainVertex[] vertexBuffer,
-        bool[] foregroundOverlayFlags,
-        float cellSize,
-        int x,
-        int y,
-        int gridX,
-        int unityY,
-        TerrainCellCache cellCache,
-        TerrainPrecalculator precalc,
-        BackgroundFloodFill bgFloodFill,
-        int worldWidth,
-        int worldHeight,
-        bool isBackground,
-        int vIdx,
-        IReadOnlyList<IAtlasDescriptor> atlases,
-        bool useColorLod,
-        MapManager mapManager,
-        ITextureService textureManager)
+    /// <summary>
+    /// Собрать квад одного слоя клетки в четыре вершины.
+    /// </summary>
+    ///
+    /// Слой решает почти всё: фон берёт тип из карты заливки и остаётся
+    /// прямоугольным, передний план берёт тип клетки и несёт смещённую
+    /// геометрию, свет и кайму. Поэтому слой — это перечисление, а не булево
+    /// «isBackground» с индексом вершины, по которому раньше приходилось
+    /// угадывать, в какую половину буфера пишут.
+    public static TerrainQuadResult FillQuad(
+        in TerrainCellSources sources,
+        in TerrainQuadSite site,
+        TerrainQuadLayer layer,
+        Span<TerrainVertex> quad)
     {
+        TerrainCellCache cellCache = sources.CellCache;
+        TerrainPrecalculator precalc = sources.Precalc;
+        IReadOnlyList<IAtlasDescriptor> atlases = sources.Atlases;
+        int worldWidth = sources.WorldWidth;
+        int worldHeight = sources.WorldHeight;
+        int x = site.LocalX;
+        int y = site.LocalY;
+        int gridX = site.GridX;
+        int unityY = site.UnityY;
+        float cellSize = site.CellSize;
+        bool isBackground = layer == TerrainQuadLayer.Background;
+
         if (unityY < 0 || unityY >= worldHeight || gridX < 0 || gridX >= worldWidth)
         {
-            return -1;
+            return TerrainQuadResult.None;
         }
 
         int cx = x + 1;
@@ -64,38 +71,43 @@ internal static class TerrainQuadBuilder
         CachedCellData ccd = cellCache.GetCellData(cx, cy);
         CellType cellFgType = ccd.Type;
 
-        if (!isBackground)
-        {
-            foregroundOverlayFlags[vIdx / 8] = cellFgType == CellType.BuildingDoor;
-        }
+        bool isDoor = !isBackground && cellFgType == CellType.BuildingDoor;
 
         if (ccd.State != TerrainCellState.Loaded)
         {
-            return -1;
+            return TerrainQuadResult.NoAtlas(isDoor);
         }
 
-        CellType cellType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
-
+        CellType backgroundType = isBackground ? sources.FloodFill.Buffer[x, y] : cellFgType;
         if (isBackground && IsBuildingBlock(cellFgType) && (ccd.Properties & CellConfigProperties.Passable) != 0)
         {
-            cellType = CellType.Road;
+            backgroundType = CellType.Road;
+        }
+
+        // Силуэт переднего плана считается до выбора слоя: от него зависит,
+        // нужна ли под ним подложка.
+        //
+        // Только скругление, не смещение. Смещённая клетка свой квадрат тоже
+        // не закрывает, но пустоты не оставляет: соседняя смещённая клетка
+        // делит с ней тот же узел и закрывает общее ребро — это проверяет
+        // растровая линейка («Uncovered shared edge between adjacent cells»).
+        // Пока сюда входило и смещение, подложка вставала под каждой клеткой
+        // внутри массива и застилала мир вторым прямоугольным слоем.
+        bool foregroundFillsCell = !MapCellConfigCatalog.IsRoundableLoose(cellFgType);
+
+        if (!TerrainCellLayers.TryGetType(
+            cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
+        {
+            return TerrainQuadResult.NoAtlas(isDoor);
         }
 
         bool isSameCell = !isBackground || cellType == cellFgType;
-
-        if (isBackground && (cellType == cellFgType || cellType == CellType.Unloaded))
-        {
-            return -1;
-        }
 
         CellRenderProperties renderProps = GetRenderProperties(
             isSameCell,
             in ccd,
             cellType,
-            cellCache,
-            mapManager,
-            textureManager,
-            atlases);
+            sources.MetadataLookup);
 
         Vector4 atlasRect = renderProps.AtlasRect;
         float uvTileSize = renderProps.UVTileSize;
@@ -129,27 +141,22 @@ internal static class TerrainQuadBuilder
         float lx = x * cellSize;
         float ly = y * cellSize;
 
-        Vector3 off00 = precalc.GridVertexOffsets[x, y];
-        Vector3 off10 = precalc.GridVertexOffsets[x + 1, y];
-        Vector3 off01 = precalc.GridVertexOffsets[x, y + 1];
-        Vector3 off11 = precalc.GridVertexOffsets[x + 1, y + 1];
+        Vector3 off00 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x, y].ToVector3();
+        Vector3 off10 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x + 1, y].ToVector3();
+        Vector3 off01 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x, y + 1].ToVector3();
+        Vector3 off11 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x + 1, y + 1].ToVector3();
 
-        bool isAnchored = off00 != Vector3.zero || off10 != Vector3.zero || off01 != Vector3.zero || off11 != Vector3.zero;
-        float anchorFlag = isAnchored ? 1f : 0f;
-        Vector2 anchor0 = isAnchored ? new Vector2(off00.x, off00.y) : new Vector2(0f, 0f);
-        Vector2 anchor1 = isAnchored ? new Vector2(1f + off10.x, off10.y) : new Vector2(1f, 0f);
-        Vector2 anchor2 = isAnchored ? new Vector2(1f + off11.x, 1f + off11.y) : new Vector2(1f, 1f);
-        Vector2 anchor3 = isAnchored ? new Vector2(off01.x, 1f + off01.y) : new Vector2(0f, 1f);
+        TerrainCellGeometry geometry = TerrainCellGeometry.FromOffsets(
+            off00,
+            off10,
+            off11,
+            off01);
+        float anchorFlag = geometry.IsAnchored ? 1f : 0f;
 
-        vertexBuffer[vIdx + 0].Position = new Vector3(lx, ly, zOffset) + off00;
-        vertexBuffer[vIdx + 1].Position = new Vector3(lx + cellSize, ly, zOffset) + off10;
-        vertexBuffer[vIdx + 2].Position = new Vector3(lx + cellSize, ly + cellSize, zOffset) + off11;
-        vertexBuffer[vIdx + 3].Position = new Vector3(lx, ly + cellSize, zOffset) + off01;
-
-        Vector2 uv0 = new Vector2(0, 0);
-        Vector2 uv1 = new Vector2(1, 0);
-        Vector2 uv2 = new Vector2(1, 1);
-        Vector2 uv3 = new Vector2(0, 1);
+        quad[0].Position = new Vector3(lx, ly, zOffset) + off00;
+        quad[1].Position = new Vector3(lx + cellSize, ly, zOffset) + off10;
+        quad[2].Position = new Vector3(lx + cellSize, ly + cellSize, zOffset) + off11;
+        quad[3].Position = new Vector3(lx, ly + cellSize, zOffset) + off01;
 
         int descriptor = isSameCell ? precalc.CellTilingDescriptors[x, y] : 0;
         int cornerSideMask = precalc.CellCornerVariants[x, y];
@@ -161,113 +168,75 @@ internal static class TerrainQuadBuilder
 
         if (useNeighborVariants)
         {
-            bool hasLeft = (cornerSideMask & 1) != 0;
-            bool hasRight = (cornerSideMask & 2) != 0;
-            bool hasTop = (cornerSideMask & 4) != 0;
-            bool hasBottom = (cornerSideMask & 8) != 0;
-            int cornerCount =
-                (hasLeft ? 1 : 0) +
-                (hasRight ? 1 : 0) +
-                (hasTop ? 1 : 0) +
-                (hasBottom ? 1 : 0);
-            int column = RenderingConstants.BUILDING_WALL_VARIANT_BASE_TILE +
-                Math.Min(cornerCount, 2);
-            byte transforms = (byte)(descriptor & 0xE0);
-
-            if ((cornerCount == 1 && hasRight) ||
-                (cornerCount == 1 && hasBottom))
-            {
-                transforms ^= 0x40;
-            }
-
-            if (cornerCount >= 2 && !hasLeft && !hasRight)
-            {
-                transforms ^= 0x80;
-            }
-
-            descriptor = transforms | (column & 0x1F);
+            descriptor = ResolveBuildingWallVariant(descriptor, cornerSideMask);
         }
 
+        var uvs = TerrainQuadUvs.Canonical;
         if ((hasTileGroup || useNeighborVariants) && descriptor != 0)
         {
-            if ((descriptor & 0x40) != 0)
-            {
-                (uv0.x, uv1.x) = (uv1.x, uv0.x);
-                (uv3.x, uv2.x) = (uv2.x, uv3.x);
-            }
-
-            if ((descriptor & 0x20) != 0)
-            {
-                (uv0.y, uv3.y) = (uv3.y, uv0.y);
-                (uv1.y, uv2.y) = (uv2.y, uv1.y);
-            }
-
-            if ((descriptor & 0x80) != 0)
-            {
-                Vector2 t = uv0;
-                uv0 = uv1;
-                uv1 = uv2;
-                uv2 = uv3;
-                uv3 = t;
-            }
+            uvs = uvs.Transform(descriptor);
         }
 
-        vertexBuffer[vIdx + 0].UV0 = uv0;
-        vertexBuffer[vIdx + 1].UV0 = uv1;
-        vertexBuffer[vIdx + 2].UV0 = uv2;
-        vertexBuffer[vIdx + 3].UV0 = uv3;
+        quad[0].UV0 = uvs.C0;
+        quad[1].UV0 = uvs.C1;
+        quad[2].UV0 = uvs.C2;
+        quad[3].UV0 = uvs.C3;
 
-        bool useFallback = useColorLod || atlasRect.z < 0.0001f;
-        Color color = useFallback ? (Color)minimapColor : Color.white;
-
-        if (atlasRect.z < 0.0001f)
+        // Текстуры нет — клетка рисуется цветом миникарты и непрозрачной.
+        // Это не фолбек, а диагностический вид: так видно, какого типа клетки
+        // сервер не отдал, вместо тихой дыры в кадре.
+        bool hasAtlasRect = atlasRect.z >= 0.0001f;
+        Color color = Color.white;
+        if (!hasAtlasRect)
         {
+            color = (Color)minimapColor;
             color.a = 1f;
         }
 
-        float animOffset = 0f;
-
-        if (!useFallback && animType == CellAnimationType.Blinking)
-        {
-            uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
-            seed = (seed ^ (seed >> 13)) * 1274126177;
-            seed = seed ^ (seed >> 16);
-            animOffset = (seed % 6283) / 1000f;
-        }
+        TerrainAnimationSettings animationSettings =
+            TerrainAnimationProfileCatalog.Get(cellType, animSpeed);
+        float animOffset = ResolveAnimationOffset(
+            animationSettings, animType, hasAtlasRect, gridX, serverY);
 
         // Любой непустой блок переднего плана — физическая масса: свет обязан
         // поглощаться всеми блоками одинаково, без зависимости от уникальных
         // свойств DropsShadow/Passable (иначе у блоков без DropsShadow
         // occupancy = 0 и свет проходит насквозь).
+        // Дороги (Road, GoldenRoad, BuildingRoad, PolymerRoad) не являются
+        // физической массой для света — они пропускают его.
         bool isPhysicalMass =
             !isBackground &&
-            cellFgType != CellType.Empty;
+            cellFgType != CellType.Empty &&
+            !MapCellConfigCatalog.IsRoad(cellFgType);
         Vector4 animDataVec = new(
             (float)animType,
-            animSpeed,
+            animationSettings.Speed,
             animOffset,
-            0f);
+            (float)animationSettings.Profile);
         Vector4 tileSizeVec = new Vector4(uvTileSize, uvTileSize, (float)animFrames, frameHeight);
-        Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
+        // Признак сплошного листа — бит 5 в z, над колонкой тайлгруппы
+        // (она занимает биты 0-4). В w его класть нельзя: там значение
+        // больше 1.5 уже означает «отбросить», и Terrain.shader вместе с
+        // TerrainCellBuilder выкидывали по нему всю породу и все кристаллы.
+        int packedColumn = descriptor & 0x1F;
+        if (TerrainSheetCatalog.IsContinuousSheet(cellType))
+        {
+            packedColumn |= 32;
+        }
 
-        bool isGlowing = (props & CellConfigProperties.Glowing) != 0;
+        Vector4 worldPosVec = new Vector4(gridX, serverY, packedColumn, packedW);
+
+        bool isGlowing = (props & CellConfigProperties.Glowing) != 0 &&
+            !MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellType) &&
+            !MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellFgType);
 
         // Read RGB directly from Color32 bytes — no intermediate Color allocation
         int packedLightingColor = minimapColor.r |
             (minimapColor.g << 8) |
             (minimapColor.b << 16);
 
-        float glowFlags = 0f;
-
-        if (isGlowing)
-        {
-            glowFlags += 1f;
-        }
-
-        if (!isBackground && MapManager.IsRoundableLoose(cellFgType))
-        {
-            glowFlags += 2f;
-        }
+        bool hasRoundedPhysicalContour =
+            !isBackground && MapCellConfigCatalog.IsRoundableLoose(cellFgType);
 
         // Маска соседства кладётся и фоновым квадам тоже.
         //
@@ -283,49 +252,141 @@ internal static class TerrainQuadBuilder
         // тем же флагом. Так что до этой правки у фона стоял ноль не по
         // смыслу, а потому что читать его было некому.
         byte solidConnectivityMask = precalc.CellSolidBoundaryMasks[x, y];
-        float solidBoundaryMask = solidConnectivityMask & 15;
-        float solidDiagonalMask = solidConnectivityMask >> 4;
-        bool hasRoundedPhysicalContour =
-            !isBackground && MapManager.IsRoundableLoose(cellFgType);
         float emissionPower = isGlowing
             ? Mathf.Max(1f / byte.MaxValue, minimapColor.a / 255f)
             : 0f;
-        float packedLightingFlags = solidBoundaryMask +
-            (isGlowing ? 16f : 0f) +
-            (hasRoundedPhysicalContour ? 32f : 0f) +
-            (isPhysicalMass ? 64f : 0f) +
-            (emissionPower * 0.25f);
+        // Кайма рельефа — только у переднего плана: фон её не рисует, а
+        // ring-адрес у фонового текселя тот же, и чужой код рельефа въехал бы
+        // в соседний слой.
+        byte reliefMask = precalc.CellReliefMasks[x, y];
+        // Каталог задаёт состав семей, а группа подтверждает, что у клетки
+        // вообще есть рельеф. Без этой проверки обычный грунт с группой 0
+        // получает reliefCode=1 и рисует фаску по всем четырём сторонам.
+        bool hasRelief = !isBackground &&
+            ccd.ReliefGroup != 0 &&
+            TerrainReliefRimCatalog.ParticipatesInRim(cellFgType);
+        TerrainLightingData lightingData = TerrainLightingData.Pack(
+            solidConnectivityMask,
+            isGlowing,
+            hasRoundedPhysicalContour,
+            isPhysicalMass,
+            emissionPower,
+            reliefMask,
+            hasRelief);
+        bool hasGroundDecalSurface = TerrainDecalCatalog.IsGroundDecalSurface(
+            cellType,
+            isBackground);
         Vector4 glowVec = new Vector4(
             packedLightingColor,
-            packedLightingFlags,
-            glowFlags + (solidDiagonalMask * 4f),
-            0f);
-
-        ReadOnlySpan<Vector2> anchors = [anchor0, anchor1, anchor2, anchor3];
+            lightingData.PackedFlags,
+            lightingData.PackedContour,
+            hasGroundDecalSurface
+                ? TerrainDecalCatalog.GetGroundPlacement(gridX, serverY)
+                : 0f);
 
         for (int i = 0; i < 4; i++)
         {
-            ref TerrainVertex vertex = ref vertexBuffer[vIdx + i];
+            ref TerrainVertex vertex = ref quad[i];
             vertex.Color = color;
             vertex.UV1 = atlasRect;
             vertex.UV2 = tileSizeVec;
             vertex.UV3 = worldPosVec;
             vertex.UV4 = animDataVec;
-            vertex.UV5 = new Vector4(anchorFlag, anchors[i].x, anchors[i].y, 0f);
+            Vector2 anchor = geometry.GetCorner(i);
+            vertex.UV5 = new Vector4(anchorFlag, anchor.x, anchor.y, 0f);
             vertex.UV6 = glowVec;
         }
 
-        return atlasIndex;
+        return new TerrainQuadResult(atlasIndex, isDoor);
+    }
+
+    /// <summary>
+    /// Вариант стены здания по соседним углам.
+    /// </summary>
+    ///
+    /// Стена выбирает колонку тайла по числу примыкающих углов, а отражения
+    /// берёт из собственного дескриптора автотайлинга. Одиночный угол справа
+    /// или снизу — это тот же тайл, отражённый по горизонтали; два угла по
+    /// вертикали — повёрнутый.
+    private static int ResolveBuildingWallVariant(int descriptor, int cornerSideMask)
+    {
+        bool hasLeft = (cornerSideMask & 1) != 0;
+        bool hasRight = (cornerSideMask & 2) != 0;
+        bool hasTop = (cornerSideMask & 4) != 0;
+        bool hasBottom = (cornerSideMask & 8) != 0;
+        int cornerCount =
+            (hasLeft ? 1 : 0) +
+            (hasRight ? 1 : 0) +
+            (hasTop ? 1 : 0) +
+            (hasBottom ? 1 : 0);
+        int column = RenderingConstants.BUILDING_WALL_VARIANT_BASE_TILE +
+            Math.Min(cornerCount, 2);
+        byte transforms = (byte)(descriptor & 0xE0);
+
+        if ((cornerCount == 1 && hasRight) ||
+            (cornerCount == 1 && hasBottom))
+        {
+            transforms ^= 0x40;
+        }
+
+        if (cornerCount >= 2 && !hasLeft && !hasRight)
+        {
+            transforms ^= 0x80;
+        }
+
+        return transforms | (column & 0x1F);
+    }
+
+    /// <summary>
+    /// Фаза анимации клетки: константа профиля или разброс по её координате.
+    /// </summary>
+    ///
+    /// Разброс нужен, чтобы соседние клетки одного типа не мигали и не
+    /// переливались в такт. Он детерминирован от мировой координаты, поэтому
+    /// одна и та же клетка всегда получает одну и ту же фазу — при сдвиге
+    /// окна и при пересборке она не перескакивает.
+    ///
+    /// Без текстуры разброса нет: клетка рисуется плоским цветом миникарты, и
+    /// анимировать в ней нечего.
+    private static float ResolveAnimationOffset(
+        TerrainAnimationSettings animationSettings,
+        CellAnimationType animType,
+        bool hasAtlasRect,
+        int gridX,
+        int serverY)
+    {
+        if (!hasAtlasRect)
+        {
+            return animationSettings.PaletteIndex;
+        }
+
+        if (animationSettings.Profile == TerrainAnimationProfile.Default &&
+            animType == CellAnimationType.Blinking)
+        {
+            uint seed = HashCell(gridX, serverY);
+            return (seed % 6283) / 1000f;
+        }
+
+        if (animationSettings.Profile == TerrainAnimationProfile.FacetedCrystal)
+        {
+            return (HashCell(gridX, serverY) & 0xFFFF) / 65536f;
+        }
+
+        return animationSettings.PaletteIndex;
+    }
+
+    private static uint HashCell(int gridX, int serverY)
+    {
+        uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
+        seed = (seed ^ (seed >> 13)) * 1274126177;
+        return seed ^ (seed >> 16);
     }
 
     private static CellRenderProperties GetRenderProperties(
         bool isSameCell,
         in CachedCellData ccd,
         CellType cellType,
-        TerrainCellCache cellCache,
-        MapManager mapManager,
-        ITextureService textureManager,
-        IReadOnlyList<IAtlasDescriptor> atlases)
+        ITerrainMetadataLookup metadataLookup)
     {
         if (isSameCell)
         {
@@ -342,7 +403,14 @@ internal static class TerrainQuadBuilder
                 ccd.AtlasIndex);
         }
 
-        CellMetadata meta = cellCache.GetMetadata(cellType, mapManager, textureManager, atlases);
+        // Без фолбеков: промах означает, что прогрев не покрыл тип. Тихая
+        // подстановка пустой метаданности нарисовала бы правдоподобную
+        // подделку вместо того, чтобы показать дефект.
+        if (!metadataLookup.TryGet(cellType, out CellMetadata meta))
+        {
+            throw new InvalidOperationException(
+                $"Terrain metadata for cell type '{cellType}' was not warmed before the build.");
+        }
 
         return new CellRenderProperties(
             meta.AtlasRect,

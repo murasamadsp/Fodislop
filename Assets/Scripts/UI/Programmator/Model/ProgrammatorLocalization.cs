@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using MinesServer.Data;
 
-namespace Fodinae.UI.Programmator;
+namespace Kern.UI.Programmator;
 
 public static class ProgrammatorLocalization
 {
@@ -157,8 +157,6 @@ public static class ProgrammatorLocalization
         [ProgAction.CellRighthand] = "programmator.opdesc.CellRighthand",
         [ProgAction.EnableAutoDig] = "programmator.opdesc.EnableAutoDig",
         [ProgAction.DisableAutoDig] = "programmator.opdesc.DisableAutoDig",
-        [ProgAction.EnableAggression] = "programmator.opdesc.EnableAggression",
-        [ProgAction.DisableAggression] = "programmator.opdesc.DisableAggression",
         [ProgAction.UseBoom] = "programmator.opdesc.UseBoom",
         [ProgAction.UseRaz] = "programmator.opdesc.UseRaz",
         [ProgAction.UseProt] = "programmator.opdesc.UseProt",
@@ -341,8 +339,6 @@ public static class ProgrammatorLocalization
         [ProgAction.CellRighthand] = "programmator.op.CellRighthand",
         [ProgAction.EnableAutoDig] = "programmator.op.EnableAutoDig",
         [ProgAction.DisableAutoDig] = "programmator.op.DisableAutoDig",
-        [ProgAction.EnableAggression] = "programmator.op.EnableAggression",
-        [ProgAction.DisableAggression] = "programmator.op.DisableAggression",
         [ProgAction.UseBoom] = "programmator.op.UseBoom",
         [ProgAction.UseRaz] = "programmator.op.UseRaz",
         [ProgAction.UseProt] = "programmator.op.UseProt",

@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.Core;
-using Fodinae.World.Terrain;
+using Kern.Core;
+using Kern.World.Terrain;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.World
+namespace Kern.World
 {
     public class WorldBackgroundSetup : MonoBehaviour
     {
@@ -33,9 +33,9 @@ namespace Fodinae.World
             Transform trans = _backgroundRenderer.transform;
 
             if (renderer != null &&
-                renderer.sortingOrder != ProjectRuntimeContracts.RequiredLayers.TerrainSortingOrder)
+                renderer.sortingOrder != ProjectRuntimeContracts.RequiredLayers.WorldBackgroundSortingOrder)
             {
-                renderer.sortingOrder = ProjectRuntimeContracts.RequiredLayers.TerrainSortingOrder;
+                renderer.sortingOrder = ProjectRuntimeContracts.RequiredLayers.WorldBackgroundSortingOrder;
             }
 
             if (trans.position.z != 0f)

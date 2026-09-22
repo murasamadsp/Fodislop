@@ -20,8 +20,6 @@ internal sealed class DummyPlayerSimulationState
 
     public int Health { get; private set; } = MaximumHealth;
 
-    public bool Aggression { get; private set; }
-
     public bool AutoDig { get; private set; }
 
     public int GeologyCount => _geologyStack.Count;
@@ -42,12 +40,6 @@ internal sealed class DummyPlayerSimulationState
         SetPosition(x, y);
         Direction = Direction.Up;
         Health = MaximumHealth;
-    }
-
-    public bool ToggleAggression()
-    {
-        Aggression = !Aggression;
-        return Aggression;
     }
 
     public bool ToggleAutoDig()

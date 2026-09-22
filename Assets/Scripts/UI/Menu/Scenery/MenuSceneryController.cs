@@ -1,17 +1,22 @@
 #nullable enable
 
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     [ExecuteAlways]
     public class MenuSceneryController : MonoBehaviour
     {
-        private const string ResolveShaderName = "Fodinae/UI/UnpremultiplyAlpha";
+        private const string ResolveShaderName = "Kern/UI/UnpremultiplyAlpha";
 
-        private Camera? _sceneryCamera;
+        private static readonly int _worldSpaceCameraPosID = Shader.PropertyToID("_WorldSpaceCameraPos");
+
+        private CommandBuffer? _commandBuffer;
+        private readonly List<(Mesh Mesh, Matrix4x4 Matrix, Material Material, int SubMesh, float Distance)> _draws = new();
+        private bool _initialized;
         private OrbitalStationMotion? _station;
-        private Transform? _planet;
         private Transform? _occluder;
 
         // Потолок стороны offscreen-кадра.
@@ -35,7 +40,7 @@ namespace Fodinae.UI
         private RenderTexture? _outputTexture;
 
         [SerializeField]
-        private Material? _resolveMaterialAsset;
+        private Material? _resolveMaterialAsset = null;
 
         private Material? _resolveMaterial;
         private bool _ownsResolveMaterial;
@@ -46,6 +51,14 @@ namespace Fodinae.UI
         // кадра, а оно меняется при каждом пересоздании текстуры.
         private float _framingProgress;
         private Vector3 _framingDirection = Vector3.back;
+        private MenuSceneryFraming.Placement _placement =
+            new(Vector3.zero, Quaternion.identity);
+
+        // Поза задаётся в пространстве рига, как раньше у дочерней камеры.
+        private MenuSceneryViewpoint Viewpoint => new(
+            transform.TransformPoint(_placement.LocalPosition),
+            transform.rotation * _placement.LocalRotation,
+            _targetWidth / (float)_targetHeight);
 
         public RenderTexture? OutputTexture => _outputTexture;
 
@@ -107,12 +120,8 @@ namespace Fodinae.UI
                 };
                 _cameraTarget.Create();
 
-                if (_sceneryCamera != null)
+                if (_initialized)
                 {
-                    _sceneryCamera.targetTexture = _cameraTarget;
-                    _sceneryCamera.ResetAspect();
-                    _sceneryCamera.ResetProjectionMatrix();
-
                     // Кадрирование пересчитывается ОБЯЗАТЕЛЬНО.
                     //
                     // Отворот камеры считается из соотношения сторон кадра, а
@@ -143,40 +152,76 @@ namespace Fodinae.UI
 
         private void OnEnable()
         {
-            if (!EnsureInitialized() || _sceneryCamera == null)
-            {
-                return;
-            }
-
-            _sceneryCamera.enabled = false;
-            _sceneryCamera.allowHDR = false;
-            _sceneryCamera.fieldOfView = MenuSceneryFraming.FieldOfView;
-            _sceneryCamera.ResetAspect();
-            _sceneryCamera.ResetProjectionMatrix();
+            EnsureInitialized();
             SetDescentFraming(0f, Vector3.back);
             RenderNow();
         }
 
         public void RenderNow()
         {
-            if (!EnsureInitialized() || _sceneryCamera == null || _cameraTarget == null)
+            EnsureInitialized();
+            if (_cameraTarget == null)
             {
                 return;
             }
 
-            _sceneryCamera.targetTexture = _cameraTarget;
-            _sceneryCamera.enabled = true;
-            try
-            {
-                _sceneryCamera.Render();
-            }
-            finally
-            {
-                _sceneryCamera.enabled = false;
-            }
-
+            RenderScenery(_cameraTarget, Viewpoint);
             ResolveOutput();
             _renderDirty = false;
+        }
+
+        // То, что раньше делала камера рига: очистка в прозрачный, непрозрачное
+        // спереди назад по очереди, прозрачное сзади вперёд по дальности.
+        private void RenderScenery(RenderTexture target, MenuSceneryViewpoint viewpoint)
+        {
+            _draws.Clear();
+            foreach (MeshRenderer meshRenderer in GetComponentsInChildren<MeshRenderer>())
+            {
+                if (!meshRenderer.enabled ||
+                    !meshRenderer.TryGetComponent(out MeshFilter filter) ||
+                    filter.sharedMesh == null)
+                {
+                    continue;
+                }
+
+                Material[] materials = meshRenderer.sharedMaterials;
+                float distance = (meshRenderer.bounds.center - viewpoint.Position).sqrMagnitude;
+                for (int subMesh = 0; subMesh < Mathf.Min(materials.Length, filter.sharedMesh.subMeshCount); subMesh++)
+                {
+                    if (materials[subMesh] != null)
+                    {
+                        _draws.Add((filter.sharedMesh, meshRenderer.localToWorldMatrix, materials[subMesh], subMesh, distance));
+                    }
+                }
+            }
+
+            _draws.Sort(static (a, b) =>
+            {
+                int queue = a.Material.renderQueue.CompareTo(b.Material.renderQueue);
+                if (queue != 0)
+                {
+                    return queue;
+                }
+
+                bool transparent = a.Material.renderQueue > (int)RenderQueue.GeometryLast;
+                return transparent ? b.Distance.CompareTo(a.Distance) : a.Distance.CompareTo(b.Distance);
+            });
+
+            _commandBuffer ??= new CommandBuffer { name = "Kern.MenuScenery" };
+            _commandBuffer.Clear();
+            _commandBuffer.SetRenderTarget(target);
+            _commandBuffer.ClearRenderTarget(clearDepth: true, clearColor: true, backgroundColor: Color.clear);
+            _commandBuffer.SetViewProjectionMatrices(
+                viewpoint.WorldToView,
+                GL.GetGPUProjectionMatrix(viewpoint.Projection, renderIntoTexture: true));
+            _commandBuffer.SetGlobalVector(_worldSpaceCameraPosID, viewpoint.Position);
+            foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int subMesh, _) in _draws)
+            {
+                _commandBuffer.DrawMesh(mesh, matrix, material, subMesh, 0);
+            }
+
+            Graphics.ExecuteCommandBuffer(_commandBuffer);
+            _draws.Clear();
         }
 
         public void ResolveOutput()
@@ -198,33 +243,13 @@ namespace Fodinae.UI
             }
         }
 
-        private bool EnsureInitialized()
+        private void EnsureInitialized()
         {
-            _sceneryCamera ??= GetComponentInChildren<Camera>(includeInactive: true);
             _station ??= GetComponentInChildren<OrbitalStationMotion>(includeInactive: true);
-            _planet ??= transform.Find("PlanetSurface");
-
-            if (_planet != null)
-            {
-                _planet.localPosition = Vector3.zero;
-            }
-
-            Transform? atmosphere = transform.Find("PlanetAtmosphere");
-            if (atmosphere != null)
-            {
-                atmosphere.localPosition = Vector3.zero;
-            }
-
-            _occluder = _planet;
-            if (_sceneryCamera == null)
-            {
-                return false;
-            }
-
-            _sceneryCamera.enabled = false;
+            _occluder = null;
+            _initialized = true;
             EnsureTargets();
             EnsureResolveMaterial();
-            return true;
         }
 
         private void EnsureResolveMaterial()
@@ -253,19 +278,12 @@ namespace Fodinae.UI
             _ownsResolveMaterial = true;
         }
 
-        private void OnDisable()
-        {
-            if (_sceneryCamera != null)
-            {
-                _sceneryCamera.enabled = false;
-                _sceneryCamera.targetTexture = null;
-            }
-        }
-
         private void OnDestroy()
         {
             ReleaseTexture(ref _cameraTarget);
             ReleaseTexture(ref _outputTexture);
+            _commandBuffer?.Release();
+            _commandBuffer = null;
 
             // Only destroy the fallback instance this component created; the
             // serialized asset must not be destroyed.
@@ -292,11 +310,6 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_sceneryCamera != null && ReferenceEquals(_sceneryCamera.targetTexture, texture))
-            {
-                _sceneryCamera.targetTexture = null;
-            }
-
             if (ReferenceEquals(RenderTexture.active, texture))
             {
                 RenderTexture.active = null;
@@ -317,35 +330,27 @@ namespace Fodinae.UI
 
         public void SetDescentFraming(float progress, Vector3 landingLocalDirection)
         {
-            if (_sceneryCamera == null)
-            {
-                return;
-            }
-
             _framingProgress = Mathf.Clamp01(progress);
             _framingDirection = landingLocalDirection;
 
             // Радиус берётся из сцены, а не задаётся числом: масштаб шара уже
             // менялся, и зашитая дистанция однажды окажется внутри поверхности.
-            float planetRadius = _planet != null ? 0.5f * _planet.lossyScale.x : 1f;
+            const float sceneBodyRadius = 1f;
 
             MenuSceneryFraming.Placement placement = MenuSceneryFraming.Solve(
                 _framingProgress,
                 landingLocalDirection,
-                planetRadius,
-                Mathf.Max(_sceneryCamera.aspect, 0.1f));
-
-            _sceneryCamera.transform.localPosition = placement.LocalPosition;
-            _sceneryCamera.transform.localRotation = placement.LocalRotation;
+                sceneBodyRadius,
+                _targetWidth / (float)_targetHeight);
 
             // Зум задаётся только дистанцией, а не сужением FOV: макет
             // увеличивает планету scale(1.18), оставляя угол обзора прежним.
             // Сужение FOV добавляло лишний ~1.21x и ломало пропорции спуска.
-            _sceneryCamera.ResetProjectionMatrix();
+            _placement = placement;
             _renderDirty = true;
         }
         // Reports the orbiting station's on-screen position as a 0..1 viewport
-        // fraction (origin bottom-left, matching Camera.WorldToViewportPoint),
+        // fraction (origin bottom-left, matching MenuSceneryViewpoint.WorldToViewport),
         // so UI Toolkit callers can convert it into their own panel space.
         //
         // Returns false while the station is not actually visible, so a label
@@ -354,7 +359,7 @@ namespace Fodinae.UI
         public bool TryGetStationViewportPosition(out Vector2 viewportPosition)
         {
             return MenuSceneryProjection.TryGetStationViewportPosition(
-                _sceneryCamera,
+                Viewpoint,
                 _station,
                 _occluder,
                 out viewportPosition);
@@ -362,21 +367,13 @@ namespace Fodinae.UI
 
         public bool TryGetOrbitPointViewportPosition(float angleDegrees, out Vector2 viewportPosition)
         {
-            Transform centerTransform = _planet != null ? _planet : transform;
+            Transform centerTransform = transform;
             return MenuSceneryProjection.TryGetOrbitPointViewportPosition(
-                _sceneryCamera,
+                Viewpoint,
                 centerTransform,
                 angleDegrees,
                 out viewportPosition);
         }
 
-        public bool TryGetPlanetSurfaceViewportPosition(Vector3 localSurfaceDir, out Vector2 viewportPosition)
-        {
-            return MenuSceneryProjection.TryGetSurfaceViewportPosition(
-                _sceneryCamera,
-                _planet,
-                localSurfaceDir,
-                out viewportPosition);
-        }
     }
 }

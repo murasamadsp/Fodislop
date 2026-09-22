@@ -1,47 +1,53 @@
-# Fodinae agent guidance
+# Kern agent guidance
 
-Fodinae — 2D MMORPG-пісочниця на Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask і пакетах `darkar25.fodinae.*`.
+Kern — 2D MMORPG sandbox on Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask, and `darkar25.fodina.*` packages.
 
-## Межі дозволів
+## Specialized guides
 
-- Не запускайте, не відкривайте, не закривайте й не контролюйте Unity Editor/Hub; не викликайте Unity CLI, MCP, Editor API, batch mode, build, tests, імпорт або читання Editor-логів, якщо поточний запит користувача прямо не називає конкретну Unity-операцію. Не просіть системного дозволу на Unity-дію з власної ініціативи.
-- Дозвіл охоплює лише прямо названу Unity-операцію. Якщо без Unity не можна завершити перевірку, зупиніться та назвіть конкретну операцію, яка лишилася користувачеві.
-- Не виконуйте Git-відкат або переписування історії без прямого запиту в поточному повідомленні: `reset`, `restore`, checkout для відновлення, `revert`, `clean`, amend, rebase чи force-push. Не відновлюйте файли з `HEAD`, stash або reflog і не просіть такого дозволу з власної ініціативи.
-- Не редагуйте текстом `.prefab`, `.unity` або `.asset`; змінюйте їх лише через явно дозволений Unity Editor API/Inspector. Зберігайте GUID і `.meta`.
-- Наявні зміни в робочому дереві належать користувачеві. Не перезаписуйте й не включайте їх у свої зміни без потреби.
+Specializations are implemented as skills and auto-load based on task triggers. If the task changes domain — explicitly load the corresponding skill before proceeding.
 
-## Виконання задач
+| Domain | Skill | Triggers |
+|--------|-------|---------|
+| C#, namespaces, DI, assembly layers | `csharp-conventions` | MonoBehaviour, VContainer, asmdef, nullable, SA1513 |
+| Coordinates, UI positioning, camera, RenderTexture, fallbacks, profiler | `critical-invariants` | CoordinateUtils, RuntimePanelUtils, LifetimeScope, VSync, EditorLoop |
+| Lighting shaders, bloom, tonemapping, HDR, post-processing, calibration | `hdr-color-contract` | saturate, ARGBHalf, HDROutputReconciler, paper white, CompositeFinal |
+| Lighting compute, DDA, cascades, bounce | `lighting-guide` | CascadeTrace, DDA.hlsl, TraceLightSegment, IFrameTelemetry |
+| Scenes, DI, startup pipeline | sections 2–3 of [`project-context.md`](.agents/project-context.md) | |
+| Network, UI, world, rendering, audio, Programmator | section 4 of [`project-context.md`](.agents/project-context.md) | |
+| Architectural invariants | section 5 of [`project-context.md`](.agents/project-context.md) | |
+| Diagnostics, performance | section 6 of [`project-context.md`](.agents/project-context.md) | |
+| Directory boundaries and asmdef | [`repository-map.md`](.agents/repository-map.md) | |
 
-Для нетривіальної роботи визначте результат, внесіть зміни й продовжуйте до перевіреного завершення, якщо не потрібне нове рішення користувача. Без окремого погодження дозволено запускати релевантні локальні перевірки, які не керують Unity, не мають production-доступу та використовують disposable fixtures. Виправляйте спричинені вашою зміною збої й повторюйте відповідні перевірки.
+Code is the source of truth if reference context is stale. Don't read everything — only what the task requires.
 
-Не повертайте користувачеві проміжний блокер або опис симптомів як результат роботи. Самостійно локалізуйте першопричину, перевіряйте альтернативні безпечні шляхи й продовжуйте до фактичного результату. Зупиняйтеся лише коли вичерпані доступні варіанти та подальший крок справді потребує нового дозволу, зовнішньої зміни або рішення користувача; тоді повідомляйте конкретний доведений блокер без виправдань і повторів.
+## Authority boundaries
 
-Не читайте всю документацію або повну карту репозиторію за замовчуванням. Починайте з файлів, яких торкається задача, і відкривайте лише релевантні розділи [.agents/project-context.md](.agents/project-context.md):
+- Do not launch, open, close, or control Unity Editor/Hub; do not invoke Unity CLI, MCP, Editor API, batch mode, build, tests, import, or read Editor logs unless the current user request explicitly names a specific Unity operation. Do not solicit system permission to act in Unity on your own initiative.
+- Permission extends only to the explicitly named Unity operation. If the verification cannot be completed without Unity, stop and name the specific operation left for the user.
+- Do not perform Git rollback or history rewriting without an explicit request in the current message: `reset`, `restore`, checkout for restoration, `revert`, `clean`, amend, rebase, or force-push. Do not restore files from `HEAD`, stash, or reflog, and do not solicit such permission on your own initiative.
+- NEVER ROLL BACK ANYTHING. This rule is broader than Git: it is forbidden to undo your own edit by any means — neither a `git` command, nor manually reverting file text, nor deleting added code and tests. Rollback is permitted ONLY when the user explicitly requests it in the current message.
+- Do not edit `.prefab`, `.unity`, or `.asset` files as text; modify them only through explicitly permitted Unity Editor API/Inspector. Preserve GUIDs and `.meta` files.
+- Existing working-tree changes belong to the user. Do not overwrite or incorporate them into your changes without necessity.
+- When the user asks a question or writes a question-reply — stop immediately, answer directly, and do NOT edit, create, or run anything without explicit instruction from the user.
+- NEVER USE `--no-verify`!
+- Warning suppression is forbidden: do not add `SuppressMessage`, `#pragma warning disable`, `NoWarn`, disabling blanket warnings, or similar exclusions. Fix the root cause of the warning; an exception is permitted only for an immutable third-party package that is not part of project code.
+- `git commit` and `git push` are executed ONLY when the user explicitly requests it in the current message. Do not commit or push after completing a task "for convenience" or "to save" — only file edits.
+- Always commit everything: all working-tree changes in one commit (`git add -A && git commit`), without splitting or selective staging, unless the user explicitly requests otherwise.
+- After every user-requested `git commit`/`git push`, immediately monitor the resulting GitHub Actions run(s) until they finish. Fetch failed-job logs, fix the root cause, push the fix, and continue monitoring; do not report completion while a run is queued, in progress, or failed.
+- CI must use standard GitHub-hosted runners (`ubuntu-latest`, `macos-latest`, `windows-latest`); self-hosted/Unity runner labels are forbidden. If a job requires Unity, move it to a standard runner instead of leaving it queued.
+- Never make CI green by skipping required checks. Missing Unity assemblies, build artifacts, or other required inputs are a CI failure: produce them in an earlier job or fail with the real error.
+- Keep commit messages short and in Russian.
 
-- сцени, переходи, DI або startup pipeline — розділи 2–3;
-- мережа, UI, світ, рендеринг, аудіо чи Programmator — відповідний підрозділ 4;
-- архітектурні інваріанти — розділ 5;
-- діагностика або продуктивність — розділ 6.
+## Task execution
 
-Код є джерелом істини, якщо довідковий контекст застарів.
+When the user sends project errors, compiler output, stack traces, or runtime logs, treat them as an instruction to fix the reported problem immediately. Locate the root cause, edit the affected files, and run the strongest permitted verification. Do not stop at explaining the error or merely suggesting a fix; only report without editing when the user explicitly asks for diagnosis only.
 
-## C# і структура
+For non-trivial work: define the outcome, make the changes, and continue until verified completion unless a new user decision is required. Without separate approval, you may run relevant local checks that do not control Unity, have no production access, and use disposable fixtures. Fix failures caused by your change and re-run the relevant checks.
 
-- Увімкнено `#nullable enable`; reference types позначайте nullable/non-null явно. Використовуйте C# 12 (`primary constructors`, `readonly record struct`, collection expressions), коли це доречно.
-- Звичайні типи мають file-scoped namespace. Типи-нащадки `MonoBehaviour`, `ScriptableObject`, `ScriptableRendererFeature` або `VolumeComponent` мають block namespace, інакше `MonoScript.GetClass()` може повернути `null`.
-- Дотримуйтеся Allman braces, обов'язкових `{}`, SA1513/SA1508 і trailing comma у багаторядкових ініціалізаторах. Приватні поля — `_camelCase`; публічні члени й типи — `PascalCase`.
-- Ім'я Unity-скрипта має збігатися з класом. Перевірка `MonoScript.GetClass()` потребує окремого явного дозволу на Unity.
-- Не створюйте менеджери через `AddComponent` у `Configure`. Scene-компоненти реєструйте через `RegisterComponent`; prefab/entity створюйте через `ISceneObjectFactory`. `IObjectResolver` допустимий лише в composition roots і фабриках.
-- `Fodinae.Contracts` — нижній шар: не посилається на жодну збірку `Fodinae.*`. Контракти модуля лежать поруч із модулем у папці `Contracts/` з `Fodinae.Contracts.asmref`; без нього тип потрапляє у збірку модуля й ламає всіх, хто нижче. Тип, що залежить від реалізації, до `Contracts/` не кладіть. Стереже `ContractsAssemblyBoundaryTests`.
-- Документи в `docs/` мають бути автономним HTML з inline `<style>`, без Markdown і зовнішніх залежностей.
+For claims about visual or GPU results, the test must go through the production path: real shader and pass, real mesh attributes/`SV_POSITION`, production material keywords, real data textures, and the same camera/projection path. An isolated probe shader, a manual helper function call, a static source check, or a CPU model are supplementary tests only — they do not prove game behavior. If the production path cannot be run, explicitly mark the verification as incomplete.
 
-## Критичні інваріанти
+The visual test oracle must be independent of production functions. A helper matching itself is not valid as a regression proof.
 
-- Серверні координати мають початок згори ліворуч і Y вниз; перетворення виконуйте лише через `CoordinateUtils` з `MapManager.WorldHeight`.
-- UI Toolkit використовує єдине дерево стилів через `FodinaeTheme.tss`; статична структура живе в UXML. Видимість перемикається класом `is-hidden` через `UIState`, а координати екрана — через `RuntimePanelUtils.ScreenToPanel`.
-- Кожна сцена має рівно один корінь — свій `LifetimeScope`; усі authored-об'єкти лежать під ним. Об'єкт поруч зі scope контейнер не бачить. Стереже `ProductionSceneContractValidator.ValidateSingleRoot`, виправляє меню `Fodinae/Architecture/Move Scene Roots Under Composition Root`.
-- `RegisterInstance` не інжектить вручну створені об'єкти. Не резолвіть контейнер у `Awake`, `OnEnable` або `Start`.
-- `VolumeProfile.Add<T>()` створює компонент лише в пам'яті; editor-код має додати його через `AssetDatabase.AddObjectToAsset()` перед збереженням.
-- Не маскуйте дефекти очищенням Unity cache, повторною компіляцією, FPS-cap, frame skipping або throttling. Зміни гарячих шляхів робіть лише після відтворення чи строгого підтвердження причини.
-- VSync НІКОЛИ не пояснює продуктивність. Заборонено в будь-якій формі: як причину низького FPS, як «стелю» чи «очікування екрана» в замірах, як застереження «заміри були з синхронізацією», як пораду для заміру, у коментарях до коду й у звітах. Число часу кадру чи відеокарти пояснюйте лише роботою коду проєкту. Якщо користувач сам повідомляє про дефект перемикача VSync — це окремий баг налаштувань: виправте його й звітуйте лише про налаштування, не пов'язуючи з FPS чи замірами.
-- «Editor overhead» (EditorLoop, Scene view GPU, PlayerConnection сокет) НІКОЛИ не є поясненням низького FPS у грі. Ці категорії у Profiler — артефакти вимірювання в Play Mode всередині Editor, а не гальма гри. Якщо у Profiler видно `EditorLoop`, `CFRunLoopRun`, `Socket.Accept` — це шум замірів, ігноруй їх і шукай причину в категоріях `Scripts`, `Rendering`, `Physics`, `GarbageCollector` або конкретних маркерах ігрового коду. Закрита Scene view у Editor знижує GPU-шум, але не є обов'язковою умовою аналізу.
+Do not invent things the user did not ask for. Motion, rotation, animation, pulsing, flickering — NOT added on the agent's initiative. A static image means a static result. A correction to one word in the description applies to the entire entity.
+
+Do not return an intermediate blocker or symptom description as a result. Independently locate the root cause and continue to an actual result. Stop only when available options are exhausted and the next step genuinely requires new permission or a user decision — then report a specific proven blocker without excuses or repetition.

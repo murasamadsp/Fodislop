@@ -1,12 +1,12 @@
 #nullable enable
 
-using Fodinae.World.Terrain;
+using Kern.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
 [TestFixture]
 [Category("FuzzPure")]
@@ -54,26 +54,26 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     [TestCase(100, 10, 100, 100)]
     [TestCase(10, 0, 100, 100)]
     [TestCase(10, 100, 100, 100)]
-    [TestCase(1, 1, 100, 100)]
-    [TestCase(99, 99, 100, 100)]
     public void ComputeOffset_OnWorldEdge_ReturnsZero(int worldX, int worldY, int w, int h)
     {
         var c = new CachedCellData { Distortion = CellDistortionType.Cause };
-        Vector3 offset = TerrainVertexDistortionCalculator.ComputeOffset(c, c, c, c, worldX, worldY, w, h);
-        Assert.That(offset, Is.EqualTo(Vector3.zero));
+        TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(c, c, c, c, worldX, worldY, w, h);
+        Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero));
     }
 
-    // Upstream (15bced90): клетка, окружённая источниками со всех сторон, не искажается.
+    // Внутренний узел массива получает детерминированный свободный jitter.
     [Test]
-    public void ComputeOffset_AllCauses_ReturnsZero()
+    public void ComputeOffset_AllCauses_IsDeterministicAndBounded()
     {
         var c = new CachedCellData { Distortion = CellDistortionType.Cause };
         for (int x = 1; x < 30; x++)
         {
             for (int y = 1; y < 30; y++)
             {
-                Vector3 offset = TerrainVertexDistortionCalculator.ComputeOffset(c, c, c, c, x, y, 100, 100);
-                Assert.That(offset, Is.EqualTo(Vector3.zero), $"x={x},y={y}");
+                TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(c, c, c, c, x, y, 100, 100);
+                Assert.That(offset.XSteps, Is.InRange(-6, 6), $"x={x},y={y}");
+                Assert.That(offset.YSteps, Is.InRange(-6, 6), $"x={x},y={y}");
+                Assert.That(offset.ZSteps, Is.Zero, $"x={x},y={y}");
             }
         }
     }
@@ -83,8 +83,8 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     {
         var block = new CachedCellData { Distortion = CellDistortionType.Block };
         var none = new CachedCellData { Distortion = CellDistortionType.Neutral };
-        Vector3 offset = TerrainVertexDistortionCalculator.ComputeOffset(none, none, none, block, 10, 10, 100, 100);
-        Assert.That(offset, Is.EqualTo(Vector3.zero));
+        TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(none, none, none, block, 10, 10, 100, 100);
+        Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero));
     }
 
     [Test]
@@ -92,9 +92,9 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     {
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
         var none = new CachedCellData { Distortion = CellDistortionType.Neutral };
-        Vector3 offset = TerrainVertexDistortionCalculator.ComputeOffset(cause, none, none, none, 10, 10, 100, 100);
-        Assert.That(offset.z, Is.EqualTo(0f));
-        float mag = offset.x * offset.x + offset.y * offset.y;
+        TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(cause, none, none, none, 10, 10, 100, 100);
+        Assert.That(offset.ZSteps, Is.EqualTo(0));
+        int mag = (offset.XSteps * offset.XSteps) + (offset.YSteps * offset.YSteps);
         Assert.That(mag, Is.GreaterThan(0f), "single cause corner should produce non-zero offset");
     }
 

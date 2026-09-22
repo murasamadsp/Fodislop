@@ -1,22 +1,23 @@
 #nullable enable
 
 using System.Linq;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Localization;
-using Fodinae.Networking;
+using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Networking;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Information.StatusPanel;
 using UnityEngine;
 
-namespace Fodinae.Networking.Processors;
+namespace Kern.Networking.Processors;
 
 public sealed class StatusProcessor(
     IPlayerStats stats,
     NetworkStatusModel statusModel,
     INetworkService networkService,
-    ILocalizationService? loc = null) :
+    ILocalizationService? loc = null,
+    IConnectionService? connection = null) :
     IPacketProcessor<OnlinePacket>,
     IPacketProcessor<PingPacket>,
     IPacketProcessor<OutdatedClientPacket>,
@@ -53,6 +54,7 @@ public sealed class StatusProcessor(
             ? loc.Get("network.error.outdated", packet.Name, description, packet.UpdateURL)
             : $"Версия: {packet.Name}\n{description}\nСкачать: {packet.UpdateURL}";
         Debug.LogWarning($"[StatusProcessor] Клиент устарел: {detail}");
+        connection?.HandleServerDisconnect(detail);
         if (!string.IsNullOrWhiteSpace(packet.UpdateURL))
         {
             Application.OpenURL(packet.UpdateURL);

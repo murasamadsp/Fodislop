@@ -4,13 +4,13 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.UI;
+namespace Kern.Tests.UI;
 
 [TestFixture]
 public sealed class LocalChatContractTests
 {
     [Test]
-    public void ActiveChatUi_ContainsLocalChannelAndNetworkRoute()
+    public void ActiveChatUi_ExposesLocalChatOnlyThroughKeyboardRoute()
     {
         string uxml = File.ReadAllText(Path.Combine(
             Application.dataPath,
@@ -19,10 +19,9 @@ public sealed class LocalChatContractTests
             Application.dataPath,
             "Scripts/UI/Chat/GlobalChatUI.cs"));
 
-        Assert.That(uxml, Does.Contain("name=\"LocalChannelButton\""));
-        Assert.That(uxml, Does.Contain("text=\"chat.channel.local\""));
+        Assert.That(uxml, Does.Not.Contain("LocalChannelButton"));
+        Assert.That(uxml, Does.Not.Contain("chat.channel.local"));
         Assert.That(controller, Does.Contain("new SendLocalChatMessagePacket(text)"));
-        Assert.That(controller, Does.Contain("LocalMessageReceived += AddLocalMessage"));
         Assert.That(controller, Does.Contain("Keyboard.current.tKey.wasPressedThisFrame"));
     }
 

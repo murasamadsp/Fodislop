@@ -1,4 +1,4 @@
-Shader "Fodinae/UI/MenuLineUnlit"
+Shader "Kern/UI/MenuLineUnlit"
 {
     // Unlit colour for the menu rig's orbit line and station point.
     //
@@ -13,7 +13,7 @@ Shader "Fodinae/UI/MenuLineUnlit"
     //
     // The explicit render queue is the other half of the fix: this and the
     // atmosphere shell share a bounding-box centre (both are centred on the
-    // planet), so distance sorting between them has no tie-breaker. The rig
+            // scene body), so distance sorting between them has no tie-breaker. The rig
     // pushes this material's queue above the shell's so the order is pinned
     // rather than left to whatever the sort happens to produce.
     Properties
@@ -29,7 +29,7 @@ Shader "Fodinae/UI/MenuLineUnlit"
         ZWrite Off
 
         // Depth-tested against the opaque crust, so the far half of the orbit
-        // passes behind the planet instead of drawing over it.
+            // passes behind the scene body instead of drawing over it.
         ZTest LEqual
         Blend One OneMinusSrcAlpha
 

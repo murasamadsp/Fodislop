@@ -2,12 +2,12 @@
 
 using System;
 using System.Drawing;
-using Fodinae.Networking;
+using Kern.Networking;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
 using NUnit.Framework;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 [TestFixture]
 public class ChatEventGatewayFuzzTests
@@ -36,7 +36,7 @@ public class ChatEventGatewayFuzzTests
             gw.MessageReceived += p => received = p;
             var msg = MakeMessage(random);
             gw.Publish(msg);
-            Assert.That(ReferenceEquals(received, msg), $"i={i}");
+            Assert.That(Equals(received, msg), $"i={i}");
         }
     }
 
@@ -53,9 +53,9 @@ public class ChatEventGatewayFuzzTests
             gw.MessageReceived += p => r3 = p;
             var msg = MakeMessage(random);
             gw.Publish(msg);
-            Assert.That(ReferenceEquals(r1, msg), $"i={i}");
-            Assert.That(ReferenceEquals(r2, msg), $"i={i}");
-            Assert.That(ReferenceEquals(r3, msg), $"i={i}");
+            Assert.That(Equals(r1, msg), $"i={i}");
+            Assert.That(Equals(r2, msg), $"i={i}");
+            Assert.That(Equals(r3, msg), $"i={i}");
         }
     }
 
@@ -71,12 +71,12 @@ public class ChatEventGatewayFuzzTests
             gw.MessageReceived += p => r1 = p;
             gw.MessageReceived += handler;
             gw.Publish(MakeMessage(random));
-            Assert.That(ReferenceEquals(r1, gw.GetType() == null ? null : null), Is.False);
-            Assert.That(ReferenceEquals(r2, null), Is.False);
+            Assert.That(r1, Is.Not.Null);
+            Assert.That(r2, Is.Not.Null);
             gw.MessageReceived -= handler;
             var msg2 = MakeMessage(random);
             gw.Publish(msg2);
-            Assert.That(ReferenceEquals(r1, msg2), $"i={i}");
+            Assert.That(Equals(r1, msg2), $"i={i}");
         }
     }
 
@@ -94,7 +94,7 @@ public class ChatEventGatewayFuzzTests
             var l = MakeLocal(random);
             gw.Publish(l);
             Assert.That(global, Is.Null, $"i={i}");
-            Assert.That(ReferenceEquals(local, l), $"i={i}");
+            Assert.That(Equals(local, l), $"i={i}");
         }
     }
 

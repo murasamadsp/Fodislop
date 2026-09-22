@@ -1,16 +1,16 @@
 #nullable enable
 
-using Fodinae;
+using Kern;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
+using Kern.Core;
+using Kern.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World;
+namespace Kern.World;
 internal struct AtlasCell
 {
     public CellType CellType;
@@ -142,14 +142,19 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
 
     public void SetFullyOpaque(CellType cellType, bool opaque) => _fullyOpaque[cellType] = opaque;
 
-    // Альфа всех пикселей текстуры. Нечитаемая текстура (на GPU-пути атласа
-    // кадры декодера сразу становятся нечитаемыми) один раз копируется во
-    // временную цель и читается оттуда: клетки маленькие, загрузка редкая.
+    // Альфа всех пикселей текстуры — только по CPU-читаемой текстуре.
+    // Нечитаемая (уже залитая на GPU) считается НЕпрозрачной: фон под ней
+    // дорисуется, картинка корректна, лишний fill дешевле синхронного
+    // GPU-readback. Старый путь Blit + ReadPixels ставил полный стал
+    // конвейера прямо на загрузке новых типов клеток при движении.
     public static bool MeasureFullyOpaque(Texture2D texture)
     {
         const byte OpaqueAlpha = 250;
-        if (texture.isReadable)
+        if (!texture.isReadable)
         {
+            return false;
+        }
+
             foreach (Color32 pixel in texture.GetPixels32())
             {
                 if (pixel.a < OpaqueAlpha)
@@ -159,46 +164,6 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
             }
 
             return true;
-        }
-
-        RenderTexture previous = RenderTexture.active;
-        RenderTexture target = RenderTexture.GetTemporary(
-            texture.width, texture.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-        Texture2D readback = RuntimeTextureFactory.CreateRGBA32NoMip(
-            texture.width,
-            texture.height,
-            "TextureAtlas.OpaqueReadback",
-            RuntimeTextureColorSpace.Linear,
-            FilterMode.Point,
-            TextureWrapMode.Clamp);
-        try
-        {
-            Graphics.Blit(texture, target);
-            RenderTexture.active = target;
-            readback.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0, recalculateMipMaps: false);
-            foreach (Color32 pixel in readback.GetPixels32())
-            {
-                if (pixel.a < OpaqueAlpha)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-        finally
-        {
-            RenderTexture.active = previous;
-            RenderTexture.ReleaseTemporary(target);
-            if (Application.isPlaying)
-            {
-                UnityEngine.Object.Destroy(readback);
-            }
-            else
-            {
-                UnityEngine.Object.DestroyImmediate(readback);
-            }
-        }
     }
 
     public AtlasCoordinate GetWrappedCoordinate(CellType cellType, int globalX, int globalY, CellVariation variation, int frameHeightPixels = 0, int frameIndex = 0)
@@ -450,6 +415,35 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
                 _atlasPixels[destIndex] = sourcePixels[sourceIndex];
             }
         }
+
+        // Extrude the source edge into every reserved gutter. Smooth atlas
+        // sampling can approach a region from any direction; padding only on
+        // the right and bottom still lets the left/top edge blend with the
+        // neighbouring region or the transparent atlas clear color.
+        for (int y = 0; y < height; y++)
+        {
+            Color32 leftEdge = sourcePixels[y * width];
+            Color32 rightEdge = sourcePixels[(y * width) + (width - 1)];
+            for (int padding = 1; padding <= Padding; padding++)
+            {
+                int row = (destination.Y + y) * Size;
+                _atlasPixels[row + destination.X - padding] = leftEdge;
+                _atlasPixels[row + destination.X + width + padding - 1] = rightEdge;
+            }
+        }
+
+        for (int padding = 1; padding <= Padding; padding++)
+        {
+            int topRow = (destination.Y - padding) * Size;
+            int bottomRow = (destination.Y + height + padding - 1) * Size;
+            for (int x = -Padding; x < width + Padding; x++)
+            {
+                int sourceX = Math.Clamp(x, 0, width - 1);
+                _atlasPixels[topRow + destination.X + x] = sourcePixels[sourceX];
+                _atlasPixels[bottomRow + destination.X + x] =
+                    sourcePixels[((height - 1) * width) + sourceX];
+            }
+        }
     }
 
     private void UploadGpuTexture(Texture2D source, Rectangle destination)
@@ -458,6 +452,57 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
         Graphics.CopyTexture(
             source, 0, 0, 0, 0, source.width, source.height,
             _atlasTexture, 0, 0, destination.X, destination.Y);
+
+        for (int padding = 1; padding <= Padding; padding++)
+        {
+            Graphics.CopyTexture(
+                source, 0, 0, 0, 0, 1, source.height,
+                _atlasTexture, 0, 0,
+                destination.X - padding,
+                destination.Y);
+
+            Graphics.CopyTexture(
+                source, 0, 0, source.width - 1, 0, 1, source.height,
+                _atlasTexture, 0, 0,
+                destination.X + source.width + padding - 1,
+                destination.Y);
+
+            Graphics.CopyTexture(
+                source, 0, 0, 0, 0, source.width, 1,
+                _atlasTexture, 0, 0,
+                destination.X,
+                destination.Y - padding);
+
+            Graphics.CopyTexture(
+                source, 0, 0, 0, source.height - 1, source.width, 1,
+                _atlasTexture, 0, 0,
+                destination.X,
+                destination.Y + source.height + padding - 1);
+
+            Graphics.CopyTexture(
+                source, 0, 0, 0, 0, 1, 1,
+                _atlasTexture, 0, 0,
+                destination.X - padding,
+                destination.Y - padding);
+
+            Graphics.CopyTexture(
+                source, 0, 0, source.width - 1, 0, 1, 1,
+                _atlasTexture, 0, 0,
+                destination.X + source.width + padding - 1,
+                destination.Y - padding);
+
+            Graphics.CopyTexture(
+                source, 0, 0, 0, source.height - 1, 1, 1,
+                _atlasTexture, 0, 0,
+                destination.X - padding,
+                destination.Y + source.height + padding - 1);
+
+            Graphics.CopyTexture(
+                source, 0, 0, source.width - 1, source.height - 1, 1, 1,
+                _atlasTexture, 0, 0,
+                destination.X + source.width + padding - 1,
+                destination.Y + source.height + padding - 1);
+        }
     }
 
     private void ValidateGpuCopySource(Texture2D source, Rectangle destination)

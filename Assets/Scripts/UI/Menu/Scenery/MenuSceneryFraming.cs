@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.UI;
+namespace Kern.UI;
 internal static class MenuSceneryFraming
 {
     private const float RestDiscWidthFraction = 860f / 1440f;
@@ -33,7 +33,7 @@ internal static class MenuSceneryFraming
     public static Placement Solve(
         float progress,
         Vector3 landingLocalDirection,
-        float planetRadius,
+        float sceneBodyRadius,
         float aspect)
     {
         float t = Mathf.Clamp01(progress);
@@ -47,12 +47,12 @@ internal static class MenuSceneryFraming
             ? landingLocalDirection.normalized
             : Vector3.back;
 
-        float restDistance = RestDistance(planetRadius, aspect);
+        float restDistance = RestDistance(sceneBodyRadius, aspect);
 
         // Ближняя точка отсчитывается от радиуса планеты, а не задаётся
         // числом: масштаб шара в сцене менялся, и зашитая дистанция
         // однажды окажется внутри поверхности.
-        float closeDistance = Mathf.Max(restDistance / DescentZoom, planetRadius + 0.35f);
+        float closeDistance = Mathf.Max(restDistance / DescentZoom, sceneBodyRadius + 0.35f);
 
         // Облёт, а не подъезд по прямой.
         //
@@ -87,17 +87,17 @@ internal static class MenuSceneryFraming
         return new Placement(local, rotation);
     }
 
-    public static float RestDistance(float planetRadius, float aspect)
+    public static float RestDistance(float sceneBodyRadius, float aspect)
     {
         float tanHalfVertical = Mathf.Tan(FieldOfView * 0.5f * Mathf.Deg2Rad);
         float safeAspect = Mathf.Max(aspect, 0.1f);
 
         // Диск занимает 2r из ширины кадра 2 * d * tan(halfV) * aspect,
         // отсюда d = r / (доля * tan(halfV) * aspect).
-        float distance = planetRadius
+        float distance = sceneBodyRadius
             / Mathf.Max(RestDiscWidthFraction * tanHalfVertical * safeAspect, 1e-4f);
 
-        return Mathf.Max(distance, planetRadius * MinRestDistanceInRadii);
+        return Mathf.Max(distance, sceneBodyRadius * MinRestDistanceInRadii);
     }
 
     private static float RestYaw(float aspect)

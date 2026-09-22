@@ -1,6 +1,7 @@
 {
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
+  "explorer.compactFolders": false,
   "explorer.fileNesting.patterns": {
     "*": "$(capture).meta",
     "*.cs": "$(capture).g.cs, $(capture).designer.cs, $(capture).generated.cs",
@@ -27,7 +28,12 @@
     "*.cginc": "hlsl",
     "*.hlsl": "hlsl",
     "*.asmdef": "json",
-    "*.asmref": "json"
+    "*.asmref": "json",
+    "*.csproj": "xml",
+    "*.props": "xml",
+    "*.targets": "xml",
+    "*.slnx": "xml",
+    "*.inputactions": "json"
   },
   "files.watcherExclude": {
     "**/Library/**": true,
@@ -39,7 +45,8 @@
     "**/.vs/**": true,
     "**/.git/**": true,
     "**/UserSettings/**": true,
-    "**/FodinaeAudio/.cache/**": true
+    "**/KernAudio/.cache/**": true,
+    "**/*.meta": true
   },
   "files.exclude": {
     "**/.git": true,
@@ -51,7 +58,8 @@
     "**/Logs": true,
     "**/ProfilerCaptures": true,
     "**/.vs": true,
-    "**/UserSettings": true
+    "**/UserSettings": true,
+    "**/*.meta": true
   },
   "search.exclude": {
     "**/Library": true,
@@ -63,12 +71,38 @@
     "**/.vs": true,
     "**/*.meta": true,
     "**/*.mapb": true,
+    "**/*.bytes": true,
     "**/UserSettings": true
   },
+  "editor.minimap.enabled": false,
+  "editor.rulers": [120,
+    160
+  ],
+  "editor.renderWhitespace": "selection",
+  "editor.stickyScroll.enabled": true,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+  "editor.linkedEditing": true,
+  "editor.suggestSelection": "first",
+  "editor.parameterHints.enabled": true,
+  "editor.unicodeHighlight.ambiguousCharacters": false,
+  "editor.unicodeHighlight.invisibleCharacters": false,
+  "files.autoGuessEncoding": false,
+  "files.simpleDialog.enable": true,
+  "files.hotExit": "onExitAndWindowClose",
+  "git.openRepositoryInParentFolders": "never",
+  "git.mergeEditor": true,
+  "git.autofetch": false,
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  "terminal.integrated.scrollback": 10000,
+  "terminal.integrated.confirmOnExit": "hasChildProcesses",
+  "csharp.semanticHighlighting.enabled": true,
+  "csharp.format.enable": true,
+  "csharp.referencesCodeLens.enabled": true,
+  "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "openFiles",
   "dotnet.defaultSolution": "Fodislop.slnx",
   "csharp.analyzerDiagnosticScope": "openFiles",
   "csharp.enableImportCompletion": true,
-  "csharp.format.enable": true,
   "csharp.enableEditorConfigSupport": true,
   "csharp.suppressHiddenDiagnostics": false,
   "dotnet.server.useOmnisharp": false,

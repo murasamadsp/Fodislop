@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.Core;
+namespace Kern.Core;
 
 public static class ProjectRuntimeContracts
 {
@@ -8,6 +8,7 @@ public static class ProjectRuntimeContracts
     {
         public const float CellSize = 1f;
         public const int ChunkSize = 32;
+        public const int ResidentChunkCacheCapacity = 2000;
     }
 
     public static class Camera
@@ -26,10 +27,15 @@ public static class ProjectRuntimeContracts
 
     public static class ClientConfiguration
     {
-        // По умолчанию — реальный сервер 127.0.0.1:8090 (порт сервера из
-        // appsettings.json, ключ Mines3:Port; прежний дефолт 7777 с портом
-        // сервера не совпадал).
-        public const bool DefaultUseDummyConnection = false;
+        // По умолчанию — штатная заглушка транспорта. Дефолт обязан быть тем
+        // состоянием, в котором клиент запускается и работает: сервер поднят
+        // не всегда, и при выключенной заглушке чистый конфиг встречает
+        // человека отказом соединения в первую же секунду.
+        //
+        // Адрес и порт остаются настоящими — 127.0.0.1:8090 из appsettings.json
+        // сервера, ключ Mines3:Port: заглушку выключают одним тумблером, и
+        // тогда клиент идёт туда, куда надо, без правки адреса.
+        public const bool DefaultUseDummyConnection = true;
         public const string DefaultServerHost = "127.0.0.1";
         public const int DefaultServerPort = 8090;
         public const bool DefaultHDREnabled = true;
@@ -37,8 +43,15 @@ public static class ProjectRuntimeContracts
 
     public static class Authentication
     {
-        public const string VKClientId = "";
-        public const string VKBackendUrl = "";
+        public const string VKClientID = "";
+        public const string VKBackendURL = "";
+    }
+
+    public static class Networking
+    {
+        // Must stay aligned with the server's accepted ClientHello protocol
+        // version. A development-only old-client path may still send 0.
+        public const int ClientVersion = 1;
     }
 
     public static class Chat
@@ -70,10 +83,16 @@ public static class ProjectRuntimeContracts
 
     public static class ResourcePaths
     {
+        public const string PrismaticFlowMap = "PrismaticFlowMap";
         public const string GraphicsQualityProfile = "GraphicsQualityProfile";
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";
         public const string PostProcessCompute = "Shaders/PostProcessing/PostProcess";
         public const string ScopesCompute = "Shaders/PostProcessing/Scopes";
+
+        // Трасса состояний графического конвейера. Ассет проекта, а не файл в
+        // persistentDataPath: из persistentDataPath в билд не попадает ничего,
+        // а ассет едет со сборкой сам и приезжает к игроку.
+        public const string GraphicsStateCollection = "Rendering/GraphicsStates";
         public const string GatewayUxml = "UI/Gateway";
         public const string MainMenuUxml = "UI/MainMenu";
         public const string AssetLoadingIndicatorUxml = "UI/AssetLoadingIndicator";
@@ -99,6 +118,12 @@ public static class ProjectRuntimeContracts
         public const string MainGame = "MainGame";
     }
 
+    public static class EditorSession
+    {
+        // Сцена, из которой нажали Play: редактор кладёт её сюда, Bootstrap забирает.
+        public const string PlayModeTargetScene = "Kern.PlayModeTargetScene";
+    }
+
     public static class PreviewVisuals
     {
         public const float RobotPixelsPerUnit = 16f;
@@ -107,14 +132,12 @@ public static class ProjectRuntimeContracts
     public static class ShaderNames
     {
         public const string Terrain = "Universal Render Pipeline/Custom/Terrain";
-        public const string DynamicEmission = "Hidden/Fodinae/DynamicEmission";
-        public const string WorldSurface = "Fodinae/World Surface";
-        public const string WorldEntity = "Fodinae/World Entity";
-        public const string PlanetSurface = "Fodinae/UI/PlanetSurface";
-        public const string PlanetAtmosphere = "Fodinae/UI/PlanetAtmosphere";
-        public const string Starfield = "Fodinae/UI/Starfield";
-        public const string MenuLineUnlit = "Fodinae/UI/MenuLineUnlit";
-        public const string UnpremultiplyAlpha = "Fodinae/UI/UnpremultiplyAlpha";
+        public const string WorldSurface = "Kern/World Surface";
+        public const string WorldEntity = "Kern/World Entity";
+        public const string Starfield = "Kern/UI/Starfield";
+        public const string MenuLineUnlit = "Kern/UI/MenuLineUnlit";
+        public const string UnpremultiplyAlpha = "Kern/UI/UnpremultiplyAlpha";
+        public const string MissionVirtualRing = "Kern/UI/MissionVirtualRing";
     }
 
     public static class ShaderPassNames
@@ -125,9 +148,15 @@ public static class ProjectRuntimeContracts
     public static class ComputeKernelNames
     {
         public const string SolveCascade = "SolveCascade";
+        public const string ScrollRadianceAtlas = "ScrollRadianceAtlas";
+        public const string SolveDynamicLighting = "SolveDynamicLighting";
+        public const string ComposeDynamicLighting = "ComposeDynamicLighting";
+        public const string TraceDynamicPolar = "TraceDynamicPolar";
+        public const string ClearDynamicDirect = "ClearDynamicDirect";
         public const string ResolveDirect = "ResolveDirect";
-        public const string SolveDiffuseBounce = "SolveDiffuseBounce";
+        public const string ResolveTransmissionDebug = "ResolveTransmissionDebug";
         public const string CompositeLighting = "CompositeLighting";
+        public const string BuildCellSolidMask = "BuildCellSolidMask";
     }
 
     public static class RequiredLayers
@@ -135,11 +164,17 @@ public static class ProjectRuntimeContracts
         public const string WorldUI = "UI";
         public const string WorldUISortingLayer = "World UI";
         public const int TerrainSortingOrder = -1000;
+
+        // Строго ниже террейна, а не вровень с ним. Оба рендерера рисуются с
+        // альфа-блендингом в слое Default, и пока номер совпадал, порядок между
+        // ними задавала не эта константа, а очередь материала и расстояние до
+        // камеры. То есть он мог меняться от кадра к кадру и от положения
+        // камеры: подложка мира то ложилась под террейн, то накрывала его
+        // собственный фоновый слой.
+        public const int WorldBackgroundSortingOrder = TerrainSortingOrder - 100;
     }
 
     public static class RuntimeLimits
     {
-        public const int MaximumPacketBatchPerFrame = 250;
-        public const int MaximumLightingUpdatesPerSecond = 60;
-    }
+        public const int MaximumPacketBatchPerFrame = 250;    }
 }

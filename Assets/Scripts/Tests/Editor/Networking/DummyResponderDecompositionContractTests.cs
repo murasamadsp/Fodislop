@@ -4,7 +4,7 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Fodinae.Tests.Networking;
+namespace Kern.Tests.Networking;
 
 public sealed class DummyResponderDecompositionContractTests
 {
@@ -12,9 +12,10 @@ public sealed class DummyResponderDecompositionContractTests
     public void Connection_DelegatesWindowTagsInsteadOfOwningTheirRouting()
     {
         string connection = ReadClientSource("DummyConnection.cs");
-        string responder = ReadClientSource("DummyWindowResponder.cs");
+        string responder = ReadClientSource("Responders/DummyWindowResponder.cs");
 
-        Assert.That(connection, Does.Contain("_windowResponder.Handle(elementClick, _x, _y)"));
+        Assert.That(connection, Does.Contain("_windowResponder.Handle("));
+        Assert.That(connection, Does.Contain("elementClick"));
         Assert.That(connection, Does.Not.Contain("packet.WindowTag == \"daily_bonus\""));
         Assert.That(connection, Does.Not.Contain("packet.WindowTag == \"teleport\""));
         Assert.That(connection, Does.Not.Contain("packet.WindowTag == \"missions\""));
@@ -39,7 +40,7 @@ public sealed class DummyResponderDecompositionContractTests
     public void Connection_DelegatesWorldStartupSnapshotAndLoops()
     {
         string connection = ReadClientSource("DummyConnection.cs");
-        string responder = ReadClientSource("DummyWorldStartupResponder.cs");
+        string responder = ReadClientSource("Responders/DummyWorldStartupResponder.cs");
 
         Assert.That(connection, Does.Contain("_worldStartup.InitializeAsync("));
         Assert.That(connection, Does.Not.Contain("new WorldInitPacket("));
@@ -53,20 +54,23 @@ public sealed class DummyResponderDecompositionContractTests
     public void Connection_DelegatesMovementAndPathLifecycle()
     {
         string connection = ReadClientSource("DummyConnection.cs");
-        string responder = ReadClientSource("DummyMovementResponder.cs");
+        string responder = ReadClientSource("Responders/DummyMovementResponder.cs");
+        string worldState = ReadClientSource("Simulation/DummyWorldSimulationState.cs");
 
-        Assert.That(connection, Does.Contain("_movementResponder.HandleMove(move)"));
-        Assert.That(connection, Does.Contain("_movementResponder.HandleClick(click)"));
+        Assert.That(connection, Does.Contain("_actionResponder.Handle(actionPacket)"));
         Assert.That(connection, Does.Not.Contain("dummy_walk_path"));
         Assert.That(responder, Does.Contain("dummy_walk_path"));
         Assert.That(responder, Does.Contain("public void CancelPath()"));
+        Assert.That(responder, Does.Not.Contain("GetCellSync"));
+        Assert.That(worldState, Does.Not.Contain("GetCellSync"));
+        Assert.That(worldState, Does.Contain("EnsureCellAvailableAsync"));
     }
 
     [Test]
     public void Connection_DelegatesGameplayActionsAndAssetResponses()
     {
         string connection = ReadClientSource("DummyConnection.cs");
-        string actions = ReadClientSource("DummyGameplayActionResponder.cs");
+        string actions = ReadClientSource("Responders/DummyGameplayActionResponder.cs");
 
         Assert.That(connection, Does.Contain("_actionResponder.Handle(actionPacket)"));
         Assert.That(connection, Does.Not.Contain("actionPacket.Payload is BzPacket"));

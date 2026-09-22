@@ -3,13 +3,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Fodinae.Core;
+using Kern.Core;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
 
-namespace Fodinae.World;
+namespace Kern.World;
 
 public sealed class MapCellConfigCatalog
 {
@@ -31,6 +31,40 @@ public sealed class MapCellConfigCatalog
 
     public static bool IsRoundableLoose(CellType type) => _RoundableLooseTypes.Contains(type);
 
+    public static bool IsRoad(CellType type) =>
+        type is CellType.Road or CellType.GoldenRoad or CellType.BuildingRoad or CellType.PolymerRoad;
+
+    // Authored object silhouettes must not inherit shared terrain-node offsets,
+    // even when a server configuration marks them as a distortion source.
+    public static bool HasFixedTerrainGeometry(CellType type) =>
+        type is CellType.BlackBoulder1 or CellType.BlackBoulder2 or CellType.BlackBoulder3 or
+            CellType.MetalBoulder1 or CellType.MetalBoulder2 or CellType.MetalBoulder3 or
+            CellType.Boulder1 or CellType.Boulder2 or CellType.Boulder3 or CellType.DeepMagmaBoulder or
+            CellType.AliveCyan or CellType.AliveRed or CellType.AliveViol or CellType.AliveNigger or
+            CellType.AliveWhite or CellType.AliveRainbow or CellType.AliveBlue or
+            CellType.QuadBlock or CellType.Support or CellType.MilitaryBlockFrame or CellType.MilitaryBlock or
+            CellType.GreenBlock or CellType.YellowBlock or CellType.FedBlock or CellType.RedBlock or
+            CellType.BuildingWall or CellType.BuildingDoor or CellType.BuildingCorner or
+            CellType.BuildingRoad or CellType.Gate or CellType.TeleportBlock or CellType.Box;
+
+    // Building and artificial blocks must never emit light/glow.
+    public static bool IsBuildingOrArtificialBlock(CellType type) =>
+        type is CellType.QuadBlock or
+            CellType.Support or
+            CellType.MilitaryBlockFrame or
+            CellType.MilitaryBlock or
+            CellType.GreenBlock or
+            CellType.YellowBlock or
+            CellType.FedBlock or
+            CellType.RedBlock or
+            CellType.BuildingWall or
+            CellType.BuildingDoor or
+            CellType.BuildingCorner or
+            CellType.BuildingRoad or
+            CellType.Gate or
+            CellType.TeleportBlock or
+            CellType.Box;
+
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {
         ValidateCellConfigurations(configurations);
@@ -47,9 +81,9 @@ public sealed class MapCellConfigCatalog
                     continue;
                 }
 
-                foreach (byte cellId in tileGroups[i])
+                foreach (byte cellID in tileGroups[i])
                 {
-                    _cellToTileGroup[(CellType)cellId] = i;
+                    _cellToTileGroup[(CellType)cellID] = i;
                 }
             }
         }
@@ -102,9 +136,9 @@ public sealed class MapCellConfigCatalog
         return _cellConfigurations[(int)type];
     }
 
-    public bool TryGetTileGroup(CellType type, out int groupId)
+    public bool TryGetTileGroup(CellType type, out int groupID)
     {
-        return _cellToTileGroup.TryGetValue(type, out groupId);
+        return _cellToTileGroup.TryGetValue(type, out groupID);
     }
 
     public Color GetCellMinimapColor(CellType type)

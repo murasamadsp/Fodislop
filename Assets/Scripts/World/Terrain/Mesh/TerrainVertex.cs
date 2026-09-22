@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace Fodinae.World.Terrain;
+namespace Kern.World.Terrain;
 [StructLayout(LayoutKind.Explicit, Size = 84)]
 public struct TerrainVertex
 {
@@ -124,4 +124,5 @@ public struct TerrainVertex
 
         return (ushort)(sign | (exp << 10) | (mantissa >> 13));
     }
+
 }

@@ -1,19 +1,19 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Core.Interfaces;
-using Fodinae.Core.Models;
+using Kern.Core.Interfaces;
+using Kern.Core.Models;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Inventory;
 
-namespace Fodinae.Networking.Processors;
+namespace Kern.Networking.Processors;
 
 public sealed class InventoryProcessor(IInventoryState model) :
     IPacketProcessor<InventoryPacket>,
     IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>,
     IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>
 {
-    private const int TotalSlots = 60;
+    private const int TotalSlots = 63;
 
     public void Process(InventoryPacket packet)
     {
@@ -33,8 +33,9 @@ public sealed class InventoryProcessor(IInventoryState model) :
             }
             else
             {
-                existing.Quantity = (int)quantity;
-                model.SetSlot(i, existing);
+                ItemData updated = existing.Clone();
+                updated.Quantity = (int)quantity;
+                model.SetSlot(i, updated);
             }
 
             remaining.Remove(existing.ItemType);
@@ -54,7 +55,7 @@ public sealed class InventoryProcessor(IInventoryState model) :
                     continue;
                 }
 
-                model.SetSlot(i, new Fodinae.Core.Models.ItemData(
+                model.SetSlot(i, new Kern.Core.Models.ItemData(
                     itemType.ToString(),
                     UnityEngine.Color.gray,
                     (int)quantity)
@@ -80,9 +81,10 @@ public sealed class InventoryProcessor(IInventoryState model) :
             return;
         }
 
-        item.Name = packet.Name;
-        item.Description = packet.Description;
-        model.SetSlot(slot, item);
+        ItemData updated = item.Clone();
+        updated.Name = packet.Name;
+        updated.Description = packet.Description;
+        model.SetSlot(slot, updated);
     }
 
     public void Process(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket packet) =>

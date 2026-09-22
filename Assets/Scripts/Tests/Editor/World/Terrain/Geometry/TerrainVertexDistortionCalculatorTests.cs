@@ -1,8 +1,8 @@
 #nullable enable
 
-namespace Fodinae.Tests.World;
+namespace Kern.Tests.World;
 
-using Fodinae.World.Terrain;
+using Kern.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using NUnit.Framework;
@@ -27,15 +27,15 @@ public class TerrainVertexDistortionCalculatorTests
     {
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
 
-        Vector3 minX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 0, 10, 100, 100);
-        Vector3 maxX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 100, 10, 100, 100);
-        Vector3 minY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 0, 100, 100);
-        Vector3 maxY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 100, 100, 100);
+        TerrainVertexOffset minX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 0, 10, 100, 100);
+        TerrainVertexOffset maxX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 100, 10, 100, 100);
+        TerrainVertexOffset minY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 0, 100, 100);
+        TerrainVertexOffset maxY = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 10, 100, 100, 100);
 
-        Assert.AreEqual(Vector3.zero, minX);
-        Assert.AreEqual(Vector3.zero, maxX);
-        Assert.AreEqual(Vector3.zero, minY);
-        Assert.AreEqual(Vector3.zero, maxY);
+        Assert.AreEqual(TerrainVertexOffset.Zero, minX);
+        Assert.AreEqual(TerrainVertexOffset.Zero, maxX);
+        Assert.AreEqual(TerrainVertexOffset.Zero, minY);
+        Assert.AreEqual(TerrainVertexOffset.Zero, maxY);
     }
 
     [Test]
@@ -44,57 +44,90 @@ public class TerrainVertexDistortionCalculatorTests
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
         var block = new CachedCellData { Distortion = CellDistortionType.Block };
 
-        Vector3 tlBlock = TerrainVertexDistortionCalculator.ComputeOffset(block, cause, cause, cause, 10, 10, 100, 100);
-        Vector3 trBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, block, cause, cause, 10, 10, 100, 100);
-        Vector3 blBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, block, cause, 10, 10, 100, 100);
-        Vector3 brBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, block, 10, 10, 100, 100);
+        TerrainVertexOffset tlBlock = TerrainVertexDistortionCalculator.ComputeOffset(block, cause, cause, cause, 10, 10, 100, 100);
+        TerrainVertexOffset trBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, block, cause, cause, 10, 10, 100, 100);
+        TerrainVertexOffset blBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, block, cause, 10, 10, 100, 100);
+        TerrainVertexOffset brBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, block, 10, 10, 100, 100);
 
-        Assert.AreEqual(Vector3.zero, tlBlock);
-        Assert.AreEqual(Vector3.zero, trBlock);
-        Assert.AreEqual(Vector3.zero, blBlock);
-        Assert.AreEqual(Vector3.zero, brBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, tlBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, trBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, blBlock);
+        Assert.AreEqual(TerrainVertexOffset.Zero, brBlock);
     }
 
     [Test]
-    public void ComputeOffset_AllFourAreCause_ReturnsZero()
+    public void ComputeOffset_RoundableLooseCell_ReturnsZero()
     {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        int worldX = 15;
-        int worldY = 25;
+        var cause = new CachedCellData
+        {
+            Distortion = CellDistortionType.Cause,
+            Type = CellType.Rock,
+        };
+        var lava = new CachedCellData
+        {
+            Distortion = CellDistortionType.Cause,
+            Type = CellType.Lava,
+        };
 
-        // Upstream (15bced90): четыре источника вокруг — вершина не сдвигается.
-        Vector3 result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, worldX, worldY, 100, 100);
+        TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(
+            lava,
+            cause,
+            cause,
+            cause,
+            10,
+            10,
+            100,
+            100);
 
-        Assert.AreEqual(Vector3.zero, result);
+        Assert.AreEqual(TerrainVertexOffset.Zero, result);
     }
 
+    // Узел внутри сплошного массива. Оригинал Mines (TerrainRenderer.GetDistortion,
+    // первая ветка) двигает его свободно в обе стороны; именно эта ветка делает
+    // кристалл цельным камнем, а не плиткой. Раньше здесь стоял ноль, и
+    // внутренность любого массива оставалась идеальной решёткой.
     [Test]
-    public void ComputeOffset_TwoOppositeAreCause_ReturnsZero()
+    public void ComputeOffset_AllFourAreCause_JittersFreely()
     {
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        var none = new CachedCellData { Distortion = (CellDistortionType)0 };
+        int limit = 3 * TerrainVertexDistortionCalculator.DistortionStrengthSteps;
+        int moved = 0;
+        bool negativeX = false;
+        bool positiveX = false;
+        bool negativeY = false;
+        bool positiveY = false;
 
-        Vector3 diagonal1 = TerrainVertexDistortionCalculator.ComputeOffset(cause, none, none, cause, 10, 10, 100, 100);
-        Vector3 diagonal2 = TerrainVertexDistortionCalculator.ComputeOffset(none, cause, cause, none, 10, 10, 100, 100);
+        for (int worldX = 1; worldX <= 40; worldX++)
+        {
+            for (int worldY = 1; worldY <= 40; worldY++)
+            {
+                TerrainVertexOffset result = TerrainVertexDistortionCalculator.ComputeOffset(
+                    cause, cause, cause, cause, worldX, worldY, 100, 100);
 
-        Assert.AreEqual(Vector3.zero, diagonal1);
-        Assert.AreEqual(Vector3.zero, diagonal2);
-    }
+                Assert.That(result.XSteps, Is.InRange(-limit, limit), $"X at {worldX},{worldY}");
+                Assert.That(result.YSteps, Is.InRange(-limit, limit), $"Y at {worldX},{worldY}");
+                Assert.That(result.ZSteps, Is.Zero, $"Z at {worldX},{worldY}");
 
-    [Test]
-    public void ComputeOffset_TopAdjacentCause_PushesDown()
-    {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        var none = new CachedCellData { Distortion = (CellDistortionType)0 };
-        int worldX = 12;
-        int worldY = 18;
+                if (result != TerrainVertexOffset.Zero)
+                {
+                    moved++;
+                }
 
-        float expectedRy = TerrainVertexDistortionCalculator.RandYd(worldX, worldY) / 16f;
-        var expected = new Vector3(0, -expectedRy, 0);
+                negativeX |= result.XSteps < 0;
+                positiveX |= result.XSteps > 0;
+                negativeY |= result.YSteps < 0;
+                positiveY |= result.YSteps > 0;
+            }
+        }
 
-        Vector3 result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, none, none, worldX, worldY, 100, 100);
+        Assert.That(moved, Is.GreaterThan(0), "Ни один узел внутри массива не сдвинулся");
 
-        Assert.AreEqual(expected, result);
+        // Джиттер обязан быть центрирован. Потеряется вычитание середины —
+        // и весь массив уедет вправо-вверх целиком вместо того, чтобы
+        // колыхаться на месте; диапазон при этом останется прежним, поэтому
+        // одной проверки границ мало.
+        Assert.That(negativeX && positiveX, Is.True, "Джиттер по X только в одну сторону");
+        Assert.That(negativeY && positiveY, Is.True, "Джиттер по Y только в одну сторону");
     }
 
     [Test]
@@ -112,4 +145,72 @@ public class TerrainVertexDistortionCalculatorTests
             }
         }
     }
+
+    [Test]
+    public void TerrainVertexOffset_ConvertsStepsToWorldOffset()
+    {
+        Vector3 result = new TerrainVertexOffset(1, -3, 6).ToVector3();
+
+        Assert.That(result.x, Is.EqualTo(1f / 32f).Within(0.000001f));
+        Assert.That(result.y, Is.EqualTo(-3f / 32f).Within(0.000001f));
+        Assert.That(result.z, Is.EqualTo(6f / 32f).Within(0.000001f));
+    }
+    [TestCase(CellType.BlackBoulder1)]
+    [TestCase(CellType.BlackBoulder2)]
+    [TestCase(CellType.BlackBoulder3)]
+    [TestCase(CellType.MetalBoulder1)]
+    [TestCase(CellType.MetalBoulder2)]
+    [TestCase(CellType.MetalBoulder3)]
+    [TestCase(CellType.Boulder1)]
+    [TestCase(CellType.Boulder2)]
+    [TestCase(CellType.Boulder3)]
+    [TestCase(CellType.DeepMagmaBoulder)]
+    [TestCase(CellType.AliveCyan)]
+    [TestCase(CellType.AliveRed)]
+    [TestCase(CellType.AliveViol)]
+    [TestCase(CellType.AliveNigger)]
+    [TestCase(CellType.AliveWhite)]
+    [TestCase(CellType.AliveRainbow)]
+    [TestCase(CellType.AliveBlue)]
+    [TestCase(CellType.QuadBlock)]
+    [TestCase(CellType.Support)]
+    [TestCase(CellType.MilitaryBlockFrame)]
+    [TestCase(CellType.MilitaryBlock)]
+    [TestCase(CellType.GreenBlock)]
+    [TestCase(CellType.YellowBlock)]
+    [TestCase(CellType.FedBlock)]
+    [TestCase(CellType.RedBlock)]
+    [TestCase(CellType.BuildingWall)]
+    [TestCase(CellType.BuildingDoor)]
+    [TestCase(CellType.BuildingCorner)]
+    [TestCase(CellType.BuildingRoad)]
+    [TestCase(CellType.Gate)]
+    [TestCase(CellType.TeleportBlock)]
+    [TestCase(CellType.Box)]
+    public void FixedSilhouettePinsEverySharedCornerEvenWithServerCauseFlag(CellType type)
+    {
+        foreach (CellDistortionType configured in new[] { CellDistortionType.Neutral, CellDistortionType.Cause })
+        {
+            var fixedCell = new CachedCellData { Type = type, Distortion = configured };
+            Assert.That(TerrainVertexDistortionCalculator.IsCause(fixedCell), Is.False);
+            for (int corner = 0; corner < 4; corner++)
+            {
+                var cells = new CachedCellData[4];
+                cells[corner] = fixedCell;
+                cells[(corner + 1) % 4] = new CachedCellData
+                {
+                    Type = CellType.Green,
+                    Distortion = CellDistortionType.Cause,
+                };
+                for (int seed = 1; seed <= 16; seed++)
+                {
+                    TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(
+                        cells[0], cells[1], cells[2], cells[3], seed * 17, seed * 29);
+                    Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero),
+                        $"{type}, config {configured}, shared corner {corner}, seed {seed}");
+                }
+            }
+        }
+    }
+
 }

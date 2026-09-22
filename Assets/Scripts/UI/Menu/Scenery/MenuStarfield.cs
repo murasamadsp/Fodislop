@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.UI
+namespace Kern.UI
 {
     // Draws the menu's starfield into a RenderTexture with no camera and no
     // geometry, so MainMenu can show it as a plain UI Image.
@@ -31,7 +31,7 @@ namespace Fodinae.UI
         private static readonly int _ParallaxOffsetID = Shader.PropertyToID("_ParallaxOffset");
 
         [SerializeField]
-        private Material? _starfieldMaterial;
+        private Material? _starfieldMaterial = null;
         private Material? _runtimeMaterial;
         private Material? _runtimeMaterialSource;
 

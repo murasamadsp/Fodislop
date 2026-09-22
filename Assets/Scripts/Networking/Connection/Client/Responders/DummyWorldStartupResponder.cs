@@ -1,10 +1,11 @@
 #nullable enable
 
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae;
-using Fodinae.Core.Interfaces;
+using Kern;
+using Kern.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -21,34 +22,31 @@ namespace MinesServer.Networking.Connection.Client;
 
 internal sealed class DummyWorldStartupResponder(
     IAsyncOperationSupervisor operations,
+    IDummyClock clock,
     IItemCatalog itemCatalog,
     DummyWorldSimulationState worldState,
     DummyPlayerSimulationState playerState,
     DummyBuffManager buffManager,
     DummyChatSimulator chatSimulator,
     DummyInventoryResponder inventoryResponder,
+    DummyMissionRunner missionRunner,
     List<(ushort X, ushort Y)> teleportPositions,
     Action<ServerPacket> sendPacket,
     Func<int, bool> loopAlive)
 {
-    private static readonly System.Random _Rng = new();
-
     public async UniTask InitializeAsync(
         string worldCodeName,
         int lifecycleVersion,
         string playerName,
         long level,
         long currency,
-        ushort playerBotId)
+        ushort playerBotID)
     {
         DummyWorldDescriptor world = await worldState.OpenAsync(worldCodeName);
-        SendWorldIdentity(worldCodeName, world, playerName, playerBotId);
-
-        // Bots disabled for performance testing.
-        // StartBotSimulation(lifecycleVersion);
+        SendWorldIdentity(worldCodeName, world, playerName, playerBotID);
 
         playerState.SetPosition(25, 50);
-        sendPacket(new ServerPacket(new AggressionStatePacket(false)));
+        StartBotSimulation(lifecycleVersion);
         sendPacket(new ServerPacket(new AutoMineStatePacket(false)));
         sendPacket(new ServerPacket(new DailyBonusStatePacket(false)));
         buffManager.ResetDailyBonus();
@@ -59,10 +57,10 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(new BasketPacket(50000, basketContents)));
         sendPacket(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
         sendPacket(new ServerPacket(new LevelPacket(level)));
-        worldState.SendChunksAround(playerState.X, playerState.Y, sendPacket);
+        await worldState.SendChunksAroundAsync(playerState.X, playerState.Y, sendPacket);
 
         SendSkillProgress();
-        chatSimulator.SendChatMock();
+        chatSimulator.SendChatMock(lifecycleVersion);
         StartStatusSimulation(lifecycleVersion);
 
         sendPacket(new ServerPacket(
@@ -86,6 +84,7 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(new ChatListPacket(
             [("global", "Global", placeholder)])));
         SendTestPacks();
+        missionRunner.StartPersistentMission(playerState.X, playerState.Y);
         SendWorldMusic();
     }
 
@@ -117,7 +116,7 @@ internal sealed class DummyWorldStartupResponder(
         string worldCodeName,
         DummyWorldDescriptor world,
         string playerName,
-        ushort playerBotId)
+        ushort playerBotID)
     {
         sendPacket(new ServerPacket(new WorldInitPacket(
             worldCodeName,
@@ -126,16 +125,16 @@ internal sealed class DummyWorldStartupResponder(
             (ushort)world.Height,
             world.CellConfigurations,
             [[37, 38, 106]])));
-        sendPacket(new ServerPacket(new PlayerInfoPacket(999, playerBotId, playerName)));
+        sendPacket(new ServerPacket(new PlayerInfoPacket(999, playerBotID, playerName)));
         sendPacket(new ServerPacket(new RobotInfoPacket(
-            playerBotId,
+            playerBotID,
             999,
             1,
             "Skin/bee.png",
             "Tail/default.png",
             string.Empty)));
         sendPacket(new ServerPacket(new HBPacket([
-            new RobotPositionPacket(playerBotId, 25, 50, 0),
+            new RobotPositionPacket(playerBotID, 25, 50, 0),
         ])));
     }
 
@@ -143,11 +142,14 @@ internal sealed class DummyWorldStartupResponder(
     {
         operations.Run(
             "dummy_bot_loop",
-            _ => DummyBotRunner.RunCircularBots(
+            cancellationToken => DummyBotRunner.RunCircularBots(
                 6,
                 lifecycleVersion,
+                clock,
                 sendPacket,
-                () => loopAlive(lifecycleVersion)));
+                () => loopAlive(lifecycleVersion),
+                () => (playerState.X, playerState.Y),
+                cancellationToken));
     }
 
     private void StartStatusSimulation(int lifecycleVersion)
@@ -156,8 +158,8 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(default(ClearStatusPacket)));
         buffManager.SendStatusPackets();
         buffManager.StartBuffLoop(lifecycleVersion);
-        operations.Run("dummy_ping_loop", _ => SendPingLoopAsync(lifecycleVersion));
-        operations.Run("dummy_online_loop", _ => SendOnlineLoopAsync(lifecycleVersion));
+        operations.Run("dummy_ping_loop", cancellationToken => SendPingLoopAsync(lifecycleVersion, cancellationToken));
+        operations.Run("dummy_online_loop", cancellationToken => SendOnlineLoopAsync(lifecycleVersion, cancellationToken));
         buffManager.StartDailyBonusLoop(lifecycleVersion);
     }
 
@@ -188,26 +190,26 @@ internal sealed class DummyWorldStartupResponder(
         ])));
     }
 
-    private async UniTask SendPingLoopAsync(int lifecycleVersion)
+    private async UniTask SendPingLoopAsync(int lifecycleVersion, CancellationToken cancellationToken)
     {
-        await UniTask.Delay(2000);
+        await clock.Delay(2000, cancellationToken);
         while (loopAlive(lifecycleVersion))
         {
             sendPacket(new ServerPacket(new PingPacket(
-                DateTimeOffset.UtcNow.Ticks,
-                _Rng.Next(15, 60))));
-            await UniTask.Delay(5000);
+                clock.UtcNowTicks,
+                clock.Random.Next(15, 60))));
+            await clock.Delay(5000, cancellationToken);
         }
     }
 
-    private async UniTask SendOnlineLoopAsync(int lifecycleVersion)
+    private async UniTask SendOnlineLoopAsync(int lifecycleVersion, CancellationToken cancellationToken)
     {
-        await UniTask.Delay(3000);
+        await clock.Delay(3000, cancellationToken);
         while (loopAlive(lifecycleVersion))
         {
-            ushort players = (ushort)(38 + _Rng.Next(0, 9));
+            ushort players = (ushort)(38 + clock.Random.Next(0, 9));
             sendPacket(new ServerPacket(new OnlinePacket(players, 3)));
-            await UniTask.Delay(12000);
+            await clock.Delay(12000, cancellationToken);
         }
     }
 }

@@ -2,16 +2,15 @@
 
 using System;
 using UnityEngine;
-using Fodinae.Core;
+using Kern.Core;
 
-namespace Fodinae.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing;
 public static class PostProcessRuntimeState
 {
     internal static Camera? MainCamera { get; private set; }
     private static uint _cameraGeneration;
     private static uint _pipelineGeneration;
 
-    private static float _displayGamma = DisplaySettings.DefaultGamma;
     private static float _displayPaperWhiteNits = DisplaySettings.DefaultPaperWhite;
     private static float _displayPeakBrightnessNits = DisplaySettings.DefaultPeakBrightness;
     private static ColorGradeSnapshot _colorGrade = ColorGradeSnapshot.FromLook();
@@ -27,8 +26,6 @@ public static class PostProcessRuntimeState
     internal static uint CameraGeneration => _cameraGeneration;
 
     internal static uint PipelineGeneration => _pipelineGeneration;
-
-    internal static float DisplayGamma => _displayGamma;
 
     internal static float DisplayPaperWhiteNits => _displayPaperWhiteNits;
 
@@ -54,6 +51,19 @@ public static class PostProcessRuntimeState
     // Отладочный A/B: проходы постпроцесса не ставятся в очередь, камера без
     // постобработки URP. Меряет цену самих проходов, а не эффектов.
     public static bool SkipPasses { get; set; }
+
+    // Калибровочный узор дисплея. Состояние держится здесь, а не в UI:
+    // рисует его проход вывода, и жить оно обязано там же, где остальные
+    // решения о кадре. CalibrationValue — выбранное значение в нитах.
+    public static CalibrationPattern CalibrationMode { get; private set; }
+
+    public static float CalibrationValue { get; private set; }
+
+    public static void SetCalibrationPattern(CalibrationPattern pattern, float valueNits)
+    {
+        CalibrationMode = pattern;
+        CalibrationValue = valueNits;
+    }
 
     public static bool TemporaryBypass
     {
@@ -145,7 +155,6 @@ public static class PostProcessRuntimeState
         MainCamera = null;
         _cameraGeneration = 0;
         _pipelineGeneration = 0;
-        _displayGamma = DisplaySettings.DefaultGamma;
         _displayPaperWhiteNits = DisplaySettings.DefaultPaperWhite;
         _displayPeakBrightnessNits = DisplaySettings.DefaultPeakBrightness;
         _colorGrade = ColorGradeSnapshot.FromLook();
@@ -158,15 +167,12 @@ public static class PostProcessRuntimeState
         _bypassPostProcessEffects = false;
         _temporaryBypass = false;
         SkipPasses = false;
+        CalibrationMode = CalibrationPattern.Off;
+        CalibrationValue = 0f;
     }
 
-    public static void SetDisplayCalibration(float gamma, float paperWhiteNits, float peakBrightnessNits)
+    public static void SetDisplayCalibration(float paperWhiteNits, float peakBrightnessNits)
     {
-        float sanitizedGamma = FiniteClamp(
-            gamma,
-            DisplaySettings.GammaMin,
-            DisplaySettings.GammaMax,
-            DisplaySettings.DefaultGamma);
         float sanitizedPaperWhite = FiniteClamp(
             paperWhiteNits,
             DisplaySettings.PaperWhiteMin,
@@ -179,14 +185,12 @@ public static class PostProcessRuntimeState
                 DisplaySettings.PeakBrightnessMin,
                 DisplaySettings.PeakBrightnessMax,
                 DisplaySettings.DefaultPeakBrightness));
-        if (Mathf.Approximately(_displayGamma, sanitizedGamma) &&
-            Mathf.Approximately(_displayPaperWhiteNits, sanitizedPaperWhite) &&
+        if (Mathf.Approximately(_displayPaperWhiteNits, sanitizedPaperWhite) &&
             Mathf.Approximately(_displayPeakBrightnessNits, sanitizedPeakBrightness))
         {
             return;
         }
 
-        _displayGamma = sanitizedGamma;
         _displayPaperWhiteNits = sanitizedPaperWhite;
         _displayPeakBrightnessNits = sanitizedPeakBrightness;
         InvalidateTemporalHistory();

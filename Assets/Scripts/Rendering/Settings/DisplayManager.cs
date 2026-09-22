@@ -3,16 +3,16 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
-using Fodinae.Rendering.PostProcessing;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.Rendering.PostProcessing;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using VContainer.Unity;
 
-namespace Fodinae.Rendering
+namespace Kern.Rendering
 {
-    // Чистый сервис контейнера (SCENE_STANDARD.md §1): настройки вывода
+    // Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): настройки вывода
     // применяются при старте scope.
     public sealed class DisplayManager : IStartable
     {
@@ -30,18 +30,52 @@ namespace Fodinae.Rendering
             ApplyDisplaySettings();
         }
 
-        public static void ApplyInitialSettings(DisplaySettings display)
+        // Возвращает true, если калибровка в настройках была изменена —
+        // автоопределением дисплея или починкой негодного значения. Вызывающий
+        // обязан такое изменение сохранить: обе процедуры пишут прямо в объект
+        // настроек, минуя UpdateSection, то есть без SaveDeferred. Раньше это
+        // значило, что определённая яркость дисплея жила только до выхода из
+        // игры, а NaN в файле чинился в памяти на каждом запуске и оставался
+        // в файле навсегда.
+        public static bool ApplyInitialSettings(DisplaySettings display)
         {
             if (display == null)
             {
-                return;
+                return false;
+            }
+
+            float previousPaperWhite = display.PaperWhiteNits;
+            float previousPeak = display.PeakBrightnessNits;
+
+            // Безопасный старт. Флаг переживает выход из игры и означает, что
+            // в прошлый раз переключение режима вывода никто не подтвердил.
+            // Единственное безопасное прочтение этого — экран после
+            // переключения был нечитаем, поэтому запускаемся в SDR. Иначе
+            // человек с несовместимым выводом крутится в чёрном экране: игра
+            // каждый запуск честно применяет сохранённую настройку.
+            bool abandonedSwitch = display.HDRSwitchPending;
+            if (abandonedSwitch)
+            {
+                display.HDREnabled = false;
+                display.HDRSwitchPending = false;
+                Debug.LogWarning(
+                    "[HDR] The previous session did not confirm a display mode switch; " +
+                    "starting in SDR.");
             }
 
             HDROutput.SetEnabled(display.HDREnabled);
             AutoDetectDisplayCapabilities(display);
             SanitizeCalibration(display);
+
+            // float.Equals, а не оператор ==: здесь важен сам факт записи,
+            // включая починку NaN, который оператору не равен ничему, в том
+            // числе самому себе, и такая замена осталась бы незамеченной.
+            bool changed =
+                abandonedSwitch ||
+                !previousPaperWhite.Equals(display.PaperWhiteNits) ||
+                !previousPeak.Equals(display.PeakBrightnessNits);
+
             PostProcessRuntimeState.SetDisplayCalibration(
-                display.Gamma,
                 display.PaperWhiteNits,
                 display.PeakBrightnessNits);
 
@@ -53,6 +87,8 @@ namespace Fodinae.Rendering
                 int refresh = display.RefreshRate > 0 ? display.RefreshRate : (int)Screen.currentResolution.refreshRateRatio.value;
                 Screen.SetResolution(display.ResolutionWidth, display.ResolutionHeight, mode, new RefreshRate { numerator = (uint)Mathf.Max(1, refresh), denominator = 1 });
             }
+
+            return changed;
         }
 
         public static void ApplyFrameTiming(DisplaySettings display)
@@ -75,7 +111,11 @@ namespace Fodinae.Rendering
             }
 
             DisplaySettings display = _clientConfig.Config.Display;
-            ApplyInitialSettings(display);
+            if (ApplyInitialSettings(display))
+            {
+                _clientConfig.SaveDeferred();
+            }
+
             ApplyPixelSampling(display.PixelSampling);
             HDROutput.ConfigureCamera(_gameplayCamera.Camera);
         }
@@ -142,7 +182,15 @@ namespace Fodinae.Rendering
                 return HDROutput.ApplyRequestResult.RejectedUnsupported;
             }
 
-            _clientConfig.UpdateSection(config => config.Display, display => display.HDREnabled = enabled);
+            // Save, а не SaveDeferred: между этой строкой и подтверждением
+            // экран может стать нечитаемым, и отложенная запись до диска не
+            // доедет. Метка обязана лежать в файле раньше, чем сменится режим.
+            _clientConfig.UpdateSection(config => config.Display, display =>
+            {
+                display.HDREnabled = enabled;
+                display.HDRSwitchPending = true;
+            });
+            _clientConfig.Save();
 
             HDROutput.ApplyRequestResult result = HDROutput.SetEnabled(enabled);
             if (result == HDROutput.ApplyRequestResult.RejectedNotSwitchable)
@@ -164,24 +212,19 @@ namespace Fodinae.Rendering
             return result;
         }
 
-        public void SetGamma(float gamma)
+        // Снимает метку безопасного старта: человек ответил на окно
+        // подтверждения, значит экран читается. Вызывается по обоим исходам —
+        // и когда режим оставили, и когда откатили: откат тоже переключение,
+        // и незакрытая метка выключила бы HDR на следующем запуске зря.
+        public void ConfirmHDRSwitchSeen()
         {
-            if (_clientConfig?.Config == null)
+            if (_clientConfig?.Config == null || !_clientConfig.Config.Display.HDRSwitchPending)
             {
                 return;
             }
 
-            float sanitized = FiniteClamp(
-                gamma,
-                DisplaySettings.GammaMin,
-                DisplaySettings.GammaMax,
-                DisplaySettings.DefaultGamma);
-            _clientConfig.UpdateSection(config => config.Display, display => display.Gamma = sanitized);
-            PostProcessRuntimeState.SetDisplayCalibration(
-                sanitized,
-                _clientConfig.Config.Display.PaperWhiteNits,
-                _clientConfig.Config.Display.PeakBrightnessNits);
-            Debug.Log($"[DisplayManager] SetGamma: {sanitized}");
+            _clientConfig.UpdateSection(config => config.Display, display => display.HDRSwitchPending = false);
+            _clientConfig.Save();
         }
 
         public void SetPaperWhiteNits(float paperWhiteNits)
@@ -191,25 +234,24 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            float sanitizedPaperWhite = FiniteClamp(
+            float sanitizedPaperWhite = QuantizeNits(FiniteClamp(
                 paperWhiteNits,
                 DisplaySettings.PaperWhiteMin,
                 DisplaySettings.PaperWhiteMax,
-                DisplaySettings.DefaultPaperWhite);
+                DisplaySettings.DefaultPaperWhite));
             float sanitizedPeak = Mathf.Max(
                 sanitizedPaperWhite,
-                FiniteClamp(
+                QuantizeNits(FiniteClamp(
                     _clientConfig.Config.Display.PeakBrightnessNits,
                     DisplaySettings.PeakBrightnessMin,
                     DisplaySettings.PeakBrightnessMax,
-                    DisplaySettings.DefaultPeakBrightness));
+                    DisplaySettings.DefaultPeakBrightness)));
             _clientConfig.UpdateSection(config => config.Display, display =>
             {
                 display.PaperWhiteNits = sanitizedPaperWhite;
                 display.PeakBrightnessNits = sanitizedPeak;
             });
             PostProcessRuntimeState.SetDisplayCalibration(
-                _clientConfig.Config.Display.Gamma,
                 sanitizedPaperWhite,
                 sanitizedPeak);
             Debug.Log(
@@ -224,25 +266,24 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            float paperWhite = FiniteClamp(
+            float paperWhite = QuantizeNits(FiniteClamp(
                 _clientConfig.Config.Display.PaperWhiteNits,
                 DisplaySettings.PaperWhiteMin,
                 DisplaySettings.PaperWhiteMax,
-                DisplaySettings.DefaultPaperWhite);
+                DisplaySettings.DefaultPaperWhite));
             float sanitizedPeak = Mathf.Max(
                 paperWhite,
-                FiniteClamp(
+                QuantizeNits(FiniteClamp(
                     peakBrightnessNits,
                     DisplaySettings.PeakBrightnessMin,
                     DisplaySettings.PeakBrightnessMax,
-                    DisplaySettings.DefaultPeakBrightness));
+                    DisplaySettings.DefaultPeakBrightness)));
             _clientConfig.UpdateSection(config => config.Display, display =>
             {
                 display.PaperWhiteNits = paperWhite;
                 display.PeakBrightnessNits = sanitizedPeak;
             });
             PostProcessRuntimeState.SetDisplayCalibration(
-                _clientConfig.Config.Display.Gamma,
                 paperWhite,
                 sanitizedPeak);
             Debug.Log($"[DisplayManager] SetPeakBrightnessNits: {sanitizedPeak}");
@@ -255,23 +296,18 @@ namespace Fodinae.Rendering
 
         private static void SanitizeCalibration(DisplaySettings display)
         {
-            display.Gamma = FiniteClamp(
-                display.Gamma,
-                DisplaySettings.GammaMin,
-                DisplaySettings.GammaMax,
-                DisplaySettings.DefaultGamma);
-            display.PaperWhiteNits = FiniteClamp(
+            display.PaperWhiteNits = QuantizeNits(FiniteClamp(
                 display.PaperWhiteNits,
                 DisplaySettings.PaperWhiteMin,
                 DisplaySettings.PaperWhiteMax,
-                DisplaySettings.DefaultPaperWhite);
+                DisplaySettings.DefaultPaperWhite));
             display.PeakBrightnessNits = Mathf.Max(
                 display.PaperWhiteNits,
-                FiniteClamp(
+                QuantizeNits(FiniteClamp(
                     display.PeakBrightnessNits,
                     DisplaySettings.PeakBrightnessMin,
                     DisplaySettings.PeakBrightnessMax,
-                    DisplaySettings.DefaultPeakBrightness));
+                    DisplaySettings.DefaultPeakBrightness)));
         }
 
         private static float FiniteClamp(
@@ -282,6 +318,14 @@ namespace Fodinae.Rendering
             float.IsNaN(value) || float.IsInfinity(value)
                 ? fallback
                 : Mathf.Clamp(value, minimum, maximum);
+
+        // Квантование стоит здесь, а не в ползунке: ползунок не единственный
+        // источник этих величин. Их же пишет автоопределение дисплея, которое
+        // отдаёт сырые числа системы вроде 160.0, и калибровочный экран.
+        // Кратность обязана держаться независимо от того, кто записал.
+        private static float QuantizeNits(float value) =>
+            Mathf.Round(value / DisplaySettings.BrightnessStepNits) *
+            DisplaySettings.BrightnessStepNits;
 
         private static FullScreenMode NormalizeFullScreenMode(FullScreenMode mode)
         {

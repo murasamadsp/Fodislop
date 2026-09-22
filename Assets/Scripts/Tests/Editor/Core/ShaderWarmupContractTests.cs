@@ -3,12 +3,12 @@
 using System.Collections;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
+using Kern.Core;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace Fodinae.Tests.Core;
+namespace Kern.Tests.Core;
 
 public sealed class ShaderWarmupContractTests
 {
@@ -17,20 +17,24 @@ public sealed class ShaderWarmupContractTests
         ProjectRuntimeContracts.ShaderNames.Terrain,
         ProjectRuntimeContracts.ShaderNames.WorldSurface,
         ProjectRuntimeContracts.ShaderNames.WorldEntity,
-        ProjectRuntimeContracts.ShaderNames.DynamicEmission,
-        ProjectRuntimeContracts.ShaderNames.PlanetSurface,
-        ProjectRuntimeContracts.ShaderNames.PlanetAtmosphere,
         ProjectRuntimeContracts.ShaderNames.Starfield,
         ProjectRuntimeContracts.ShaderNames.MenuLineUnlit,
         ProjectRuntimeContracts.ShaderNames.UnpremultiplyAlpha,
+        ProjectRuntimeContracts.ShaderNames.MissionVirtualRing,
     ];
 
     private static readonly string[] _RequiredLightingKernels =
     [
         "SolveCascade",
+        "ScrollRadianceAtlas",
+        "SolveDynamicLighting",
+        "ComposeDynamicLighting",
+        "TraceDynamicPolar",
+        "ClearDynamicDirect",
         "ResolveDirect",
-        "SolveDiffuseBounce",
+        "ResolveTransmissionDebug",
         "CompositeLighting",
+        "BuildCellSolidMask",
     ];
 
     [Test]

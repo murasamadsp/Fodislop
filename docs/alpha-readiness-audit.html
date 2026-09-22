@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fodinae — Alpha readiness audit</title>
+<style>
+:root{color-scheme:dark;--bg:#101318;--panel:#181d24;--line:#303846;--text:#e8edf4;--muted:#9ca8b8;--ok:#62d394;--warn:#f1c75b;--bad:#ff7777;--accent:#8bb8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1280px;margin:0 auto;padding:40px 24px 72px}h1{font-size:34px;line-height:1.15;margin:0 0 8px}h2{font-size:22px;margin:34px 0 12px;border-bottom:1px solid var(--line);padding-bottom:8px}h3{font-size:17px;margin:24px 0 8px}.meta{color:var(--muted);margin:0 0 26px}.lead{font-size:18px;max-width:920px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin:14px 0}.danger{border-left:4px solid var(--bad)}.warning{border-left:4px solid var(--warn)}.positive{border-left:4px solid var(--ok)}table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);font-size:14px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{color:var(--muted);font-weight:600}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#c6d8ff;background:#202733;padding:1px 4px;border-radius:4px}a{color:var(--accent)}.status{font-weight:700;white-space:nowrap}.ok{color:var(--ok)}.partial{color:var(--warn)}.blocked{color:var(--bad)}.unknown{color:var(--muted)}.small{font-size:13px;color:var(--muted)}ul{margin:8px 0 0 22px;padding:0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;color:#c9d5e6}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}.metric b{display:block;font-size:25px}.metric span{color:var(--muted)}@media(max-width:760px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:25px 14px}table{font-size:13px}}
+</style>
+</head>
+<body>
+<main>
+<h1>Fodinae — аудит Alpha Ready</h1>
+<p class="meta">Срез репозитория: 20 сентября 2026 · статический аудит без Unity Editor, публичного сервера и сборки.</p>
+<p class="lead">Клиент не подтверждён как Alpha Ready. В коде есть значительная offline/dummy-вертикаль и архитектурные контракты, но обязательный публичный серверный контур, полная функциональность программатора, реальные миссии, обучение, производительность и две production-сборки доказательствами не закрыты.</p>
+
+<div class="summary">
+<div class="metric"><b class="partial">0</b><span>ошибок архитектурного гейта</span></div>
+<div class="metric"><b class="partial">3</b><span>предупреждения архитектурного гейта</span></div>
+<div class="metric"><b class="partial">manual</b><span>CI запускается только вручную</span></div>
+<div class="metric"><b class="blocked">0</b><span>подтверждённых production-билдов</span></div>
+</div>
+
+<h2>Блокеры перед замерами</h2>
+<div class="card danger">
+<h3>Публичный сервер не задан</h3>
+<p><code>ProjectRuntimeContracts.ClientConfiguration</code> задаёт <code>DefaultServerHost = "127.0.0.1"</code>, <code>DefaultServerPort = 8090</code> и <code>DefaultUseDummyConnection = true</code>. Это не соответствует EDGE-02 и рамке альфы: чистый билд по умолчанию не подключается к одному публичному production-адресу.</p>
+<p class="small">Доказательство: <a href="../Assets/Scripts/Core/Interfaces/Contracts/ProjectRuntimeContracts.cs">ProjectRuntimeContracts.cs</a>, строки 28–40.</p>
+</div>
+<div class="card danger">
+<h3>Архитектурный гейт жёлтый</h3>
+<p><code>dotnet run --project tools/Kern.ArchitectureLinter -- --project-root .</code> завершился с кодом 0 после появления <code>TerrainSheetCatalog.cs.meta</code>. Остались три предупреждения: <code>PostProcessRenderPass.cs</code> имеет 501 строку; два UI guard-а молча возвращают управление при отсутствии <code>rootVisualElement</code>.</p>
+<p class="small">Отчёт SARIF сохранён во временный путь <code>/tmp/fodinae-architecture-lint.sarif</code>; в репозиторий не добавлялся.</p>
+</div>
+<div class="card positive">
+<h3>DEATH-00 очищен статически</h3>
+<p>Из клиентского исходника удалены обработка клавиши L, состояние и HUD агрессии, операторы программатора, локализация, <code>AggressionStatePacket</code> processor/подписка и dummy-поток. Поиск по <code>Assets</code> больше не находит агрессию или PvP-переключатель.</p>
+<p class="small">Проверка: <code>rg -n 'Aggression|aggression|Agression|EnableAggression|DisableAggression' Assets</code> не вернул строк.</p>
+</div>
+<div class="card warning">
+<h3>Результаты CI ещё не получены</h3>
+<p>Workflow теперь запускается на push, pull_request и nightly schedule. Фактические Unity-тесты, soak и production-сборки ещё не получены из CI.</p>
+<p class="small">Доказательство: <a href="../.github/workflows/ci.yml">ci.yml</a>, строки 3–8.</p>
+</div>
+<div class="card danger">
+<h3>Release-сборка намеренно остановится до настройки endpoint</h3>
+<p>Добавлен <code>ProductionServerEndpointValidator</code>: Windows x64 и macOS ARM64 не соберутся с dummy transport, localhost/loopback или недопустимым портом. Сейчас validator закономерно отклонит сборку, потому что production host отсутствует.</p>
+</div>
+<div class="card positive">
+<h3>Меню alpha-сервера упрощено</h3>
+<p>Из MainMenu удалены альтернативные серверы и ручной ввод IP. Оставлены одна карточка alpha-сервера и отдельная dev-карточка DUMMY OFFLINE; dummy не считается production-подключением.</p>
+</div>
+
+<h2>Проверка критериев</h2>
+<p class="small">«Частично» означает наличие клиентского кода или dummy-сценария без доказательства against public server. «Не проверено» означает, что критерий требует Unity, сборки, реального сервера, ручного сценария или performance-замера.</p>
+<table>
+<thead><tr><th>Критерии</th><th>Статус</th><th>Доказательство и недостающая проверка</th></tr></thead>
+<tbody>
+<tr><td>EDGE-01, EDGE-04, EDGE-06</td><td class="status unknown">Не проверено</td><td>Нужны запуск Windows/macOS, прохождение onboarding и проверка переходов.</td></tr>
+<tr><td>EDGE-02</td><td class="status partial">Структура закрыта, endpoint заблокирован</td><td>MainMenu содержит одну alpha-карточку и отдельный dev-only Dummy. Ручного IP и списка production-серверов нет; дефолт остаётся localhost/dummy до появления публичного адреса.</td></tr>
+<tr><td>EDGE-03</td><td class="status partial">Частично</td><td>Есть <code>AuthToken6</code>, <code>AuthTokenPacket</code> и ClientHello в клиенте/dummy. Первый вход и повторный вход против production-сервера не подтверждены.</td></tr>
+<tr><td>EDGE-05</td><td class="status partial">Частично</td><td>Линтер проверяет локализацию и проходит правило локализации; финальность русских текстов и zh/zh-hant ручным сценарием не проверена.</td></tr>
+<tr><td>MOVE-01, MOVE-02, MOVE-04</td><td class="status partial">Частично</td><td>Есть <code>MovePacket</code>, cooldown 0.3 с, input/UI guards и координатные сервисы. RTT ≤150 мс, серверные подтверждения и отсутствие телепортов требуют публичного сценария.</td></tr>
+<tr><td>MOVE-06</td><td class="status partial">Клиентский путь исправлен</td><td>Клик по миру теперь использует <code>CoordinateUtils.UnityToServerPos</code> и проверку границ; runtime-сценарий на границах мира ещё требуется.</td></tr>
+<tr><td>MOVE-05</td><td class="status partial">Клиентский guard усилен</td><td><code>PlayerInputHandler</code> теперь обнуляет движение при <code>IInputBlocker.IsInputBlocked</code>; ручное подтверждение фокуса UI и клавиатурной навигации ещё требуется.</td></tr>
+<tr><td>MOVE-03</td><td class="status partial">Частично</td><td>Клиент отправляет <code>ActionClientPacket(x,y,new BzPacket())</code>, а <code>MapRegionProcessor</code> принимает вырожденный регион 1×1; dummy отправляет перезапись клетки. Клиент теперь обрабатывает production <code>VFXPacket</code> в HB-пачке, но реальный <code>DamageCell</code>, прочность, серверная FX-эмиссия и единственный пакет перезаписи ещё не подтверждены.</td></tr>
+<tr><td>DEATH-00</td><td class="status ok">Закрыт статически</td><td>Агрессия удалена из input, HUD, локального контракта, processor, dummy и программатора; ручное подтверждение отсутствия PvP на сервере ещё требуется.</td></tr>
+<tr><td>DEATH-01, DEATH-02</td><td class="status unknown">Не проверено</td><td>Источники урона и серверная политика смерти не подтверждены; остаётся открытый вопрос документа.</td></tr>
+<tr><td>INV-01</td><td class="status partial">Клиентский контракт исправлен</td><td>Модель резервирует 9 слотов хотбара и 54 слота инвентаря; UI всегда отображает фиксированные ячейки 9 + 6×9, включая пустые. Серверные изменения количества создают новый объект и гарантированно запускают обновление UI; сценарий операций и задержка ≤1 с ещё не подтверждены.</td></tr>
+<tr><td>INV-02</td><td class="status partial">Частично</td><td>Серверные обновления статов и HUD требуют ручного сценария против публичного сервера.</td></tr>
+<tr><td>INV-03</td><td class="status partial">Частично</td><td>Серверный крафт и расход ресурсов требуют ручного сценария против публичного сервера.</td></tr>
+<tr><td>INV-04</td><td class="status blocked">Протокол не найден</td><td>В клиентском исходнике нет production-пакетов операций Storage (положить/взять) и их процессора; есть только здание и dummy-сценарии. Нужен согласованный серверный контракт до ручной проверки.</td></tr>
+<tr><td>INV-05</td><td class="status partial">Частично</td><td>Выбор и использование отправляются серверными пакетами, а входящие изменения применяются через новые объекты с UI-событием. Для перемещения предметов и Storage нет production-пакетов, поэтому отсутствие потери при отказе сервера не доказано.</td></tr>
+<tr><td>WORLD-01..WORLD-07</td><td class="status partial">Частично</td><td>Есть WorldInit, MapStorage, region processors, chunk cache, CoordinateUtils и обработка server <code>VFXPacket</code> в HB-пачке. Размер 30 000×60 000, карты, dirty saves, камеру и lighting нужно подтвердить runtime-сценарием.</td></tr>
+<tr><td>ROB-01..ROB-03, ROB-05</td><td class="status partial">Клиентский протокол подключён, сервер не подтверждён</td><td>Редактор отправляет Save и отдельный Start/Stop; список вызывает Rename/Delete; добавлен scoped processor для UpdateProgram/ProgramState/BreakpointHit/ProgramMemory/OpenProgrammator и команд Pause/Step/QueryMemory. Неизвестная инструкция теперь даёт локализованное сообщение в редакторе. Dummy-сценарий отвечает тем же контрактом для offline-проверки. Серверный VM, фактические ID программ и ручной прогон против публичного сервера ещё не подтверждены.</td></tr>
+<tr><td>ROB-04</td><td class="status partial">Локальное хранение исправлено</td><td><code>programmator.json</code> теперь хранит список программ, загружается при создании store, пишет atomic temp + backup и читает прежний одиночный формат. Сервер остаётся источником факта выполнения.</td></tr>
+<tr><td>MIS-01..MIS-03</td><td class="status partial">Частично</td><td>Клиент принимает MissionInit, MissionProgress и MissionArrow; dummy их генерирует. Серверная выдача, сброс 18:00 МСК, награды и клановый контур не доказаны.</td></tr>
+<tr><td>ECO-01..ECO-02, ECO-04..ECO-05</td><td class="status partial">Частично</td><td>Есть OpenWindow/CloseWindow и dummy Storage/Crafter/Market/teleport сценарии. Серверная экономика, полный перечень зданий и отсутствие payment API не проверены.</td></tr>
+<tr><td>ECO-03</td><td class="status partial">Клиентский запрос подключён</td><td>ESC при открытом серверном окне проходит в существующий <code>ElementClickPacket(topTag, 0, ...)</code>; локальное окно не скрывается и закрывается только входящим <code>CloseWindowPacket</code>. Production-сервер должен подтвердить, что индекс 0 является его close-action для каждого window tag.</td></tr>
+<tr><td>CHAT-01</td><td class="status partial">Клиентский маршрут исправлен</td><td>Global отображается вкладкой; local открывается только клавишей <code>T</code> и остаётся floating-чатом для входящих локальных сообщений. История сохраняет и использует <code>ChatMessageListPacket.Tag</code> для global/local. Production-сервер и фактическая история каналов требуют ручного сценария.</td></tr>
+<tr><td>CHAT-02</td><td class="status partial">Частично</td><td>Фокус чата блокирует gameplay, Enter отправляет сообщение, подписки очищаются при уничтожении UI. Потеря сообщений под нагрузкой движения/копки требует публичного сценария.</td></tr>
+<tr><td>AUD-01..AUD-03</td><td class="status partial">Частично</td><td>В dummy создаются SFX/audio packets; FMOD банки и 3D-позиционирование в production build не проверены.</td></tr>
+<tr><td>SET-01</td><td class="status partial">Сохранение усилено</td><td>Текущий клиент использует schema v32; переход 31→32 мигрирует <code>TerrainSettings.EnableReliefRim</code> с авторским default <code>true</code>, запись атомарна и сохраняет исходный файл в <code>client_config.json.backup</code>. Более ранние схемы сбрасываются на defaults; требование Definition о полном наборе миграций schema v15 ещё не закрыто.</td></tr>
+<tr><td>SET-02</td><td class="status partial">Частично</td><td>Язык переключается через <code>OnLanguageChanged</code>, остальные настройки применяются рантаймом; ручная проверка полного набора без перезапуска ещё требуется.</td></tr>
+<tr><td>REC-01</td><td class="status partial">Клиентский маршрут усилен</td><td>Обычный разрыв TCP и серверный <code>DisconnectPacket</code> теперь показывают локализованную причину и запускают единый возврат в MainMenu; повторный переход защищён флагом. Production-сценарий разрыва и zombie subscriptions требуют ручной проверки.</td></tr>
+<tr><td>REC-02</td><td class="status unknown">Не проверено</td><td>Нужен soak по памяти, FPS, стримингу и подпискам.</td></tr>
+<tr><td>REC-03</td><td class="status partial">Persistence усилен</td><td><code>programmator.json</code> и конфиг пишутся через временные файлы с backup; перед durable-снимком карты создаётся атомарная backup-копия текущего файла. Аварийный сценарий восстановления в Unity не запускался.</td></tr>
+<tr><td>REC-04</td><td class="status partial">Частично</td><td>В просмотренных файлах не найдено требование искусственного FPS cap; полный поиск и runtime proof ещё не являются тестом производительности.</td></tr>
+<tr><td>PERF-01..PERF-06</td><td class="status unknown">Не проверено</td><td>Нет baseline p95/GC/памяти и замеров на среднем/слабом железе. Unity Editor, build и публичный сервер намеренно не запускались.</td></tr>
+</tbody>
+</table>
+
+<h2>Автоматические гейты</h2>
+<table>
+<thead><tr><th>Гейт</th><th>Результат</th><th>Комментарий</th></tr></thead>
+<tbody>
+<tr><td>ArchitectureLinter</td><td class="status partial">PASS с предупреждениями</td><td>51 правил, 12 assemblies; 0 errors и 3 warnings.</td></tr>
+<tr><td>SettingsProbe</td><td class="status ok">PASS внутри линтера</td><td>Проверки defaults/ranges/consumers/localization/audio/graphics завершились OK.</td></tr>
+<tr><td>Unity EditMode/PlayMode</td><td class="status unknown">Не запускался</td><td>Требует явно названной Unity-операции; в CI это self-hosted workflow.</td></tr>
+<tr><td>Windows x64/macOS ARM64 build</td><td class="status blocked">Заблокирован endpoint-гейтом</td><td>Jobs существуют, но <code>ProductionServerEndpointValidator</code> отклонит текущие defaults localhost + dummy; production-артефактов нет.</td></tr>
+<tr><td>Nightly soak</td><td class="status partial">Активирован в workflow</td><td>Schedule включён на 02:00 UTC; фактический отчёт по 24-часовой стабильности ещё не получен.</td></tr>
+</tbody>
+</table>
+
+<h2>Приоритет исправлений</h2>
+<ol>
+<li>Задать реальный production host/port и выключить dummy connection для release-конфигурации; добавить проверку EDGE-02 в build gate.</li>
+<li>Завершить MOVE-03: серверный <code>DamageCell</code>, VFX-пакет удара, прочность и единичную MapRegion-перезапись; затем проверить RTT 150 мс.</li>
+<li>Согласовать production-протокол Storage и перемещения предметов, затем связать его с фиксированной сеткой INV-01 и подтверждениями INV-04/INV-05.</li>
+<li>Добавить согласованный запрос закрытия серверного окна для ECO-03; ESC и кнопка должны ждать только входящий <code>CloseWindowPacket</code>.</li>
+<li>Закрыть полный протокол программатора и миссий на сервере, после чего провести ручной сценарий ROB-01..05 и MIS-01..03.</li>
+<li>Получить Windows/macOS артефакты и результаты EditMode/PlayMode/soak после первого полного CI-прогона.</li>
+<li>Только после этого зафиксировать performance baseline и выполнить публичный чек-лист всех ID.</li>
+</ol>
+
+<h2>Ограничения этого аудита</h2>
+<p>Проверка не утверждает, что визуальные, GPU, сетевые и performance-критерии выполнены: для них нужны production-путь, Unity, реальные данные, сборка и публичный сервер. Серверный исходник в текущем workspace не является частью проверенного набора. Unity и NuGet restore в этом проходе не запускались.</p>
+</main>
+</body>
+</html>
