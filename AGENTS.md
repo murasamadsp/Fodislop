@@ -33,6 +33,9 @@ Code is the source of truth if reference context is stale. Don't read everything
 - Warning suppression is forbidden: do not add `SuppressMessage`, `#pragma warning disable`, `NoWarn`, disabling blanket warnings, or similar exclusions. Fix the root cause of the warning; an exception is permitted only for an immutable third-party package that is not part of project code.
 - `git commit` and `git push` are executed ONLY when the user explicitly requests it in the current message. Do not commit or push after completing a task "for convenience" or "to save" — only file edits.
 - Always commit everything: all working-tree changes in one commit (`git add -A && git commit`), without splitting or selective staging, unless the user explicitly requests otherwise.
+- After every user-requested `git commit`/`git push`, immediately monitor the resulting GitHub Actions run(s) until they finish. Fetch failed-job logs, fix the root cause, push the fix, and continue monitoring; do not report completion while a run is queued, in progress, or failed.
+- Never make CI green by skipping required checks. Missing Unity assemblies, build artifacts, or other required inputs are a CI failure: produce them in an earlier job or fail with the real error.
+- Пиши сообщения коммитов коротко и по-русски.
 
 ## Task execution
 
