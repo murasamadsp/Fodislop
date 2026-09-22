@@ -6,7 +6,8 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Kern.Rendering.PostProcessing;
+namespace Kern.Rendering.PostProcessing
+{
 
 public static class PostProcessDefaults
 {
@@ -123,4 +124,5 @@ public static class PostProcessDefaults
             parameter.overrideState = true;
         }
     }
+}
 }

@@ -167,6 +167,11 @@ internal sealed class DynamicLightTileCache
         Tiles = tiles;
         TileInfos = new ComputeBuffer(capacity, TileInfoStride, ComputeBufferType.Structured);
 
+        // A layout change replaces the atlas and invalidates every traced tile.
+        // The old ID -> slot map is invalid as well: a shrink can remove slots
+        // that were still referenced by the dictionary, and the next solve
+        // would index the newly smaller arrays with those stale values.
+        _slotByLightID.Clear();
         Array.Resize(ref _lightIDBySlot, capacity);
         Array.Resize(ref _slotInUse, capacity);
         Array.Resize(ref _slotSeenFrame, capacity);
@@ -174,6 +179,10 @@ internal sealed class DynamicLightTileCache
         Array.Resize(ref _slotPosition, capacity);
         Array.Resize(ref _slotColor, capacity);
         Array.Resize(ref _slotRect, capacity);
+        Array.Clear(_lightIDBySlot, 0, _lightIDBySlot.Length);
+        Array.Clear(_slotInUse, 0, _slotInUse.Length);
+        Array.Clear(_slotSeenFrame, 0, _slotSeenFrame.Length);
+        Array.Clear(_slotValid, 0, _slotValid.Length);
         Capacity = capacity;
         _columns = columns;
         _tileWidth = tileWidth;

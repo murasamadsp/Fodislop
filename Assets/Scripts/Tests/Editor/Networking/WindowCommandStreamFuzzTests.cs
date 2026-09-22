@@ -7,78 +7,103 @@ using NUnit.Framework;
 namespace Kern.Tests.Networking;
 
 [TestFixture]
-public class WindowCommandStreamFuzzTests
+public sealed class WindowCommandStreamFuzzTests
 {
     [Test]
-    public void RandomOpenClose_FlagMatches()
+    public void RandomVisibilitySequence_EmitsOnlyStateTransitions()
     {
         var random = new System.Random(42);
         var stream = new WindowCommandStream();
-        for (int i = 0; i < 200; i++)
+        int notifications = 0;
+        bool expected = false;
+        stream.OpenWindowVisibilityChanged += _ => notifications++;
+
+        for (int step = 0; step < 10_000; step++)
         {
-            if (random.Next(2) == 0)
-                stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
-            else
-                stream.PublishCloseWindow(new CloseWindowPacket());
-            Assert.That(stream.HasOpenWindows, Is.EqualTo(random.Next(2) == 0 ? false : true).Or.EqualTo(false),
-                $"i={i}");
+            bool next = random.Next(2) == 0;
+            stream.SetServerWindowVisibility(next);
+            expected = next;
+            Assert.That(stream.HasOpenWindows, Is.EqualTo(expected), $"step={step}");
         }
+
+        random = new System.Random(42);
+        expected = false;
+        int expectedNotifications = 0;
+        for (int step = 0; step < 10_000; step++)
+        {
+            bool next = random.Next(2) == 0;
+            if (next != expected)
+            {
+                expectedNotifications++;
+            }
+
+            expected = next;
+        }
+
+        Assert.That(notifications, Is.EqualTo(expectedNotifications));
     }
 
     [Test]
-    public void Open_FiresVisibilityTrue()
+    public void RandomCommands_ReachOnlyTheirTypedSubscribers()
     {
-        var random = new System.Random(42);
+        var random = new System.Random(43);
         var stream = new WindowCommandStream();
-        for (int i = 0; i < 50; i++)
+        int opens = 0;
+        int closes = 0;
+        int modals = 0;
+        stream.OpenRequested += _ => opens++;
+        stream.CloseRequested += _ => closes++;
+        stream.ModalRequested += _ => modals++;
+
+        int expectedOpens = 0;
+        int expectedCloses = 0;
+        int expectedModals = 0;
+        for (int step = 0; step < 10_000; step++)
         {
-            bool? v = null;
-            stream.OpenWindowVisibilityChanged += x => v = x;
-            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
-            Assert.That(v, Is.True, $"i={i}");
+            switch (random.Next(3))
+            {
+                case 0:
+                    stream.PublishOpenWindow(new OpenWindowPacket("window", 100, 100, null));
+                    expectedOpens++;
+                    break;
+                case 1:
+                    stream.PublishCloseWindow(new CloseWindowPacket());
+                    expectedCloses++;
+                    break;
+                default:
+                    stream.PublishModalWindow(new ModalWindowPacket("title", "body", "ok", ""));
+                    expectedModals++;
+                    break;
+            }
         }
+
+        Assert.That(opens, Is.EqualTo(expectedOpens));
+        Assert.That(closes, Is.EqualTo(expectedCloses));
+        Assert.That(modals, Is.EqualTo(expectedModals));
     }
 
     [Test]
-    public void Close_FiresVisibilityFalse()
+    public void Modal_DoesNotChangeServerVisibility()
     {
-        var random = new System.Random(42);
         var stream = new WindowCommandStream();
-        for (int i = 0; i < 50; i++)
-        {
-            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
-            bool? v = null;
-            stream.OpenWindowVisibilityChanged += x => v = x;
-            stream.PublishCloseWindow(new CloseWindowPacket());
-            Assert.That(v, Is.False, $"i={i}");
-        }
+        stream.SetServerWindowVisibility(true);
+        stream.PublishModalWindow(new ModalWindowPacket("title", "body", "ok", ""));
+
+        Assert.That(stream.HasOpenWindows, Is.True);
     }
 
     [Test]
-    public void Modal_DoesNotChangeFlag()
+    public void RepeatingVisibility_DoesNotNotifyAgain()
     {
-        var random = new System.Random(42);
         var stream = new WindowCommandStream();
-        for (int i = 0; i < 50; i++)
-        {
-            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
-            stream.PublishModalWindow(new ModalWindowPacket("a", "b", "c", "d"));
-            Assert.IsTrue(stream.HasOpenWindows, $"i={i}");
-        }
-    }
+        int notifications = 0;
+        stream.OpenWindowVisibilityChanged += _ => notifications++;
 
-    [Test]
-    public void SetSameVisibility_NoFire()
-    {
-        var random = new System.Random(42);
-        var stream = new WindowCommandStream();
-        for (int i = 0; i < 50; i++)
-        {
-            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
-            int count = 0;
-            stream.OpenWindowVisibilityChanged += _ => count++;
-            stream.SetServerWindowVisibility(true);
-            Assert.That(count, Is.EqualTo(0), $"i={i}");
-        }
+        stream.SetServerWindowVisibility(true);
+        stream.SetServerWindowVisibility(true);
+        stream.SetServerWindowVisibility(false);
+        stream.SetServerWindowVisibility(false);
+
+        Assert.That(notifications, Is.EqualTo(2));
     }
 }

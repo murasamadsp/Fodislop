@@ -100,7 +100,7 @@ public sealed class TerrainDebugViewContractTests
     {
         Assert.That(
             ShaderSource(),
-            Does.Contain(">= KERN_TERRAIN_DEBUG_FOREIGN_SIDES").And
+            Does.Contain("> KERN_TERRAIN_DEBUG_OFF").And
                 .Contain("<= KERN_TERRAIN_DEBUG_AMBIENT_OCCLUSION"),
             "Активность отладочного вида обязана проверяться диапазоном объявленных номеров.");
     }

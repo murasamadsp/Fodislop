@@ -216,6 +216,11 @@ public sealed class TerrainCellMaskCalculator
         CachedCellData bottom,
         CachedCellData right)
     {
+        if (data.ReliefGroup == 0)
+        {
+            return 0;
+        }
+
         byte rm = 0;
         if (top.ReliefGroup == data.ReliefGroup)
         {

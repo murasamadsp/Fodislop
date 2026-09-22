@@ -166,6 +166,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _buffManager,
             _chatSimulator,
             _inventoryResponder,
+            _missionRunner,
             _teleportPositions,
             SendPacket,
             LoopAlive);

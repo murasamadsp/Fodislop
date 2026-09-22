@@ -17,6 +17,7 @@ public sealed class DummyClockContractTests
         "Simulation/DummyClock.cs",
         "Simulation/DummyWorldMapArchive.cs",
         "Simulation/DummyWorldSimulationState.cs",
+        "Simulation/DummyWorldStreamingCoordinator.cs",
         "Systems/DummyMapStreamer.cs",
     ];
 

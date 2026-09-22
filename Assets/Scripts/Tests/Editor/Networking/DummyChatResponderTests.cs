@@ -30,7 +30,7 @@ public sealed class DummyChatResponderTests
         Assert.That(_sent, Has.Count.EqualTo(1));
         var payload = (ChatMessageListPacket)_sent[0].Payload;
         Assert.That(payload.Tag, Is.EqualTo("global"));
-        Assert.That(payload.Messages, Has.Count.EqualTo(10));
+        Assert.That(payload.Messages, Has.Length.EqualTo(10));
     }
 
     [Test]

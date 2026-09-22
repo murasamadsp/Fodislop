@@ -157,23 +157,26 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
         {
             string segment = segments[index];
             string exact = Path.Combine(current, segment);
-            if (File.Exists(exact) || Directory.Exists(exact))
-            {
-                current = exact;
-                continue;
-            }
-
             if (!Directory.Exists(current))
             {
                 return null;
             }
 
             bool isLeaf = index == segments.Length - 1;
+            // Do not trust File.Exists/Directory.Exists for the fast path:
+            // macOS commonly uses a case-insensitive volume and would then
+            // return the caller's spelling instead of the canonical on-disk
+            // spelling. Returning the actual directory entry keeps persistent
+            // and bundled paths stable across platforms.
             string? match = Directory.EnumerateFileSystemEntries(current)
                 .FirstOrDefault(entry => string.Equals(
                     Path.GetFileName(entry),
                     segment,
                     StringComparison.OrdinalIgnoreCase));
+            if (match == null && (File.Exists(exact) || Directory.Exists(exact)))
+            {
+                match = exact;
+            }
             if (match == null && isLeaf && string.IsNullOrEmpty(Path.GetExtension(segment)))
             {
                 match = Directory.EnumerateFiles(current)

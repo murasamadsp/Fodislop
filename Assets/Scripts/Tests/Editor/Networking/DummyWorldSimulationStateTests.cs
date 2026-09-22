@@ -11,6 +11,7 @@ using MinesServer.Data;
 using MinesServer.Networking.Connection.Client;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Kern.Tests.Networking;
 
@@ -26,17 +27,16 @@ public sealed class DummyWorldSimulationStateTests
         Assert.That(state.GetCellConfig(CellType.Empty), Is.Null);
     }
 
-    [UnityEngine.TestTools.UnityTest]
-    public System.Collections.IEnumerator FailedInitialization_CanBeRetried()
+    [Test]
+    public async Task FailedInitialization_CanBeRetried()
     {
         using var state = new DummyWorldSimulationState(new StubSupervisor(), new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
         int attempts = 0;
 
-        async UniTask FailOnce()
+        UniTask FailOnce()
         {
             attempts++;
-            await UniTask.Yield();
-            throw new InvalidOperationException("injected failure");
+            return UniTask.FromException(new InvalidOperationException("injected failure"));
         }
 
         async UniTask<bool> FailsAsExpected()
@@ -52,16 +52,15 @@ public sealed class DummyWorldSimulationStateTests
             }
         }
 
-        bool failedAsExpected = false;
-        yield return FailsAsExpected().ToCoroutine(result => failedAsExpected = result);
+        LogAssert.Expect(LogType.Exception, new System.Text.RegularExpressions.Regex("injected failure"));
+        bool failedAsExpected = await FailsAsExpected();
         Assert.That(failedAsExpected, Is.True);
 
-        yield return state.EnsureInitializedAsync(() =>
+        await state.EnsureInitializedAsync(() =>
             {
                 attempts++;
                 return UniTask.CompletedTask;
-            })
-            .ToCoroutine();
+            });
 
         Assert.That(attempts, Is.EqualTo(2));
     }

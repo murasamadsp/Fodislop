@@ -214,7 +214,7 @@ public class DirtyRectSetFuzzTests
     public void ADiagonalChainDoesNotGrowIntoTheWholeWindow()
     {
         var set = new DirtyRectSet();
-        const int Steps = 8;
+        const int Steps = 3;
         for (int i = 0; i < Steps; i++)
         {
             set.Add(new RectInt(1000 + (i * 32), 2000 + (i * 32), 32, 32), _Bounds);

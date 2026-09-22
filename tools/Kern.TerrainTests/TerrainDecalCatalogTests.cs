@@ -65,7 +65,7 @@ public sealed class TerrainDecalCatalogTests
             placed += TerrainDecalCatalog.GetPackedPlacement(CellType.Empty, i, i * 17) > 0 ? 1 : 0;
         }
 
-        Assert.That(placed, Is.InRange(sampleSize * 14 / 100, sampleSize * 22 / 100));
+        Assert.That(placed, Is.InRange(sampleSize * 20 / 100, sampleSize * 28 / 100));
     }
 
     [Test]

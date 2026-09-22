@@ -70,9 +70,9 @@ public sealed class DummyMovementResponderTests
 
         movement.HandleMove(new MovePacket(11, 20));
 
-        Assert.That(player.X, Is.EqualTo(11));
+        Assert.That(player.X, Is.EqualTo(10));
         Assert.That(player.Y, Is.EqualTo(20));
-        Assert.That(supervisor.OperationNames, Is.EqualTo(new[] { "dummy_position_snapshot" }));
+        Assert.That(supervisor.OperationNames, Is.EqualTo(new[] { "dummy_move_wait_for_cell" }));
     }
 
     private sealed class RecordingSupervisor : IAsyncOperationSupervisor

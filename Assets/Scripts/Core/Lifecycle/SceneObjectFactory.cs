@@ -4,7 +4,8 @@ using System;
 using UnityEngine;
 using VContainer;
 
-namespace Kern.Core.Lifecycle;
+namespace Kern.Core.Lifecycle
+{
 
 public sealed class SceneObjectFactory(
     Transform runtimeRoot,
@@ -47,4 +48,5 @@ public sealed class SceneObjectFactory(
         gameObject.SetActive(true);
         return component;
     }
+}
 }

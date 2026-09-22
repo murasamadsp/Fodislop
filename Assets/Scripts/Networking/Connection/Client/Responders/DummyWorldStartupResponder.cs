@@ -29,6 +29,7 @@ internal sealed class DummyWorldStartupResponder(
     DummyBuffManager buffManager,
     DummyChatSimulator chatSimulator,
     DummyInventoryResponder inventoryResponder,
+    DummyMissionRunner missionRunner,
     List<(ushort X, ushort Y)> teleportPositions,
     Action<ServerPacket> sendPacket,
     Func<int, bool> loopAlive)

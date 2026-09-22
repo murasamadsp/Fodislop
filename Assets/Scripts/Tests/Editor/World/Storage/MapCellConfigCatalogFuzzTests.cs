@@ -100,11 +100,9 @@ public class MapCellConfigCatalogFuzzTests
     public void HasAnimation_TrueOnlyWhenAnimationNotNone()
     {
         var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations(new[]
-        {
-            new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.None, 0, 0, 0, 0),
-            new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 5, 0, 0, 0),
-        }, null);
+        catalog.LoadConfigurations(Configs(
+            (CellType.Empty, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.None, 0, 0, 0, 0)),
+            (CellType.Rock, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 5, 0, 0, 0))), null);
         Assert.That(catalog.HasAnimation(CellType.Empty), Is.False);
         Assert.That(catalog.HasAnimation(CellType.Rock), Is.True);
     }
@@ -113,10 +111,8 @@ public class MapCellConfigCatalogFuzzTests
     public void GetAnimationFrameHeight_FrameOffsetTimesCellSize()
     {
         var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations(new[]
-        {
-            new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 5, 3, 0, 0),
-        }, null);
+        catalog.LoadConfigurations(Configs(
+            (CellType.Empty, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 5, 3, 0, 0))), null);
         int frameHeight = catalog.GetAnimationFrameHeight(CellType.Empty);
         Assert.That(frameHeight, Is.EqualTo(3 * 32));
     }
@@ -125,10 +121,8 @@ public class MapCellConfigCatalogFuzzTests
     public void GetAnimationSpeed_ReturnsConfigValue()
     {
         var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations(new[]
-        {
-            new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 7, 0, 0, 0),
-        }, null);
+        catalog.LoadConfigurations(Configs(
+            (CellType.Empty, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 7, 0, 0, 0))), null);
         Assert.That(catalog.GetAnimationSpeed(CellType.Empty), Is.EqualTo((byte)7));
     }
 
@@ -147,10 +141,8 @@ public class MapCellConfigCatalogFuzzTests
     {
         var catalog = new MapCellConfigCatalog();
         const int argb = unchecked((int)0xFF804020);
-        catalog.LoadConfigurations(new[]
-        {
-            new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.None, 0, 0, argb, 0),
-        }, null);
+        catalog.LoadConfigurations(Configs(
+            (CellType.Empty, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.None, 0, 0, argb, 0))), null);
         Color c = catalog.GetCellMinimapColor(CellType.Empty);
         Assert.That(c.r, Is.EqualTo(0x80 / 255f).Within(0.001f));
         Assert.That(c.g, Is.EqualTo(0x40 / 255f).Within(0.001f));
@@ -189,5 +181,17 @@ public class MapCellConfigCatalogFuzzTests
             0,
             0,
             0);
+    }
+
+    private static CellConfigurationPacket[] Configs(
+        params (CellType Type, CellConfigurationPacket Config)[] entries)
+    {
+        var configs = new CellConfigurationPacket[256];
+        foreach ((CellType type, CellConfigurationPacket config) in entries)
+        {
+            configs[(int)type] = config;
+        }
+
+        return configs;
     }
 }

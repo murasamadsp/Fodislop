@@ -191,8 +191,10 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(textures, Does.Contain("_geometryY.Data[index] = texels.GeometryY"));
         Assert.That(textures, Does.Contain("_geometryX.UploadAll()"));
         Assert.That(textures, Does.Contain("_geometryY.UploadAll()"));
-        Assert.That(textures, Does.Contain("_geometryX.UploadRect"));
-        Assert.That(textures, Does.Contain("_geometryY.UploadRect"));
+        Assert.That(textures, Does.Contain("_geometryX.StageStrip"));
+        Assert.That(textures, Does.Contain("_geometryY.StageStrip"));
+        Assert.That(textures, Does.Contain("_geometryX.CopyStagedStrip"));
+        Assert.That(textures, Does.Contain("_geometryY.CopyStagedStrip"));
         Assert.That(textures, Does.Contain("Shader.SetGlobalTexture(GeometryXID"));
         Assert.That(textures, Does.Contain("Shader.SetGlobalTexture(GeometryYID"));
         Assert.That(terrain, Does.Not.Contain("_TerrainGridOffsets"));

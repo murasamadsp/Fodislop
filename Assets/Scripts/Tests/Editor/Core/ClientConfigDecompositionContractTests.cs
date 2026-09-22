@@ -18,9 +18,9 @@ public sealed class ClientConfigDecompositionContractTests
         Assert.That(manager, Does.Not.Contain("SchemaVersion <"));
         Assert.That(manager, Does.Not.Contain("private void Validate("));
         Assert.That(manager, Does.Not.Contain("new ClientConfig\n"));
-        Assert.That(manager, Does.Contain("Repository.Save(Config)"));
+        Assert.That(manager, Does.Contain("_Repository.Save(Config"));
         Assert.That(manager, Does.Contain("new ClientConfigLoader("));
-        Assert.That(manager, Does.Contain("Validator.Validate(Config)"));
+        Assert.That(manager, Does.Contain("_Validator.Validate(Config)"));
         Assert.That(manager, Does.Contain("ClientConfigDefaults.Create"));
     }
 

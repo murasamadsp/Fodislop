@@ -212,6 +212,17 @@ namespace Kern.UI
                 return;
             }
 
+            // During reconnect the player state can be restored before the
+            // WorldInit packet repopulates MapManager. Coordinates are not
+            // convertible until the authoritative world height exists; keep
+            // the arrow hidden for that transient state instead of calling
+            // CoordinateUtils with an invalid dimension.
+            if (_mapManager.WorldHeight <= 0)
+            {
+                UIState.Hide(_ring);
+                return;
+            }
+
             // Мир нужен ровно для одного — направления на цель. Положение и
             // размер кольца мир не спрашивают вовсе: это элемент экрана.
             //

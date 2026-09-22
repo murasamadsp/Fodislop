@@ -67,9 +67,6 @@ namespace Kern.World.Terrain
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
 
-        private static readonly int _reliefRimEnabledID =
-            Shader.PropertyToID("_TerrainReliefRimEnabled");
-
         private static readonly ProfilerMarker _TerrainLateUpdateMarker =
             new("Kern.Terrain.LateUpdate.CPU");
 
@@ -80,8 +77,8 @@ namespace Kern.World.Terrain
         private readonly TerrainFramePlanner _planner = new();
         private readonly TerrainMeshManager _meshManager = new();
         private readonly TerrainPresentationWindow _presentation = new();
-        private readonly TerrainDiagnosticLog _diag = new();
-        private readonly TerrainStallReport _stall = new();
+        private TerrainFrameDiagnostics? _diagnostics;
+        private TerrainClientConfigApplier? _configApplier;
 
         private MeshFilter? _meshFilter;
         private MeshRenderer? _meshRenderer;
@@ -106,6 +103,10 @@ namespace Kern.World.Terrain
 
         public ulong TerrainContentRevision => _terrainContentRevision;
 
+        private TerrainFrameDiagnostics Diagnostics => _diagnostics ??= new(_window);
+
+        private TerrainClientConfigApplier ConfigApplier => _configApplier ??= new(_window);
+
         // Exposes the production builder's geometry evidence to PlayMode
         // contract tests. A hand-authored cell-data texture can pass a shader
         // test while the live scene still renders a rectangular CPU path; the
@@ -129,23 +130,8 @@ namespace Kern.World.Terrain
                 throw new InvalidOperationException(
                     "TerrainRenderer requires an initialized ClientConfig.");
 
-            bool enableDistortion = config.Terrain.EnableDistortion;
-            if (_window.Driver.Pipeline.EnableDistortion != enableDistortion)
-            {
-                _window.Driver.Pipeline.EnableDistortion = enableDistortion;
-                _window.NeedsRefresh = true;
-            }
-
-            // Кайма живёт глобалью шейдера: маска и транспорт от тумблера не
-            // зависят, выключенная кайма просто перестаёт умножать кадр.
-            bool enableReliefRim = config.Terrain.EnableReliefRim;
-            Shader.SetGlobalFloat(_reliefRimEnabledID, enableReliefRim ? 1f : 0f);
-
-            _window.Driver.Materials.ApplyClientConfig(config);
+            ConfigApplier.Apply(config);
             _terrainContentRevision++;
-            Debug.Log(
-                $"[TerrainRenderer] ApplyClientConfig: distortion={enableDistortion}, " +
-                $"reliefRim={enableReliefRim}");
         }
 
         public void InitializeEditorPreview(
@@ -219,7 +205,7 @@ namespace Kern.World.Terrain
                 return;
             }
 
-            _diag.Once(1 << 1, "[TerrainDiag] gate passed: storage ready");
+            Diagnostics.Mark(1 << 1, "[TerrainDiag] gate passed: storage ready");
             if (!TryResolveCamera())
             {
                 return;
@@ -299,7 +285,12 @@ namespace Kern.World.Terrain
                 _meshRenderer,
                 out Exception? failure))
             {
-                ReportBuildFailure(failure, framePlan.ActiveWindow.Origin);
+                _fatalBuildError = Diagnostics.ReportBuildFailure(
+                    failure,
+                    framePlan.ActiveWindow.Origin,
+                    _mapManager,
+                    _textureService,
+                    _storage);
                 return;
             }
 
@@ -332,35 +323,17 @@ namespace Kern.World.Terrain
             _lightingViewport = framePlan.LightingViewport;
             lightingEngine.CaptureBudgetViolationIfNeeded();
 
-            TerrainBuildPipeline pipeline = _window.Driver.Pipeline;
-            _stall.Record(
+            Diagnostics.Record(
                 stallStart,
                 _telemetry,
-                new TerrainStallFrame(
-                    pipeline.LastBuildScrolled,
-                    pipeline.LastScrollDelta,
-                    _window.Origin,
-                    new Vector2Int(_window.Width, _window.Height),
-                    dirtyRectCount,
-                    dirtyArea,
+                new TerrainFrameTimings(
+                    planMs,
+                    dimensionsMs,
                     refreshTextureMs,
                     processMs,
                     uploadMs,
-                    pipeline.CellBuilder.LastScrollMs,
-                    pipeline.CellBuilder.LastIndexRemoveMs,
-                    pipeline.CellBuilder.LastWarmupMs,
-                    pipeline.CellBuilder.LastFillMs,
-                    pipeline.CellBuilder.LastFilledCells,
-                    pipeline.CellBuilder.Textures.LastUploadRectCount,
-                    pipeline.CellBuilder.Textures.LastUploadTexels,
-                    pipeline.CellBuilder.LastQuadMs,
-                    pipeline.CellBuilder.LastPackMs,
-                    pipeline.CellBuilder.Textures.LastStageMs,
-                    pipeline.CellBuilder.Textures.LastStageCopyMs,
-                    pipeline.CellBuilder.Textures.LastStageApplyMs,
-                    pipeline.CellBuilder.Textures.LastUploadStrips,
-                    planMs,
-                    dimensionsMs));
+                    dirtyRectCount,
+                    dirtyArea));
         }
 
         private TerrainBuildServices Services =>
@@ -396,31 +369,6 @@ namespace Kern.World.Terrain
             _meshRenderer.sortingOrder = _sortingOrder;
         }
 
-        /// <summary>
-        /// Сборка упала: террейн замолкает до перезапуска сцены. Продолжать
-        /// кадрами по частично собранному окну значит показывать дыры и
-        /// приписывать их чему угодно, кроме настоящей причины.
-        /// </summary>
-        private void ReportBuildFailure(Exception? failure, Vector2Int origin)
-        {
-            if (failure == null)
-            {
-                // Не отказ, а «ещё нечем»: атласы не приехали. Кадр пропущен,
-                // террейн жив и попробует снова.
-                _diag.Once(1 << 6, "[TerrainDiag] BAIL: build sources not ready");
-                return;
-            }
-
-            _fatalBuildError = true;
-            Debug.LogException(new InvalidOperationException(
-                $"[TerrainRenderer] Build failed: grid={origin} " +
-                $"size={_window.Width}x{_window.Height}, world=" +
-                $"{_mapManager?.WorldWidth ?? 0}x{_mapManager?.WorldHeight ?? 0}, " +
-                $"atlases={_textureService?.GetAllAtlases().Count ?? 0}, " +
-                $"storageReady={_storage?.IsReady ?? false}.",
-                failure));
-        }
-
         private void HandleCellChanged(int serverX, int serverY) =>
             HandleRegionChanged(serverX, serverY, 1, 1);
 
@@ -444,7 +392,7 @@ namespace Kern.World.Terrain
 
         private void OnTextureLoaded(string filename, Texture2D texture)
         {
-            _diag.Once(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
+            Diagnostics.Mark(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
 
             if (TerrainCellTextureName.TryParseCellType(filename, out CellType cellType))
             {
@@ -488,11 +436,11 @@ namespace Kern.World.Terrain
 
             if (_mainCamera == null)
             {
-                _diag.Once(1 << 2, "[TerrainDiag] camera NULL");
+                Diagnostics.Mark(1 << 2, "[TerrainDiag] camera NULL");
                 return false;
             }
 
-            _diag.Once(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
+            Diagnostics.Mark(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             return true;
         }
 
