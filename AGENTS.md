@@ -34,6 +34,7 @@ Code is the source of truth if reference context is stale. Don't read everything
 - `git commit` and `git push` are executed ONLY when the user explicitly requests it in the current message. Do not commit or push after completing a task "for convenience" or "to save" — only file edits.
 - Always commit everything: all working-tree changes in one commit (`git add -A && git commit`), without splitting or selective staging, unless the user explicitly requests otherwise.
 - After every user-requested `git commit`/`git push`, immediately monitor the resulting GitHub Actions run(s) until they finish. Fetch failed-job logs, fix the root cause, push the fix, and continue monitoring; do not report completion while a run is queued, in progress, or failed.
+- CI must use standard GitHub-hosted runners (`ubuntu-latest`, `macos-latest`, `windows-latest`); self-hosted/Unity runner labels are forbidden. If a job requires Unity, move it to a standard runner instead of leaving it queued.
 - Never make CI green by skipping required checks. Missing Unity assemblies, build artifacts, or other required inputs are a CI failure: produce them in an earlier job or fail with the real error.
 - Keep commit messages short and in Russian.
 
