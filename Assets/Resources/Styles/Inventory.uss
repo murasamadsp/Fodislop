@@ -108,6 +108,9 @@
 }
 
 .inv-cell--selected {
+    /* Рамка выбранного слота, как в старом клиенте. */
+    border-width: 2px;
+    border-color: var(--accent-gold);
     background-color: rgba(48, 44, 20, 0.95);
 }
 
@@ -258,61 +261,41 @@
 
 /* ─── Тултип выбранного предмета ─── */
 
-.inv-tooltip-wrapper {
+.inv-tooltip-card {
     position: absolute;
-    left: 0;
-    right: 0;
-    top: var(--space-14);
-    height: 36px;
-    flex-direction: row;
-    justify-content: center;
+    top: var(--space-12);
+    left: 50%;
+    translate: -50% 0;
+    min-width: 320px;
+    max-width: 480px;
 }
 
-.inv-tooltip-bg {
+.inv-tooltip-header {
     flex-direction: row;
     align-items: center;
-    background-color: var(--surface-slate-dense);
-    border-width: 1px;
-    border-color: var(--accent-cyan-fill);
-    border-radius: var(--radius-md);
-    padding: var(--space-3) var(--space-6);
+    margin-bottom: var(--space-3);
 }
 
-.inv-tooltip-name {
+.inv-tooltip-icon {
+    width: 42px;
+    height: 42px;
+    margin-right: var(--space-4);
+}
+
+.inv-tooltip-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+}
+
+.inv-tooltip-title {
     font-size: var(--size-base);
     -unity-font-style: bold;
-    color: var(--accent-gold);
-    margin-right: var(--space-5);
+    color: var(--text-primary);
 }
 
 .inv-tooltip-desc {
     font-size: var(--size-sm);
-    color: var(--accent-cyan-solid);
-}
-
-/* ─── Контекстное меню ─── */
-
-.inv-context-menu {
-    position: absolute;
-    background-color: var(--surface-slate-dense);
-    border-width: 1px;
-    border-color: var(--accent-cyan-fill);
-    border-radius: var(--radius-md);
-    padding: var(--space-2) 0;
-    flex-direction: column;
-    min-width: 150px;
-}
-
-.inv-context-btn {
-    background-color: transparent;
-    border-width: 0;
-    padding: var(--space-3) var(--space-6);
-    color: var(--text-primary);
-    font-size: var(--size-base);
-    -unity-text-align: middle-left;
-    min-height: var(--space-11);
-}
-
-.inv-context-btn:hover {
-    background-color: var(--accent-cyan-glow);
+    color: var(--text-secondary);
+    white-space: normal;
 }

@@ -1,92 +1,40 @@
 #nullable enable
 
-using System.Collections.Generic;
+using System.Linq;
 using Kern.Core.Interfaces;
-using Kern.Core.Models;
-using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Inventory;
 
 namespace Kern.Networking.Processors;
 
-public sealed class InventoryProcessor(IInventoryState model) :
+/// <summary>
+/// Applies native inventory snapshots to <see cref="IInventoryState"/>.
+/// A packet whose <c>Changes</c> contains at least one entry per known item
+/// type is an authoritative full snapshot (server sends every type, zeros
+/// included); a smaller packet is a partial update and is merged instead.
+/// The server's metadata packet is keyed by <see cref="SelectItemPacket.Item"/>,
+/// not by a client slot, so it is applied directly to that type.
+/// </summary>
+public sealed class InventoryProcessor(IInventoryState model, IItemCatalog catalog) :
     IPacketProcessor<InventoryPacket>,
-    IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>,
-    IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>
+    IPacketProcessor<SelectItemPacket>,
+    IPacketProcessor<DeselectItemPacket>
 {
-    private const int TotalSlots = 63;
+    private readonly int _knownTypeCount = catalog.AllTypes.Count();
 
     public void Process(InventoryPacket packet)
     {
-        Dictionary<ItemType, long> remaining = new(packet.Changes);
-
-        for (int i = 0; i < TotalSlots; i++)
+        if (packet.Changes.Count >= _knownTypeCount)
         {
-            var existing = model.GetSlot(i);
-            if (existing == null || !remaining.TryGetValue(existing.ItemType, out long quantity))
-            {
-                continue;
-            }
-
-            if (quantity <= 0)
-            {
-                model.SetSlot(i, null);
-            }
-            else
-            {
-                ItemData updated = existing.Clone();
-                updated.Quantity = (int)quantity;
-                model.SetSlot(i, updated);
-            }
-
-            remaining.Remove(existing.ItemType);
-        }
-
-        foreach ((ItemType itemType, long quantity) in remaining)
-        {
-            if (quantity <= 0)
-            {
-                continue;
-            }
-
-            for (int i = 0; i < TotalSlots; i++)
-            {
-                if (model.GetSlot(i) != null)
-                {
-                    continue;
-                }
-
-                model.SetSlot(i, new Kern.Core.Models.ItemData(
-                    itemType.ToString(),
-                    UnityEngine.Color.gray,
-                    (int)quantity)
-                {
-                    ItemType = itemType,
-                });
-                break;
-            }
-        }
-    }
-
-    public void Process(MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket packet)
-    {
-        int slot = model.SelectedSlot;
-        if (slot < 0)
-        {
+            model.ApplyFullSnapshot(packet.Changes);
             return;
         }
 
-        var item = model.GetSlot(slot);
-        if (item == null)
-        {
-            return;
-        }
-
-        ItemData updated = item.Clone();
-        updated.Name = packet.Name;
-        updated.Description = packet.Description;
-        model.SetSlot(slot, updated);
+        model.MergeChanges(packet.Changes);
     }
 
-    public void Process(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket packet) =>
+    public void Process(SelectItemPacket packet) =>
+        model.ApplyItemMetadata(packet.Item, packet.Name, packet.Description);
+
+    public void Process(DeselectItemPacket packet) =>
         model.ClearSelection();
 }

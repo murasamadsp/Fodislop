@@ -100,6 +100,8 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
             throw new InvalidOperationException(
                 "[Programmator] Resources/UI/Programmator.uxml is required.");
         TemplateContainer tree = template.Instantiate();
+        tree.AddToClassList("ui-fullscreen");
+        tree.pickingMode = PickingMode.Ignore;
         _doc.rootVisualElement.Add(tree);
 
         // Статические ключи Uxml (programmator.*, common.*) резолвятся сразу при
