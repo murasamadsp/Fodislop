@@ -1,6 +1,6 @@
 #nullable enable
 
-using Kern.Core.Models;
+using System.Collections.Generic;
 using Kern.Game.Inventory;
 using MinesServer.Data;
 using NUnit.Framework;
@@ -20,98 +20,210 @@ public class InventoryModelTests
     }
 
     [Test]
-    public void InitialState_TotalSlotsMatchConstant_AllSlotsNull()
+    public void InitialState_IsEmptyAndNothingSelected()
     {
-        Assert.AreEqual(63, InventoryModel.TOTALSLOTS);
-        for (int i = 0; i < InventoryModel.TOTALSLOTS; i++)
+        Assert.IsEmpty(_model.OrderedTypes);
+        Assert.IsNull(_model.SelectedItem);
+        Assert.IsFalse(_model.HasSelectedItem);
+    }
+
+    [Test]
+    public void ApplyFullSnapshot_AddsAllPositiveTypes()
+    {
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
         {
-            Assert.IsNull(_model.GetSlot(i), $"Slot {i} should initially be null.");
-        }
+            { ItemType.Rem, 5 },
+            { ItemType.Battery, 2 },
+        });
+
+        Assert.That(_model.OrderedTypes, Is.EquivalentTo(new[] { ItemType.Rem, ItemType.Battery }));
+        Assert.AreEqual(5, _model.GetQuantity(ItemType.Rem));
+        Assert.AreEqual(2, _model.GetQuantity(ItemType.Battery));
     }
 
     [Test]
-    public void SetSlot_FiresOnSlotChangedEvent_UpdatesSlotData()
+    public void ApplyFullSnapshot_UpdatesQuantitiesAndDropsMissingTypes()
     {
-        int changedIndex = -1;
-        _model.OnSlotChanged += (idx) => changedIndex = idx;
+        var existing = new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 5 },
+            { ItemType.Nano, 3 },
+        };
+        _model.ApplyFullSnapshot(existing);
 
-        var item = new ItemData("Iron Ore", Color.gray, 5) { ItemType = (ItemType)1 };
-        _model.SetSlot(3, item);
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 7 },
+            { ItemType.Battery, 1 },
+        });
 
-        Assert.AreEqual(3, changedIndex, "OnSlotChanged should be invoked with slot index 3.");
-        Assert.AreEqual(item, _model.GetSlot(3));
+        Assert.That(_model.OrderedTypes, Is.EquivalentTo(new[] { ItemType.Rem, ItemType.Battery }));
+        Assert.AreEqual(7, _model.GetQuantity(ItemType.Rem));
+        Assert.AreEqual(0, _model.GetQuantity(ItemType.Nano));
+        Assert.AreEqual(1, _model.GetQuantity(ItemType.Battery));
     }
 
     [Test]
-    public void SwapSlots_ExchangesItems_FiresSlotChangedEvents()
+    public void ApplyFullSnapshot_PreservesLocalOrderForSurvivingTypes()
     {
-        var itemA = new ItemData("Iron", Color.gray, 10) { ItemType = (ItemType)1 };
-        var itemB = new ItemData("Gold", Color.yellow, 5) { ItemType = (ItemType)2 };
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 5 },
+            { ItemType.Battery, 2 },
+        });
+        _model.Select(ItemType.Battery);
 
-        _model.SetSlot(0, itemA);
-        _model.SetSlot(1, itemB);
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 5 },
+            { ItemType.Battery, 2 },
+        });
 
-        _model.SwapSlots(0, 1);
-
-        Assert.AreEqual(itemB, _model.GetSlot(0), "Slot 0 should now contain Gold.");
-        Assert.AreEqual(itemA, _model.GetSlot(1), "Slot 1 should now contain Iron.");
+        // После Select(Battery) выбранный предмет был переставлен в голову;
+        // полный снимок сохраняет локальный порядок.
+        Assert.AreEqual(ItemType.Battery, _model.OrderedTypes[0]);
+        Assert.AreEqual(ItemType.Rem, _model.OrderedTypes[1]);
     }
 
     [Test]
-    public void TryStackSlots_SameItemType_CombinesQuantities()
+    public void ApplyFullSnapshot_ZeroQuantityRemovesType()
     {
-        var itemFrom = new ItemData("Coal", Color.black, 15) { ItemType = (ItemType)1 };
-        var itemTo = new ItemData("Coal", Color.black, 20) { ItemType = (ItemType)1 };
+        var existing = new Dictionary<ItemType, long> { { ItemType.Rem, 5 } };
+        _model.ApplyFullSnapshot(existing);
 
-        _model.SetSlot(0, itemFrom);
-        _model.SetSlot(1, itemTo);
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 0 } });
 
-        bool stacked = _model.TryStackSlots(0, 1);
-
-        Assert.IsTrue(stacked, "TryStackSlots should return true for identical stackable items.");
-        Assert.IsNull(_model.GetSlot(0), "From slot should be emptied after stacking.");
-        Assert.AreEqual(35, _model.GetSlot(1)?.Quantity, "Target slot quantity should be the sum (15 + 20 = 35).");
+        Assert.IsEmpty(_model.OrderedTypes);
     }
 
     [Test]
-    public void TryStackSlots_DifferentItems_ReturnsFalseAndPreservesSlots()
+    public void MergeChanges_UpdatesOnlyListedTypes()
     {
-        var itemFrom = new ItemData("Coal", Color.black, 15) { ItemType = (ItemType)1 };
-        var itemTo = new ItemData("Diamond", Color.cyan, 1) { ItemType = (ItemType)2 };
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 5 },
+            { ItemType.Nano, 3 },
+        });
 
-        _model.SetSlot(0, itemFrom);
-        _model.SetSlot(1, itemTo);
+        _model.MergeChanges(new Dictionary<ItemType, long> { { ItemType.Rem, 6 } });
 
-        bool stacked = _model.TryStackSlots(0, 1);
-
-        Assert.IsFalse(stacked, "TryStackSlots should return false for different items.");
-        Assert.AreEqual(15, _model.GetSlot(0)?.Quantity);
-        Assert.AreEqual(1, _model.GetSlot(1)?.Quantity);
+        Assert.AreEqual(6, _model.GetQuantity(ItemType.Rem));
+        Assert.AreEqual(3, _model.GetQuantity(ItemType.Nano), "Unlisted type must be untouched by a mini update.");
     }
 
     [Test]
-    public void SelectSlotAndClearSelection_UpdatesSelectedSlotIndex()
+    public void MergeChanges_AddsNewTypeAtEnd()
     {
-        int selectedIdx = -2;
-        _model.OnSlotSelected += (idx) => selectedIdx = idx;
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 5 } });
 
-        _model.SelectSlot(4);
-        Assert.AreEqual(4, _model.SelectedSlot);
-        Assert.AreEqual(4, selectedIdx);
+        _model.MergeChanges(new Dictionary<ItemType, long> { { ItemType.Battery, 1 } });
 
+        Assert.That(_model.OrderedTypes, Is.EqualTo(new[] { ItemType.Rem, ItemType.Battery }));
+    }
+
+    [Test]
+    public void MergeChanges_ZeroQuantityRemovesType()
+    {
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 5 } });
+
+        _model.MergeChanges(new Dictionary<ItemType, long> { { ItemType.Rem, 0 } });
+
+        Assert.IsEmpty(_model.OrderedTypes);
+    }
+
+    [Test]
+    public void Select_MovesTypeToFrontAndRaisesSelected()
+    {
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 5 },
+            { ItemType.Battery, 2 },
+        });
+
+        ItemType? selected = null;
+        int orderChangeEvents = 0;
+        _model.OnSelectedChanged += type => selected = type;
+        _model.OnItemsChanged += () => orderChangeEvents++;
+
+        _model.Select(ItemType.Battery);
+
+        Assert.AreEqual(ItemType.Battery, _model.SelectedItem);
+        Assert.AreEqual(ItemType.Battery, selected);
+        Assert.AreEqual(ItemType.Battery, _model.OrderedTypes[0]);
+        Assert.AreNotEqual(0, orderChangeEvents);
+        Assert.IsTrue(_model.HasSelectedItem);
+    }
+
+    [Test]
+    public void Select_UnknownType_IsIgnored()
+    {
+        var existing = new Dictionary<ItemType, long> { { ItemType.Rem, 5 } };
+        _model.ApplyFullSnapshot(existing);
+
+        _model.Select(ItemType.Battery);
+
+        Assert.IsNull(_model.SelectedItem);
+        Assert.IsFalse(_model.HasSelectedItem);
+    }
+
+    [Test]
+    public void Deselect_ClearsSelection()
+    {
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 5 } });
+        _model.Select(ItemType.Rem);
+
+        ItemType? selected = ItemType.Rem;
+        _model.OnSelectedChanged += type => selected = type;
+
+        _model.Deselect();
+
+        Assert.IsNull(_model.SelectedItem);
+        Assert.IsNull(selected);
+        Assert.IsFalse(_model.HasSelectedItem);
+    }
+
+    [Test]
+    public void ClearSelection_ClearsWithoutRaisedEventsWhenAlreadyEmpty()
+    {
+        int events = 0;
+        _model.OnSelectedChanged += _ => events++;
         _model.ClearSelection();
-        Assert.AreEqual(-1, _model.SelectedSlot);
-        Assert.AreEqual(-1, selectedIdx);
+        Assert.AreEqual(0, events);
     }
 
     [Test]
-    public void InvalidSlotOperations_AreIgnored()
+    public void ApplyItemMetadata_UpdatesItemShell()
     {
-        Assert.DoesNotThrow(() => _model.SelectSlot(-1));
-        Assert.DoesNotThrow(() => _model.SelectSlot(InventoryModel.TOTALSLOTS));
-        Assert.DoesNotThrow(() => _model.SwapSlots(-1, 0));
-        Assert.DoesNotThrow(() => _model.SwapSlots(0, InventoryModel.TOTALSLOTS));
-        Assert.IsFalse(_model.TryStackSlots(-1, 0));
-        Assert.IsFalse(_model.TryStackSlots(0, InventoryModel.TOTALSLOTS));
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 5 } });
+        _model.Select(ItemType.Rem);
+
+        _model.ApplyItemMetadata(ItemType.Rem, "Ремонтный бот", "Восстанавливает здоровье");
+
+        var item = _model.GetItem(ItemType.Rem);
+        Assert.IsNotNull(item);
+        Assert.AreEqual("Ремонтный бот", item!.Name);
+        Assert.AreEqual("Восстанавливает здоровье", item.Description);
+    }
+
+    [Test]
+    public void ApplyItemMetadata_UnknownType_IsIgnored()
+    {
+        Assert.DoesNotThrow(() => _model.ApplyItemMetadata(ItemType.Rem, "x", "y"));
+    }
+
+    [Test]
+    public void FullSnapshotVanishingSelection_ClearsSelection()
+    {
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 5 },
+            { ItemType.Battery, 2 },
+        });
+        _model.Select(ItemType.Battery);
+
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 5 } });
+
+        Assert.IsNull(_model.SelectedItem);
+        Assert.IsFalse(_model.HasSelectedItem);
     }
 }

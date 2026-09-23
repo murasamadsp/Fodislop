@@ -5,123 +5,161 @@ using System.Collections.Generic;
 using Kern.Core.Interfaces;
 using Kern.Core.Models;
 using Kern.Networking;
+using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Inventory;
 using UnityEngine;
 using VContainer;
 
 namespace Kern.Game.Inventory;
+
+/// <summary>
+/// Ordered-type inventory. Holds every item type that the player owns (with
+/// long quantities, no slot abstraction), keeps a display order whose head is
+/// the currently selected item, and forwards client-to-server selection
+/// commands through <see cref="INetworkService"/>.
+/// </summary>
 public class InventoryModel : IInventoryModel, IInventoryState
 {
-    public const int HOTBAR_SIZE = 9;
-    public const int INVENTORY_SIZE = 6 * 9;
-    public const int TOTALSLOTS = HOTBAR_SIZE + INVENTORY_SIZE;
-
     [Inject]
     private INetworkService _networkService = null!;
 
-    private ItemData?[] _slots = new ItemData?[TOTALSLOTS];
+    private readonly List<ItemType> _order = new();
+    private readonly Dictionary<ItemType, ItemData> _items = new();
 
-    public event Action<int>? OnSlotChanged;
+    private ItemType? _selectedItem;
 
-    private int _selectedSlot = -1;
-    public int SelectedSlot => _selectedSlot;
+    public event Action? OnItemsChanged;
+    public event Action<ItemType?>? OnSelectedChanged;
+
+    public IReadOnlyList<ItemType> OrderedTypes => _order;
+
+    public ItemType? SelectedItem => _selectedItem;
+
     public bool HasSelectedItem =>
-        _selectedSlot >= 0 && _selectedSlot < _slots.Length && _slots[_selectedSlot] != null;
-    public event Action<int>? OnSlotSelected;
+        _selectedItem is { } selected &&
+        _items.TryGetValue(selected, out ItemData? item) &&
+        item.Quantity > 0;
 
-    public ItemData? GetSlot(int index) => (index >= 0 && index < _slots.Length) ? _slots[index] : null;
-    public void SetSlot(int index, ItemData? item)
+    public ItemData? GetItem(ItemType type) =>
+        _items.TryGetValue(type, out ItemData? item) ? item : null;
+
+    public long GetQuantity(ItemType type) =>
+        _items.TryGetValue(type, out ItemData? item) ? item.Quantity : 0;
+
+    public void ApplyFullSnapshot(IDictionary<ItemType, long> snapshot)
     {
-        if (index >= 0 && index < _slots.Length)
+        HashSet<ItemType> nextTypes = new();
+        SnapshotKeySet(snapshot, nextTypes);
+
+        var nextOrder = new List<ItemType>(_order.Count);
+        foreach (ItemType type in _order)
         {
-            if (AreEquivalent(_slots[index], item))
+            if (nextTypes.Contains(type))
             {
-                return;
+                nextOrder.Add(type);
+            }
+        }
+
+        foreach (ItemType type in snapshot.Keys)
+        {
+            if (!nextTypes.Contains(type) || _order.Contains(type))
+            {
+                continue;
             }
 
-            _slots[index] = item;
-            OnSlotChanged?.Invoke(index);
-            if (index == _selectedSlot)
+            nextOrder.Add(type);
+        }
+
+        _order.Clear();
+        _order.AddRange(nextOrder);
+
+        _items.Clear();
+        foreach (ItemType type in _order)
+        {
+            _items[type] = new ItemData(type.ToString(), Color.gray, snapshot[type])
             {
-                OnSlotSelected?.Invoke(index);
+                ItemType = type,
+            };
+        }
+
+        ClearSelectionIfVanished();
+        OnItemsChanged?.Invoke();
+    }
+
+    public void MergeChanges(IDictionary<ItemType, long> changes)
+    {
+        bool shouldInvalidate = false;
+
+        foreach ((ItemType type, long quantity) in changes)
+        {
+            if (quantity <= 0)
+            {
+                if (!_items.Remove(type))
+                {
+                    continue;
+                }
+
+                _order.Remove(type);
+                shouldInvalidate = true;
+                continue;
             }
-        }
-    }
 
-    public static bool CanStack(ItemData? a, ItemData? b)
-    {
-        if (a == null || b == null)
+            if (_items.TryGetValue(type, out ItemData? existing))
+            {
+                if (existing.Quantity != quantity)
+                {
+                    existing.Quantity = quantity;
+                    shouldInvalidate = true;
+                }
+
+                continue;
+            }
+
+            _items[type] = new ItemData(type.ToString(), Color.gray, quantity)
+            {
+                ItemType = type,
+            };
+            _order.Add(type);
+            shouldInvalidate = true;
+        }
+
+        if (ClearSelectionIfVanished())
         {
-            return false;
+            shouldInvalidate = true;
         }
 
-        return a.Name == b.Name && a.IconColor == b.IconColor;
+        if (shouldInvalidate)
+        {
+            OnItemsChanged?.Invoke();
+        }
     }
 
-    public void SwapSlots(int from, int to)
+    public void ApplyItemMetadata(ItemType item, string name, string description)
     {
-        if (!IsValidSlot(from) || !IsValidSlot(to) || from == to)
+        if (!_items.TryGetValue(item, out ItemData? data))
         {
             return;
         }
 
-        var temp = _slots[from];
-        _slots[from] = _slots[to];
-        _slots[to] = temp;
-        OnSlotChanged?.Invoke(from);
-        OnSlotChanged?.Invoke(to);
+        data.Name = name;
+        data.Description = description;
+        OnItemsChanged?.Invoke();
     }
 
-    public bool TryStackSlots(int from, int to)
+    public void Select(ItemType type)
     {
-        if (!IsValidSlot(from) || !IsValidSlot(to) || from == to)
-        {
-            return false;
-        }
-
-        var fromItem = _slots[from];
-        var toItem = _slots[to];
-
-        if (fromItem == null)
-        {
-            return false;
-        }
-
-        if (toItem == null)
-        {
-            _slots[to] = fromItem;
-            _slots[from] = null;
-            OnSlotChanged?.Invoke(from);
-            OnSlotChanged?.Invoke(to);
-            return true;
-        }
-
-        if (!CanStack(fromItem, toItem))
-        {
-            return false;
-        }
-
-        toItem.Quantity += fromItem.Quantity;
-        _slots[from] = null;
-        OnSlotChanged?.Invoke(from);
-        OnSlotChanged?.Invoke(to);
-        return true;
-    }
-
-    public void SelectSlot(int index)
-    {
-        if (!IsValidSlot(index))
+        if (!_items.TryGetValue(type, out ItemData? item) || item.Quantity <= 0)
         {
             return;
         }
 
-        if (_selectedSlot == index)
+        if (_selectedItem != type)
         {
-            return;
+            _selectedItem = type;
+            MoveToFront(type);
+            OnSelectedChanged?.Invoke(type);
+            OnItemsChanged?.Invoke();
         }
-
-        _selectedSlot = index;
-        OnSlotSelected?.Invoke(index);
 
         if (_networkService == null)
         {
@@ -129,24 +167,22 @@ public class InventoryModel : IInventoryModel, IInventoryState
             return;
         }
 
-        ItemData? item = _slots[index];
-        if (item != null)
-        {
-            _networkService.Send(new SelectItemPacket(item.ItemType));
-        }
-        else
-        {
-            _networkService.Send(new DeselectItemPacket());
-        }
+        _networkService.Send(new SelectItemPacket(type));
     }
 
-    public void DeselectSlot()
+    public void Deselect()
     {
-        _selectedSlot = -1;
-        OnSlotSelected?.Invoke(-1);
+        if (_selectedItem == null)
+        {
+            return;
+        }
+
+        _selectedItem = null;
+        OnSelectedChanged?.Invoke(null);
 
         if (_networkService == null)
         {
+            Debug.LogWarning("[InventoryModel] NetworkService is not injected, cannot send packet");
             return;
         }
 
@@ -155,45 +191,70 @@ public class InventoryModel : IInventoryModel, IInventoryState
 
     public void ClearSelection()
     {
-        if (_selectedSlot < 0)
+        if (_selectedItem == null)
         {
             return;
         }
 
-        _selectedSlot = -1;
-        OnSlotSelected?.Invoke(-1);
+        _selectedItem = null;
+        OnSelectedChanged?.Invoke(null);
     }
 
     public void UseSelectedItem()
     {
-        if (_selectedSlot < 0 || _slots[_selectedSlot] == null)
+        if (!HasSelectedItem)
         {
             return;
         }
 
+        if (_networkService == null)
+        {
+            Debug.LogWarning("[InventoryModel] NetworkService is not injected, cannot send packet");
+            return;
+        }
+
+        // Server decides which held type is used from its own selection state;
+        // the client just asks to use whatever is currently selected.
         _networkService.Send(new UseItemPacket());
     }
 
-    private static bool AreEquivalent(ItemData? left, ItemData? right)
+    private void MoveToFront(ItemType type)
     {
-        if (ReferenceEquals(left, right))
+        int index = _order.IndexOf(type);
+        if (index <= 0)
         {
-            return true;
+            return;
         }
 
-        if (left == null || right == null)
+        _order.RemoveAt(index);
+        _order.Insert(0, type);
+    }
+
+    private bool ClearSelectionIfVanished()
+    {
+        if (_selectedItem is not { } selected)
         {
             return false;
         }
 
-        return string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
-            left.Quantity == right.Quantity &&
-            string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
-            left.ItemType == right.ItemType;
+        if (_items.TryGetValue(selected, out ItemData? item) && item.Quantity > 0)
+        {
+            return false;
+        }
+
+        _selectedItem = null;
+        OnSelectedChanged?.Invoke(null);
+        return true;
     }
 
-    private static bool IsValidSlot(int index)
+    private static void SnapshotKeySet(IDictionary<ItemType, long> snapshot, HashSet<ItemType> into)
     {
-        return index >= 0 && index < TOTALSLOTS;
+        foreach ((ItemType type, long quantity) in snapshot)
+        {
+            if (quantity > 0)
+            {
+                into.Add(type);
+            }
+        }
     }
 }
