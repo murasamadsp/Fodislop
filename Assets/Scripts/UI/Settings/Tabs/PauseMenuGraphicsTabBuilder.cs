@@ -157,6 +157,33 @@ internal sealed class PauseMenuGraphicsTabBuilder
             _refreshers);
         graphicsSection.Add(distortionToggle);
 
+        var distortionStyleRow = new VisualElement();
+        distortionStyleRow.AddToClassList("pause-slider-container");
+        var distortionStyleLabel = new Label(_loc.Get("settings.world.distortion_style"));
+        distortionStyleLabel.AddToClassList("pause-slider-label");
+        distortionStyleRow.Add(distortionStyleLabel);
+        var distortionStyleDropdown = new DropdownField
+        {
+            choices = new List<string>
+            {
+                _loc.Get("settings.world.distortion_style.classic"),
+                _loc.Get("settings.world.distortion_style.organic"),
+            },
+        };
+        distortionStyleDropdown.index = (int)_clientConfig.Config.Terrain.DistortionStyle;
+        distortionStyleDropdown.RegisterValueChangedCallback(_ =>
+        {
+            TerrainDistortionStyle style = (TerrainDistortionStyle)distortionStyleDropdown.index;
+            _graphicsSettings.UpdateCustomWorldMaterialSettings(
+                config => config.Terrain.DistortionStyle = style);
+        });
+        _refreshers.Add(() =>
+        {
+            distortionStyleDropdown.index = (int)_clientConfig.Config.Terrain.DistortionStyle;
+        });
+        distortionStyleRow.Add(distortionStyleDropdown);
+        graphicsSection.Add(distortionStyleRow);
+
         customGraphicsSection = new Foldout
         {
             text = _loc.Get("settings.graphics.custom_profile"),

@@ -255,7 +255,9 @@ public sealed class ServerAudioEvent : IDisposable
 
         if (_parsedParams.HasSourceBot)
         {
+            long robotStart = System.Diagnostics.Stopwatch.GetTimestamp();
             _sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotID);
+            RecordIfSlow("робот-источник", robotStart);
             pos = _sourceBot != null
                 ? _sourceBot.transform.position
                 : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
@@ -275,7 +277,9 @@ public sealed class ServerAudioEvent : IDisposable
 
         if (_targetBotID != 0)
         {
+            long robotStart = System.Diagnostics.Stopwatch.GetTimestamp();
             _targetBot = _robotService.GetOrCreateRobot(_targetBotID);
+            RecordIfSlow("робот-цель", robotStart);
             if (_targetBot != null && _gameObject != null)
             {
                 // The dig effect must point the way the bot faces, toward
@@ -296,7 +300,23 @@ public sealed class ServerAudioEvent : IDisposable
     private void PlayAudio(SFX effectType)
     {
         string eventName = SfxEventNames.Get(effectType);
+        long audioStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _audioSystem.PlayAt(eventName, _intendedWorldPosition);
+        RecordIfSlow(eventName, audioStart);
+    }
+
+    // Обработчик звукового пакета синхронно создаёт робота, если бот ещё не
+    // известен, и запускает звук. Какая часть дорогая, видно только по
+    // замеру: запись попадает в отчёт о провисе кадра (FrameStall).
+    private static void RecordIfSlow(string what, long startTimestamp)
+    {
+        double milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 /
+            System.Diagnostics.Stopwatch.Frequency;
+        if (milliseconds >= 2.0)
+        {
+            Kern.Core.Interfaces.Diagnostics.FrameEventLog.Record(
+                $"звуковое событие: {what} {milliseconds:F1} мс");
+        }
     }
 
     private async UniTask LoadVisualWithCancellationAsync(

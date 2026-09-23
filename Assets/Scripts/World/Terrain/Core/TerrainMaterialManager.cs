@@ -6,6 +6,7 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
+using Kern.Core.Interfaces.Diagnostics;
 
 namespace Kern.World.Terrain;
 
@@ -15,6 +16,7 @@ public sealed class TerrainMaterialManager
     private static readonly int _PrismaticFlowMapPropertyID = Shader.PropertyToID("_PrismaticFlowMap");
     private static readonly int _FlowMapPropertyID = Shader.PropertyToID("_FlowMap");
     private static readonly int _TerrainDecalAtlasPropertyID = Shader.PropertyToID("_TerrainDecalAtlas");
+    private static readonly int _TerrainDecalStoneAtlasPropertyID = Shader.PropertyToID("_TerrainDecalStoneAtlas");
     private static readonly int _FlowScalePropertyID = Shader.PropertyToID("_FlowScale");
     private static readonly int _ShimmerSpeedScalePropertyID = Shader.PropertyToID("_ShimmerSpeedScale");
     private static readonly int _PulseSpeedScalePropertyID = Shader.PropertyToID("_PulseSpeedScale");
@@ -126,6 +128,7 @@ public sealed class TerrainMaterialManager
             }
 
             SnapshotAtlasRefs(atlases);
+            FrameEventLog.Record($"террейн: материалы для атласов {startIndex}..{atlases.Count - 1}");
             return false;
         }
 
@@ -154,6 +157,7 @@ public sealed class TerrainMaterialManager
         _cellMaterials[0].EnableKeyword(CellModeKeyword);
 
         SnapshotAtlasRefs(atlases);
+        FrameEventLog.Record($"террейн: материалы пересозданы, атласов {atlases.Count}");
         return true;
     }
 
@@ -248,13 +252,15 @@ public sealed class TerrainMaterialManager
                 atlases[i].Texture,
                 textureService.FlowMapTexture,
                 textureService.PrismaticFlowMapTexture,
-                textureService.TerrainDecalAtlasTexture);
+                textureService.TerrainDecalAtlasTexture,
+                textureService.TerrainDecalStoneAtlasTexture);
             BindAtlas(
                 _overlayMaterials[i],
                 atlases[i].Texture,
                 textureService.FlowMapTexture,
                 textureService.PrismaticFlowMapTexture,
-                textureService.TerrainDecalAtlasTexture);
+                textureService.TerrainDecalAtlasTexture,
+                textureService.TerrainDecalStoneAtlasTexture);
             if (_cellMaterials.Length > 0 && i < _TerrainAtlasPropertyIDs.Length &&
                 _cellMaterials[0].GetTexture(_TerrainAtlasPropertyIDs[i]) != atlases[i].Texture)
             {
@@ -269,7 +275,8 @@ public sealed class TerrainMaterialManager
                 atlases[0].Texture,
                 textureService.FlowMapTexture,
                 textureService.PrismaticFlowMapTexture,
-                textureService.TerrainDecalAtlasTexture);
+                textureService.TerrainDecalAtlasTexture,
+                textureService.TerrainDecalStoneAtlasTexture);
         }
     }
 
@@ -280,7 +287,8 @@ public sealed class TerrainMaterialManager
         Texture? atlas,
         Texture? flowMap,
         Texture? prismaticFlowMap,
-        Texture? terrainDecalAtlas)
+        Texture? terrainDecalAtlas,
+        Texture? terrainDecalStoneAtlas)
     {
         if (material.GetTexture(_BaseMapPropertyID) != atlas)
         {
@@ -300,6 +308,11 @@ public sealed class TerrainMaterialManager
         if (material.GetTexture(_TerrainDecalAtlasPropertyID) != terrainDecalAtlas)
         {
             material.SetTexture(_TerrainDecalAtlasPropertyID, terrainDecalAtlas);
+        }
+
+        if (material.GetTexture(_TerrainDecalStoneAtlasPropertyID) != terrainDecalStoneAtlas)
+        {
+            material.SetTexture(_TerrainDecalStoneAtlasPropertyID, terrainDecalStoneAtlas);
         }
     }
 

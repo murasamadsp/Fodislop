@@ -22,6 +22,7 @@ Code is the source of truth if reference context is stale. Don't read everything
 
 ## Authority boundaries
 
+- Unity CLI is available as `unity`; invoke it only for a specific Unity operation explicitly named in the current user request.
 - Do not launch, open, close, or control Unity Editor/Hub; do not invoke Unity CLI, MCP, Editor API, batch mode, build, tests, import, or read Editor logs unless the current user request explicitly names a specific Unity operation. Do not solicit system permission to act in Unity on your own initiative.
 - Permission extends only to the explicitly named Unity operation. If the verification cannot be completed without Unity, stop and name the specific operation left for the user.
 - Do not perform Git rollback or history rewriting without an explicit request in the current message: `reset`, `restore`, checkout for restoration, `revert`, `clean`, amend, rebase, or force-push. Do not restore files from `HEAD`, stash, or reflog, and do not solicit such permission on your own initiative.
@@ -31,7 +32,7 @@ Code is the source of truth if reference context is stale. Don't read everything
 - When the user asks a question or writes a question-reply — stop immediately, answer directly, and do NOT edit, create, or run anything without explicit instruction from the user.
 - NEVER USE `--no-verify`!
 - Warning suppression is forbidden: do not add `SuppressMessage`, `#pragma warning disable`, `NoWarn`, disabling blanket warnings, or similar exclusions. Fix the root cause of the warning; an exception is permitted only for an immutable third-party package that is not part of project code.
-- `git commit` and `git push` are executed ONLY when the user explicitly requests it in the current message. Do not commit or push after completing a task "for convenience" or "to save" — only file edits.
+- `git commit` and `git push` are executed ONLY when the user explicitly requests it in the current message. A user request to "push" means stage all working-tree changes, create one commit with a short Russian message, and push it; do not ask for separate commit authorization. Do not commit or push after completing a task "for convenience" or "to save" — only file edits.
 - Always commit everything: all working-tree changes in one commit (`git add -A && git commit`), without splitting or selective staging, unless the user explicitly requests otherwise.
 - After every user-requested `git commit`/`git push`, immediately monitor the resulting GitHub Actions run(s) until they finish. Fetch failed-job logs, fix the root cause, push the fix, and continue monitoring; do not report completion while a run is queued, in progress, or failed.
 - CI must use standard GitHub-hosted runners (`ubuntu-latest`, `macos-latest`, `windows-latest`); self-hosted/Unity runner labels are forbidden. If a job requires Unity, move it to a standard runner instead of leaving it queued.
@@ -47,6 +48,8 @@ For non-trivial work: define the outcome, make the changes, and continue until v
 For claims about visual or GPU results, the test must go through the production path: real shader and pass, real mesh attributes/`SV_POSITION`, production material keywords, real data textures, and the same camera/projection path. An isolated probe shader, a manual helper function call, a static source check, or a CPU model are supplementary tests only — they do not prove game behavior. If the production path cannot be run, explicitly mark the verification as incomplete.
 
 The visual test oracle must be independent of production functions. A helper matching itself is not valid as a regression proof.
+
+Never explain a visual or runtime problem by saying that debug mode is enabled. Debug state may be inspected as one hypothesis, but it is not evidence of the root cause and must never end the investigation or replace a production-path fix. A screenshot with flat colors must be traced through the real shader, mesh data, material keywords, textures, and camera path; if that production verification cannot be performed, report the result as unverified instead of attributing it to `TerrainDebugView` or any other debug feature.
 
 Do not invent things the user did not ask for. Motion, rotation, animation, pulsing, flickering — NOT added on the agent's initiative. A static image means a static result. A correction to one word in the description applies to the entire entity.
 

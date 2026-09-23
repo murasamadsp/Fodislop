@@ -89,13 +89,13 @@ public sealed class InstallUpgradeTests
     public void OldConfigVersion_ResetsToDefaultsAndOverwrites()
     {
         OldVersionConfig(
-            schemaVersion: ClientConfig.CurrentSchemaVersion - 2,
+            schemaVersion: ClientConfig.CurrentSchemaVersion - 3,
             PixelSamplingMode.PixelPerfect);
 
         ClientConfigLoader.Result config = LoadConfig();
 
         Assert.That(config.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.ResetToDefaults));
-        Assert.That(config.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 2));
+        Assert.That(config.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 3));
         Assert.That(
             new ClientConfigRepository(ConfigPath).Load().Config.SchemaVersion,
             Is.EqualTo(ClientConfig.CurrentSchemaVersion));
@@ -103,17 +103,17 @@ public sealed class InstallUpgradeTests
     }
 
     [Test]
-    public void PreviousConfigVersion_MigratesReliefRimAndKeepsBackup()
+    public void PreviousConfigVersion_MigratesDistortionStyleAndKeepsBackup()
     {
         string previousJson = OldVersionConfig(
             schemaVersion: ClientConfig.CurrentSchemaVersion - 1,
             PixelSamplingMode.SmoothFiltered);
         previousJson = Regex.Replace(
             previousJson,
-            @"^\s*""EnableReliefRim""\s*:\s*true,\r?\n",
+            @"^\s*""DistortionStyle""\s*:\s*0,\r?\n",
             string.Empty,
             RegexOptions.Multiline);
-        Assert.That(previousJson, Does.Not.Contain("EnableReliefRim"));
+        Assert.That(previousJson, Does.Not.Contain("DistortionStyle"));
         File.WriteAllText(ConfigPath, previousJson);
 
         ClientConfigLoader.Result result = LoadConfig();
@@ -122,6 +122,7 @@ public sealed class InstallUpgradeTests
         Assert.That(result.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 1));
         Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
         Assert.That(result.Config.Terrain.EnableReliefRim, Is.True);
+        Assert.That(result.Config.Terrain.DistortionStyle, Is.EqualTo(TerrainDistortionStyle.Organic));
         Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Custom));
         Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(previousJson));
     }
@@ -194,8 +195,8 @@ public sealed class InstallUpgradeTests
         new ClientConfigLoader(new ClientConfigRepository(ConfigPath), _profile).LoadOrCreate();
 
     // Файл чужой версии: те же секции, что пишет текущий клиент, но с чужим
-// номером схемы. Для старых неподдерживаемых версий содержимое не переносится;
-// отдельный тест выше проверяет единственную поддерживаемую миграцию.
+    // номером схемы. Для старых неподдерживаемых версий содержимое не переносится;
+    // отдельный тест выше проверяет миграцию предыдущей версии.
     private string OldVersionConfig(int schemaVersion, PixelSamplingMode pixelSampling)
     {
         ClientConfig config = ClientConfigDefaults.Create(_profile);

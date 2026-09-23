@@ -142,7 +142,6 @@ _pkginfo.txt
 ClientBin/
 ~$*
 *~
-!Packages/com.gamelovers.mcp-unity/Server~/
 *.dbmdl
 *.dbproj.schemaview
 *.jfm

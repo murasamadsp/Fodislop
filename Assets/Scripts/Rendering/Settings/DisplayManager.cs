@@ -111,11 +111,9 @@ namespace Kern.Rendering
             }
 
             DisplaySettings display = _clientConfig.Config.Display;
-            if (ApplyInitialSettings(display))
-            {
-                _clientConfig.SaveDeferred();
-            }
-
+            // Начальные режимы экрана применяются ApplicationBootstrap до
+            // shader warmup. Повторный вызов здесь заново читает HDR-состояние
+            // и может запустить лишнюю попытку переключения Pending/Retrying.
             ApplyPixelSampling(display.PixelSampling);
             HDROutput.ConfigureCamera(_gameplayCamera.Camera);
         }

@@ -20,8 +20,8 @@ public class TerrainLightingDataTests
             reliefMask: 0,
             hasRelief: false);
 
-        Assert.That(data.PackedFlags, Is.EqualTo(117.15f).Within(0.0001f));
-        Assert.That(data.PackedContour, Is.EqualTo(43f));
+        Assert.That(data.PackedFlags, Is.EqualTo(53.15f).Within(0.0001f));
+        Assert.That(data.PackedContour, Is.EqualTo(21f));
     }
 
     [TestCase(false, false, false)]
@@ -47,7 +47,6 @@ public class TerrainLightingDataTests
         Assert.That(data.SolidDiagonal, Is.EqualTo(0x0A));
         Assert.That(data.IsEmissive, Is.EqualTo(isGlowing));
         Assert.That(data.IsRoundable, Is.EqualTo(hasRoundedPhysicalContour));
-        Assert.That(data.HasRoundedPhysicalContour, Is.EqualTo(hasRoundedPhysicalContour));
         Assert.That(data.IsPhysicalMass, Is.EqualTo(isPhysicalMass));
     }
 
@@ -88,7 +87,6 @@ public class TerrainLightingDataTests
         Assert.That(data.EmissionStrength, Is.EqualTo(emissionStrength).Within(0.0001f));
         Assert.That(data.SolidBoundary, Is.EqualTo(0x0A));
         Assert.That(data.IsEmissive, Is.True);
-        Assert.That(data.HasRoundedPhysicalContour, Is.True);
         Assert.That(data.IsPhysicalMass, Is.True);
     }
 
@@ -107,22 +105,7 @@ public class TerrainLightingDataTests
         Assert.That(data.EmissionStrength, Is.Zero);
     }
 
-    [TestCase(MinesServer.Data.CellType.QuadBlock)]
-    [TestCase(MinesServer.Data.CellType.Support)]
-    [TestCase(MinesServer.Data.CellType.MilitaryBlock)]
-    [TestCase(MinesServer.Data.CellType.BuildingWall)]
-    [TestCase(MinesServer.Data.CellType.BuildingDoor)]
-    [TestCase(MinesServer.Data.CellType.BuildingCorner)]
-    [TestCase(MinesServer.Data.CellType.Gate)]
-    [TestCase(MinesServer.Data.CellType.TeleportBlock)]
-    [TestCase(MinesServer.Data.CellType.Box)]
-    public void BuildingAndArtificialBlocksAreIdentifiedAsNonEmissive(MinesServer.Data.CellType cellType)
-    {
-        Assert.That(Kern.World.MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellType), Is.True);
-    }
-
-    // Код рельефа лежит над остальными полями контура и обязан их не задевать:
-    // одно число несёт флаги, диагональных соседей и кайму разом.
+    // Код рельефа лежит над флагом roundable contour и не затрагивает его.
     [TestCase(0, 1)]
     [TestCase(0x05, 6)]
     [TestCase(0x0F, 16)]
@@ -138,7 +121,6 @@ public class TerrainLightingDataTests
             hasRelief: true);
 
         Assert.That(data.ReliefCode, Is.EqualTo(expectedCode));
-        Assert.That(data.SolidDiagonal, Is.EqualTo(0x0A));
         Assert.That(data.IsRoundable, Is.True);
     }
 

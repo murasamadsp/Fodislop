@@ -101,6 +101,10 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
     // the same ring address and must never inherit a stale anchor bit from a
     // previous cell upload.
     bool anchored = layer > 0 && meta.a > 0.5;
+    bool organic = anchored && meta.a < 0.75;
+    float organicEdges = organic
+        ? round(meta.b * 255.0) + 256.0 * (round(meta.a * 255.0) - 128.0)
+        : 0.0;
     // Rasterize a carrier enclosing the ENTIRE pixel silhouette. Rasterizing
     // the displaced polygon first loses fragments on the outward half of every
     // staircase; fragment clipping cannot bring those fragments back.
@@ -114,11 +118,45 @@ TerrainCellVertex LoadTerrainCellVertex(float3 address, float2 cornerBase)
         float2 boundsMax = float2(
             max(max(geometryX.x, geometryX.y), max(geometryX.z, geometryX.w)),
             max(max(geometryY.x, geometryY.y), max(geometryY.z, geometryY.w)));
+        // Include the four extra edge points in the carrier. Exact bounds
+        // avoid shading a padded rectangle around every organic cell.
+        if (organic)
+        {
+            int code = (int)organicEdges - 1;
+            float bottomBend = ((code % 5) - 2) * (2.0 / 32.0);
+            code /= 5;
+            float rightBend = ((code % 5) - 2) * (2.0 / 32.0);
+            code /= 5;
+            float topBend = ((code % 5) - 2) * (2.0 / 32.0);
+            code /= 5;
+            float leftBend = ((code % 5) - 2) * (2.0 / 32.0);
+            float4 edgeT = float4(
+                bottomBend > 0.0 ? 0.35 : 0.65,
+                rightBend > 0.0 ? 0.35 : 0.65,
+                topBend > 0.0 ? 0.65 : 0.35,
+                leftBend > 0.0 ? 0.65 : 0.35);
+            float4 edgeX = float4(
+                lerp(geometryX.x, geometryX.y, edgeT.x),
+                lerp(geometryX.y, geometryX.z, edgeT.y) + rightBend,
+                lerp(geometryX.z, geometryX.w, edgeT.z),
+                lerp(geometryX.w, geometryX.x, edgeT.w) + leftBend);
+            float4 edgeY = float4(
+                lerp(geometryY.x, geometryY.y, edgeT.x) + bottomBend,
+                lerp(geometryY.y, geometryY.z, edgeT.y),
+                lerp(geometryY.z, geometryY.w, edgeT.z) + topBend,
+                lerp(geometryY.w, geometryY.x, edgeT.w));
+            boundsMin = min(boundsMin, float2(
+                min(min(edgeX.x, edgeX.y), min(edgeX.z, edgeX.w)),
+                min(min(edgeY.x, edgeY.y), min(edgeY.z, edgeY.w))));
+            boundsMax = max(boundsMax, float2(
+                max(max(edgeX.x, edgeX.y), max(edgeX.z, edgeX.w)),
+                max(max(edgeY.x, edgeY.y), max(edgeY.z, edgeY.w))));
+        }
         boundsMin = floor(boundsMin * 32.0) / 32.0;
         boundsMax = ceil(boundsMax * 32.0) / 32.0;
         carrierCorner = lerp(boundsMin, boundsMax, cornerBase);
     }
-    v.packedData = float4(anchored ? 1.0 : 0.0, carrierCorner, 0.0);
+    v.packedData = float4(anchored ? 1.0 : 0.0, carrierCorner, organicEdges);
     v.geometryCornersX = anchored
         ? geometryX
         : float4(0.0, 1.0, 1.0, 0.0);

@@ -1,9 +1,11 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Kern.Core.Interfaces.Diagnostics;
 
 namespace Kern.World.Terrain;
 
@@ -68,8 +70,12 @@ public sealed class TerrainCellDataTextures : IDisposable
         private const int StagingRows = 128;
 
         public Texture2D? Target;
-        public Texture2D? Staging;
         public T[] Data = [];
+
+        // Промежуточные текстуры по слотам. Слот один на все каналы: его
+        // выбирает TerrainCellDataTextures так, чтобы текстура не набивалась
+        // повторно, пока её прошлую загрузку ещё может читать render thread.
+        private readonly List<Texture2D> _staging = [];
 
         public static long CopyTicks;
         public static long ApplyTicks;
@@ -77,8 +83,8 @@ public sealed class TerrainCellDataTextures : IDisposable
         public void Allocate(int width, int height)
         {
             Target = Create(width, height, format, name);
-            Staging = Create(width, Math.Min(StagingRows, height), format, name + "Staging");
             Data = new T[width * height];
+            EnsureStagingSlot(0);
         }
 
         public void UploadAll()
@@ -88,41 +94,79 @@ public sealed class TerrainCellDataTextures : IDisposable
             Target.Apply(false, false);
         }
 
-        /// <summary>Высота полоски, которой режется прямоугольник любой формы.</summary>
-        public int StagingHeight => Staging!.height;
+        /// <summary>Высота промежуточной текстуры: по ней режутся высокие куски.</summary>
+        public int StagingHeight => Math.Min(StagingRows, Target!.height);
 
-        /// <summary>Набить полоску прямоугольника и отдать её на GPU.</summary>
+        public int StagingWidth => Target!.width;
+
+        public void EnsureStagingSlot(int slot)
+        {
+            while (_staging.Count <= slot)
+            {
+                _staging.Add(Create(StagingWidth, StagingHeight, format, name + "Staging" + _staging.Count));
+            }
+        }
+
+        /// <summary>
+        /// Набить все куски одной промежуточной текстуры и отдать её на GPU:
+        /// один доступ к пиксельному буферу и одна загрузка на канал.
+        /// </summary>
         ///
-        /// Разделено с переносом намеренно. Apply() — это загрузка с
-        /// синхронизацией, CopyTexture — команда GPU; когда они чередуются по
-        /// девяти каналам, кадр платит за девять точек синхронизации вместо
-        /// одной. Сначала набиваются все каналы, потом переносятся все.
-        public void StageStrip(int x, int y, int width, int height)
+        /// Перенос на место — отдельно (CopyStaged): Apply() — это загрузка с
+        /// синхронизацией, CopyTexture — команда GPU; сначала набиваются все
+        /// каналы, потом переносятся все.
+        public void Stage(int slot, List<TerrainStagedPiece> pieces, int start, int end)
         {
             long copyStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            Texture2D staging = _staging[slot];
             int textureWidth = Target!.width;
-            NativeArray<T> pixels = Staging!.GetPixelData<T>(0);
-            for (int row = 0; row < height; row++)
+            int stagingWidth = staging.width;
+            NativeArray<T> pixels = staging.GetPixelData<T>(0);
+            for (int index = start; index < end; index++)
             {
-                NativeArray<T>.Copy(Data, ((y + row) * textureWidth) + x, pixels, row * Staging.width, width);
+                TerrainStagedPiece piece = pieces[index];
+                RectInt target = piece.Target;
+                for (int row = 0; row < target.height; row++)
+                {
+                    NativeArray<T>.Copy(
+                        Data,
+                        ((target.y + row) * textureWidth) + target.x,
+                        pixels,
+                        ((piece.StageY + row) * stagingWidth) + piece.StageX,
+                        target.width);
+                }
             }
 
             CopyTicks += System.Diagnostics.Stopwatch.GetTimestamp() - copyStart;
 
             long applyStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            Staging.Apply(false, false);
+            staging.Apply(false, false);
             ApplyTicks += System.Diagnostics.Stopwatch.GetTimestamp() - applyStart;
         }
 
-        public void CopyStagedStrip(int x, int y, int width, int height)
+        public void CopyStaged(int slot, List<TerrainStagedPiece> pieces, int start, int end)
         {
-            Graphics.CopyTexture(Staging!, 0, 0, 0, 0, width, height, Target!, 0, 0, x, y);
+            Texture2D staging = _staging[slot];
+            for (int index = start; index < end; index++)
+            {
+                TerrainStagedPiece piece = pieces[index];
+                RectInt target = piece.Target;
+                Graphics.CopyTexture(
+                    staging, 0, 0, piece.StageX, piece.StageY, target.width, target.height,
+                    Target!, 0, 0, target.x, target.y);
+            }
         }
 
         public void Destroy()
         {
             DestroyTexture(ref Target);
-            DestroyTexture(ref Staging);
+            for (int index = 0; index < _staging.Count; index++)
+            {
+                Texture2D? staging = _staging[index];
+                DestroyTexture(ref staging);
+            }
+
+            _staging.Clear();
             Data = [];
         }
 
@@ -139,6 +183,12 @@ public sealed class TerrainCellDataTextures : IDisposable
     private readonly Channel<TerrainHalfTexel> _geometryY = new(TextureFormat.RGBAHalf, "TerrainCellGeometryY");
 
     private readonly TerrainDirtyRegion _dirty = new();
+    private readonly List<RectInt> _uploadRects = [];
+    private readonly List<TerrainStagedPiece> _uploadPieces = [];
+
+    // Кадр, в котором слот промежуточных текстур набивался последний раз.
+    private readonly List<int> _stagingSlotFrames = [];
+    private const int MaximumStagingSlots = 8;
 
     public int MeshWidth { get; private set; }
 
@@ -285,6 +335,7 @@ public sealed class TerrainCellDataTextures : IDisposable
         {
             LastUploadRectCount = 0;
             LastUploadTexels = (long)MeshWidth * textureHeight;
+            FrameEventLog.Record($"террейн: полная выгрузка {LastUploadTexels} текселей");
             LastUploadStrips = 0;
             LastStageMs = 0f;
             LastStageCopyMs = 0f;
@@ -303,44 +354,50 @@ public sealed class TerrainCellDataTextures : IDisposable
         {
             LastUploadRectCount = _dirty.Count;
             LastUploadTexels = _dirty.Area;
-            LastUploadStrips = 0;
             ResetStageCounters();
             long stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            int stagingRows = _color.StagingHeight;
+            _uploadRects.Clear();
             for (int i = 0; i < _dirty.Count; i++)
             {
-                RectInt rect = _dirty[i];
+                _uploadRects.Add(_dirty[i]);
+            }
 
-                // Прямоугольник любой формы режется по высоте на полоски
-                // постоянного размера (см. TerrainUploadStrips).
-                int strips = TerrainUploadStrips.Count(rect.height, stagingRows);
-                for (int strip = 0; strip < strips; strip++)
+            int batches = TerrainStagingPacker.Pack(
+                _uploadRects,
+                _color.StagingWidth,
+                _color.StagingHeight,
+                _uploadPieces);
+            LastUploadStrips = _uploadPieces.Count;
+            int start = 0;
+            for (int batch = 0; batch < batches; batch++)
+            {
+                int end = start;
+                while (end < _uploadPieces.Count && _uploadPieces[end].Batch == batch)
                 {
-                    RectInt band = TerrainUploadStrips.At(rect, stagingRows, strip);
-                    int stripHeight = band.height;
-                    int stripY = band.y;
-                    LastUploadStrips++;
-
-                    _color.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _meta.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _atlasRect.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _tileSize.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _animation.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _world.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _glow.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _geometryX.StageStrip(rect.x, stripY, rect.width, stripHeight);
-                    _geometryY.StageStrip(rect.x, stripY, rect.width, stripHeight);
-
-                    _color.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _meta.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _atlasRect.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _tileSize.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _animation.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _world.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _glow.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _geometryX.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
-                    _geometryY.CopyStagedStrip(rect.x, stripY, rect.width, stripHeight);
+                    end++;
                 }
+
+                int slot = AcquireStagingSlot();
+                _color.Stage(slot, _uploadPieces, start, end);
+                _meta.Stage(slot, _uploadPieces, start, end);
+                _atlasRect.Stage(slot, _uploadPieces, start, end);
+                _tileSize.Stage(slot, _uploadPieces, start, end);
+                _animation.Stage(slot, _uploadPieces, start, end);
+                _world.Stage(slot, _uploadPieces, start, end);
+                _glow.Stage(slot, _uploadPieces, start, end);
+                _geometryX.Stage(slot, _uploadPieces, start, end);
+                _geometryY.Stage(slot, _uploadPieces, start, end);
+
+                _color.CopyStaged(slot, _uploadPieces, start, end);
+                _meta.CopyStaged(slot, _uploadPieces, start, end);
+                _atlasRect.CopyStaged(slot, _uploadPieces, start, end);
+                _tileSize.CopyStaged(slot, _uploadPieces, start, end);
+                _animation.CopyStaged(slot, _uploadPieces, start, end);
+                _world.CopyStaged(slot, _uploadPieces, start, end);
+                _glow.CopyStaged(slot, _uploadPieces, start, end);
+                _geometryX.CopyStaged(slot, _uploadPieces, start, end);
+                _geometryY.CopyStaged(slot, _uploadPieces, start, end);
+                start = end;
             }
 
             LastStageMs = ElapsedMs(stageStart);
@@ -353,6 +410,51 @@ public sealed class TerrainCellDataTextures : IDisposable
         }
 
         _dirty.Clear();
+    }
+
+    // Слот, чья промежуточная текстура не набивалась ни в этом кадре, ни в
+    // прошлом: её прошлую загрузку render thread уже прочитал, и доступ к
+    // пиксельному буферу не ждёт. Пул растёт только под настоящий объём
+    // выгрузки; за потолком берётся самый давний слот — медленнее, но верно.
+    private int AcquireStagingSlot()
+    {
+        int frame = Time.frameCount;
+        int oldest = 0;
+        for (int slot = 0; slot < _stagingSlotFrames.Count; slot++)
+        {
+            if (_stagingSlotFrames[slot] < frame - 1)
+            {
+                _stagingSlotFrames[slot] = frame;
+                return slot;
+            }
+
+            if (_stagingSlotFrames[slot] < _stagingSlotFrames[oldest])
+            {
+                oldest = slot;
+            }
+        }
+
+        int chosen = _stagingSlotFrames.Count < MaximumStagingSlots ? _stagingSlotFrames.Count : oldest;
+        if (chosen == _stagingSlotFrames.Count)
+        {
+            _stagingSlotFrames.Add(frame);
+            FrameEventLog.Record($"террейн: staging-слот {chosen} создан");
+            _color.EnsureStagingSlot(chosen);
+            _meta.EnsureStagingSlot(chosen);
+            _atlasRect.EnsureStagingSlot(chosen);
+            _tileSize.EnsureStagingSlot(chosen);
+            _animation.EnsureStagingSlot(chosen);
+            _world.EnsureStagingSlot(chosen);
+            _glow.EnsureStagingSlot(chosen);
+            _geometryX.EnsureStagingSlot(chosen);
+            _geometryY.EnsureStagingSlot(chosen);
+        }
+        else
+        {
+            _stagingSlotFrames[chosen] = frame;
+        }
+
+        return chosen;
     }
 
     // Глобально, а не в материал: свойства вне UnityPerMaterial выключили бы
@@ -388,6 +490,7 @@ public sealed class TerrainCellDataTextures : IDisposable
         _glow.Destroy();
         _geometryX.Destroy();
         _geometryY.Destroy();
+        _stagingSlotFrames.Clear();
         MeshWidth = 0;
         MeshHeight = 0;
     }

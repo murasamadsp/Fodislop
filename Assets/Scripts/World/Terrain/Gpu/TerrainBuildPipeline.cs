@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Interfaces.Diagnostics;
@@ -32,22 +33,32 @@ public readonly record struct TerrainBuildContext(
 /// кэш, заливка читает кэш, тексель читает и маски, и заливку. Поэтому они
 /// живут одним типом, а не четырьмя полями рендерера, и каждая стадия имеет
 /// ровно три входа — полный проход, сдвиг окна и заплатка по прямоугольнику.
+///
+/// Работа разделена по потокам ровно по границе живого мира. Кэш клеток
+/// читает хранилище и разрешает типы — это главный поток, <see cref="Prepare"/>.
+/// Всё остальное считает только из кэша и снимков атласов — это рабочий
+/// поток, <see cref="Execute"/>. Между ними владение передаётся целиком:
+/// пока шаг идёт, главный поток не трогает ни одну из четырёх стадий.
 public sealed class TerrainBuildPipeline : IDisposable
 {
     private static readonly ProfilerMarker _CacheMarker = new("Kern.Terrain.Cache");
-    private static readonly ProfilerMarker _PrecalculateMarker = new("Kern.Terrain.Precalculate");
-    private static readonly ProfilerMarker _FloodFillMarker = new("Kern.World.Terrain.BackgroundFloodFill");
-    private static readonly ProfilerMarker _MeshBuildMarker = new("Kern.Terrain.MeshBuild");
-    private static readonly ProfilerMarker _MeshUploadMarker = new("Kern.Terrain.MeshUpload");
+
+    // Пустой набор типов для шагов без перечитывания текстур. Рабочий поток
+    // его только читает, поэтому один экземпляр на все шаги.
+    private static readonly HashSet<CellType> _NoTextureTypes = [];
 
     private readonly TerrainCellCache _cellCache = new();
     private readonly TerrainPrecalculator _precalc = new();
     private readonly BackgroundFloodFill _floodFill = new();
     private readonly TerrainCellBuilder _cellBuilder = new();
+    private readonly List<IAtlasDescriptor> _snapshotSources = [];
+    private IAtlasDescriptor[] _atlasSnapshots = [];
 
     public TerrainCellCache CellCache => _cellCache;
 
     public TerrainCellBuilder CellBuilder => _cellBuilder;
+
+    internal TerrainPrecalculator Precalculator => _precalc;
 
     public bool EnableDistortion
     {
@@ -55,14 +66,23 @@ public sealed class TerrainBuildPipeline : IDisposable
         set => _precalc.EnableDistortion = value;
     }
 
-    /// <summary>Последний проход по окну перенёс перекрытие вместо полной сборки.</summary>
+    public TerrainDistortionStyle DistortionStyle
+    {
+        get => _precalc.DistortionStyle;
+        set => _precalc.DistortionStyle = value;
+    }
+
+    /// <summary>Последний опубликованный шаг перенёс перекрытие вместо полной сборки.</summary>
     public bool LastBuildScrolled { get; private set; }
 
     /// <summary>
-    /// На сколько клеток переехало окно в последнем проходе. Накладка дверей
+    /// На сколько клеток переехало окно в последнем шаге. Накладка дверей
     /// компенсирует этим сдвиг своего родителя, когда состав дверей не менялся.
     /// </summary>
     public Vector2Int LastScrollDelta { get; private set; }
+
+    /// <summary>Сколько стоил рабочему потоку последний опубликованный шаг.</summary>
+    public TerrainWorkerCost LastWorkerCost { get; private set; }
 
     public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
     {
@@ -72,6 +92,7 @@ public sealed class TerrainBuildPipeline : IDisposable
         _floodFill.Allocate(meshWidth, meshHeight);
     }
 
+    /// <summary>Источники для главного потока: накладка дверей после публикации.</summary>
     public TerrainCellSources CreateSources(in TerrainBuildContext context) =>
         new(
             _cellCache,
@@ -84,24 +105,34 @@ public sealed class TerrainBuildPipeline : IDisposable
             context.TextureService);
 
     /// <summary>
-    /// Собрать окно с началом (minX, minY).
+    /// Главный поток: довести кэш клеток до шага и составить задание рабочему.
     /// </summary>
     ///
-    /// <param name="forceFull">
-    /// Перекрытие переносить нельзя: содержимое окна изменилось целиком.
+    /// Порядок внутри кэша: сначала метаданные приехавших текстур, потом сдвиг
+    /// или полное заполнение, потом изменённые клетки. Изменения берутся в
+    /// мировых координатах и после сдвига ложатся в новые адреса; рабочий
+    /// поток пересчитывает их тоже после сдвига, поэтому порядок совпадает.
+    ///
+    /// <param name="forceFull">Перекрытие переносить нельзя: содержимое окна изменилось целиком.</param>
+    /// <param name="rebuildAllCells">
+    /// Тексели собираются целиком, хотя кэш переносится: сменился набор
+    /// атласов (индексы в текселях посчитаны по старому) или изменений так
+    /// много, что заплатки дороже полной сборки. Изменённые клетки всё равно
+    /// перечитываются в кэш только по своим прямоугольникам.
     /// </param>
-    /// <param name="atlasSetChanged">
-    /// Набор атласов сменился, и индексы атласов в уже записанных текселях
-    /// посчитаны по старому набору — переносить их нельзя.
-    /// </param>
-    public void BuildWindow(
+    internal TerrainCpuBuildRequest Prepare(
         in TerrainBuildContext context,
-        int minX,
-        int minY,
+        Vector2Int origin,
         bool forceFull,
-        bool atlasSetChanged)
+        bool rebuildAllCells,
+        DirtyRectSet dirtyRects,
+        HashSet<CellType> textureTypes,
+        ulong contentRevision,
+        long worldGeneration)
     {
         IFrameTelemetry telemetry = context.Telemetry;
+        int minX = origin.x;
+        int minY = origin.y;
         int cacheDeltaX = (minX - 1) - _cellCache.CacheMinX;
         int cacheDeltaY = (minY - 1) - _cellCache.CacheMinY;
         bool canScrollCache =
@@ -109,164 +140,319 @@ public sealed class TerrainBuildPipeline : IDisposable
             _cellCache.CacheMinX != int.MinValue &&
             Math.Abs(cacheDeltaX) < _cellCache.CacheWidth &&
             Math.Abs(cacheDeltaY) < _cellCache.CacheHeight;
-        LastBuildScrolled = canScrollCache;
-        LastScrollDelta = canScrollCache
+        Vector2Int scrollDelta = canScrollCache
             ? new Vector2Int(cacheDeltaX, cacheDeltaY)
             : Vector2Int.zero;
         telemetry.TerrainRebuildCount++;
 
+        // Главный поток только снимает: байты типов из хранилища и
+        // метаданные встретившихся типов. В кольцо кэша снятое раскладывает
+        // рабочий поток в начале шага (ApplyPendingCapture).
         long cacheStart = Stopwatch.GetTimestamp();
         using (_CacheMarker.Auto())
         {
-            if (canScrollCache)
+            if (textureTypes.Count > 0 && _cellCache.CacheMinX != int.MinValue)
             {
-                _cellCache.ScrollAndFill(
-                    cacheDeltaX, cacheDeltaY, context.Storage, context.MapData,
-                    context.TextureService, context.Atlases);
+                _cellCache.CaptureTextureRefresh(
+                    textureTypes, context.MapData, context.TextureService, context.Atlases);
             }
-            else
+
+            if (!canScrollCache)
             {
                 telemetry.TerrainFullPopulateCount++;
-                _cellCache.PopulateFull(
+                _cellCache.CaptureFull(
                     minX, minY, context.Storage, context.MapData,
                     context.TextureService, context.Atlases);
             }
-        }
+            else if (scrollDelta != Vector2Int.zero)
+            {
+                _cellCache.CaptureScroll(
+                    cacheDeltaX, cacheDeltaY, context.Storage, context.MapData,
+                    context.TextureService, context.Atlases);
+            }
 
-        telemetry.TerrainCacheTimeMs = ElapsedMs(cacheStart);
-
-        using (_PrecalculateMarker.Auto())
-        {
             if (canScrollCache)
             {
-                _precalc.PrecalculateIncremental(
-                    _cellCache, context.MeshWidth, context.MeshHeight,
-                    cacheDeltaX, cacheDeltaY,
-                    context.MapData.WorldWidth, context.MapData.WorldHeight);
+                for (int index = 0; index < dirtyRects.Count; index++)
+                {
+                    RectInt rect = dirtyRects[index];
+                    _cellCache.CaptureRegion(
+                        rect.xMin - 1,
+                        rect.yMin - 1,
+                        rect.width + 2,
+                        rect.height + 2,
+                        context.Storage,
+                        context.MapData,
+                        context.TextureService,
+                        context.Atlases);
+                }
             }
-            else
-            {
-                _precalc.PrecalculateFull(
-                    _cellCache, context.MeshWidth, context.MeshHeight,
-                    context.MapData.WorldWidth, context.MapData.WorldHeight);
-            }
+
+            _cellCache.ResolveCapturedTypes(
+                context.MapData, context.TextureService, context.Atlases);
         }
 
-        long floodStart = Stopwatch.GetTimestamp();
-        using (_FloodFillMarker.Auto())
+        telemetry.TerrainCacheTimeMs += ElapsedMs(cacheStart);
+
+        IReadOnlyList<IAtlasDescriptor> atlases = CaptureAtlases(context.Atlases, textureTypes.Count > 0 || !canScrollCache);
+
+        bool buildFull = !canScrollCache || rebuildAllCells;
+        RectInt[] rects = buildFull ? [] : new RectInt[dirtyRects.Count];
+        for (int index = 0; index < rects.Length; index++)
         {
-            // Тем же сдвигом, что кэш и предрасчёт выше: иначе на
-            // каждом переходе через границу региона заливка одна
-            // платила по площади за то, что сдвинулось на кайму.
-            if (canScrollCache)
-            {
-                _floodFill.ComputeScrolled(cacheDeltaX, cacheDeltaY, _cellCache);
-            }
-            else
-            {
-                _floodFill.ComputeFull(_cellCache);
-            }
+            rects[index] = dirtyRects[index];
         }
 
-        telemetry.TerrainFloodFillTimeMs = ElapsedMs(floodStart);
-
-        long meshStart = Stopwatch.GetTimestamp();
-        TerrainCellSources sources = CreateSources(context);
-        using (_MeshBuildMarker.Auto())
+        if (rects.Length > 0)
         {
-            // Тексели лежат по кольцевому адресу и при сдвиге не
-            // двигаются: собирается только вошедшая полоса. Полная
-            // сборка остаётся там, где переносить нечего, и при смене
-            // набора атласов — индексы атласов в текселях считаны по
-            // старому набору.
-            if (canScrollCache && !atlasSetChanged)
-            {
-                _cellBuilder.ScrollAndBuildBand(sources, minX, minY, cacheDeltaX, cacheDeltaY);
-            }
-            else
-            {
-                _cellBuilder.BuildFull(sources, minX, minY);
-            }
+            telemetry.TerrainDirtyPatchCount++;
         }
 
-        telemetry.TerrainMeshTimeMs = ElapsedMs(meshStart);
-    }
-
-    /// <summary>Пересчитать изменённые прямоугольники в координатах окна.</summary>
-    public bool PatchRegions(
-        in TerrainBuildContext context,
-        int minX,
-        int minY,
-        DirtyRectSet dirtyRects)
-    {
-        context.Telemetry.TerrainDirtyPatchCount++;
-
-        TerrainCellSources sources = CreateSources(context);
-        bool doorsTouched = false;
-        for (int index = 0; index < dirtyRects.Count; index++)
-        {
-            RectInt rect = dirtyRects[index];
-
-            int dirtyMinX = rect.xMin - 1;
-            int dirtyMaxX = rect.xMax + 1;
-            int dirtyMinY = rect.yMin - 1;
-            int dirtyMaxY = rect.yMax + 1;
-
-            int localStartX = dirtyMinX - minX;
-            int localStartY = dirtyMinY - minY;
-            int countX = dirtyMaxX - dirtyMinX;
-            int countY = dirtyMaxY - dirtyMinY;
-
-            _cellCache.UpdateRegion(
-                dirtyMinX, dirtyMinY, countX, countY, context.Storage, context.MapData,
-                context.TextureService, context.Atlases);
-            _precalc.PrecalculateRegion(
-                _cellCache, context.MeshWidth, context.MeshHeight,
-                localStartX, localStartY, countX, countY,
-                context.MapData.WorldWidth, context.MapData.WorldHeight);
-            _floodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, _cellCache);
-            _cellBuilder.BuildRegion(
-                sources, minX, minY, localStartX, localStartY, countX, countY);
-            doorsTouched |= _cellBuilder.DoorsTouched;
-        }
-
-        return doorsTouched;
-    }
-
-    /// <summary>Перечитать клетки типов, у которых только что приехала текстура.</summary>
-    /// <param name="rebuildCells">
-    /// Перечитать тексели клеток этих типов. Ложь, когда кадр всё равно
-    /// собирает окно целиком: полная сборка перечитает те же клетки сама, а
-    /// перечитывание до неё — это проход по окну в никуда. Метаданные при этом
-    /// обновляются всегда: по ним и будет собирать полная сборка.
-    /// </param>
-    public void RefreshTextureCells(
-        in TerrainBuildContext context,
-        HashSet<CellType> cellTypes,
-        int minX,
-        int minY,
-        bool rebuildCells)
-    {
-        _cellCache.RefreshTextureMetadata(
-            cellTypes, context.MapData, context.TextureService, context.Atlases);
-        if (rebuildCells)
-        {
-            _cellBuilder.BuildTextureCells(cellTypes, CreateSources(context), minX, minY);
-        }
+        return new TerrainCpuBuildRequest(
+            origin,
+            new Vector2Int(context.MeshWidth, context.MeshHeight),
+            canScrollCache,
+            scrollDelta,
+            buildFull,
+            atlases,
+            context.MapData.WorldWidth,
+            context.MapData.WorldHeight,
+            rects,
+            buildFull || textureTypes.Count == 0 ? _NoTextureTypes : new HashSet<CellType>(textureTypes),
+            contentRevision,
+            worldGeneration);
     }
 
     /// <summary>
-    /// Одна выгрузка текселей за кадр, после сборки или заплатки. Начало окна
+    /// Рабочий поток: предрасчёт, заливка и тексели по уже заполненному кэшу.
+    /// Ни хранилища, ни сервисов, ни Unity-объектов здесь нет.
+    /// </summary>
+    ///
+    /// Отмена между стадиями оставляет стадии рассогласованными, поэтому
+    /// владелец после отмены обязан собрать окно целиком.
+    internal TerrainCpuBuildResult Execute(
+        TerrainCpuBuildRequest request,
+        CancellationToken cancellationToken)
+    {
+        long start = Stopwatch.GetTimestamp();
+        var result = new TerrainCpuBuildResult();
+        int meshWidth = request.Size.x;
+        int meshHeight = request.Size.y;
+        int minX = request.Origin.x;
+        int minY = request.Origin.y;
+        TerrainCellSources sources = new(
+            _cellCache,
+            _precalc,
+            _floodFill,
+            request.WorldWidth,
+            request.WorldHeight,
+            request.Atlases,
+            null,
+            null);
+
+        long cacheStart = Stopwatch.GetTimestamp();
+        _cellCache.ApplyPendingCapture();
+        result.CacheMs = ElapsedMs(cacheStart);
+
+        // Шаг из одних изменённых клеток кэш не двигал: полосы нет, и
+        // приращение предрасчёта и заливки было бы пустым проходом.
+        bool moved = request.BuildFull || request.ScrollDelta != Vector2Int.zero;
+        if (moved)
+        {
+            RunWindowStages(request, sources, result, cancellationToken);
+        }
+
+        for (int index = 0; index < request.DirtyRects.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // Прямоугольник снят в координатах окна до сдвига: после сдвига он
+            // может частично или целиком выйти за окно. Вышедшая часть уехала
+            // вместе с окном, вошедшая уже собрана полосой из свежего кэша.
+            RectInt rect = request.DirtyRects[index];
+            int localStartX = Math.Max(0, rect.xMin - 1 - minX);
+            int localStartY = Math.Max(0, rect.yMin - 1 - minY);
+            int countX = Math.Min(meshWidth, rect.xMax + 1 - minX) - localStartX;
+            int countY = Math.Min(meshHeight, rect.yMax + 1 - minY) - localStartY;
+            if (countX <= 0 || countY <= 0)
+            {
+                continue;
+            }
+
+            long precalculateStart = Stopwatch.GetTimestamp();
+            _precalc.PrecalculateRegion(
+                _cellCache, meshWidth, meshHeight,
+                localStartX, localStartY, countX, countY,
+                request.WorldWidth, request.WorldHeight);
+            result.PrecalculateMs += ElapsedMs(precalculateStart);
+
+            long floodStart = Stopwatch.GetTimestamp();
+            _floodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, _cellCache);
+            result.FloodFillMs += ElapsedMs(floodStart);
+
+            long meshStart = Stopwatch.GetTimestamp();
+            _cellBuilder.BuildRegion(
+                sources, minX, minY, localStartX, localStartY, countX, countY);
+            result.DoorsTouched |= _cellBuilder.DoorsTouched;
+            result.AddBuilderStages(_cellBuilder);
+            result.MeshMs += ElapsedMs(meshStart);
+        }
+
+        if (request.TextureTypes.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            long meshStart = Stopwatch.GetTimestamp();
+            _cellBuilder.BuildTextureCells(request.TextureTypes, sources, minX, minY);
+            result.DoorsTouched |= _cellBuilder.DoorsTouched;
+            result.AddBuilderStages(_cellBuilder);
+            result.MeshMs += ElapsedMs(meshStart);
+        }
+
+        result.ElapsedMs = ElapsedMs(start);
+        return result;
+    }
+
+    private void RunWindowStages(
+        TerrainCpuBuildRequest request,
+        in TerrainCellSources sources,
+        TerrainCpuBuildResult result,
+        CancellationToken cancellationToken)
+    {
+        int meshWidth = request.Size.x;
+        int meshHeight = request.Size.y;
+        cancellationToken.ThrowIfCancellationRequested();
+        // Полная сборка текселей идёт по полному предрасчёту и заливке: после
+        // пачки изменений приращение по сдвигу не покрыло бы изменённые
+        // клетки, а рабочему потоку полный проход ничего не стоит в кадре.
+        bool incremental = request.CacheScrolled && !request.BuildFull;
+        long precalculateStart = Stopwatch.GetTimestamp();
+        if (incremental)
+        {
+            _precalc.PrecalculateIncremental(
+                _cellCache, meshWidth, meshHeight,
+                request.ScrollDelta.x, request.ScrollDelta.y,
+                request.WorldWidth, request.WorldHeight);
+        }
+        else
+        {
+            _precalc.PrecalculateFull(
+                _cellCache, meshWidth, meshHeight,
+                request.WorldWidth, request.WorldHeight);
+        }
+
+        result.PrecalculateMs += ElapsedMs(precalculateStart);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Тем же сдвигом, что кэш и предрасчёт выше: иначе на каждом переходе
+        // через границу региона заливка одна платила по площади за то, что
+        // сдвинулось на кайму.
+        long floodStart = Stopwatch.GetTimestamp();
+        if (incremental)
+        {
+            _floodFill.ComputeScrolled(request.ScrollDelta.x, request.ScrollDelta.y, _cellCache);
+        }
+        else
+        {
+            _floodFill.ComputeFull(_cellCache);
+        }
+
+        result.FloodFillMs += ElapsedMs(floodStart);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Тексели лежат по кольцевому адресу и при сдвиге не двигаются:
+        // собирается только вошедшая полоса.
+        long meshStart = Stopwatch.GetTimestamp();
+        if (request.BuildFull)
+        {
+            _cellBuilder.BuildFull(sources, request.Origin.x, request.Origin.y, cancellationToken);
+            result.DoorsTouched = true;
+        }
+        else
+        {
+            _cellBuilder.ScrollAndBuildBand(
+                sources,
+                request.Origin.x,
+                request.Origin.y,
+                request.ScrollDelta.x,
+                request.ScrollDelta.y);
+            result.DoorsTouched |= _cellBuilder.DoorsTouched;
+        }
+
+        result.AddBuilderStages(_cellBuilder);
+        result.MeshMs += ElapsedMs(meshStart);
+    }
+
+    // Снимки атласов переиспользуются между шагами. Содержимое атласа
+    // меняется только приездом текстуры, а каждый приезд попадает в шаг как
+    // тип на перечитывание, — тогда снимок снимается заново. Прежний массив
+    // не трогается: его может держать ещё не опубликованный шаг.
+    private IReadOnlyList<IAtlasDescriptor> CaptureAtlases(
+        IReadOnlyList<IAtlasDescriptor> atlases,
+        bool contentMayHaveChanged)
+    {
+        bool sameSet = !contentMayHaveChanged && _snapshotSources.Count == atlases.Count;
+        for (int index = 0; sameSet && index < atlases.Count; index++)
+        {
+            sameSet = ReferenceEquals(_snapshotSources[index], atlases[index]);
+        }
+
+        if (sameSet)
+        {
+            return _atlasSnapshots;
+        }
+
+        var snapshots = new IAtlasDescriptor[atlases.Count];
+        for (int index = 0; index < snapshots.Length; index++)
+        {
+            snapshots[index] = TerrainAtlasSnapshot.Capture(atlases[index]);
+        }
+
+        _snapshotSources.Clear();
+        for (int index = 0; index < atlases.Count; index++)
+        {
+            _snapshotSources.Add(atlases[index]);
+        }
+
+        _atlasSnapshots = snapshots;
+        return snapshots;
+    }
+
+    /// <summary>Главный поток после завершения шага: запомнить, чем он был.</summary>
+    internal void RecordPublished(
+        TerrainCpuBuildRequest request,
+        TerrainCpuBuildResult result,
+        float latencyMs)
+    {
+        LastBuildScrolled = request.CacheScrolled && request.ScrollDelta != Vector2Int.zero;
+        LastScrollDelta = request.CacheScrolled ? request.ScrollDelta : Vector2Int.zero;
+        TerrainBuildStepKind kind =
+            request.BuildFull ? TerrainBuildStepKind.Full
+            : request.ScrollDelta != Vector2Int.zero ? TerrainBuildStepKind.Scroll
+            : request.DirtyRects.Length > 0 ? TerrainBuildStepKind.Patch
+            : TerrainBuildStepKind.Textures;
+        LastWorkerCost = new TerrainWorkerCost(
+            kind,
+            result.CacheMs,
+            result.PrecalculateMs,
+            result.FloodFillMs,
+            result.MeshMs,
+            result.ScrollMs,
+            result.WarmupMs,
+            result.FillMs,
+            result.FilledCells,
+            result.QuadMs,
+            result.PackMs,
+            result.ElapsedMs,
+            latencyMs);
+    }
+
+    /// <summary>
+    /// Одна выгрузка текселей за кадр, после публикации шага. Начало окна
     /// публикуется вместе с ними: шейдер берёт по нему кольцевой адрес.
     /// </summary>
     public float Commit(int originX, int originY)
     {
         long start = Stopwatch.GetTimestamp();
-        using (_MeshUploadMarker.Auto())
-        {
-            _cellBuilder.Commit(originX, originY);
-        }
-
+        _cellBuilder.Commit(originX, originY);
         return ElapsedMs(start);
     }
 

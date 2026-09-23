@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.World.Terrain;
 using Kern.World.Textures;
@@ -46,10 +47,18 @@ namespace Kern.World
         public Texture2D? PrismaticFlowMapTexture => _prismaticFlowMapTexture;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
-        private readonly TerrainDecalAtlasLoader _decalLoader = new();
+        private readonly TerrainDecalAtlasLoader _decalLoader = new(
+            "terrain-decals.png",
+            "load_terrain_decal_atlas");
+        private readonly TerrainDecalAtlasLoader _decalStoneLoader = new(
+            "terrain-decals-stone.png",
+            "load_terrain_decal_stone_atlas");
         public Texture2D? TerrainDecalAtlasTexture => _decalLoader.AtlasTexture;
+        public Texture2D? TerrainDecalStoneAtlasTexture => _decalStoneLoader.AtlasTexture;
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
         private readonly CellTextureRetryTracker _retryTracker = new();
+        private readonly SemaphoreSlim _textureLoadSlots = new(
+            ProjectRuntimeContracts.AssetStreaming.MaximumConcurrentTextureLoads);
 
         public int PendingCellTextureRequests => _retryTracker.PendingRequestsCount;
 
@@ -91,6 +100,7 @@ namespace Kern.World
             }
 
             _decalLoader.Dispose();
+            _decalStoneLoader.Dispose();
         }
 
         private void Initialize()
@@ -112,6 +122,7 @@ namespace Kern.World
             _prismaticFlowMapTexture = WorldTextureGenerator.CreatePrismaticFlowMap();
             GenerateFlowMap();
             _decalLoader.StartLoad(_textureStorage, _operations, (name, tex) => OnTextureLoaded?.Invoke(name, tex));
+            _decalStoneLoader.StartLoad(_textureStorage, _operations, (name, tex) => OnTextureLoaded?.Invoke(name, tex));
         }
 
         private void EnsureInitialized()
@@ -151,11 +162,20 @@ namespace Kern.World
                 return;
             }
 
+            // Загрузка стартует в следующем Update, а не внутри вызывающего.
+            // RequestTexture зовут посреди заполнения кэша террейна, и
+            // текстура из памяти успевала дойти до атласа синхронно: её
+            // декодирование ложилось в кадр сборки, а OnTextureLoaded менял
+            // набор типов, по которому сборка в этот момент шла.
             _operations.Run(
                 $"load_world_texture_{cellType}",
                 cancellationToken => _retryTracker.RunTrackedRequestAsync(
                     cellType,
-                    async (type, ct) => await GetCellTextureCoordinate(type, 0, 0),
+                    async (type, ct) =>
+                    {
+                        await UniTask.Yield(PlayerLoopTiming.Update, ct);
+                        await GetCellTextureCoordinate(type, 0, 0, ct);
+                    },
                     cancellationToken));
         }
 
@@ -265,7 +285,17 @@ namespace Kern.World
             return _textureCache.TryGetTexture(cellType, out var info) ? info.FrameSize : 0;
         }
 
-        public async UniTask<AtlasCoordinate> GetCellTextureCoordinate(CellType cellType, int globalX, int globalY)
+        public UniTask<AtlasCoordinate> GetCellTextureCoordinate(
+            CellType cellType,
+            int globalX,
+            int globalY) =>
+            GetCellTextureCoordinate(cellType, globalX, globalY, destroyCancellationToken);
+
+        private async UniTask<AtlasCoordinate> GetCellTextureCoordinate(
+            CellType cellType,
+            int globalX,
+            int globalY,
+            CancellationToken cancellationToken)
         {
             await UniTask.SwitchToMainThread();
             EnsureInitialized();
@@ -304,7 +334,15 @@ namespace Kern.World
 
             try
             {
-                await LoadTexture(cellType);
+                await _textureLoadSlots.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadTexture(cellType);
+                }
+                finally
+                {
+                    _textureLoadSlots.Release();
+                }
                 await UniTask.SwitchToMainThread();
                 request.SetResult(true);
 
@@ -392,11 +430,14 @@ namespace Kern.World
             AddTextureToAtlas(cellType, texture, ownsTexture: true);
         }
 
+        private static readonly Unity.Profiling.ProfilerMarker _AtlasAddMarker = new("Kern.Textures.AtlasAdd");
+
         private void AddTextureToAtlas(
             CellType cellType,
             Texture2D texture,
             bool ownsTexture)
         {
+            using var atlasAddMarker = _AtlasAddMarker.Auto();
             if (_atlasCollection.ContainsCell(cellType) || !_mapManager.IsWorldInitialized)
             {
                 return;

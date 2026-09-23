@@ -120,6 +120,95 @@ float TerrainGeometryCoverage(
     return inside ? 1.0 : 0.0;
 }
 
+float2 TerrainOrganicGeometryPoint(
+    float4 cornersX,
+    float4 cornersY,
+    float4 bends,
+    int index)
+{
+    if ((index & 1) == 0)
+    {
+        return TerrainGeometryCorner(cornersX, cornersY, index >> 1);
+    }
+
+    int side = index >> 1;
+    float2 start = TerrainGeometryCorner(cornersX, cornersY, side);
+    float2 end = TerrainGeometryCorner(cornersX, cornersY, (side + 1) & 3);
+    float2 bend = side == 0 ? float2(0.0, bends.x) :
+        side == 1 ? float2(bends.y, 0.0) :
+        side == 2 ? float2(0.0, bends.z) : float2(bends.w, 0.0);
+    float signedBend = side == 0 ? bends.x :
+        side == 1 ? bends.y : side == 2 ? bends.z : bends.w;
+    // A centered outward bend gives a barrel silhouette. Offset the extra
+    // point along the edge; reverse t for the top and left shared edges.
+    float edgeT = signedBend > 0.0 ? 0.35 : 0.65;
+    if (side >= 2)
+    {
+        edgeT = 1.0 - edgeT;
+    }
+
+    return lerp(start, end, edgeT) + bend;
+}
+
+float TerrainOrganicGeometryCoverage(
+    float2 samplePosition,
+    float4 cornersX,
+    float4 cornersY,
+    float packedEdges)
+{
+    int code = (int)round(packedEdges) - 1;
+    float4 bends;
+    bends.x = (code % 5) - 2;
+    code /= 5;
+    bends.y = (code % 5) - 2;
+    code /= 5;
+    bends.z = (code % 5) - 2;
+    code /= 5;
+    bends.w = (code % 5) - 2;
+    bends *= 2.0 / KERN_TERRAIN_FACE_GRID_SIZE;
+
+    float2 quantizedPoint = QuantizeTerrainGeometryPoint(samplePosition);
+    bool inside = false;
+    for (int index = 0; index < 8; index++)
+    {
+        float2 edgeStart = TerrainOrganicGeometryPoint(cornersX, cornersY, bends, index);
+        float2 edgeEnd = TerrainOrganicGeometryPoint(cornersX, cornersY, bends, (index + 1) & 7);
+        if (TerrainGeometrySegmentDistanceSquared(
+                quantizedPoint,
+                edgeStart,
+                edgeEnd) <= KERN_TERRAIN_EDGE_SEAL * KERN_TERRAIN_EDGE_SEAL)
+        {
+            return 1.0;
+        }
+
+        float2 edge = edgeEnd - edgeStart;
+        float edgeCross = TerrainGeometryEdgeCross(edgeStart, edgeEnd, quantizedPoint);
+        bool onEdge = abs(edgeCross) <= KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.x >= min(edgeStart.x, edgeEnd.x) - KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.x <= max(edgeStart.x, edgeEnd.x) + KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.y >= min(edgeStart.y, edgeEnd.y) - KERN_TERRAIN_GEOMETRY_EPSILON &&
+            quantizedPoint.y <= max(edgeStart.y, edgeEnd.y) + KERN_TERRAIN_GEOMETRY_EPSILON;
+        if (onEdge)
+        {
+            return 1.0;
+        }
+
+        bool crossesScanline = (edgeStart.y > quantizedPoint.y) !=
+            (edgeEnd.y > quantizedPoint.y);
+        if (crossesScanline)
+        {
+            float xAtScanline = edgeStart.x +
+                ((quantizedPoint.y - edgeStart.y) * edge.x / edge.y);
+            if (quantizedPoint.x < xAtScanline)
+            {
+                inside = !inside;
+            }
+        }
+    }
+
+    return inside ? 1.0 : 0.0;
+}
+
 float2 QuantizeTerrainFaceUV(float2 uv)
 {
     // The input can be the displaced corner coordinate. Keep it outside the
@@ -310,6 +399,7 @@ struct TerrainSurfaceInputs
     float4 cornersX;
     float4 cornersY;
     float anchored;
+    float packedOrganicEdges;
     float packedContour;
     float packedLightingFlags;
     int animationProfile;
@@ -329,6 +419,7 @@ TerrainSurfaceInputs BuildTerrainSurfaceInputs(
     surface.cornersX = cornersX;
     surface.cornersY = cornersY;
     surface.anchored = packedData.x;
+    surface.packedOrganicEdges = packedData.w;
     surface.packedContour = glowData.z;
     surface.packedLightingFlags = glowData.y;
     surface.animationProfile = (int)(packedAnimationProfile + 0.5);
@@ -352,13 +443,21 @@ float EvaluateTerrainCellCoverage(
     float antialiasScale,
     float applyGeometry)
 {
-    float geometryCoverage = applyGeometry > 0.5
-        ? TerrainGeometryCoverage(
-            surface.cellSample,
-            surface.cornersX,
-            surface.cornersY,
-            surface.anchored)
-        : 1.0;
+    float geometryCoverage = 1.0;
+    if (applyGeometry > 0.5)
+    {
+        geometryCoverage = surface.packedOrganicEdges > 0.5
+            ? TerrainOrganicGeometryCoverage(
+                surface.cellSample,
+                surface.cornersX,
+                surface.cornersY,
+                surface.packedOrganicEdges)
+            : TerrainGeometryCoverage(
+                surface.cellSample,
+                surface.cornersX,
+                surface.cornersY,
+                surface.anchored);
+    }
     float contourCoverage = KernTerrainIsRoundable(surface.packedContour)
         ? EvaluateRoundableBlockAlpha(
             surface.contourUV,

@@ -7,8 +7,8 @@ namespace Kern.Core;
 
 // Путь конфига на старте: чистая установка или обычный запуск.
 //
-// Поддерживаются только явно описанные миграции формата. Сейчас это переход
-// schema 31 -> 32 для добавления TerrainSettings.EnableReliefRim. Любая более
+// Поддерживаются только явно описанные миграции формата: 31 -> 32 для
+// TerrainSettings.EnableReliefRim и 32 -> 33 для DistortionStyle. Любая более
 // старая или неизвестная схема сбрасывается на дефолты и перезаписывается;
 // произвольного переноса полей между форматами нет.
 // Сверка стандартных пресетов — текущее поведение, не миграция:
@@ -20,6 +20,7 @@ internal sealed class ClientConfigLoader
 {
     private const int ReliefRimSourceSchemaVersion = 31;
     private const int ReliefRimSchemaVersion = 32;
+    private const int DistortionStyleSchemaVersion = 33;
 
     private readonly ClientConfigRepository _repository;
     private readonly ClientConfigValidator _validator;
@@ -57,10 +58,16 @@ internal sealed class ClientConfigLoader
 
         ClientConfigRepository.LoadedConfig loaded = _repository.Load();
         int sourceSchemaVersion = loaded.Config.SchemaVersion;
-        if (sourceSchemaVersion == ReliefRimSourceSchemaVersion &&
-            ClientConfig.CurrentSchemaVersion == ReliefRimSchemaVersion)
+        if ((sourceSchemaVersion == ReliefRimSourceSchemaVersion ||
+                sourceSchemaVersion == ReliefRimSchemaVersion) &&
+            ClientConfig.CurrentSchemaVersion == DistortionStyleSchemaVersion)
         {
-            MigrateSchema31To32(loaded.Config);
+            if (sourceSchemaVersion == ReliefRimSourceSchemaVersion)
+            {
+                MigrateSchema31To32(loaded.Config);
+            }
+
+            MigrateSchema32To33(loaded.Config, loaded.Json);
             _validator.Validate(loaded.Config);
             _repository.Save(loaded.Config, _repository.BackupPath);
             return new Result(loaded.Config, Outcome.Migrated, sourceSchemaVersion);
@@ -95,6 +102,17 @@ internal sealed class ClientConfigLoader
         // instead of accepting JsonUtility's CLR default for a missing bool.
         config.Terrain.EnableReliefRim = true;
         config.SchemaVersion = ReliefRimSchemaVersion;
+    }
+
+    private static void MigrateSchema32To33(ClientConfig config, string sourceJson)
+    {
+        // Keep an explicitly saved style in early schema-32 configs.
+        if (sourceJson.IndexOf("\"DistortionStyle\"", StringComparison.Ordinal) < 0)
+        {
+            config.Terrain.DistortionStyle = TerrainDistortionStyle.Organic;
+        }
+
+        config.SchemaVersion = DistortionStyleSchemaVersion;
     }
 
     private void ReconcileStandardPreset(ClientConfig config)

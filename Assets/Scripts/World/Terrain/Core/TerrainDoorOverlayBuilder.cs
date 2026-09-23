@@ -64,6 +64,9 @@ public sealed class TerrainDoorOverlayBuilder : IDisposable
     public void CompensateParentTranslation(Vector3 parentDelta) =>
         _renderer.CompensateParentTranslation(parentDelta);
 
+    /// <summary>Опубликованного окна больше нет: его двери показывать нельзя.</summary>
+    public void Hide() => _renderer.Hide();
+
     public void Dispose() => _renderer.Dispose();
 
     private void EnsureSubMeshIndices(int atlasCount)

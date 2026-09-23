@@ -67,6 +67,40 @@ public static class TerrainDecalCatalog
     public static int GetGroundPlacement(int worldX, int serverY) =>
         GetPackedPlacement(CellType.Empty, worldX, serverY);
 
+    // Бит 12 (= 4096) в packedPlacement сигнализирует шейдеру использовать
+    // _TerrainDecalStoneAtlas вместо основного _TerrainDecalAtlas.
+    // Именно 12, а не 11: ground-раскладка упирается ровно в 2048
+    // (1 + 15 + (3 << 4) + 64 + (3 << 7) + (3 << 9)), поэтому бит 11
+    // выставлялся бы у самой старшей ground-декали — она уходила бы в чужой
+    // атлас, а её же код в stone-ветке вырождался бы в 0 - 1.
+    // Биты 0..10 содержат variant/rotation/mirror/offset — те же поля что
+    // и у ground-декалей, поэтому TerrainTransformDecalUV работает без правок.
+    private const int StoneAtlasBit = 1 << 12;
+
+    public static int GetStonePlacement(int worldX, int serverY)
+    {
+        uint hash = Hash(worldX, serverY, cellType: 7u);
+        if ((hash % 100u) >= PlacementPercent)
+        {
+            return 0;
+        }
+
+        int variant = (int)(hash % (uint)VariantCount);
+        int rotation = (int)((hash >> 8) & 3u);
+        int mirror = (int)((hash >> 10) & 1u);
+        int offsetX = (int)((hash >> 12) & 3u);
+        int offsetY = (int)((hash >> 14) & 3u);
+        int packed = 1 + variant + (rotation << 4) + (mirror << 6) +
+            (offsetX << 7) + (offsetY << 9);
+        return packed | StoneAtlasBit;
+    }
+
+    // Атлас нарисован красно-чёрными тонами под красноскал и черноскал.
+    // Остальной камень той же семьи — золото, металл, глубинная порода —
+    // им не красим: гамма расходится с палитрой самой клетки.
+    public static bool IsStoneDecalSurface(CellType cellType, bool isBackground) =>
+        !isBackground && cellType is CellType.RedRock or CellType.NiggerRock;
+
     public static bool IsGroundDecalSurface(CellType cellType, bool isBackground) =>
         cellType == CellType.Empty ||
         (isBackground && cellType != CellType.Unloaded);

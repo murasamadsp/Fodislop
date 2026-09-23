@@ -46,6 +46,12 @@ public sealed class TerrainMetadataWarmup
 
     private void Warm(in TerrainCellSources sources)
     {
+        if (!sources.CanResolveMetadata)
+        {
+            Verify(sources);
+            return;
+        }
+
         // Прогрев — это тоже проход: неготовый тип обязан перерешаться, но
         // один раз, а не на каждой клетке полосы.
         sources.CellCache.BeginMetadataPass();
@@ -58,9 +64,24 @@ public sealed class TerrainMetadataWarmup
 
             sources.CellCache.GetMetadata(
                 type,
-                sources.MapData,
-                sources.TextureService,
+                sources.MapData!,
+                sources.TextureService!,
                 sources.Atlases);
+        }
+    }
+
+    // Фоновая сборка: разрешать нечем, типы обязаны быть разрешены главным
+    // потоком до старта. Промах — дефект подготовки, и он называется здесь,
+    // до первой клетки, а не посреди Parallel.For.
+    private void Verify(in TerrainCellSources sources)
+    {
+        foreach (CellType type in _types)
+        {
+            if (type != CellType.Unloaded && !sources.MetadataLookup.TryGet(type, out _))
+            {
+                throw new System.InvalidOperationException(
+                    $"Terrain metadata for cell type '{type}' was not resolved before the background build.");
+            }
         }
     }
 }

@@ -39,6 +39,7 @@
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainScrollBands.cs" Link="Game/TerrainScrollBands.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/CellTypeSpatialIndex.cs" Link="Game/CellTypeSpatialIndex.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainMetadata.cs" Link="Game/TerrainMetadata.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/Cache/TerrainCellDataSource.cs" Link="Game/TerrainCellDataSource.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Background/BackgroundFloodFill.cs" Link="Game/BackgroundFloodFill.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/Contracts/ISpatialIndex.cs" Link="Game/ISpatialIndex.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/Spatial/SpatialShardGrid.cs" Link="Game/SpatialShardGrid.cs" />
@@ -48,6 +49,7 @@
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainVertexDistortionCalculator.cs" Link="Game/TerrainVertexDistortionCalculator.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/Contracts/RenderingConstants.cs" Link="Game/RenderingConstants.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
+    <Compile Include="../../Assets/Scripts/World/Storage/CellVisualProtocol.cs" Link="Game/CellVisualProtocol.cs" />
     <Compile Include="../../Assets/Scripts/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
     <!-- Каталоги типов: FillQuad опрашивает их на каждый квад. -->
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainSheetCatalog.cs" Link="Game/TerrainSheetCatalog.cs" />

@@ -12,9 +12,17 @@ namespace Kern.World.Textures;
 
 internal sealed class TerrainDecalAtlasLoader
 {
+    private readonly string _filename;
+    private readonly string _operationKey;
     private bool _loadStarted;
 
     public Texture2D? AtlasTexture { get; private set; }
+
+    public TerrainDecalAtlasLoader(string filename, string operationKey)
+    {
+        _filename = filename;
+        _operationKey = operationKey;
+    }
 
     public void StartLoad(
         ITextureStorageService textureStorage,
@@ -28,7 +36,7 @@ internal sealed class TerrainDecalAtlasLoader
 
         _loadStarted = true;
         operations.Run(
-            "load_terrain_decal_atlas",
+            _operationKey,
             cancellationToken => LoadAsync(textureStorage, onTextureLoaded, cancellationToken));
     }
 
@@ -38,10 +46,10 @@ internal sealed class TerrainDecalAtlasLoader
         CancellationToken cancellationToken)
     {
         Texture2D texture = await textureStorage.GetTextureAsync(
-            "terrain-decals.png",
+            _filename,
             cancellationToken) ??
             throw new InvalidOperationException(
-                "Required terrain decal atlas 'terrain-decals.png' could not be decoded.");
+                $"Required terrain decal atlas '{_filename}' could not be decoded.");
 
         if (texture.width != 512 || texture.height != 32)
         {
@@ -55,7 +63,7 @@ internal sealed class TerrainDecalAtlasLoader
             TextureWrapMode.Clamp);
 
         AtlasTexture = texture;
-        onTextureLoaded?.Invoke("terrain-decals.png", texture);
+        onTextureLoaded?.Invoke(_filename, texture);
     }
 
     public void Dispose()

@@ -285,7 +285,10 @@ namespace Kern.Networking
 
             // Время всех обработчиков пакета вместе: без него пик разбора
             // очереди не привязать к типу пакета.
-            long handlerStarted = PacketTelemetry.Enabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            // Замер идёт всегда: тяжёлый обработчик пишется в журнал событий
+            // кадра, и отчёт о провисе называет пакет, даже когда окно трафика
+            // закрыто. Сам замер — два чтения таймера.
+            long handlerStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             try
             {
                 using var allocationScope = Kern.Core.Interfaces.Diagnostics.AllocationLedger.Enabled
@@ -295,15 +298,19 @@ namespace Kern.Networking
             }
             finally
             {
-                if (handlerStarted != 0L)
+                double handlerMilliseconds =
+                    (System.Diagnostics.Stopwatch.GetTimestamp() - handlerStarted) * 1000.0 /
+                    System.Diagnostics.Stopwatch.Frequency;
+                PacketTelemetry.RecordHandlerTime(packetType, handlerMilliseconds);
+                if (handlerMilliseconds >= SlowHandlerEventMilliseconds)
                 {
-                    PacketTelemetry.RecordHandlerTime(
-                        packetType,
-                        (System.Diagnostics.Stopwatch.GetTimestamp() - handlerStarted) * 1000.0 /
-                        System.Diagnostics.Stopwatch.Frequency);
+                    Kern.Core.Interfaces.Diagnostics.FrameEventLog.Record(
+                        $"пакет {packetType.Name} {handlerMilliseconds:F1} мс");
                 }
             }
         }
+
+        private const double SlowHandlerEventMilliseconds = 4.0;
 
         // Одна запись учёта аллокаций на тип пакета; строка имени строится один
         // раз на тип, а не на пакет.

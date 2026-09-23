@@ -43,48 +43,43 @@ public sealed class TerrainDirtyTracker
         int meshHeight,
         int worldHeight)
     {
-        int lastServerY = serverY + Mathf.Max(0, height - 1);
-        int firstUnityY = Mathf.FloorToInt(CoordinateUtils.ServerToUnityY(serverY, worldHeight));
-        int lastUnityY = Mathf.FloorToInt(CoordinateUtils.ServerToUnityY(lastServerY, worldHeight));
-        int minimumUnityY = Mathf.Min(firstUnityY, lastUnityY);
-        int maximumUnityY = Mathf.Max(firstUnityY, lastUnityY);
+        RectInt changedRegion = ToUnityRect(serverX, serverY, width, height, worldHeight);
         bool affectsCachedTerrain =
-            serverX + width - 1 >= windowOrigin.x - 1 &&
-            serverX <= windowOrigin.x + meshWidth &&
-            maximumUnityY >= windowOrigin.y - 1 &&
-            minimumUnityY <= windowOrigin.y + meshHeight;
+            changedRegion.xMax - 1 >= windowOrigin.x - 1 &&
+            changedRegion.xMin <= windowOrigin.x + meshWidth &&
+            changedRegion.yMax - 1 >= windowOrigin.y - 1 &&
+            changedRegion.yMin <= windowOrigin.y + meshHeight;
         if (!affectsCachedTerrain)
         {
             return null;
         }
 
-        RectInt changedRegion = new(
-            serverX,
-            minimumUnityY,
-            width,
-            maximumUnityY + 1 - minimumUnityY);
         _rects.Add(
             changedRegion,
             new RectInt(windowOrigin.x, windowOrigin.y, meshWidth, meshHeight));
         return changedRegion;
     }
 
-    /// <summary>
-    /// Заплатки перестали окупаться: очистить их и сообщить, что окно надо
-    /// собрать целиком.
-    /// </summary>
-    public bool CoalesceIntoFullRebuild(Vector2Int windowOrigin, int meshWidth, int meshHeight)
+    /// <summary>Прямоугольник сервера в координатах Unity: ось Y перевёрнута целиком.</summary>
+    public static RectInt ToUnityRect(int serverX, int serverY, int width, int height, int worldHeight)
     {
-        if (!TerrainRebuildCostModel.PrefersFullRebuild(
+        int lastServerY = serverY + Mathf.Max(0, height - 1);
+        int firstUnityY = Mathf.FloorToInt(CoordinateUtils.ServerToUnityY(serverY, worldHeight));
+        int lastUnityY = Mathf.FloorToInt(CoordinateUtils.ServerToUnityY(lastServerY, worldHeight));
+        int minimumUnityY = Mathf.Min(firstUnityY, lastUnityY);
+        int maximumUnityY = Mathf.Max(firstUnityY, lastUnityY);
+        return new RectInt(serverX, minimumUnityY, width, maximumUnityY + 1 - minimumUnityY);
+    }
+
+    /// <summary>
+    /// Заплатки перестали окупаться: дешевле пересобрать тексели окна целиком.
+    /// Прямоугольники при этом не сбрасываются — по ним главный поток
+    /// перечитывает в кэш только изменённые клетки, а не всё окно.
+    /// </summary>
+    public bool PrefersFullRebuild(Vector2Int windowOrigin, int meshWidth, int meshHeight) =>
+        TerrainRebuildCostModel.PrefersFullRebuild(
             _rects,
             new RectInt(windowOrigin.x, windowOrigin.y, meshWidth, meshHeight),
             meshWidth,
-            meshHeight))
-        {
-            return false;
-        }
-
-        _rects.Clear();
-        return true;
-    }
+            meshHeight);
 }

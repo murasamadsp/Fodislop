@@ -56,7 +56,7 @@ public class TerrainVertexDistortionCalculatorTests
     }
 
     [Test]
-    public void ComputeOffset_RoundableLooseCell_ReturnsZero()
+    public void ComputeOffset_RoundableLooseCell_UsesServerCause()
     {
         var cause = new CachedCellData
         {
@@ -79,7 +79,19 @@ public class TerrainVertexDistortionCalculatorTests
             100,
             100);
 
-        Assert.AreEqual(TerrainVertexOffset.Zero, result);
+        TerrainVertexOffset serverCauseResult = TerrainVertexDistortionCalculator.ComputeOffset(
+            cause,
+            cause,
+            cause,
+            cause,
+            10,
+            10,
+            100,
+            100);
+
+        Assert.That(TerrainVertexDistortionCalculator.IsCause(lava), Is.True);
+        Assert.That(result, Is.EqualTo(serverCauseResult));
+        Assert.That(result, Is.Not.EqualTo(TerrainVertexOffset.Zero));
     }
 
     // Узел внутри сплошного массива. Оригинал Mines (TerrainRenderer.GetDistortion,
@@ -187,28 +199,28 @@ public class TerrainVertexDistortionCalculatorTests
     [TestCase(CellType.Gate)]
     [TestCase(CellType.TeleportBlock)]
     [TestCase(CellType.Box)]
-    public void FixedSilhouettePinsEverySharedCornerEvenWithServerCauseFlag(CellType type)
+    public void ServerBlockPinsEverySharedCorner(CellType type)
     {
-        foreach (CellDistortionType configured in new[] { CellDistortionType.Neutral, CellDistortionType.Cause })
+        var causeCell = new CachedCellData { Type = type, Distortion = CellDistortionType.Cause };
+        Assert.That(TerrainVertexDistortionCalculator.IsCause(causeCell), Is.True);
+
+        var blockCell = new CachedCellData { Type = type, Distortion = CellDistortionType.Block };
+        Assert.That(TerrainVertexDistortionCalculator.IsBlock(blockCell), Is.True);
+        for (int corner = 0; corner < 4; corner++)
         {
-            var fixedCell = new CachedCellData { Type = type, Distortion = configured };
-            Assert.That(TerrainVertexDistortionCalculator.IsCause(fixedCell), Is.False);
-            for (int corner = 0; corner < 4; corner++)
+            var cells = new CachedCellData[4];
+            cells[corner] = blockCell;
+            cells[(corner + 1) % 4] = new CachedCellData
             {
-                var cells = new CachedCellData[4];
-                cells[corner] = fixedCell;
-                cells[(corner + 1) % 4] = new CachedCellData
-                {
-                    Type = CellType.Green,
-                    Distortion = CellDistortionType.Cause,
-                };
-                for (int seed = 1; seed <= 16; seed++)
-                {
-                    TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(
-                        cells[0], cells[1], cells[2], cells[3], seed * 17, seed * 29);
-                    Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero),
-                        $"{type}, config {configured}, shared corner {corner}, seed {seed}");
-                }
+                Type = CellType.Green,
+                Distortion = CellDistortionType.Cause,
+            };
+            for (int seed = 1; seed <= 16; seed++)
+            {
+                TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(
+                    cells[0], cells[1], cells[2], cells[3], seed * 17, seed * 29);
+                Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero),
+                    $"{type}, shared corner {corner}, seed {seed}");
             }
         }
     }

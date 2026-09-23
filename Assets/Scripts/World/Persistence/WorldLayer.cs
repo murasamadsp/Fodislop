@@ -314,8 +314,13 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
     public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot) =>
         _dirtyWriter.RestoreDirty(snapshot);
 
+    /// <summary>Записать снимок в файл. Можно из пула; учёт — <see cref="CompleteDirty"/>.</summary>
     public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk) =>
         _dirtyWriter.WriteSnapshot(snapshot, flushToDisk);
+
+    /// <summary>Главный поток после успешной записи снимка.</summary>
+    public void CompleteDirty(List<(int Index, T[] Chunk)> snapshot) =>
+        _dirtyWriter.CompleteSnapshot(snapshot);
 
     public void CreateDurableBackup(string backupPath) =>
         _file.CreateDurableBackup(backupPath);

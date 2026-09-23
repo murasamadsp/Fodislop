@@ -13,8 +13,7 @@ internal enum TerrainLightingFlags : byte
     SolidBottom = 1 << 2,
     SolidRight = 1 << 3,
     Emissive = 1 << 4,
-    RoundedPhysicalContour = 1 << 5,
-    PhysicalMass = 1 << 6,
+    PhysicalMass = 1 << 5,
 }
 
 // Wire format written to TerrainVertex.UV6 and decoded by
@@ -26,33 +25,29 @@ internal readonly record struct TerrainLightingData(
     public const byte SolidBoundaryMask = 0x0F;
 
     private const float EmissionFractionScale = 0.25f;
-    private const byte SolidDiagonalShift = 4;
-    private const float ContourFlagsRange = 4f;
+    private const int SolidDiagonalShift = 1;
+    private const int ReliefCodeShift = 5;
+    private const int ReliefCodeRange = 1 << ReliefCodeShift;
 
-    // Маска рельефа лежит над диагональной: биты 0-1 — флаги контура,
-    // 2-5 — диагональные соседи, 6-10 — код рельефа. Код, а не маска:
+    // Бит 0 — roundable contour, биты 1-4 — диагональные соседи,
+    // биты 5-9 — код рельефа. Код, а не маска:
     // ноль означает «клетка без рельефа, каймы нет», а маска рельефа
     // хранится как mask + 1. Иначе клетка без рельефа и клетка, у которой
     // все четыре соседа чужие, выглядели бы одинаково.
-    private const int ReliefCodeShift = 6;
-    private const float ReliefCodeRange = 64f;
     public const int NoRelief = 0;
-    private const int GlowingContourFlag = 1 << 0;
-    private const int RoundableContourFlag = 1 << 1;
+    private const int RoundableContourFlag = 1 << 0;
 
     public TerrainLightingFlags Flags =>
         (TerrainLightingFlags)(byte)MathF.Floor(PackedFlags + 0.0001f);
 
     public int SolidBoundary => (int)Flags & SolidBoundaryMask;
 
-    public int SolidDiagonal => (int)MathF.Round(PackedContour) >> 2 & SolidBoundaryMask;
+    public int SolidDiagonal =>
+        ((int)MathF.Round(PackedContour) >> SolidDiagonalShift) & SolidBoundaryMask;
 
     public int ReliefCode => ((int)MathF.Round(PackedContour) >> ReliefCodeShift) & 0x1F;
 
     public bool IsEmissive => (Flags & TerrainLightingFlags.Emissive) != 0;
-
-    public bool HasRoundedPhysicalContour =>
-        (Flags & TerrainLightingFlags.RoundedPhysicalContour) != 0;
 
     public bool IsPhysicalMass => (Flags & TerrainLightingFlags.PhysicalMass) != 0;
 
@@ -80,23 +75,17 @@ internal readonly record struct TerrainLightingData(
             flags |= TerrainLightingFlags.Emissive;
         }
 
-        if (hasRoundedPhysicalContour)
-        {
-            flags |= TerrainLightingFlags.RoundedPhysicalContour;
-        }
-
         if (isPhysicalMass)
         {
             flags |= TerrainLightingFlags.PhysicalMass;
         }
 
-        int contourFlags = (isGlowing ? GlowingContourFlag : 0) |
-            (hasRoundedPhysicalContour ? RoundableContourFlag : 0);
-        int solidDiagonal = solidConnectivityMask >> SolidDiagonalShift;
+        int contourFlags = hasRoundedPhysicalContour ? RoundableContourFlag : 0;
+        int solidDiagonal = solidConnectivityMask >> 4;
         int reliefCode = hasRelief ? (reliefMask & SolidBoundaryMask) + 1 : NoRelief;
         return new TerrainLightingData(
             (byte)flags + (emissionStrength * EmissionFractionScale),
-            contourFlags + (solidDiagonal * ContourFlagsRange) +
+            contourFlags + (solidDiagonal << SolidDiagonalShift) +
                 (reliefCode * ReliefCodeRange));
     }
 }

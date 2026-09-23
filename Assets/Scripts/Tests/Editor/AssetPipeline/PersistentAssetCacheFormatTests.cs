@@ -207,4 +207,14 @@ public sealed class PersistentAssetCacheFormatTests
         Assert.That(cache.GetAsset("shared.bin"), Is.EqualTo(second));
         Assert.That(cache.GetETag("shared.bin"), Is.EqualTo("second"));
     }
+
+    [Test]
+    public async Task AsyncReadAndETagRoundTripVerifiedPair()
+    {
+        var cache = new PersistentAssetCache(_cachePath);
+        cache.SaveAsset("async.bin", [8, 13, 21], "async-etag");
+
+        Assert.That(await cache.GetAssetAsync("async.bin"), Is.EqualTo(new byte[] { 8, 13, 21 }));
+        Assert.That(await cache.GetETagAsync("async.bin"), Is.EqualTo("async-etag"));
+    }
 }

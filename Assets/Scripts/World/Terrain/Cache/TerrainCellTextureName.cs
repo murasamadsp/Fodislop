@@ -16,6 +16,7 @@ public static class TerrainCellTextureName
 {
     private const string CellPrefix = "Cells/";
     private const string DecalAtlas = "terrain-decals.png";
+    private const string DecalStoneAtlas = "terrain-decals-stone.png";
 
     public static bool TryParseCellType(string filename, out CellType cellType)
     {
@@ -38,6 +39,10 @@ public static class TerrainCellTextureName
         return true;
     }
 
+    // Второй атлас обязан попадать сюда наравне с первым: без этого его
+    // загрузка не перебиндит материалы, и stone-декали останутся сэмплить
+    // незаполненный _TerrainDecalStoneAtlas, если он приехал вторым.
     public static bool IsDecalAtlas(string filename) =>
-        string.Equals(filename, DecalAtlas, StringComparison.OrdinalIgnoreCase);
+        string.Equals(filename, DecalAtlas, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(filename, DecalStoneAtlas, StringComparison.OrdinalIgnoreCase);
 }

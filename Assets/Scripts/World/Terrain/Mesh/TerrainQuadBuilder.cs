@@ -47,7 +47,7 @@ internal static class TerrainQuadBuilder
         TerrainQuadLayer layer,
         Span<TerrainVertex> quad)
     {
-        TerrainCellCache cellCache = sources.CellCache;
+        ITerrainCellDataSource cellCache = sources.CellCache;
         TerrainPrecalculator precalc = sources.Precalc;
         IReadOnlyList<IAtlasDescriptor> atlases = sources.Atlases;
         int worldWidth = sources.WorldWidth;
@@ -70,6 +70,7 @@ internal static class TerrainQuadBuilder
 
         CachedCellData ccd = cellCache.GetCellData(cx, cy);
         CellType cellFgType = ccd.Type;
+        CellVisualProperties foregroundVisuals = MapCellConfigCatalog.GetVisualProperties(cellFgType);
 
         bool isDoor = !isBackground && cellFgType == CellType.BuildingDoor;
 
@@ -78,28 +79,56 @@ internal static class TerrainQuadBuilder
             return TerrainQuadResult.NoAtlas(isDoor);
         }
 
-        CellType backgroundType = isBackground ? sources.FloodFill.Buffer[x, y] : cellFgType;
-        if (isBackground && IsBuildingBlock(cellFgType) && (ccd.Properties & CellConfigProperties.Passable) != 0)
+        bool organicTerrain = precalc.EnableDistortion &&
+            precalc.DistortionStyle == TerrainDistortionStyle.Organic &&
+            TerrainVertexDistortionCalculator.IsCause(ccd);
+        bool organicCause = !isBackground && organicTerrain;
+        int organicEdges = 0;
+        bool needsOrganicUnderlay = false;
+        if (organicTerrain)
         {
-            backgroundType = CellType.Road;
+            CachedCellData bottomNeighbor = cellCache.GetCellData(cx, cy - 1);
+            CachedCellData rightNeighbor = cellCache.GetCellData(cx + 1, cy);
+            CachedCellData topNeighbor = cellCache.GetCellData(cx, cy + 1);
+            CachedCellData leftNeighbor = cellCache.GetCellData(cx - 1, cy);
+            needsOrganicUnderlay =
+                IsOrganicEmptyEdge(bottomNeighbor) ||
+                IsOrganicEmptyEdge(rightNeighbor) ||
+                IsOrganicEmptyEdge(topNeighbor) ||
+                IsOrganicEmptyEdge(leftNeighbor);
+            if (organicCause)
+            {
+                int bottom = OrganicEdgeBend(bottomNeighbor, gridX, unityY, false, 1);
+                int right = OrganicEdgeBend(rightNeighbor, gridX + 1, unityY, true, -1);
+                int top = OrganicEdgeBend(topNeighbor, gridX, unityY + 1, false, -1);
+                int left = OrganicEdgeBend(leftNeighbor, gridX, unityY, true, 1);
+                organicEdges = 1 +
+                    (bottom + 2) +
+                    ((right + 2) * 5) +
+                    ((top + 2) * 25) +
+                    ((left + 2) * 125);
+            }
         }
+
+        CellType backgroundType = isBackground
+            ? TerrainCellLayers.ResolveBackground(cellFgType, sources.FloodFill.Buffer[x, y], ccd.Properties)
+            : cellFgType;
 
         // Силуэт переднего плана считается до выбора слоя: от него зависит,
         // нужна ли под ним подложка.
         //
-        // Только скругление, не смещение. Смещённая клетка свой квадрат тоже
-        // не закрывает, но пустоты не оставляет: соседняя смещённая клетка
-        // делит с ней тот же узел и закрывает общее ребро — это проверяет
-        // растровая линейка («Uncovered shared edge between adjacent cells»).
-        // Пока сюда входило и смещение, подложка вставала под каждой клеткой
-        // внутри массива и застилала мир вторым прямоугольным слоем.
-        bool foregroundFillsCell = !MapCellConfigCatalog.IsRoundableLoose(cellFgType);
+        // Общие смещённые рёбра закрывают друг друга. Подложка нужна только
+        // там, где Organic врезает открытый край внутрь собственной клетки;
+        // внутри сплошного массива второй слой не рисуем.
+        bool foregroundFillsCell = !foregroundVisuals.IsRoundableLoose && !needsOrganicUnderlay;
 
         if (!TerrainCellLayers.TryGetType(
             cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
         {
             return TerrainQuadResult.NoAtlas(isDoor);
         }
+
+        CellVisualProperties cellVisuals = MapCellConfigCatalog.GetVisualProperties(cellType);
 
         bool isSameCell = !isBackground || cellType == cellFgType;
 
@@ -151,7 +180,7 @@ internal static class TerrainQuadBuilder
             off10,
             off11,
             off01);
-        float anchorFlag = geometry.IsAnchored ? 1f : 0f;
+        float anchorFlag = geometry.IsAnchored || organicCause ? 1f : 0f;
 
         quad[0].Position = new Vector3(lx, ly, zOffset) + off00;
         quad[1].Position = new Vector3(lx + cellSize, ly, zOffset) + off10;
@@ -207,7 +236,7 @@ internal static class TerrainQuadBuilder
         bool isPhysicalMass =
             !isBackground &&
             cellFgType != CellType.Empty &&
-            !MapCellConfigCatalog.IsRoad(cellFgType);
+            !foregroundVisuals.IsRoad;
         Vector4 animDataVec = new(
             (float)animType,
             animationSettings.Speed,
@@ -219,16 +248,14 @@ internal static class TerrainQuadBuilder
         // больше 1.5 уже означает «отбросить», и Terrain.shader вместе с
         // TerrainCellBuilder выкидывали по нему всю породу и все кристаллы.
         int packedColumn = descriptor & 0x1F;
-        if (TerrainSheetCatalog.IsContinuousSheet(cellType))
+        if (cellVisuals.IsContinuousSheet)
         {
             packedColumn |= 32;
         }
 
         Vector4 worldPosVec = new Vector4(gridX, serverY, packedColumn, packedW);
 
-        bool isGlowing = (props & CellConfigProperties.Glowing) != 0 &&
-            !MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellType) &&
-            !MapCellConfigCatalog.IsBuildingOrArtificialBlock(cellFgType);
+        bool isGlowing = (props & CellConfigProperties.Glowing) != 0;
 
         // Read RGB directly from Color32 bytes — no intermediate Color allocation
         int packedLightingColor = minimapColor.r |
@@ -236,7 +263,7 @@ internal static class TerrainQuadBuilder
             (minimapColor.b << 16);
 
         bool hasRoundedPhysicalContour =
-            !isBackground && MapCellConfigCatalog.IsRoundableLoose(cellFgType);
+            !isBackground && foregroundVisuals.IsRoundableLoose;
 
         // Маска соседства кладётся и фоновым квадам тоже.
         //
@@ -259,12 +286,10 @@ internal static class TerrainQuadBuilder
         // ring-адрес у фонового текселя тот же, и чужой код рельефа въехал бы
         // в соседний слой.
         byte reliefMask = precalc.CellReliefMasks[x, y];
-        // Каталог задаёт состав семей, а группа подтверждает, что у клетки
-        // вообще есть рельеф. Без этой проверки обычный грунт с группой 0
+        // Серверная группа определяет наличие фаски. Без проверки группа 0
         // получает reliefCode=1 и рисует фаску по всем четырём сторонам.
         bool hasRelief = !isBackground &&
-            ccd.ReliefGroup != 0 &&
-            TerrainReliefRimCatalog.ParticipatesInRim(cellFgType);
+            ccd.ReliefGroup != 0;
         TerrainLightingData lightingData = TerrainLightingData.Pack(
             solidConnectivityMask,
             isGlowing,
@@ -276,29 +301,65 @@ internal static class TerrainQuadBuilder
         bool hasGroundDecalSurface = TerrainDecalCatalog.IsGroundDecalSurface(
             cellType,
             isBackground);
+        bool hasStoneDecalSurface = TerrainDecalCatalog.IsStoneDecalSurface(
+            cellType,
+            isBackground);
+        float decalPlacement = hasGroundDecalSurface
+            ? TerrainDecalCatalog.GetGroundPlacement(gridX, serverY)
+            : hasStoneDecalSurface
+                ? TerrainDecalCatalog.GetStonePlacement(gridX, serverY)
+                : 0f;
         Vector4 glowVec = new Vector4(
             packedLightingColor,
             lightingData.PackedFlags,
             lightingData.PackedContour,
-            hasGroundDecalSurface
-                ? TerrainDecalCatalog.GetGroundPlacement(gridX, serverY)
-                : 0f);
+            decalPlacement);
 
+        // Surface data is identical at every corner. Quantize it once;
+        // keep position, transformed UV0 and geometry anchors per vertex.
+        TerrainVertex surface = default;
+        surface.Color = color;
+        surface.UV1 = atlasRect;
+        surface.UV2 = tileSizeVec;
+        surface.UV3 = worldPosVec;
+        surface.UV4 = animDataVec;
+        surface.UV6 = glowVec;
         for (int i = 0; i < 4; i++)
         {
             ref TerrainVertex vertex = ref quad[i];
-            vertex.Color = color;
-            vertex.UV1 = atlasRect;
-            vertex.UV2 = tileSizeVec;
-            vertex.UV3 = worldPosVec;
-            vertex.UV4 = animDataVec;
+            vertex.CopySurfaceFrom(in surface);
             Vector2 anchor = geometry.GetCorner(i);
-            vertex.UV5 = new Vector4(anchorFlag, anchor.x, anchor.y, 0f);
-            vertex.UV6 = glowVec;
+            vertex.UV5 = new Vector4(anchorFlag, anchor.x, anchor.y, organicEdges);
         }
 
         return new TerrainQuadResult(atlasIndex, isDoor);
     }
+
+    private static int OrganicEdgeBend(
+        CachedCellData neighbor,
+        int edgeX,
+        int edgeY,
+        bool vertical,
+        int inwardSign)
+    {
+        if (neighbor.State != TerrainCellState.Loaded ||
+            TerrainVertexDistortionCalculator.IsBlock(neighbor) ||
+            (!TerrainVertexDistortionCalculator.IsCause(neighbor) && !IsOrganicEmptyEdge(neighbor)))
+        {
+            return 0;
+        }
+
+        int bend = TerrainVertexDistortionCalculator.ComputeOrganicEdgeBend(edgeX, edgeY, vertical);
+        return TerrainVertexDistortionCalculator.IsCause(neighbor)
+            ? bend
+            : Math.Min(Math.Abs(bend), 1) * inwardSign;
+    }
+
+    private static bool IsOrganicEmptyEdge(CachedCellData neighbor) =>
+        neighbor.State == TerrainCellState.Loaded &&
+        neighbor.Type == CellType.Empty &&
+        !TerrainVertexDistortionCalculator.IsBlock(neighbor) &&
+        !TerrainVertexDistortionCalculator.IsCause(neighbor);
 
     /// <summary>
     /// Вариант стены здания по соседним углам.

@@ -60,6 +60,10 @@ namespace Kern.Networking.Connection
         public event Action? OnReconnectHidden;
 
         private readonly ConcurrentQueue<ServerPacket> _packetQueue = new();
+        private readonly object _packetAdmissionGate = new();
+        private readonly PacketAdmissionBudget _packetAdmission = new(
+            ProjectRuntimeContracts.RuntimeLimits.MaximumQueuedPacketCount,
+            ProjectRuntimeContracts.RuntimeLimits.MaximumQueuedPacketBytes);
         private readonly ReconnectBackoff _reconnectBackoff = new();
 
         [Inject]
@@ -80,12 +84,19 @@ namespace Kern.Networking.Connection
         private float _reconnectCountdown;
         private string _reconnectStatus = string.Empty;
         private bool _tearingDown;
+        private int _receiveGeneration;
+        private int _mainThreadId;
         private bool _returningToMenu;
         private bool _restartWorldOnConnect;
 
         // НУЖЕН: сохраняет причину серверного дисконнекта — используется при реконнекте
         // и для диагностики в ReconnectUI. НЕ УДАЛЯТЬ (см. HandleServerDisconnect).
         private string _disconnectReason = string.Empty;
+
+        protected void Awake()
+        {
+            _mainThreadId = Environment.CurrentManagedThreadId;
+        }
 
         protected void OnDestroy()
         {
@@ -109,8 +120,24 @@ namespace Kern.Networking.Connection
             int processedCount = 0;
             bool stoppedByBudget = false;
             bool stoppedByCap = false;
-            while (_packetQueue.TryDequeue(out ServerPacket packet))
+            while (processedCount < ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
             {
+                // A handler cannot be preempted. Stop before dequeuing the next
+                // packet so one expensive handler is the only unavoidable overrun.
+                float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                if (processedCount > 0 && elapsedMs >= budgetSeconds * 1000f)
+                {
+                    stoppedByBudget = true;
+                    break;
+                }
+
+                if (!_packetQueue.TryDequeue(out ServerPacket packet))
+                {
+                    break;
+                }
+
+                ReleaseQueuedPacket(packet);
+
                 processedCount++;
                 try
                 {
@@ -125,24 +152,21 @@ namespace Kern.Networking.Connection
                     TriggerDisconnect("Client packet processing failed.");
                     break;
                 }
+            }
 
-                if (processedCount >= ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
-                {
-                    stoppedByCap = true;
-                    break;
-                }
-
-                float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-                if (elapsedMs >= budgetSeconds * 1000f)
-                {
-                    stoppedByBudget = true;
-                    break;
-                }
+            if (processedCount >= ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame &&
+                !_packetQueue.IsEmpty)
+            {
+                stoppedByCap = true;
             }
 
             // Остаток очереди и причина обрыва — единственный признак того, что
             // пакет уже пришёл, но до обработчика в этом кадре не добрался.
-            PacketTelemetry.RecordQueueState(_packetQueue.Count, stoppedByBudget, stoppedByCap);
+            PacketTelemetry.RecordQueueState(
+                _packetQueue.Count,
+                _packetAdmission.PacketBytes,
+                stoppedByBudget,
+                stoppedByCap);
         }
 
         private void UpdateReconnect()
@@ -437,9 +461,18 @@ namespace Kern.Networking.Connection
         private void ClearPendingPackets()
         {
             int discardedCount = 0;
-            while (_packetQueue.TryDequeue(out _))
+            lock (_packetAdmissionGate)
             {
-                discardedCount++;
+                // Новое поколение приёма: поток чтения прежнего соединения,
+                // ждущий места в очереди, проснётся и уйдёт, ничего не положив.
+                _receiveGeneration++;
+                while (_packetQueue.TryDequeue(out _))
+                {
+                    discardedCount++;
+                }
+
+                _packetAdmission.Clear();
+                Monitor.PulseAll(_packetAdmissionGate);
             }
 
             if (discardedCount > 0)
@@ -451,14 +484,85 @@ namespace Kern.Networking.Connection
 
         private void OnReceived(ServerPacket obj)
         {
-            if (_tearingDown)
+            if (_tearingDown || obj == null)
             {
                 return;
             }
 
-            if (obj != null)
+            EnqueuePacket(obj);
+        }
+
+        /// <summary>
+        /// Положить пакет в очередь главного потока, соблюдая лимит по числу и
+        /// байтам.
+        /// </summary>
+        ///
+        /// Переполнение — это давление назад, а не обрыв. Поток чтения ждёт,
+        /// пока главный поток разберёт очередь; пока он ждёт, сокет не
+        /// читается, и TCP сам притормаживает сервер. Выбросить пакет нельзя —
+        /// порядок авторитетных обновлений нарушился бы, — а рвать связь из-за
+        /// всплеска чанков значило бы превратить нагрузку в дисконнект.
+        ///
+        /// Главный поток ждать сам себя не может: пакет, пришедший с него
+        /// (офлайн-соединение отвечает прямо из обработчика), кладётся сверх
+        /// лимита, и это видно в телеметрии.
+        private void EnqueuePacket(ServerPacket packet)
+        {
+            int packetBytes = Math.Max(1, packet.Size);
+            long waitStart = 0;
+            lock (_packetAdmissionGate)
             {
-                _packetQueue.Enqueue(obj);
+                int generation = _receiveGeneration;
+                while (true)
+                {
+                    // OnReceived may have observed the old teardown state just
+                    // before Disconnect acquired the gate. Re-check while the
+                    // queue and its counters are protected, so no stale packet
+                    // can be inserted after ClearPendingPackets.
+                    if (_tearingDown || generation != _receiveGeneration)
+                    {
+                        return;
+                    }
+
+                    if (_packetAdmission.TryReserve(packetBytes))
+                    {
+                        break;
+                    }
+
+                    if (Environment.CurrentManagedThreadId == _mainThreadId)
+                    {
+                        _packetAdmission.Reserve(packetBytes);
+                        PacketTelemetry.RecordAdmissionOverflow();
+                        break;
+                    }
+
+                    if (waitStart == 0)
+                    {
+                        waitStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                    }
+
+                    // Таймаут — страховка от пропущенного сигнала, а не опрос:
+                    // место освобождает ReleaseQueuedPacket с PulseAll.
+                    Monitor.Wait(_packetAdmissionGate, 100);
+                }
+
+                _packetQueue.Enqueue(packet);
+            }
+
+            if (waitStart != 0)
+            {
+                PacketTelemetry.RecordBackpressure(
+                    (System.Diagnostics.Stopwatch.GetTimestamp() - waitStart) * 1000.0 /
+                    System.Diagnostics.Stopwatch.Frequency);
+            }
+        }
+
+        private void ReleaseQueuedPacket(ServerPacket packet)
+        {
+            lock (_packetAdmissionGate)
+            {
+                _packetAdmission.Release(packet.Size);
+                Monitor.PulseAll(_packetAdmissionGate);
             }
         }
 

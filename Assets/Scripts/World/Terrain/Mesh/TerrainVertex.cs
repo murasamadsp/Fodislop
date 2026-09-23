@@ -51,6 +51,25 @@ public struct TerrainVertex
 
     // ── Write-only properties: float → half ───────────────
 
+    public void CopySurfaceFrom(in TerrainVertex source)
+    {
+        Color = source.Color;
+        UV1x = source.UV1x;
+        UV1y = source.UV1y;
+        UV1z = source.UV1z;
+        UV1w = source.UV1w;
+        UV2x = source.UV2x;
+        UV2y = source.UV2y;
+        UV2z = source.UV2z;
+        UV2w = source.UV2w;
+        UV3 = source.UV3;
+        UV4x = source.UV4x;
+        UV4y = source.UV4y;
+        UV4z = source.UV4z;
+        UV4w = source.UV4w;
+        UV6 = source.UV6;
+    }
+
     public Vector2 UV0
     {
         set

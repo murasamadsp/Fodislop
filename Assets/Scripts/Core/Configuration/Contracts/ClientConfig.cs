@@ -8,8 +8,9 @@ namespace Kern.Core;
 public class ClientConfig
 {
     // 32: TerrainSettings.EnableReliefRim.
-    // Schema 31 мигрируется штатным загрузчиком с созданием backup.
-    public const int CurrentSchemaVersion = 32;
+    // 33: TerrainSettings.DistortionStyle.
+    // Схемы 31 и 32 мигрируются штатным загрузчиком с созданием backup.
+    public const int CurrentSchemaVersion = 33;
 
     public int SchemaVersion;
     public AudioSettings Audio = new();

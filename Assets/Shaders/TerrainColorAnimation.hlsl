@@ -78,18 +78,6 @@ bool TerrainAnimationUsesFlowMap(int animationType, int animationProfile)
         animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL);
 }
 
-float2 AnimateTerrainSampleUV(
-    float2 atlasUV,
-    float4 subAtlasRect,
-    float2 tileSizeUV,
-    int animationProfile,
-    float3 flowSample)
-{
-    // Sheet motion is already resolved by TerrainSampling. Do not warp or
-    // clamp the result again within individual cell tiles.
-    return atlasUV;
-}
-
 float TerrainContourAntialiasScale(int animationProfile)
 {
     return animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE
