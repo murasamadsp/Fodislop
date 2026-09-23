@@ -2,7 +2,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
-using Kern.Core.Models;
+using Kern.Core.Interfaces;
 using Kern.Networking.Processors;
 using Kern.Game.Inventory;
 using MinesServer.Data;
@@ -15,6 +15,13 @@ namespace Kern.Tests.Networking;
 [TestFixture]
 public class InventoryProcessorTests
 {
+    private static readonly ItemType[] KnownTypes =
+    [
+        ItemType.Rem,
+        ItemType.Battery,
+        ItemType.Nano,
+    ];
+
     private InventoryModel _model = null!;
     private InventoryProcessor _processor = null!;
 
@@ -22,78 +29,92 @@ public class InventoryProcessorTests
     public void SetUp()
     {
         _model = new InventoryModel();
-        _processor = new InventoryProcessor(_model);
+        _processor = new InventoryProcessor(_model, new StubItemCatalog(KnownTypes));
     }
 
     [Test]
-    public void Process_InventoryPacket_AddsNewItemsToEmptySlots()
+    public void Process_FullSnapshot_AddsAllTypes()
     {
         var changes = new Dictionary<ItemType, long>
         {
-            { (ItemType)1, 10 },
-            { (ItemType)2, 5 },
+            { ItemType.Rem, 10 },
+            { ItemType.Battery, 5 },
+            { ItemType.Nano, 1 },
         };
 
-        var packet = new InventoryPacket(changes);
-        _processor.Process(packet);
+        _processor.Process(new InventoryPacket(changes));
 
-        var slot0 = _model.GetSlot(0);
-        var slot1 = _model.GetSlot(1);
-
-        Assert.IsNotNull(slot0);
-        Assert.AreEqual((ItemType)1, slot0!.ItemType);
-        Assert.AreEqual(10, slot0.Quantity);
-
-        Assert.IsNotNull(slot1);
-        Assert.AreEqual((ItemType)2, slot1!.ItemType);
-        Assert.AreEqual(5, slot1.Quantity);
+        Assert.That(_model.OrderedTypes, Is.EquivalentTo(changes.Keys));
+        Assert.AreEqual(10, _model.GetQuantity(ItemType.Rem));
+        Assert.AreEqual(5, _model.GetQuantity(ItemType.Battery));
+        Assert.AreEqual(1, _model.GetQuantity(ItemType.Nano));
     }
 
     [Test]
-    public void Process_InventoryPacket_UpdatesExistingItemQuantity()
+    public void Process_FullSnapshot_CountEqualsKnownTypeCount_UsesAbsoluteSet()
     {
-        _model.SetSlot(0, new ItemData("Iron", Color.gray, 5) { ItemType = (ItemType)1 });
+        // Три известных типа в снимке — это полный набор (≥ KnownTypes.Length),
+        // даже если из модели выпал какой-то прежний тип: он исчезает.
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 10 },
+            { ItemType.Battery, 5 },
+        });
 
         var changes = new Dictionary<ItemType, long>
         {
-            { (ItemType)1, 25 },
+            { ItemType.Rem, 10 },
+            { ItemType.Nano, 7 },
+            { ItemType.Battery, 0 },
         };
 
-        var packet = new InventoryPacket(changes);
-        _processor.Process(packet);
+        _processor.Process(new InventoryPacket(changes));
 
-        var slot0 = _model.GetSlot(0);
-        Assert.IsNotNull(slot0);
-        Assert.AreEqual((ItemType)1, slot0!.ItemType);
-        Assert.AreEqual(25, slot0.Quantity);
+        Assert.That(_model.OrderedTypes, Is.EquivalentTo(new[] { ItemType.Rem, ItemType.Nano }));
+        Assert.AreEqual(0, _model.GetQuantity(ItemType.Battery));
     }
 
     [Test]
-    public void Process_InventoryPacket_RemovesItemWhenQuantityZeroOrNegative()
+    public void Process_MiniSnapshot_UpdatesOnlyListedTypes()
     {
-        _model.SetSlot(0, new ItemData("Iron", Color.gray, 5) { ItemType = (ItemType)1 });
-        _model.SetSlot(1, new ItemData("Gold", Color.yellow, 3) { ItemType = (ItemType)2 });
-
-        var changes = new Dictionary<ItemType, long>
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
         {
-            { (ItemType)1, 0 },
-        };
+            { ItemType.Rem, 10 },
+            { ItemType.Battery, 5 },
+        });
 
-        var packet = new InventoryPacket(changes);
-        _processor.Process(packet);
+        var changes = new Dictionary<ItemType, long> { { ItemType.Rem, 25 } };
 
-        Assert.IsNull(_model.GetSlot(0));
-        Assert.IsNotNull(_model.GetSlot(1));
+        _processor.Process(new InventoryPacket(changes));
+
+        Assert.AreEqual(25, _model.GetQuantity(ItemType.Rem));
+        Assert.AreEqual(5, _model.GetQuantity(ItemType.Battery), "Mini update must leave unlisted types untouched.");
     }
 
     [Test]
-    public void Process_SelectItemPacket_UpdatesSelectedItemMetadata()
+    public void Process_MiniSnapshot_RemovesItemWhenQuantityZeroOrNegative()
     {
-        _model.SetSlot(2, new ItemData("Unknown", Color.gray, 1) { ItemType = (ItemType)1 });
-        _model.SelectSlot(2);
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 10 },
+            { ItemType.Battery, 5 },
+        });
+
+        var changes = new Dictionary<ItemType, long> { { ItemType.Rem, 0 } };
+
+        _processor.Process(new InventoryPacket(changes));
+
+        Assert.AreEqual(0, _model.GetQuantity(ItemType.Rem));
+        Assert.AreEqual(5, _model.GetQuantity(ItemType.Battery));
+    }
+
+    [Test]
+    public void Process_SelectItemPacket_AppliesMetadataToThatType()
+    {
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 1 } });
 
         var packet = new SelectItemPacket(
-            (ItemType)1,
+            ItemType.Rem,
             "Super Pickaxe",
             "Mines instantly",
             0,
@@ -104,21 +125,50 @@ public class InventoryProcessorTests
 
         _processor.Process(packet);
 
-        var item = _model.GetSlot(2);
+        var item = _model.GetItem(ItemType.Rem);
         Assert.IsNotNull(item);
         Assert.AreEqual("Super Pickaxe", item!.Name);
         Assert.AreEqual("Mines instantly", item.Description);
     }
 
     [Test]
+    public void Process_SelectItemPacket_IgnoresUnknownType()
+    {
+        var packet = new SelectItemPacket(
+            ItemType.Nano,
+            "x",
+            "y",
+            0,
+            0,
+            0,
+            false,
+            new BitArray(8));
+
+        Assert.DoesNotThrow(() => _processor.Process(packet));
+        Assert.IsNull(_model.GetItem(ItemType.Nano));
+    }
+
+    [Test]
     public void Process_DeselectItemPacket_ClearsSelection()
     {
-        _model.SelectSlot(2);
-        Assert.AreEqual(2, _model.SelectedSlot);
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long> { { ItemType.Rem, 1 } });
+        _model.Select(ItemType.Rem);
+        Assert.AreEqual(ItemType.Rem, _model.SelectedItem);
 
-        var packet = new DeselectItemPacket();
-        _processor.Process(packet);
+        _processor.Process(new DeselectItemPacket());
 
-        Assert.AreEqual(-1, _model.SelectedSlot);
+        Assert.IsNull(_model.SelectedItem);
+        Assert.IsFalse(_model.HasSelectedItem);
+    }
+
+    private sealed class StubItemCatalog(IEnumerable<ItemType> knownTypes) : IItemCatalog
+    {
+        public IEnumerable<ItemType> AllTypes => knownTypes;
+
+        public string GetName(ItemType type) => type.ToString();
+
+        public string GetDescription(ItemType type) => string.Empty;
+
+        public Texture2D? GetIcon(ItemType type) => null;
     }
 }

@@ -6,11 +6,8 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Localization;
 using Kern.Core.Models;
-using Kern.Networking;
 using Kern.Game.Inventory;
 using MinesServer.Data;
-using MinesServer.Networking.Client.Packets.GUI;
-using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
@@ -23,10 +20,20 @@ namespace Kern.UI.Inventory
 
         private const int ROWCOUNT = 4;
 
+        // Компактный режим — восемь предметов (два столбца по четыре), как
+        // согласовано: старый клиент держал в верхней панели короткий список,
+        // полный раскрывался тем же треугольником.
+        private const int COMPACT_SIZE = 8;
+
+        // Цифровые клавиши 1–9 выбирают предмет по позиции в OrderedTypes.
+        private const int NUM_ORDERED_SELECT_KEYS = 9;
+
         [Inject]
         private UIDocument _doc = null!;
         [Inject]
         private IInventoryModel _model = null!;
+        [Inject]
+        private IItemCatalog _catalog = null!;
         [Inject]
         private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
@@ -34,18 +41,13 @@ namespace Kern.UI.Inventory
         [Inject]
         private UIInputManager _uiInput = null!;
 
-        private readonly Dictionary<int, List<VisualElement>> _slotElements = new();
-        private VisualElement? _hotbarContainer;
+        private readonly Dictionary<ItemType, List<VisualElement>> _cellElements = new();
         private Button? _inventoryButton;
         private VisualElement? _hotbarSlots;
         private VisualElement? _fullSlots;
         private Label? _toggleGlyph;
         private bool _isInventoryOpen;
-        private Label? _capacityLabel = null;
-
-        private int _lastSelectedSlot = -1;
         private InventoryTooltipController? _tooltipController;
-        private InventoryContextMenuController? _contextMenuController;
         private bool _initialized;
 
         protected void Start()
@@ -67,11 +69,11 @@ namespace Kern.UI.Inventory
 
             if (_model != null)
             {
-                _model.OnSlotChanged -= RefreshSlot;
-                _model.OnSlotSelected -= OnModelSlotSelected;
+                _model.OnItemsChanged -= RebuildSlots;
+                _model.OnSelectedChanged -= OnModelSelectedChanged;
             }
 
-            _contextMenuController?.HideContextMenu();
+            _tooltipController?.HideTooltip();
         }
 
         protected void Update()
@@ -97,32 +99,64 @@ namespace Kern.UI.Inventory
                 return;
             }
 
-            bool digitPressed = TrySelectSlotFromDigitKey();
-
-            if (!digitPressed && (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
+            if (TrySelectFromDigitKey())
             {
-                // Enter применяет выбранный предмет и имеет приоритет над открытием
-                // чата: чат не должен перехватывать Enter и красть предмет у узла.
-                // Если слот не выбран — Enter ведёт себя обычным образом
-                // (в том числе открывает чат в GlobalChatUI).
-                // Пустой Enter (нет выбранного предмета) передаёт управление чату,
-                // чтобы открытие чата не конфликтовало с применением предмета.
+                return;
+            }
+
+            if (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame)
+            {
+                // Enter применяет выбранный предмет и имеет приоритет над
+                // открытием чата: пустой Enter (ничего не выбрано) ведёт себя
+                // обычным образом и позволяет чату открыться (GlobalChatUI).
                 _model!.UseSelectedItem();
+                return;
+            }
+
+            if (Keyboard.current.escapeKey.wasPressedThisFrame && _model!.HasSelectedItem)
+            {
+                // Escape снимает предмет и не должен заодно открывать меню
+                // паузы — одно нажатие, один владелец (см. UIInputManager).
+                _model.Deselect();
+                _uiInput.ConsumeEscape();
             }
         }
 
-        private bool TrySelectSlotFromDigitKey()
+        private bool TrySelectFromDigitKey()
         {
-            if (Keyboard.current.digit1Key.wasPressedThisFrame) { _model!.SelectSlot(0); return true; }
-            if (Keyboard.current.digit2Key.wasPressedThisFrame) { _model!.SelectSlot(1); return true; }
-            if (Keyboard.current.digit3Key.wasPressedThisFrame) { _model!.SelectSlot(2); return true; }
-            if (Keyboard.current.digit4Key.wasPressedThisFrame) { _model!.SelectSlot(3); return true; }
-            if (Keyboard.current.digit5Key.wasPressedThisFrame) { _model!.SelectSlot(4); return true; }
-            if (Keyboard.current.digit6Key.wasPressedThisFrame) { _model!.SelectSlot(5); return true; }
-            if (Keyboard.current.digit7Key.wasPressedThisFrame) { _model!.SelectSlot(6); return true; }
-            if (Keyboard.current.digit8Key.wasPressedThisFrame) { _model!.SelectSlot(7); return true; }
-            if (Keyboard.current.digit9Key.wasPressedThisFrame) { _model!.SelectSlot(8); return true; }
+            IReadOnlyList<ItemType> types = _model!.OrderedTypes;
+            for (int i = 0; i < NUM_ORDERED_SELECT_KEYS && i < types.Count; i++)
+            {
+                if (WasOrderedSelectKeyPressed(i))
+                {
+                    _model.Select(types[i]);
+                    return true;
+                }
+            }
+
             return false;
+        }
+
+        private static bool WasOrderedSelectKeyPressed(int index)
+        {
+            if (Keyboard.current == null)
+            {
+                return false;
+            }
+
+            return index switch
+            {
+                0 => Keyboard.current.digit1Key.wasPressedThisFrame,
+                1 => Keyboard.current.digit2Key.wasPressedThisFrame,
+                2 => Keyboard.current.digit3Key.wasPressedThisFrame,
+                3 => Keyboard.current.digit4Key.wasPressedThisFrame,
+                4 => Keyboard.current.digit5Key.wasPressedThisFrame,
+                5 => Keyboard.current.digit6Key.wasPressedThisFrame,
+                6 => Keyboard.current.digit7Key.wasPressedThisFrame,
+                7 => Keyboard.current.digit8Key.wasPressedThisFrame,
+                8 => Keyboard.current.digit9Key.wasPressedThisFrame,
+                _ => false,
+            };
         }
 
         private void TryInitialize()
@@ -142,6 +176,10 @@ namespace Kern.UI.Inventory
                 "[InventoryView] IInventoryModel injection is required before initialization.");
             _model = model;
 
+            IItemCatalog catalog = _catalog ?? throw new InvalidOperationException(
+                "[InventoryView] IItemCatalog injection is required before initialization.");
+            _catalog = catalog;
+
             if (_inputBlocker == null)
             {
                 throw new InvalidOperationException(
@@ -154,12 +192,11 @@ namespace Kern.UI.Inventory
                     "[InventoryView] ILocalizationService injection is required before initialization.");
             }
 
-            _model.OnSlotChanged += RefreshSlot;
-            _model.OnSlotSelected += OnModelSlotSelected;
-
-            _tooltipController = new InventoryTooltipController(_doc.rootVisualElement, _loc);
-            _contextMenuController = new InventoryContextMenuController(_doc, _model, _loc);
             BuildUI();
+            _tooltipController = new InventoryTooltipController(_doc.rootVisualElement, _loc);
+
+            _model.OnItemsChanged += RebuildSlots;
+            _model.OnSelectedChanged += OnModelSelectedChanged;
             _initialized = true;
 
             _loc.RegisterLocalizable(this);
@@ -169,40 +206,19 @@ namespace Kern.UI.Inventory
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(InventoryView));
             UILocalizer.Apply(_doc.rootVisualElement, _loc);
-            if (_capacityLabel != null)
-            {
-                _capacityLabel.text = _loc.Get("inventory.capacity", InventoryModel.TOTALSLOTS);
-            }
-
             UILocalizer.AssertLocalized(_doc.rootVisualElement, _loc);
         }
 
-        private void OnModelSlotSelected(int slotIndex)
+        private void OnModelSelectedChanged(ItemType? selectedType)
         {
-            if (_lastSelectedSlot >= 0 && _slotElements.ContainsKey(_lastSelectedSlot))
-            {
-                foreach (var cell in _slotElements[_lastSelectedSlot])
-                {
-                    cell.RemoveFromClassList("inv-cell--selected");
-                }
-            }
+            ApplySelection();
 
-            _lastSelectedSlot = slotIndex;
-
-            if (slotIndex >= 0 && _slotElements.ContainsKey(slotIndex))
+            if (selectedType is { } type)
             {
-                foreach (var cell in _slotElements[slotIndex])
-                {
-                    cell.AddToClassList("inv-cell--selected");
-                }
-            }
-
-            if (slotIndex >= 0)
-            {
-                var item = _model!.GetSlot(slotIndex);
+                var item = _model!.GetItem(type);
                 if (item != null)
                 {
-                    _tooltipController?.ShowSlotTooltip(item);
+                    _tooltipController?.ShowItemInfo(item, _catalog.GetIcon(type));
                     return;
                 }
             }
@@ -228,8 +244,7 @@ namespace Kern.UI.Inventory
                     UILocalizer.Apply(tree, _loc);
                 }
 
-                _hotbarContainer = tree.Q<VisualElement>("HotbarContainer");
-                _hotbarSlots = tree.Q<VisualElement>("HotbarSlots") ?? _hotbarContainer;
+                _hotbarSlots = tree.Q<VisualElement>("HotbarSlots");
 
                 _inventoryButton = tree.Q<Button>("InventoryToggleBtn");
                 if (_inventoryButton != null)
@@ -239,11 +254,9 @@ namespace Kern.UI.Inventory
                     {
                         _inventoryButton.tooltip = $"{_loc.Get("inventory.open")} — {_loc.Get("inventory.hotbar")}";
 
-                        // Кнопка — узкая вертикальная полоса шириной в пятнадцать
-                        // пикселей, как в старом клиенте: название туда не влезает
-                        // и вылезало поверх сетки. Внутри остаётся только стрелка,
-                        // которая разворачивается при сворачивании — тем же
-                        // признаком, что и треугольник в эталоне.
+                        // Кнопка — узкая полоса с треугольником, как в старом
+                        // клиенте: название туда не влезает, внутри остаётся
+                        // только стрелка, разворачивающаяся при сворачивании.
                         _toggleGlyph = _inventoryButton.Q<Label>();
                     }
 
@@ -260,23 +273,16 @@ namespace Kern.UI.Inventory
             }
         }
 
-        private VisualElement CreateCell(int slotIndex, string name)
+        private VisualElement CreateCell(ItemType type)
         {
             var cell = new VisualElement();
-            cell.name = name;
-            cell.userData = slotIndex;
+            cell.name = "Cell_" + type;
+            cell.userData = type;
             cell.AddToClassList("inv-cell");
-            // InventoryRoot стоит в picking-mode="Ignore" (клики пустого поля
-            // уходят миру); ячейка обязана явно вернуть Position, иначе Ignore
-            // наследуется на поддерево и слот не получает мышь вообще — хотбар
-            // выглядит как мёртвый интерфейс.
+            // InventoryRoot стоит в picking-mode="Ignore"; ячейка обязана явно
+            // вернуть Position, иначе Ignore наследуется на поддерево и слот
+            // не получает мышь вообще.
             cell.pickingMode = PickingMode.Position;
-
-            // Вид ячейки — целиком в .inv-cell из Inventory.uss, и здесь его
-            // задавать нельзя. Раньше тут стояли размер, отступы, цвет, рамки и
-            // скругления инлайном; инлайн старше таблицы стилей, поэтому правки
-            // в USS не действовали вовсе — оттуда и брались голубая обводка,
-            // крупные скругления и отступ, ломавший шаг сетки.
 
             var icon = new VisualElement();
             icon.name = "Icon";
@@ -299,104 +305,93 @@ namespace Kern.UI.Inventory
             cell.RegisterCallback<MouseEnterEvent>(_ => cell.AddToClassList("inv-cell--highlight"));
             cell.RegisterCallback<MouseLeaveEvent>(_ => cell.RemoveFromClassList("inv-cell--highlight"));
 
+            // ЛКМ выбирает предмет (контекстное меню из новой модели убрано).
             cell.RegisterCallback<MouseDownEvent>(evt =>
             {
                 if (evt.button == 0)
                 {
-                    _model!.SelectSlot(slotIndex);
-                }
-                else if (evt.button == 1)
-                {
-                    _contextMenuController?.HideContextMenu();
-                    _contextMenuController?.ShowContextMenu(
-                        evt.mousePosition,
-                        slotIndex,
-                        ShowItemInfo);
-                    evt.StopPropagation();
+                    _model!.Select(type);
                 }
             });
 
-            if (!_slotElements.ContainsKey(slotIndex))
+            if (!_cellElements.TryGetValue(type, out List<VisualElement>? list))
             {
-                _slotElements[slotIndex] = new List<VisualElement>();
+                list = new List<VisualElement>();
+                _cellElements[type] = list;
             }
 
-            _slotElements[slotIndex].Add(cell);
+            list.Add(cell);
 
-            RefreshSlot(slotIndex);
+            RefreshCell(cell, type);
             return cell;
         }
 
-        private void RefreshSlot(int slotIndex)
+        private void RefreshCell(VisualElement cell, ItemType type)
         {
-            if (!_slotElements.ContainsKey(slotIndex))
+            ItemData? item = _model!.GetItem(type);
+
+            var icon = cell.Q<VisualElement>("Icon");
+            var qty = cell.Q<Label>("Quantity");
+
+            if (item != null)
             {
-                return;
-            }
-
-            var item = _model!.GetSlot(slotIndex);
-
-            foreach (var cell in _slotElements[slotIndex])
-            {
-                var icon = cell.Q<VisualElement>("Icon");
-                var qty = cell.Q<Label>("Quantity");
-
-                if (item != null)
+                icon.style.display = DisplayStyle.Flex;
+                Texture2D? texture = item.Icon ?? _catalog.GetIcon(type);
+                if (texture != null)
                 {
-                    icon.style.display = DisplayStyle.Flex;
-                    if (item.Icon != null)
-                    {
-                        icon.style.backgroundImage = new StyleBackground(item.Icon);
-                        icon.style.backgroundColor = Color.clear;
-                    }
-                    else
-                    {
-                        icon.style.backgroundImage = null;
-                        icon.style.backgroundColor = item.IconColor;
-                    }
-
-                    qty.text = item.Quantity > 1 ? item.Quantity.ToString() : string.Empty;
+                    icon.style.backgroundImage = new StyleBackground(texture);
+                    icon.style.backgroundColor = Color.clear;
                 }
                 else
                 {
-                    icon.style.display = DisplayStyle.None;
-                    qty.text = string.Empty;
+                    icon.style.backgroundImage = null;
+                    icon.style.backgroundColor = item.IconColor;
                 }
+
+                qty.text = item.Quantity > 1 ? item.Quantity.ToString() : string.Empty;
+            }
+            else
+            {
+                icon.style.display = DisplayStyle.None;
+                qty.text = string.Empty;
             }
         }
 
         private void RebuildSlots()
         {
-            FillSlots(_hotbarSlots, "Hotbar", 0, InventoryModel.HOTBAR_SIZE);
-            FillSlots(_fullSlots, "Inv", InventoryModel.HOTBAR_SIZE, InventoryModel.INVENTORY_SIZE);
+            _cellElements.Clear();
+            FillSlots(_hotbarSlots, COMPACT_SIZE);
+            FillSlots(_fullSlots, int.MaxValue);
 
             if (_inventoryButton != null)
             {
                 _inventoryButton.style.display = DisplayStyle.Flex;
             }
 
+            ApplySelection();
             ApplyInventoryMode();
         }
 
-        private void FillSlots(VisualElement? container, string prefix, int startSlot, int count)
+        private void FillSlots(VisualElement? container, int maxCount)
         {
             if (container == null)
             {
                 return;
             }
 
-            // Ячейки пересоздаются целиком: список занятых слотов меняется, и
-            // сохранять привязку старых элементов к новым номерам не к чему.
-            foreach (List<VisualElement> elements in _slotElements.Values)
-            {
-                elements.RemoveAll(cell => container.Contains(cell));
-            }
-
             container.Clear();
 
-            // Четыре строки, столбцы прирастают влево — как FixedRowCount = 4 со
-            // StartAxis = Vertical в старом клиенте. Все слоты создаются, включая
-            // пустые: индекс ячейки обязан совпадать с индексом серверного слота.
+            IReadOnlyList<ItemType> types = _model!.OrderedTypes;
+            int count = Math.Min(maxCount, types.Count);
+            if (count <= 0)
+            {
+                return;
+            }
+
+            // Четыре строки, столбцы прирастают влево — как FixedRowCount = 4
+            // со StartAxis = Vertical в старом клиенте. Создаются только
+            // ячейки реально держимых предметов: номер слота больше не имеет
+            // смысла, у каждого типа одна ячейка на панель.
             VisualElement? column = null;
             for (int i = 0; i < count; i++)
             {
@@ -407,8 +402,20 @@ namespace Kern.UI.Inventory
                     container.Add(column);
                 }
 
-                int slotIndex = startSlot + i;
-                column!.Add(CreateCell(slotIndex, $"{prefix}_{slotIndex}"));
+                column!.Add(CreateCell(types[i]));
+            }
+        }
+
+        private void ApplySelection()
+        {
+            ItemType? selected = _model!.SelectedItem;
+            foreach ((ItemType type, List<VisualElement> cells) in _cellElements)
+            {
+                bool isSelected = type == selected;
+                foreach (VisualElement cell in cells)
+                {
+                    cell.EnableInClassList("inv-cell--selected", isSelected);
+                }
             }
         }
 
@@ -440,11 +447,5 @@ namespace Kern.UI.Inventory
 
         // Клавиша делает ровно то же, что полоса: отдельного окна больше нет.
         private void ToggleInventory() => ToggleFullInventory();
-
-
-        private void ShowItemInfo(ItemData item)
-        {
-            _tooltipController?.ShowItemInfo(item);
-        }
     }
 }
