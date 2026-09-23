@@ -280,14 +280,14 @@ public sealed class FrameBreakdownWindow : ToolWindow
     private void StartAll()
     {
         _timings.Clear();
-        _playerLoop.Start();
+        _playerLoop.EnsureStarted();
         _loop.Begin();
         Kern.Core.Interfaces.Diagnostics.AllocationLedger.Enabled = true;
         foreach (List<FrameProbe> list in AllCatalogLists())
         {
             foreach (FrameProbe probe in list)
             {
-                probe.Start();
+                probe.EnsureStarted();
             }
         }
 

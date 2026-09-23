@@ -23,9 +23,7 @@
             },
             "second": {
                 "shader": {
-                    "fileID": 3892704024674354108,
-                    "guid": "0000000000000000d000000000000000",
-                    "type": 0
+                    "instanceID": 0
                 },
                 "shaderName": "Hidden/Editor Gizmo",
                 "shaderAssetGUID": "ca43ce2f4a87bd44b81bdae82dcbc066",
@@ -50,84 +48,6 @@
                         "appBackface": false,
                         "wireframe": false,
                         "invertProjectionMatrix": false,
-                        "unfilterableTextureBindings": 0,
-                        "nonfilteringSamplerBindings": 0
-                    }
-                ]
-            }
-        },
-        {
-            "first": {
-                "serializedVersion": "2",
-                "Hash": "bf2fce624cd48e0427890f3897f995d0"
-            },
-            "second": {
-                "shader": {
-                    "fileID": 70,
-                    "guid": "0000000000000000e000000000000000",
-                    "type": 0
-                },
-                "shaderName": "Hidden/Internal-Loading",
-                "shaderAssetGUID": "7d3344c24e361eb40bbe181c1c6b910b",
-                "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "",
-                "subShaderIndex": 0,
-                "passIndex": 0,
-                "graphicsStateInfoSet": [
-                    {
-                        "vertexLayout": 9346122305125408839,
-                        "renderPass": 15945554207292896147,
-                        "renderState": 15649462741326987297,
-                        "subPassIndex": 0,
-                        "topology": 0,
-                        "forceCullMode": -1,
-                        "shadingRateCombinerPrimitive": 0,
-                        "shadingRateCombinerFragment": 0,
-                        "baseShadingRate": 0,
-                        "depthBias": 0.0,
-                        "slopeDepthBias": 0.0,
-                        "userBackface": false,
-                        "appBackface": false,
-                        "wireframe": false,
-                        "invertProjectionMatrix": true,
-                        "unfilterableTextureBindings": 0,
-                        "nonfilteringSamplerBindings": 0
-                    },
-                    {
-                        "vertexLayout": 4933427786327595115,
-                        "renderPass": 15945554207292896147,
-                        "renderState": 15649462741326987297,
-                        "subPassIndex": 0,
-                        "topology": 0,
-                        "forceCullMode": -1,
-                        "shadingRateCombinerPrimitive": 0,
-                        "shadingRateCombinerFragment": 0,
-                        "baseShadingRate": 0,
-                        "depthBias": 0.0,
-                        "slopeDepthBias": 0.0,
-                        "userBackface": false,
-                        "appBackface": false,
-                        "wireframe": false,
-                        "invertProjectionMatrix": true,
-                        "unfilterableTextureBindings": 0,
-                        "nonfilteringSamplerBindings": 0
-                    },
-                    {
-                        "vertexLayout": 1433109904469103815,
-                        "renderPass": 15945554207292896147,
-                        "renderState": 15649462741326987297,
-                        "subPassIndex": 0,
-                        "topology": 0,
-                        "forceCullMode": -1,
-                        "shadingRateCombinerPrimitive": 0,
-                        "shadingRateCombinerFragment": 0,
-                        "baseShadingRate": 0,
-                        "depthBias": 0.0,
-                        "slopeDepthBias": 0.0,
-                        "userBackface": false,
-                        "appBackface": false,
-                        "wireframe": false,
-                        "invertProjectionMatrix": true,
                         "unfilterableTextureBindings": 0,
                         "nonfilteringSamplerBindings": 0
                     }
@@ -712,9 +632,7 @@
             },
             "second": {
                 "shader": {
-                    "fileID": 3892704024674354108,
-                    "guid": "0000000000000000d000000000000000",
-                    "type": 0
+                    "instanceID": 0
                 },
                 "shaderName": "Hidden/Editor Gizmo",
                 "shaderAssetGUID": "ca43ce2f4a87bd44b81bdae82dcbc066",
@@ -1717,9 +1635,7 @@
             },
             "second": {
                 "shader": {
-                    "fileID": 6727908021972620119,
-                    "guid": "0000000000000000d000000000000000",
-                    "type": 0
+                    "instanceID": 0
                 },
                 "shaderName": "Hidden/Light Probe Wire",
                 "shaderAssetGUID": "61e023e2052b43048b19177b2a4ebc05",
@@ -1870,44 +1786,25 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "998eea5f0e22e6834e124bed966ad33a"
+                "Hash": "901666ed13c8fe10064e8f39bcbd41ee"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "b5b2cd0432454877a4825471a6e12a70",
+                    "guid": "810f9c6b8f8e24eccb19735f7c2ccf55",
                     "type": 3
                 },
-                "shaderName": "Kern/World Surface",
-                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
+                "shaderName": "Kern/UI/Starfield",
+                "shaderAssetGUID": "810f9c6b8f8e24eccb19735f7c2ccf55",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_SURFACE_REDROCK",
+                "keywordNames": "",
                 "subShaderIndex": 0,
-                "passIndex": 1,
+                "passIndex": 0,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 4933427786327595115,
-                        "renderPass": 17065834461829938205,
-                        "renderState": 3409366084545131148,
-                        "subPassIndex": -1,
-                        "topology": 0,
-                        "forceCullMode": -1,
-                        "shadingRateCombinerPrimitive": 0,
-                        "shadingRateCombinerFragment": 0,
-                        "baseShadingRate": 0,
-                        "depthBias": 0.0,
-                        "slopeDepthBias": 0.0,
-                        "userBackface": false,
-                        "appBackface": false,
-                        "wireframe": false,
-                        "invertProjectionMatrix": true,
-                        "unfilterableTextureBindings": 0,
-                        "nonfilteringSamplerBindings": 0
-                    },
-                    {
-                        "vertexLayout": 4933427786327595115,
-                        "renderPass": 9980060513523334430,
-                        "renderState": 3409366084545131148,
+                        "vertexLayout": 1433109904469103815,
+                        "renderPass": 14152621794517940071,
+                        "renderState": 17623681824384884761,
                         "subPassIndex": -1,
                         "topology": 0,
                         "forceCullMode": -1,
@@ -1973,9 +1870,7 @@
             },
             "second": {
                 "shader": {
-                    "fileID": -7923638393116622636,
-                    "guid": "0000000000000000d000000000000000",
-                    "type": 0
+                    "instanceID": 0
                 },
                 "shaderName": "Hidden/SH",
                 "shaderAssetGUID": "5f839f58fafbe2847bfd524a316494fe",
@@ -2029,7 +1924,7 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "9b7696a92f5ceca9cbd522d9951adb9b"
+                "Hash": "998eea5f0e22e6834e124bed966ad33a"
             },
             "second": {
                 "shader": {
@@ -2040,7 +1935,7 @@
                 "shaderName": "Kern/World Surface",
                 "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_SURFACE_PERSPECTIVE",
+                "keywordNames": "KERN_SURFACE_REDROCK",
                 "subShaderIndex": 0,
                 "passIndex": 1,
                 "graphicsStateInfoSet": [
@@ -2168,26 +2063,26 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "9756dc62848710360dc8cd24c32a703b"
+                "Hash": "9b7696a92f5ceca9cbd522d9951adb9b"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "a89bee29cffa951418fc1e2da94d1959",
+                    "guid": "b5b2cd0432454877a4825471a6e12a70",
                     "type": 3
                 },
-                "shaderName": "Hidden/Universal/BlitHDROverlay",
-                "shaderAssetGUID": "a89bee29cffa951418fc1e2da94d1959",
+                "shaderName": "Kern/World Surface",
+                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "HDR_ENCODING _HDR_OVERLAY",
+                "keywordNames": "KERN_SURFACE_PERSPECTIVE",
                 "subShaderIndex": 0,
                 "passIndex": 1,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 15807068410263000910,
-                        "renderPass": 17386594603764001319,
-                        "renderState": 17623681824384884761,
-                        "subPassIndex": 0,
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 17065834461829938205,
+                        "renderState": 3409366084545131148,
+                        "subPassIndex": -1,
                         "topology": 0,
                         "forceCullMode": -1,
                         "shadingRateCombinerPrimitive": 0,
@@ -2198,7 +2093,26 @@
                         "userBackface": false,
                         "appBackface": false,
                         "wireframe": false,
-                        "invertProjectionMatrix": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    },
+                    {
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 9980060513523334430,
+                        "renderState": 3409366084545131148,
+                        "subPassIndex": -1,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
                         "unfilterableTextureBindings": 0,
                         "nonfilteringSamplerBindings": 0
                     }
@@ -2212,9 +2126,7 @@
             },
             "second": {
                 "shader": {
-                    "fileID": -5839801192547515254,
-                    "guid": "0000000000000000d000000000000000",
-                    "type": 0
+                    "instanceID": 0
                 },
                 "shaderName": "Hidden/Handles Lines",
                 "shaderAssetGUID": "61b9847591d4641e49af80a989ab633f",
@@ -2252,9 +2164,7 @@
             },
             "second": {
                 "shader": {
-                    "fileID": -7923638393116622636,
-                    "guid": "0000000000000000d000000000000000",
-                    "type": 0
+                    "instanceID": 0
                 },
                 "shaderName": "Hidden/SH",
                 "shaderAssetGUID": "5f839f58fafbe2847bfd524a316494fe",
@@ -2263,6 +2173,46 @@
                 "subShaderIndex": 0,
                 "passIndex": 1,
                 "graphicsStateInfoSet": []
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
+                "Hash": "9756dc62848710360dc8cd24c32a703b"
+            },
+            "second": {
+                "shader": {
+                    "fileID": 4800000,
+                    "guid": "a89bee29cffa951418fc1e2da94d1959",
+                    "type": 3
+                },
+                "shaderName": "Hidden/Universal/BlitHDROverlay",
+                "shaderAssetGUID": "a89bee29cffa951418fc1e2da94d1959",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "HDR_ENCODING _HDR_OVERLAY",
+                "subShaderIndex": 0,
+                "passIndex": 1,
+                "graphicsStateInfoSet": [
+                    {
+                        "vertexLayout": 15807068410263000910,
+                        "renderPass": 17386594603764001319,
+                        "renderState": 17623681824384884761,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": false,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    }
+                ]
             }
         },
         {
@@ -2327,25 +2277,63 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "b607f5f039e201ffe35d11e844ea05dc"
+                "Hash": "bf2fce624cd48e0427890f3897f995d0"
             },
             "second": {
                 "shader": {
-                    "fileID": 4800000,
-                    "guid": "943286b1ceedb6e49881652498d6ec13",
-                    "type": 3
+                    "fileID": 70,
+                    "guid": "0000000000000000e000000000000000",
+                    "type": 0
                 },
-                "shaderName": "Universal Render Pipeline/Custom/Terrain",
-                "shaderAssetGUID": "943286b1ceedb6e49881652498d6ec13",
+                "shaderName": "Hidden/Internal-Loading",
+                "shaderAssetGUID": "7d3344c24e361eb40bbe181c1c6b910b",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_WORLD_LIGHTING",
+                "keywordNames": "",
                 "subShaderIndex": 0,
                 "passIndex": 0,
                 "graphicsStateInfoSet": [
                     {
                         "vertexLayout": 9346122305125408839,
                         "renderPass": 15945554207292896147,
-                        "renderState": 2874810695172648804,
+                        "renderState": 15649462741326987297,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    },
+                    {
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 15649462741326987297,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    },
+                    {
+                        "vertexLayout": 1433109904469103815,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 15649462741326987297,
                         "subPassIndex": 0,
                         "topology": 0,
                         "forceCullMode": -1,
@@ -2367,23 +2355,23 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "b3278976068a6228567c026a179d5888"
+                "Hash": "b607f5f039e201ffe35d11e844ea05dc"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "b5b2cd0432454877a4825471a6e12a70",
+                    "guid": "943286b1ceedb6e49881652498d6ec13",
                     "type": 3
                 },
-                "shaderName": "Kern/World Surface",
-                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
+                "shaderName": "Universal Render Pipeline/Custom/Terrain",
+                "shaderAssetGUID": "943286b1ceedb6e49881652498d6ec13",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_SURFACE_REDROCK",
+                "keywordNames": "KERN_WORLD_LIGHTING",
                 "subShaderIndex": 0,
                 "passIndex": 0,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 4933427786327595115,
+                        "vertexLayout": 9346122305125408839,
                         "renderPass": 15945554207292896147,
                         "renderState": 2874810695172648804,
                         "subPassIndex": 0,
@@ -2466,26 +2454,26 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "901666ed13c8fe10064e8f39bcbd41ee"
+                "Hash": "b3278976068a6228567c026a179d5888"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "810f9c6b8f8e24eccb19735f7c2ccf55",
+                    "guid": "b5b2cd0432454877a4825471a6e12a70",
                     "type": 3
                 },
-                "shaderName": "Kern/UI/Starfield",
-                "shaderAssetGUID": "810f9c6b8f8e24eccb19735f7c2ccf55",
+                "shaderName": "Kern/World Surface",
+                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "",
+                "keywordNames": "KERN_SURFACE_REDROCK",
                 "subShaderIndex": 0,
                 "passIndex": 0,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 1433109904469103815,
-                        "renderPass": 14152621794517940071,
-                        "renderState": 17623681824384884761,
-                        "subPassIndex": -1,
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 2874810695172648804,
+                        "subPassIndex": 0,
                         "topology": 0,
                         "forceCullMode": -1,
                         "shadingRateCombinerPrimitive": 0,
