@@ -90,7 +90,6 @@ DEPENDENCIES=(
     "UniTask.DOTween.csproj"
     "UniTask.Addressables.csproj"
     "UniTask.TextMeshPro.csproj"
-    "McpUnity.Editor.csproj"
 )
 
 echo "--- Step 1: Building sub-project dependencies ---"
