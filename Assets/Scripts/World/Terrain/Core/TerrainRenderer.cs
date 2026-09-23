@@ -2,6 +2,7 @@
 
 using Kern.Core.Interfaces.Diagnostics;
 using System;
+using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
@@ -43,6 +44,9 @@ namespace Kern.World.Terrain
         private int _doorOverlaySortingOrder = 500;
         [SerializeField]
         private int _viewportPadding = 2;
+
+        [Inject]
+        private Kern.World.Streaming.WorldViewTransition? _viewTransition = null;
 
         [Inject]
         private IWorldDataStorage _storage = null!;
@@ -88,6 +92,12 @@ namespace Kern.World.Terrain
         private RectInt _lightingViewport;
         private bool _fatalBuildError;
         private ulong _terrainContentRevision = 1;
+        private readonly List<RectInt> _publishedChangedRegions = [];
+        private readonly TerrainTexturePrefetch _texturePrefetch = new();
+        private FrameStallReport? _frameStall;
+        private bool _hasCameraSpeedSample;
+        private Vector3 _lastCameraPosition;
+        private float _cameraSpeedCellsPerSecond;
 
         public bool BypassCpuMeshRebuild
         {
@@ -102,6 +112,10 @@ namespace Kern.World.Terrain
         }
 
         public ulong TerrainContentRevision => _terrainContentRevision;
+
+        public ulong PublishedTerrainContentRevision => _window.PublishedContentRevision;
+
+        public bool HasPublishedTerrain => _window.CellsCommitted;
 
         private TerrainFrameDiagnostics Diagnostics => _diagnostics ??= new(_window);
 
@@ -119,7 +133,9 @@ namespace Kern.World.Terrain
             _window.CellIDMesh != null &&
             _window.CellsCommitted &&
             _window.Driver.Materials.Materials.Length > 0 &&
-            _window.PendingTextureCellTypes.Count == 0;
+            _window.PendingTextureCellTypes.Count == 0 &&
+            !_window.HasUnpublishedTextureRefresh &&
+            _textureService.PendingCellTextureRequests == 0;
 
         public void ApplyClientConfig()
         {
@@ -173,7 +189,17 @@ namespace Kern.World.Terrain
                 _window.CellIDMesh,
                 _presentation.ViewOffset);
 
-        protected void Awake() => InitializeSceneBindings();
+        protected void Awake()
+        {
+            InitializeSceneBindings();
+
+            // Разбор провиса всего кадра: террейн — единственный компонент,
+            // который гарантированно тикает каждый кадр игры.
+            if (Application.isPlaying)
+            {
+                _frameStall = new FrameStallReport();
+            }
+        }
 
         protected void Start() => _mainCamera = _gameplayCamera?.Camera;
 
@@ -183,10 +209,13 @@ namespace Kern.World.Terrain
             _subscriptions = null;
             _presentation.Dispose();
             _window.Dispose();
+            _frameStall?.Dispose();
+            _frameStall = null;
         }
 
         protected void LateUpdate()
         {
+            _frameStall?.Tick();
             if (_fatalBuildError)
             {
                 return;
@@ -195,6 +224,7 @@ namespace Kern.World.Terrain
             using var terrainLateUpdateMarker = _TerrainLateUpdateMarker.Auto();
             using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
             long stallStart = TerrainStallReport.Begin();
+            _telemetry.ResetFrameTimers();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
                 return;
@@ -211,59 +241,82 @@ namespace Kern.World.Terrain
                 return;
             }
 
+            UpdateCameraSpeedEstimate(_mainCamera!);
+
             LightingEngine? lightingEngine = ResolveLightingEngine();
             if (lightingEngine == null)
             {
                 return;
             }
 
+            // Готовый фоновый шаг забирается до плана и выгружается сразу:
+            // так следующий шаг ставится уже в этом кадре по новому началу, а
+            // тексели, начало окна и двери меняются вместе при любом раннем
+            // выходе ниже.
+            // Переход вида (телепорт): камера стоит на старом месте, окно
+            // назначения собирается и не публикуется до кадра, в котором
+            // камера на него встанет. CameraFollow обновляется раньше, поэтому
+            // в кадре перестановки удержание здесь уже снято.
+            bool holdingView = _viewTransition is { IsHolding: true };
+            _window.HoldPublication = holdingView;
+            if (_viewTransition != null)
+            {
+                _viewTransition.CanHold = _window.CellsCommitted;
+            }
+
+            long publishStart = TerrainStallReport.Begin();
+            if (!_window.TryPublishCompleted(Services, out Exception? publishFailure))
+            {
+                _fatalBuildError = Diagnostics.ReportBuildFailure(
+                    publishFailure,
+                    _window.Origin,
+                    _mapManager,
+                    _textureService,
+                    _storage);
+                return;
+            }
+
+            float publishMs = TerrainStallReport.ElapsedMs(publishStart);
+            float uploadMs = _window.Commit();
+            if (uploadMs > 0f)
+            {
+                _telemetry.TerrainGpuUploadTimeMs = uploadMs;
+            }
+
             long planStart = TerrainStallReport.Begin();
+            Vector3 focusPosition = holdingView
+                ? _viewTransition!.Destination
+                : _mainCamera!.transform.position;
             TerrainFramePlan framePlan = _planner.Plan(
                 _mainCamera!,
+                focusPosition,
                 _cellSize,
                 _viewportPadding,
                 lightingEngine.RequiredTerrainPadding,
                 lightingEngine.StableRegionPaddingCells,
-                _window.Origin,
+                _window.ProspectiveOrigin,
                 _window.Width,
                 _window.Height,
                 _window.IsInitialized,
                 _window.CellsCommitted,
+                _window.HasCpuBuildInFlight,
+                _cameraSpeedCellsPerSecond,
+                _window.EstimatedPreparationSeconds,
                 _lightingViewport,
+                allowPartialAdvance: !holdingView,
                 _storage,
                 _mapManager,
                 _connectionService,
                 _telemetry);
             float planMs = TerrainStallReport.ElapsedMs(planStart);
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.enabled = !BypassTerrainDraw && _window.CellsCommitted;
+            }
+
             if (!framePlan.ShouldProcess)
             {
                 return;
-            }
-
-            if (_meshRenderer != null)
-            {
-                _meshRenderer.enabled = !BypassTerrainDraw;
-            }
-
-            float refreshTextureMs = 0f;
-            if (_window.PendingTextureCellTypes.Count > 0 &&
-                !BypassCpuMeshRebuild &&
-                _window.CellsCommitted)
-            {
-                // Поле материалов семплит альбедо и эмиссию из атласа: новые
-                // rect'ы меняют его содержимое без смены геометрии. Без бампа
-                // ревизии поле осталось бы с чёрным/старым альбедо (и без
-                // свечения) до первой копки или сдвига региона — светящиеся
-                // кристаллы гасли навсегда.
-                long refreshStart = TerrainStallReport.Begin();
-                if (_window.RefreshPendingTextureCells(
-                    Services,
-                    _window.NeedsRefresh || framePlan.DimensionsChanged))
-                {
-                    _terrainContentRevision++;
-                }
-
-                refreshTextureMs = TerrainStallReport.ElapsedMs(refreshStart);
             }
 
             long dimensionsStart = TerrainStallReport.Begin();
@@ -283,6 +336,7 @@ namespace Kern.World.Terrain
                 framePlan.DimensionsChanged,
                 BypassCpuMeshRebuild,
                 _meshRenderer,
+                _terrainContentRevision,
                 out Exception? failure))
             {
                 _fatalBuildError = Diagnostics.ReportBuildFailure(
@@ -294,11 +348,34 @@ namespace Kern.World.Terrain
                 return;
             }
 
-            float processMs = TerrainStallReport.ElapsedMs(processStart);
-            float uploadMs = _window.Commit();
-            if (uploadMs > 0f)
+            float processMs = publishMs + TerrainStallReport.ElapsedMs(processStart);
+
+            // Окно рисуется только опубликованным: до первой публикации, после
+            // смены мира или размера на GPU нет согласованной версии.
+            if (_meshRenderer != null)
             {
-                _telemetry.TerrainGpuUploadTimeMs = uploadMs;
+                _meshRenderer.enabled = !BypassTerrainDraw && _window.CellsCommitted;
+            }
+
+            // Освещение узнаёт об изменённых клетках в кадре, когда их новая
+            // геометрия действительно на экране, а не когда пришёл пакет.
+            _publishedChangedRegions.Clear();
+            _window.TakePublishedChangedRegions(_publishedChangedRegions);
+            for (int index = 0; index < _publishedChangedRegions.Count; index++)
+            {
+                RectInt region = _publishedChangedRegions[index];
+                lightingEngine.InvalidateRegion(region.x, region.y, region.width, region.height);
+            }
+
+            if (holdingView)
+            {
+                // Кадр по-прежнему показывает старое место: меш показа и
+                // область освещения остаются прежними, план кадра считан для
+                // места назначения.
+                PublishViewTransitionReadiness(_viewTransition!);
+                PublishLightingUpdate(lightingEngine, _lightingViewport);
+                lightingEngine.CaptureBudgetViolationIfNeeded();
+                return;
             }
 
             // Меш показа ставится только по собранному окну: до первой
@@ -329,11 +406,40 @@ namespace Kern.World.Terrain
                 new TerrainFrameTimings(
                     planMs,
                     dimensionsMs,
-                    refreshTextureMs,
                     processMs,
                     uploadMs,
                     dirtyRectCount,
                     dirtyArea));
+        }
+
+        /// <summary>
+        /// Готово ли место назначения: окно, которое окажется на экране после
+        /// публикации, собрано, нового шага не идёт и текстуры его типов на
+        /// месте. Готовая область сужена на запас меша показа — камера
+        /// встанет только туда, где её кадр рисуется целиком.
+        /// </summary>
+        private void PublishViewTransitionReadiness(Kern.World.Streaming.WorldViewTransition transition)
+        {
+            bool ready =
+                !_window.HasCpuBuildInFlight &&
+                !_window.NeedsRefresh &&
+                _window.PendingTextureCellTypes.Count == 0 &&
+                !_window.HasUnpublishedTextureRefresh &&
+                _textureService.PendingCellTextureRequests == 0 &&
+                (_window.HeldOrigin != null || _window.CellsCommitted);
+            if (!ready)
+            {
+                transition.ClearReady();
+                return;
+            }
+
+            const int PresentationMarginCells = 4;
+            Vector2Int origin = _window.ProspectiveOrigin;
+            transition.MarkReady(new RectInt(
+                origin.x + PresentationMarginCells,
+                origin.y + PresentationMarginCells,
+                _window.Width - (PresentationMarginCells * 2),
+                _window.Height - (PresentationMarginCells * 2)));
         }
 
         private TerrainBuildServices Services =>
@@ -374,19 +480,19 @@ namespace Kern.World.Terrain
 
         private void HandleRegionChanged(int serverX, int serverY, int width, int height)
         {
-            if (_mapManager == null || !_window.HasOrigin)
+            if (_mapManager == null)
             {
                 _window.NeedsRefresh = true;
+                _terrainContentRevision++;
                 return;
             }
 
-            RectInt? changed = _window.Dirty.Add(
-                serverX, serverY, width, height,
-                _window.Origin, _window.Width, _window.Height, _mapManager.WorldHeight);
-            if (changed is { } region)
+            // Ревизия — это «картинка окна изменится». Чанк на другом конце
+            // карты её не меняет; поднять ревизию ради него значило бы
+            // отправить свет в полный пересчёт статики при следующем шаге.
+            if (_window.RecordWorldChange(serverX, serverY, width, height, _mapManager.WorldHeight))
             {
-                _lightingEngine?.InvalidateRegion(
-                    region.x, region.y, region.width, region.height);
+                _terrainContentRevision++;
             }
         }
 
@@ -399,6 +505,13 @@ namespace Kern.World.Terrain
                 _window.Driver.Materials.TerrainShader = _terrainShader;
                 _window.Driver.Materials.InitializeShader();
                 _window.PendingTextureCellTypes.Add(cellType);
+
+                // Поле материалов семплит альбедо и эмиссию из атласа: новые
+                // rect'ы меняют его содержимое без смены геометрии. Без бампа
+                // ревизии поле осталось бы с чёрным/старым альбедо (и без
+                // свечения) до первой копки или сдвига региона. Ревизия уйдёт
+                // в свет вместе с публикацией шага, который перечитает тип.
+                _terrainContentRevision++;
             }
             else if (TerrainCellTextureName.IsDecalAtlas(filename))
             {
@@ -415,7 +528,7 @@ namespace Kern.World.Terrain
         private void OnWorldDataLoaded()
         {
             EnsureSubscriptions();
-            _window.NeedsRefresh = true;
+            _window.InvalidateWorld();
             _terrainContentRevision++;
             _lightingEngine?.InvalidateStaticCache();
         }
@@ -423,6 +536,19 @@ namespace Kern.World.Terrain
         private void OnCellLayerChunkLoaded(int serverX, int serverY, int width, int height)
         {
             _telemetry.TerrainChunkLoadCount++;
+
+            // Предзаказ — только для чанков, в которые окно может въехать
+            // ближайшим шагом. Дальний чанк заказал бы текстуры типов, которых
+            // игрок, возможно, не увидит, и раздул бы атлас впустую.
+            if (_storage != null && _textureService != null && _mapManager != null &&
+                _storage.CellLayer is { } layer &&
+                _window.IsNearBuildWindow(
+                    TerrainDirtyTracker.ToUnityRect(serverX, serverY, width, height, _mapManager.WorldHeight),
+                    layer.ChunkSize))
+            {
+                _texturePrefetch.PrefetchRegion(_storage, _textureService, serverX, serverY, width, height);
+            }
+
             HandleRegionChanged(serverX, serverY, width, height);
         }
 
@@ -442,6 +568,39 @@ namespace Kern.World.Terrain
 
             Diagnostics.Mark(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             return true;
+        }
+
+        private void UpdateCameraSpeedEstimate(Camera camera)
+        {
+            float deltaTime = Time.unscaledDeltaTime;
+            if (!_hasCameraSpeedSample || deltaTime <= 0f || _cellSize <= 0f)
+            {
+                _lastCameraPosition = camera.transform.position;
+                _hasCameraSpeedSample = true;
+                _cameraSpeedCellsPerSecond = 0f;
+                return;
+            }
+
+            Vector3 position = camera.transform.position;
+            float distanceCells = Vector2.Distance(
+                new Vector2(_lastCameraPosition.x, _lastCameraPosition.y),
+                new Vector2(position.x, position.y)) /
+                _cellSize;
+            _lastCameraPosition = position;
+
+            // Прыжок дальше окна — телепорт, а не скорость: окно всё равно
+            // собирается заново, и раздувать им опережение ходьбы незачем.
+            if (distanceCells >= Mathf.Max(_window.Width, _window.Height))
+            {
+                return;
+            }
+
+            // Сглаживание убирает дрожь кадра: запас переякоривания не
+            // должен скакать от кадра к кадру при ровной ходьбе.
+            _cameraSpeedCellsPerSecond = Mathf.Lerp(
+                _cameraSpeedCellsPerSecond,
+                distanceCells / deltaTime,
+                0.2f);
         }
 
         private LightingEngine? ResolveLightingEngine()
@@ -479,7 +638,13 @@ namespace Kern.World.Terrain
                 _storage,
                 _mapManager,
                 this);
-            _window.Driver.Materials.ValidateLightingBinding();
+            // LightingUpdateCoordinator waits for the first terrain upload
+            // before solving. During the asynchronous initial terrain build,
+            // there is intentionally no world-light texture to validate yet.
+            if (_window.CellsCommitted)
+            {
+                _window.Driver.Materials.ValidateLightingBinding();
+            }
         }
     }
 }

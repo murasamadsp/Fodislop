@@ -52,7 +52,15 @@ namespace Kern.Game.Managers
             }
 
             var vfxType = MapAudioToVFX(packet.EffectType);
+            long acquireStart = System.Diagnostics.Stopwatch.GetTimestamp();
             IVfxSlot? slot = _vfxService.Acquire(vfxType);
+            double acquireMilliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - acquireStart) * 1000.0 /
+                System.Diagnostics.Stopwatch.Frequency;
+            if (acquireMilliseconds >= 2.0)
+            {
+                Kern.Core.Interfaces.Diagnostics.FrameEventLog.Record(
+                    $"звуковое событие: VFX-слот {vfxType} {acquireMilliseconds:F1} мс");
+            }
 
             var effect = new ServerAudioEvent(
                 packet,

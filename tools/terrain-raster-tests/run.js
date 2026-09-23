@@ -47,6 +47,7 @@ float2 QuantizeTerrainFaceUV(float2 uv)
 `;
 const extra = `
 float2 round(float2 a) { return {std::round(a.x), std::round(a.y)}; }
+float lerp(float a, float b, float t) { return a + (b-a)*t; }
 float2 lerp(float2 a, float2 b, float2 t) { return a + (b-a)*t; }
 float4 make_float4(float a, float2 b, float c) { return {a,b.x,b.y,c}; }
 `;

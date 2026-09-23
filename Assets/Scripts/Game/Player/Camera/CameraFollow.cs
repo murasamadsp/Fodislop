@@ -5,6 +5,7 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Networking;
 using Kern.Player.Logic;
+using Kern.World.Streaming;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;
@@ -65,6 +66,9 @@ namespace Kern.Player
 
         [Inject]
         private IClientConfigManager? _clientConfig = null;
+
+        [Inject]
+        private WorldViewTransition? _viewTransition = null;
 
         private CameraPixelGridAligner? _aligner;
 
@@ -326,6 +330,11 @@ namespace Kern.Player
             Vector3 targetPosition = _target.position + new Vector3(_offset.x, _offset.y, 0f);
             Vector3 desiredPosition = new Vector3(targetPosition.x, targetPosition.y, _originalZ);
 
+            if (HandleViewJump(cameraTransform, desiredPosition))
+            {
+                return;
+            }
+
             // SmoothDamp is frame-rate independent — unlike Lerp(dt), it handles variable dt
             // without introducing jitter during frame spikes (e.g. terrain mesh rebuilds).
             // smoothTime ≈ 1 / _smoothSpeed gives equivalent response to the old Lerp, but we
@@ -351,6 +360,67 @@ namespace Kern.Player
                 float.PositiveInfinity,
                 Time.deltaTime);
             cameraTransform.position = SnapToPixelGrid(smoothed);
+        }
+
+        /// <summary>
+        /// Прыжок цели дальше кадра камеры (телепорт) не догоняется
+        /// сглаживанием: камера пролетела бы через всю карту, и игрок увидел бы
+        /// прогрузку по дороге. Камера держит старый вид, пока террейн готовит
+        /// место назначения, и переставляется одним кадром.
+        /// </summary>
+        /// <returns>true, если позицию камеры в этом кадре решил переход.</returns>
+        private bool HandleViewJump(Transform cameraTransform, Vector3 desiredPosition)
+        {
+            float halfHeight = _camera.orthographicSize;
+            float halfWidth = halfHeight * _camera.aspect;
+            if (_viewTransition is { IsHolding: true } holding)
+            {
+                holding.Hold(desiredPosition);
+                float cellSize = ProjectRuntimeContracts.World.CellSize;
+                bool ready = holding.IsReadyFor(
+                    desiredPosition,
+                    halfWidth / cellSize,
+                    halfHeight / cellSize,
+                    cellSize);
+                bool expired = holding.HoldSeconds >= WorldViewTransition.MaximumHoldSeconds;
+                if (!ready && !expired)
+                {
+                    return true;
+                }
+
+                if (!ready)
+                {
+                    Debug.LogWarning(
+                        $"[CameraFollow] Teleport destination {desiredPosition} was not ready after " +
+                        $"{WorldViewTransition.MaximumHoldSeconds:F0}s; releasing the view.");
+                }
+
+                Kern.Core.Interfaces.Diagnostics.FrameEventLog.Record(
+                    $"телепорт: вид переставлен через {holding.HoldSeconds:F2} с");
+                cameraTransform.position = SnapToPixelGrid(desiredPosition);
+                _followVelocity = Vector3.zero;
+                holding.Release();
+                return true;
+            }
+
+            Vector3 offset = desiredPosition - cameraTransform.position;
+            bool beyondView = Mathf.Abs(offset.x) > halfWidth || Mathf.Abs(offset.y) > halfHeight;
+            if (!beyondView)
+            {
+                return false;
+            }
+
+            if (_viewTransition is { CanHold: true } transition)
+            {
+                transition.Hold(desiredPosition);
+                return true;
+            }
+
+            // Показывать нечего (мир ещё грузится под экраном загрузки):
+            // переставить сразу, без полёта через карту.
+            cameraTransform.position = SnapToPixelGrid(desiredPosition);
+            _followVelocity = Vector3.zero;
+            return true;
         }
 
         private void ApplyZoom(float desiredSize)
@@ -391,6 +461,7 @@ namespace Kern.Player
                 cameraTransform.position = SnapToPixelGrid(
                     new Vector3(targetPosition.x, targetPosition.y, _originalZ));
                 _followVelocity = Vector3.zero;
+                _viewTransition?.Release();
             }
         }
         public void SetScrollEnabled(bool enabled) => _scrollEnabled = enabled;

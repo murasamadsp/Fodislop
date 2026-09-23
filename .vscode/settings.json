@@ -98,7 +98,6 @@
   "terminal.integrated.confirmOnExit": "hasChildProcesses",
   "csharp.semanticHighlighting.enabled": true,
   "csharp.format.enable": true,
-  "csharp.referencesCodeLens.enabled": true,
   "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "openFiles",
   "dotnet.defaultSolution": "Fodislop.slnx",
   "csharp.analyzerDiagnosticScope": "openFiles",
@@ -106,5 +105,6 @@
   "csharp.enableEditorConfigSupport": true,
   "csharp.suppressHiddenDiagnostics": false,
   "dotnet.server.useOmnisharp": false,
-  "vstuc.useInfiniteLoopTimeout": true
+  "vstuc.useInfiniteLoopTimeout": true,
+  "dotnet.codeLens.enableReferencesCodeLens": true
 }

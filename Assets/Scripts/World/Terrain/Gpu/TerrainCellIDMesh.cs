@@ -3,6 +3,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Kern.Core.Interfaces.Diagnostics;
 
 namespace Kern.World.Terrain;
 
@@ -98,6 +99,7 @@ public sealed class TerrainCellIDMesh : IDisposable
             new Vector3(boundsWidth * cellSize * 0.5f, boundsHeight * cellSize * 0.5f, 0f),
             new Vector3((boundsWidth + 2) * cellSize, (boundsHeight + 2) * cellSize, 2f));
         _mesh.UploadMeshData(markNoLongerReadable: true);
+        FrameEventLog.Record($"меш клеток {meshWidth}×{meshHeight} пересоздан");
         return true;
     }
 

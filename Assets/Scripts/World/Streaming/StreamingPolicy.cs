@@ -19,6 +19,9 @@ public readonly record struct StreamingPolicy(
     public const int DefaultMinimumWindowDimension = 2;
     public const int DefaultMaximumWindowDimension = 384;
     public const int DefaultShrinkHysteresisQuanta = 2;
+    public const float DefaultPreparationLatencySeconds = 0.25f;
+    public const int SpeedLeadSafetyCells = 4;
+    public const int MaximumSpeedLeadCells = 128;
 
     public static StreamingPolicy Default => new(
         DefaultAllocationQuantumCells,
@@ -55,6 +58,31 @@ public readonly record struct StreamingPolicy(
             headroomRequest >= int.MaxValue
                 ? int.MaxValue
                 : (int)headroomRequest);
+    }
+
+    /// <summary>
+    /// Сколько клеток камера проедет, пока готовится следующий шаг окна:
+    /// скорость × измеренная задержка подготовки плюс запас.
+    /// </summary>
+    ///
+    /// Опережение меняет момент переякоривания, а не размер окна. Размер окна
+    /// задаёт и память, и область освещения; его рост от скорости вызывал бы
+    /// полную пересборку ровно тогда, когда игрок разгоняется.
+    public int ResolveSpeedLeadCells(
+        float speedCellsPerSecond,
+        float preparationLatencySeconds)
+    {
+        if (float.IsNaN(speedCellsPerSecond) || float.IsInfinity(speedCellsPerSecond) ||
+            float.IsNaN(preparationLatencySeconds) || float.IsInfinity(preparationLatencySeconds) ||
+            speedCellsPerSecond <= 0f ||
+            preparationLatencySeconds <= 0f)
+        {
+            return 0;
+        }
+
+        double leadCells = System.Math.Ceiling(speedCellsPerSecond * (double)preparationLatencySeconds) +
+            SpeedLeadSafetyCells;
+        return (int)System.Math.Clamp(leadCells, 0d, MaximumSpeedLeadCells);
     }
 
     public int AlignOrigin(int coordinate)
@@ -118,5 +146,23 @@ public readonly record struct StreamingPolicy(
         int quantum = System.Math.Max(1, AllocationQuantumCells);
         int halfWindow = System.Math.Max(0, (windowDimension - 1) / 2);
         return System.Math.Min(quantum - 1, halfWindow);
+    }
+
+    /// <summary>
+    /// Запас до края окна с учётом скорости. Опережение ограничено свободным
+    /// местом между кадром камеры и окном: запас больше этого места держал бы
+    /// окно в вечном переякоривании.
+    /// </summary>
+    public int ResolvePrefetchMarginCells(
+        Vector2Int windowSize,
+        Vector2Int viewportSize,
+        int speedLeadCells)
+    {
+        int baseMargin = ResolvePrefetchMarginCells(System.Math.Min(windowSize.x, windowSize.y));
+        int freeCells = System.Math.Min(
+            (windowSize.x - viewportSize.x) / 2,
+            (windowSize.y - viewportSize.y) / 2);
+        int speedMargin = System.Math.Clamp(speedLeadCells, 0, System.Math.Max(0, freeCells - 1));
+        return System.Math.Max(baseMargin, speedMargin);
     }
 }

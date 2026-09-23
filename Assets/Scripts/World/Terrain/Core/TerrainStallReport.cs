@@ -6,6 +6,11 @@ using UnityEngine;
 namespace Kern.World.Terrain;
 
 /// <summary>Решение кадра и его цена — то, что надо знать про провис.</summary>
+///
+/// Интервалы кадра делятся на независимые (план, размеры, процесс, выгрузка —
+/// из них и считается «прочее») и вложенные в процесс (кэш, атласы). Фоновый
+/// шаг не входит в кадр вовсе: его цифры — цена последнего опубликованного
+/// шага на рабочем потоке, и в «прочее» они не вычитаются.
 public readonly record struct TerrainStallFrame(
     bool Scrolled,
     Vector2Int ScrollDelta,
@@ -13,24 +18,47 @@ public readonly record struct TerrainStallFrame(
     Vector2Int Size,
     int DirtyRectCount,
     long DirtyArea,
-    float RefreshTextureMs,
     float ProcessMs,
     float UploadMs,
-    float ScrollMs,
-    float IndexRemoveMs,
-    float WarmupMs,
-    float FillMs,
-    int FilledCells,
     int UploadRectCount,
     long UploadTexels,
-    float QuadMs,
-    float PackMs,
     float StageMs,
     float StageCopyMs,
     float StageApplyMs,
     int UploadStrips,
     float PlanMs,
-    float DimensionsMs);
+    float DimensionsMs,
+    TerrainStallBuildState State,
+    TerrainWorkerCost Worker);
+
+/// <summary>Состояние фоновой сборки в кадре отчёта.</summary>
+public readonly record struct TerrainStallBuildState(TerrainBuildState Build, bool InFlight);
+
+/// <summary>Чем был шаг фоновой сборки.</summary>
+public enum TerrainBuildStepKind
+{
+    None,
+    Full,
+    Scroll,
+    Patch,
+    Textures,
+}
+
+/// <summary>Цена последнего опубликованного шага на рабочем потоке.</summary>
+public readonly record struct TerrainWorkerCost(
+    TerrainBuildStepKind Kind,
+    float CacheMs,
+    float PrecalculateMs,
+    float FloodFillMs,
+    float MeshMs,
+    float ScrollMs,
+    float WarmupMs,
+    float FillMs,
+    int FilledCells,
+    float QuadMs,
+    float PackMs,
+    float ElapsedMs,
+    float LatencyMs);
 
 /// <summary>
 /// Печатает разбор кадра, в котором террейн съел больше бюджета.
@@ -60,8 +88,7 @@ public sealed class TerrainStallReport
     private int _worstPatches;
     private int _worstChunkLoads;
     private float _worstCacheMs;
-    private float _worstFloodMs;
-    private float _worstMeshMs;
+    private float _worstAtlasMs;
 
     public static long Begin() => System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -79,8 +106,7 @@ public sealed class TerrainStallReport
             _worstPatches = telemetry.TerrainDirtyPatchCount;
             _worstChunkLoads = telemetry.TerrainChunkLoadCount;
             _worstCacheMs = telemetry.TerrainCacheTimeMs;
-            _worstFloodMs = telemetry.TerrainFloodFillTimeMs;
-            _worstMeshMs = telemetry.TerrainMeshTimeMs;
+            _worstAtlasMs = telemetry.TerrainAtlasUploadTimeMs;
         }
 
         float now = Time.unscaledTime;
@@ -91,30 +117,43 @@ public sealed class TerrainStallReport
 
         _nextReportTime = now + IntervalSeconds;
 
-        // «Прочее» — это разница между измеренным кадром и суммой стадий.
-        // Крупное «прочее» означает, что провис не в перечисленных стадиях, и
-        // искать надо снаружи: в приёме пакета, в хранилище, в освещении.
-        float accounted = _worstCacheMs + _worstFloodMs + _worstMeshMs +
-            _worstFrame.UploadMs + _worstFrame.RefreshTextureMs +
-            _worstFrame.PlanMs + _worstFrame.DimensionsMs;
+        // «Прочее» — это разница между измеренным кадром и суммой
+        // независимых интервалов. Кэш и атласы идут внутри процесса и второй
+        // раз не вычитаются. Крупное «прочее» означает, что провис не в
+        // перечисленных стадиях, и искать надо снаружи: в приёме пакета, в
+        // хранилище, в освещении.
+        TerrainWorkerCost worker = _worstFrame.Worker;
+        float accounted = _worstFrame.PlanMs + _worstFrame.DimensionsMs +
+            _worstFrame.ProcessMs + _worstFrame.UploadMs;
         Debug.LogWarning(
             $"[TerrainStall] {_worstMs:F1} мс · окно {_worstFrame.Size.x}×{_worstFrame.Size.y} " +
             $"в ({_worstFrame.Origin.x},{_worstFrame.Origin.y}) · " +
-            $"{(_worstFrame.Scrolled ? $"сдвиг {_worstFrame.ScrollDelta.x},{_worstFrame.ScrollDelta.y}" : "полная сборка")} · " +
-            $"кэш {_worstCacheMs:F1} · заливка {_worstFloodMs:F1} · тексели {_worstMeshMs:F1} · " +
-            $"выгрузка {_worstFrame.UploadMs:F1} · текстуры типов {_worstFrame.RefreshTextureMs:F1} · " +
-            $"процесс {_worstFrame.ProcessMs:F1} · план {_worstFrame.PlanMs:F1} · " +
-            $"размеры {_worstFrame.DimensionsMs:F1} · прочее {_worstMs - accounted:F1} · " +
-            $"[тексели: кольца {_worstFrame.ScrollMs:F1} · снятие с индекса {_worstFrame.IndexRemoveMs:F1} · " +
-            $"прогрев {_worstFrame.WarmupMs:F1} · заливка {_worstFrame.FillMs:F1} на {_worstFrame.FilledCells} клеток " +
-            $"(квады {_worstFrame.QuadMs:F1} · упаковка {_worstFrame.PackMs:F1})] · " +
+            $"сборка {_worstFrame.State.Build}{(_worstFrame.State.InFlight ? " (идёт)" : string.Empty)} · " +
+            $"план {_worstFrame.PlanMs:F1} · размеры {_worstFrame.DimensionsMs:F1} · " +
+            $"процесс {_worstFrame.ProcessMs:F1} (кэш {_worstCacheMs:F1} · атласы {_worstAtlasMs:F1}) · " +
+            $"выгрузка {_worstFrame.UploadMs:F1} · прочее {_worstMs - accounted:F1} · " +
             $"[выгрузка: {(_worstFrame.UploadRectCount == 0 ? "целиком" : _worstFrame.UploadRectCount + " прямоуг.")} " +
             $"{_worstFrame.UploadTexels} текселей · набивка {_worstFrame.StageMs:F1} " +
             $"(строки {_worstFrame.StageCopyMs:F1} · загрузка {_worstFrame.StageApplyMs:F1}) · " +
             $"полосок {_worstFrame.UploadStrips}] · " +
             $"заплаток {_worstFrame.DirtyRectCount} на {_worstFrame.DirtyArea} клеток · " +
+            $"[фон, вне кадра: последний шаг " +
+            $"{StepLabel(worker.Kind, _worstFrame.ScrollDelta)} · " +
+            $"{worker.ElapsedMs:F1} мс на потоке, до показа {worker.LatencyMs:F1} мс · " +
+            $"кэш {worker.CacheMs:F1} · предрасчёт {worker.PrecalculateMs:F1} · заливка фона {worker.FloodFillMs:F1} · тексели {worker.MeshMs:F1} " +
+            $"(кольца {worker.ScrollMs:F1} · прогрев {worker.WarmupMs:F1} · заливка {worker.FillMs:F1} на {worker.FilledCells} клеток; " +
+            $"сумма по потокам: квады {worker.QuadMs:F1} · упаковка {worker.PackMs:F1})] · " +
             $"всего: полных {_worstFullPopulates}, заплаток {_worstPatches}, чанков {_worstChunkLoads}");
 
         _worstMs = 0f;
     }
+
+    private static string StepLabel(TerrainBuildStepKind kind, Vector2Int delta) => kind switch
+    {
+        TerrainBuildStepKind.Full => "полная сборка",
+        TerrainBuildStepKind.Scroll => $"сдвиг {delta.x},{delta.y}",
+        TerrainBuildStepKind.Patch => "заплатки",
+        TerrainBuildStepKind.Textures => "перечитывание текстур",
+        _ => "нет",
+    };
 }

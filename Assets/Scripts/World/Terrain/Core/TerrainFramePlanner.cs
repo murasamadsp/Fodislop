@@ -26,6 +26,7 @@ public sealed class TerrainFramePlanner
 
     public TerrainFramePlan Plan(
         Camera camera,
+        Vector3 focusPosition,
         float cellSize,
         int viewportPadding,
         int requiredLightingPadding,
@@ -35,7 +36,11 @@ public sealed class TerrainFramePlanner
         int meshHeight,
         bool isInitialized,
         bool cellsCommitted,
+        bool cpuBuildInFlight,
+        float speedCellsPerSecond,
+        float preparationLatencySeconds,
         RectInt retainedLightingViewport,
+        bool allowPartialAdvance,
         IWorldDataStorage? storage,
         IMapDataProvider? mapData,
         IConnectionService? connectionService,
@@ -59,6 +64,7 @@ public sealed class TerrainFramePlanner
 
         Vector2Int requestedOrigin = _viewport.ResolveGridPosition(
             camera,
+            focusPosition,
             cellSize,
             targetWidth,
             targetHeight,
@@ -67,6 +73,9 @@ public sealed class TerrainFramePlanner
             effectivePadding,
             dimensionsChanged,
             committedOrigin,
+            speedCellsPerSecond,
+            preparationLatencySeconds,
+            centerOnFocus: !allowPartialAdvance,
             out int viewportMinX,
             out int viewportMinY,
             out int viewportWidth,
@@ -96,7 +105,11 @@ public sealed class TerrainFramePlanner
 
         // Запрошенное место ещё не приехало — значит едем настолько, насколько
         // приехало, а не стоим и не прыгаем потом целиком.
-        if (!isRequestedResident && committedOrigin.x != int.MinValue && !dimensionsChanged)
+        //
+        // Кроме перехода вида (телепорт): там промежуточное окно никому не
+        // видно, а каждый шаг к нему — полная сборка впустую. Ждём место
+        // назначения целиком.
+        if (allowPartialAdvance && !isRequestedResident && committedOrigin.x != int.MinValue && !dimensionsChanged)
         {
             Vector2Int reachable = TerrainWindowAdvance.Resolve(
                 committedOrigin,
@@ -119,7 +132,8 @@ public sealed class TerrainFramePlanner
             retainedLightingViewport,
             isRequestedResident,
             dimensionsChanged,
-            cellsCommitted);
+            cellsCommitted,
+            cpuBuildInFlight);
     }
 
     private static void PublishStreamingTelemetry(IFrameTelemetry telemetry, StreamingPlan plan)
@@ -131,6 +145,5 @@ public sealed class TerrainFramePlanner
         telemetry.StreamingWindowHeight = plan.Target.Size.y;
         telemetry.StreamingDeltaX = plan.Delta.x;
         telemetry.StreamingDeltaY = plan.Delta.y;
-        telemetry.ResetFrameTimers();
     }
 }

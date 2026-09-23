@@ -622,9 +622,8 @@ public static class Suites
                 {
                     sink += MapCellConfigCatalog.IsRoundableLoose(type) ? 1 : 0;
                     sink += MapCellConfigCatalog.IsRoad(type) ? 1 : 0;
-                    sink += MapCellConfigCatalog.IsBuildingOrArtificialBlock(type) ? 1 : 0;
                     sink += TerrainSheetCatalog.IsContinuousSheet(type) ? 1 : 0;
-                    sink += TerrainReliefRimCatalog.ParticipatesInRim(type) ? 1 : 0;
+                    sink += TerrainReliefRimCatalog.GetFamily(type) != TerrainRimFamily.None ? 1 : 0;
                     sink += TerrainDecalCatalog.IsGroundSurface(type) ? 1 : 0;
                     sink += (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
                 }
@@ -635,7 +634,6 @@ public static class Suites
 
         var roundable = new bool[65536];
         var road = new bool[65536];
-        var artificial = new bool[65536];
         var sheet = new bool[65536];
         var rim = new bool[65536];
         var ground = new bool[65536];
@@ -645,9 +643,8 @@ public static class Suites
             var type = (CellType)value;
             roundable[value] = MapCellConfigCatalog.IsRoundableLoose(type);
             road[value] = MapCellConfigCatalog.IsRoad(type);
-            artificial[value] = MapCellConfigCatalog.IsBuildingOrArtificialBlock(type);
             sheet[value] = TerrainSheetCatalog.IsContinuousSheet(type);
-            rim[value] = TerrainReliefRimCatalog.ParticipatesInRim(type);
+            rim[value] = TerrainReliefRimCatalog.GetFamily(type) != TerrainRimFamily.None;
             ground[value] = TerrainDecalCatalog.IsGroundSurface(type);
             profile[value] = (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
         }
@@ -662,7 +659,6 @@ public static class Suites
                 {
                     sink += roundable[type] ? 1 : 0;
                     sink += road[type] ? 1 : 0;
-                    sink += artificial[type] ? 1 : 0;
                     sink += sheet[type] ? 1 : 0;
                     sink += rim[type] ? 1 : 0;
                     sink += ground[type] ? 1 : 0;

@@ -32,8 +32,28 @@ float KernSampleTerrainAmbientOcclusion(float2 worldPosition, float4 worldLightR
     return saturate(sqrt(nearbyOccupancy) * _TerrainAmbientOcclusionStrength);
 }
 
+float KernTerrainDiagonalOcclusion(float packedContour, float2 cellPosition)
+{
+    // Same bit order as CalculateSolidBoundaryMask: top-left, top-right,
+    // bottom-left, bottom-right. Cell position is unrotated geometry UV.
+    int diagonalMask = KernTerrainSolidDiagonal(packedContour);
+    float2 towardLeftBottom = saturate(1.0 - 2.0 * cellPosition);
+    float2 towardRightTop = saturate(2.0 * cellPosition - 1.0);
+    float topLeft = (diagonalMask & 1) != 0
+        ? towardLeftBottom.x * towardRightTop.y : 0.0;
+    float topRight = (diagonalMask & 2) != 0
+        ? towardRightTop.x * towardRightTop.y : 0.0;
+    float bottomLeft = (diagonalMask & 4) != 0
+        ? towardLeftBottom.x * towardLeftBottom.y : 0.0;
+    float bottomRight = (diagonalMask & 8) != 0
+        ? towardRightTop.x * towardLeftBottom.y : 0.0;
+    return max(max(topLeft, topRight), max(bottomLeft, bottomRight));
+}
+
 float KernTerrainAmbientOcclusionMultiplier(
     float packedLightingFlags,
+    float packedContour,
+    float2 cellPosition,
     float2 worldPosition,
     float4 worldLightRect)
 {
@@ -46,7 +66,10 @@ float KernTerrainAmbientOcclusionMultiplier(
     // Затенение гасит поверхность не до нуля, а до пола. Полный ноль делал
     // из тени дыру: пол вплотную к массиву становился чёрным, и граница
     // читалась полосой, а не притенением. Пол задаётся в TerrainLook.
-    float occlusion = KernSampleTerrainAmbientOcclusion(worldPosition, worldLightRect);
+    float occlusion = max(
+        KernSampleTerrainAmbientOcclusion(worldPosition, worldLightRect),
+        KernTerrainDiagonalOcclusion(packedContour, cellPosition) *
+            _TerrainAmbientOcclusionStrength);
     return 1.0 - (occlusion * (1.0 - _TerrainAmbientOcclusionFloor));
 }
 

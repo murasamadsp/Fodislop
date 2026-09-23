@@ -317,8 +317,8 @@ public sealed class VKIdentityProvider
     {
         public string user_confirm_link = string.Empty;
         public string device_code = string.Empty;
-        public int interval;
-        public int expires_in;
+        public int interval = 0;
+        public int expires_in = 0;
         public string error = string.Empty;
         public string error_description = string.Empty;
     }
@@ -328,8 +328,8 @@ public sealed class VKIdentityProvider
     {
         public string access_token = string.Empty;
         public string refresh_token = string.Empty;
-        public int expires_in;
-        public long user_id;
+        public int expires_in = 0;
+        public long user_id = 0;
         public string error = string.Empty;
         public string error_description = string.Empty;
     }
@@ -338,11 +338,11 @@ public sealed class VKIdentityProvider
     private sealed class BackendExchangeResponse
     {
         public string game_token = string.Empty;
-        public long user_id;
-        public string? first_name;
-        public string? last_name;
-        public string? avatar_url;
-        public int expires_in;
-        public string? error;
+        public long user_id = 0;
+        public string? first_name = null;
+        public string? last_name = null;
+        public string? avatar_url = null;
+        public int expires_in = 0;
+        public string? error = null;
     }
 }

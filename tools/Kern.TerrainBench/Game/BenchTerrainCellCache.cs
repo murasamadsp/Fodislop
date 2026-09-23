@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 
@@ -9,8 +10,9 @@ namespace Kern.World.Terrain;
 // Подмена TerrainCellCache для бенчмарка: тот же API, который читают
 // калькуляторы масок и искажения, но клетки берутся из синтетической карты,
 // а не из хранилища мира и MapManager. Кэш на одну клетку шире сетки с каждой
-// стороны, как настоящий.
-public class TerrainCellCache
+// стороны, как настоящий. Калькуляторы масок и искажения принимают
+// ITerrainCellDataSource, поэтому подмена реализует его, как и настоящий кэш.
+public class TerrainCellCache : ITerrainCellDataSource
 {
     private readonly TerrainRingGrid<CachedCellData> _cells = new();
 
@@ -21,6 +23,12 @@ public class TerrainCellCache
     public int CacheWidth { get; private set; }
 
     public int CacheHeight { get; private set; }
+
+    public CachedCellInfo GetCell(int x, int y)
+    {
+        CachedCellData data = GetCellData(x, y);
+        return new CachedCellInfo { Type = data.Type, Properties = data.Properties };
+    }
 
     public CachedCellData GetCellData(int x, int y)
     {

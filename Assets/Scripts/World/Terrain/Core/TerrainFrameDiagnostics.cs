@@ -12,7 +12,6 @@ namespace Kern.World.Terrain;
 public readonly record struct TerrainFrameTimings(
     float PlanMs,
     float DimensionsMs,
-    float RefreshTextureMs,
     float ProcessMs,
     float UploadMs,
     int DirtyRectCount,
@@ -41,9 +40,10 @@ public sealed class TerrainFrameDiagnostics
     public void Record(long stallStart, IFrameTelemetry telemetry, in TerrainFrameTimings timings)
     {
         TerrainBuildPipeline pipeline = _window.Driver.Pipeline;
-        TerrainCellBuilder cells = pipeline.CellBuilder;
-        TerrainCellDataTextures textures = cells.Textures;
 
+        // Счётчики сборщика клеток принадлежат рабочему потоку и здесь не
+        // читаются: цена шага берётся из его опубликованного итога.
+        TerrainCellDataTextures textures = pipeline.CellBuilder.Textures;
         _stall.Record(
             stallStart,
             telemetry,
@@ -54,24 +54,18 @@ public sealed class TerrainFrameDiagnostics
                 new Vector2Int(_window.Width, _window.Height),
                 timings.DirtyRectCount,
                 timings.DirtyArea,
-                timings.RefreshTextureMs,
                 timings.ProcessMs,
                 timings.UploadMs,
-                cells.LastScrollMs,
-                cells.LastIndexRemoveMs,
-                cells.LastWarmupMs,
-                cells.LastFillMs,
-                cells.LastFilledCells,
                 textures.LastUploadRectCount,
                 textures.LastUploadTexels,
-                cells.LastQuadMs,
-                cells.LastPackMs,
                 textures.LastStageMs,
                 textures.LastStageCopyMs,
                 textures.LastStageApplyMs,
                 textures.LastUploadStrips,
                 timings.PlanMs,
-                timings.DimensionsMs));
+                timings.DimensionsMs,
+                new TerrainStallBuildState(_window.BuildState, _window.HasCpuBuildInFlight),
+                pipeline.LastWorkerCost));
     }
 
     /// <summary>

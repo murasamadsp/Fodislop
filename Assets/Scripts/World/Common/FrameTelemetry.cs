@@ -30,6 +30,14 @@ public interface IFrameTelemetry
     int TerrainChunkLoadCount { get; set; }
     int TerrainMeshClearCount { get; set; }
     int TerrainDirtyPatchCount { get; set; }
+
+    // Фоновая сборка террейна. Не кадровые таймеры: время рабочего потока
+    // не входит в кадр, а задержка до публикации — это возраст картинки.
+    float TerrainWorkerBuildMs { get; set; }
+    float TerrainBuildLatencyMs { get; set; }
+    float TerrainEditDisplayLatencyMs { get; set; }
+    int TerrainBuildCancelCount { get; set; }
+    int TerrainBuildInFlight { get; set; }
     int LightingRegionInvalidationCount { get; set; }
     int LightingRegionInvalidationFrameCount { get; set; }
     // Per-frame causes of the lighting command graph rebuild.
@@ -118,6 +126,18 @@ public sealed class FrameTelemetry : IFrameTelemetry, IDisposable
     public int TerrainMeshClearCount { get; set; }
 
     public int TerrainDirtyPatchCount { get; set; }
+
+    // Последняя опубликованная фоновая сборка: сколько она шла на рабочем
+    // потоке и сколько прошло от её постановки до публикации. Отмены
+    // копятся, как счётчики перестроений выше.
+    public float TerrainWorkerBuildMs { get; set; }
+    public float TerrainBuildLatencyMs { get; set; }
+
+    // От самого раннего изменения мира, вошедшего в шаг, до его публикации:
+    // сколько копка или стройка ждала, прежде чем стать видимой.
+    public float TerrainEditDisplayLatencyMs { get; set; }
+    public int TerrainBuildCancelCount { get; set; }
+    public int TerrainBuildInFlight { get; set; }
 
     public int LightingRegionInvalidationCount { get; set; }
     public int LightingRegionInvalidationFrameCount { get; set; }

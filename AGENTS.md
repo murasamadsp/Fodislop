@@ -48,6 +48,8 @@ For claims about visual or GPU results, the test must go through the production 
 
 The visual test oracle must be independent of production functions. A helper matching itself is not valid as a regression proof.
 
+Never explain a visual or runtime problem by saying that debug mode is enabled. Debug state may be inspected as one hypothesis, but it is not evidence of the root cause and must never end the investigation or replace a production-path fix. A screenshot with flat colors must be traced through the real shader, mesh data, material keywords, textures, and camera path; if that production verification cannot be performed, report the result as unverified instead of attributing it to `TerrainDebugView` or any other debug feature.
+
 Do not invent things the user did not ask for. Motion, rotation, animation, pulsing, flickering — NOT added on the agent's initiative. A static image means a static result. A correction to one word in the description applies to the entire entity.
 
 Do not return an intermediate blocker or symptom description as a result. Independently locate the root cause and continue to an actual result. Stop only when available options are exhausted and the next step genuinely requires new permission or a user decision — then report a specific proven blocker without excuses or repetition.

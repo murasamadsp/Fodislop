@@ -152,6 +152,7 @@ namespace Kern.Core
             builder.Register<InventoryModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<PlayerStatsModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<LightingGeometryRegistry>(Lifetime.Singleton);
+            builder.Register<Kern.World.Streaming.WorldViewTransition>(Lifetime.Singleton);
             builder.Register<GraphicsSettingsController>(Lifetime.Singleton);
             builder.Register<MapModeState>(Lifetime.Singleton);
             builder.Register<ChatEventGateway>(Lifetime.Singleton);

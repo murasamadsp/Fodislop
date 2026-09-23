@@ -107,6 +107,7 @@ public sealed class TerrainCellMetadataCacheTests
         public Texture2D? FlowMapTexture => null;
 
         public Texture2D? TerrainDecalAtlasTexture => null;
+        public Texture2D? TerrainDecalStoneAtlasTexture => null;
 
         public void RequestTexture(CellType cellType)
         {

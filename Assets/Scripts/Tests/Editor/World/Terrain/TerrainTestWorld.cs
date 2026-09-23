@@ -46,6 +46,18 @@ public sealed class TerrainTestWorld
 
     public IReadOnlyList<IAtlasDescriptor> Atlases => _atlases;
 
+    public bool DoorTextureReady
+    {
+        get => _textures.DoorTextureReady;
+        set => _textures.DoorTextureReady = value;
+    }
+
+    public bool RoadTextureReady
+    {
+        get => _textures.RoadTextureReady;
+        set => _textures.RoadTextureReady = value;
+    }
+
     // Порода с полостями из хеша координаты: те же клетки, что у соседних
     // тестов заливки фона, чтобы один и тот же мир читался узнаваемо.
     public static CellType CellAt(int worldX, int serverY)
@@ -181,6 +193,9 @@ public sealed class TerrainTestWorld
 
     private sealed class FakeTextures : ITextureService
     {
+        public bool DoorTextureReady { get; set; } = true;
+        public bool RoadTextureReady { get; set; } = true;
+
         public event Action<string, Texture2D>? OnTextureLoaded
         {
             add { }
@@ -194,6 +209,7 @@ public sealed class TerrainTestWorld
         public Texture2D? FlowMapTexture => null;
 
         public Texture2D? TerrainDecalAtlasTexture => null;
+        public Texture2D? TerrainDecalStoneAtlasTexture => null;
 
         public void RequestTexture(CellType cellType)
         {
@@ -205,6 +221,12 @@ public sealed class TerrainTestWorld
         // разных типов обязаны отличаться, иначе тест ничего не докажет.
         public Vector4 GetCellFrameRect(CellType cellType)
         {
+            if ((cellType == CellType.BuildingDoor && !DoorTextureReady) ||
+                (cellType == CellType.Road && !RoadTextureReady))
+            {
+                return Vector4.zero;
+            }
+
             int id = (int)cellType;
             return new Vector4(
                 (id % 16) / 16f,

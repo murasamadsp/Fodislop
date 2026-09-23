@@ -25,6 +25,14 @@ public sealed class TerrainCellBuilder : IDisposable
         public Span<TerrainVertex> Foreground => Vertices.AsSpan(4, 4);
     }
 
+    private sealed class FillState
+    {
+        public readonly Scratch Scratch = new();
+        public long QuadTicks;
+        public long PackTicks;
+        public bool DoorsTouched;
+    }
+
     private readonly TerrainCellDataTextures _textures = new();
     private readonly Scratch _mainScratch = new();
     private readonly TerrainDoorOverlayIndex _doors = new();
@@ -52,6 +60,8 @@ public sealed class TerrainCellBuilder : IDisposable
 
     public TerrainCellDataTextures Textures => _textures;
 
+    public float CellSize => _cellSize;
+
     public bool DoorsTouched => _doorsTouched;
 
     public bool HasDoors => _doors.HasDoors;
@@ -72,7 +82,7 @@ public sealed class TerrainCellBuilder : IDisposable
 
     public int LastFilledCells { get; private set; }
 
-    /// <summary>Внутри заливки: сборка двух квадов против упаковки и записи в тексели.</summary>
+    /// <summary>Сумма времени сборки квадов по рабочим потокам, не длительность кадра.</summary>
     ///
     /// Заливка полосы оказалась в тридцать раз дороже той же работы в
     /// бенчмарке, а в ней два разных дела: TerrainQuadBuilder.FillQuad (его
@@ -80,6 +90,7 @@ public sealed class TerrainCellBuilder : IDisposable
     /// клетку). Разделение показывает, какое из двух врёт.
     public float LastQuadMs { get; private set; }
 
+    /// <summary>Сумма времени упаковки по рабочим потокам; может превышать LastFillMs.</summary>
     public float LastPackMs { get; private set; }
 
     public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
@@ -100,6 +111,15 @@ public sealed class TerrainCellBuilder : IDisposable
 
     public void BuildFull(TerrainCellSources sources, int minX, int minY)
     {
+        BuildFull(sources, minX, minY, CancellationToken.None);
+    }
+
+    public void BuildFull(
+        TerrainCellSources sources,
+        int minX,
+        int minY,
+        CancellationToken cancellationToken)
+    {
         if (!CanBuild(sources))
         {
             return;
@@ -118,29 +138,56 @@ public sealed class TerrainCellBuilder : IDisposable
         _warmup.WarmRect(sources, 0, _width, 0, _height);
         LastWarmupMs = ElapsedMs(warmStart);
 
-        // Разбивка на квады и упаковку здесь не ведётся: счётчики складываются
-        // без синхронизации, а этот путь идёт из рабочих потоков. Общее время
-        // и число клеток — ведутся.
+        // Сначала накапливаем тики в состоянии потока, затем объединяем их.
+        // Нулевые значения здесь скрывали стоимость полной сборки в отчёте.
         long fillStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        _quadTicks = 0;
+        _packTicks = 0;
         Parallel.For(
             0,
             _width,
-            static () => new Scratch(),
-            (x, _, scratch) =>
+            static () => new FillState(),
+            (x, _, state) =>
             {
                 for (int y = 0; y < _height; y++)
                 {
-                    FillCell(x, y, minX, minY, sources, scratch);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    FillCell(
+                        x,
+                        y,
+                        minX,
+                        minY,
+                        sources,
+                        state.Scratch,
+                        true,
+                        out long quadTicks,
+                        out long packTicks,
+                        countAnchoredForeground: true);
+                    state.QuadTicks += quadTicks;
+                    state.PackTicks += packTicks;
                 }
 
-                return scratch;
+                return state;
             },
-            static _ => { });
+            state =>
+            {
+                Interlocked.Add(ref _quadTicks, state.QuadTicks);
+                Interlocked.Add(ref _packTicks, state.PackTicks);
+            });
         LastFillMs = ElapsedMs(fillStart);
+        LastQuadMs = TicksToMs(_quadTicks);
+        LastPackMs = TicksToMs(_packTicks);
         LastFilledCells = _width * _height;
         _doors.CompleteFullBuild();
         _trackTextureIndex = true;
-        _textureIndex.Rebuild(sources, minX, minY, _width, _height);
+        _textureIndex.Clear();
+        for (int x = 0; x < _width; x++)
+        {
+            for (int y = 0; y < _height; y++)
+            {
+                UpdateTextureIndexCell(x, y, minX, minY, sources);
+            }
+        }
     }
 
     public void ScrollAndBuildBand(TerrainCellSources sources, int minX, int minY, int dx, int dy)
@@ -245,7 +292,21 @@ public sealed class TerrainCellBuilder : IDisposable
                 int quad = refreshQuads[index];
                 int x = quad / _height;
                 int y = quad % _height;
-                _doorsTouched |= FillCell(x, y, minX, minY, sources, _mainScratch);
+                bool doorsChanged = FillCell(
+                    x,
+                    y,
+                    minX,
+                    minY,
+                    sources,
+                    _mainScratch,
+                    true,
+                    out long quadTicks,
+                    out long packTicks);
+                // Door overlays own vertex data separately from the cell textures.
+                // A newly loaded atlas rect must invalidate that mesh as well.
+                _doorsTouched |= doorsChanged;
+                _quadTicks += quadTicks;
+                _packTicks += packTicks;
             }
 
             LastFillMs = ElapsedMs(fillStart);
@@ -337,7 +398,7 @@ public sealed class TerrainCellBuilder : IDisposable
         }
 
         ref TerrainVertex vertex = ref scratch.Vertices[4];
-        const int RoundableFlag = 2;
+        const int RoundableFlag = 1;
         bool hasTexture = vertex.UV1z != 0 && Mathf.HalfToFloat(vertex.UV1z) > 0.0001f;
         bool roundable = (Mathf.RoundToInt(vertex.UV6.z) & RoundableFlag) != 0;
         if (!hasTexture || roundable || vertex.Color.a < 255)
@@ -392,12 +453,6 @@ public sealed class TerrainCellBuilder : IDisposable
             return;
         }
 
-        // Строки полосы независимы, и распараллелить её можно так же, как полную
-        // сборку (BuildFull идёт через Parallel.For по столбцам). Не сделано
-        // сознательно: счётчики стадий (_quadTicks, LastFillMs) складываются без
-        // синхронизации, а главное — это оптимизация на догадке, пока нет замера
-        // F1 frametime, который показал бы, что полоса вообще узкое место.
-
         long warmStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _warmup.WarmRect(sources, startX, endX, startY, endY);
         LastWarmupMs += ElapsedMs(warmStart);
@@ -405,17 +460,90 @@ public sealed class TerrainCellBuilder : IDisposable
         long fillStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _quadTicks = 0;
         _packTicks = 0;
-        for (int x = startX; x < endX; x++)
+        int doorsTouched = 0;
+
+        // Мелкая область (заплатка, узкая полоса) идёт на этом же потоке:
+        // Parallel.For ждёт запущенные реплики, и при занятом пуле девять
+        // клеток ждали свободного потока десятки миллисекунд.
+        const int ParallelFillMinimumCells = 4096;
+        if ((long)(endX - startX) * (endY - startY) < ParallelFillMinimumCells)
         {
-            for (int y = startY; y < endY; y++)
+            bool touched = false;
+            for (int x = startX; x < endX; x++)
             {
-                _doorsTouched |= FillCell(x, y, minX, minY, sources, _mainScratch);
+                for (int y = startY; y < endY; y++)
+                {
+                    touched |= FillCell(
+                        x,
+                        y,
+                        minX,
+                        minY,
+                        sources,
+                        _mainScratch,
+                        false,
+                        out long quadTicks,
+                        out long packTicks);
+                    _quadTicks += quadTicks;
+                    _packTicks += packTicks;
+                }
+            }
+
+            doorsTouched = touched ? 1 : 0;
+        }
+        else
+        {
+            Parallel.For(
+                startX,
+                endX,
+                () => new FillState(),
+                (x, _, state) =>
+                {
+                    for (int y = startY; y < endY; y++)
+                    {
+                        state.DoorsTouched |= FillCell(
+                            x,
+                            y,
+                            minX,
+                            minY,
+                            sources,
+                            state.Scratch,
+                            false,
+                            out long quadTicks,
+                            out long packTicks);
+                        state.QuadTicks += quadTicks;
+                        state.PackTicks += packTicks;
+                    }
+
+                    return state;
+                },
+                state =>
+                {
+                    if (state.DoorsTouched)
+                    {
+                        Interlocked.Exchange(ref doorsTouched, 1);
+                    }
+
+                    Interlocked.Add(ref _quadTicks, state.QuadTicks);
+                    Interlocked.Add(ref _packTicks, state.PackTicks);
+                });
+        }
+
+        _doorsTouched |= doorsTouched != 0;
+        LastQuadMs += TicksToMs(_quadTicks);
+        LastPackMs += TicksToMs(_packTicks);
+
+        if (_trackTextureIndex)
+        {
+            for (int x = startX; x < endX; x++)
+            {
+                for (int y = startY; y < endY; y++)
+                {
+                    UpdateTextureIndexCell(x, y, minX, minY, sources);
+                }
             }
         }
 
         LastFillMs += ElapsedMs(fillStart);
-        LastQuadMs += TicksToMs(_quadTicks);
-        LastPackMs += TicksToMs(_packTicks);
         LastFilledCells += (endX - startX) * (endY - startY);
 
         _textures.MarkCells(
@@ -427,7 +555,17 @@ public sealed class TerrainCellBuilder : IDisposable
 
     // Возвращает признак «двери задеты» вместо записи в общее поле: полная
     // сборка зовёт FillCell из Parallel.For, и такая запись была гонкой.
-    private bool FillCell(int x, int y, int minX, int minY, TerrainCellSources sources, Scratch scratch)
+    private bool FillCell(
+        int x,
+        int y,
+        int minX,
+        int minY,
+        TerrainCellSources sources,
+        Scratch scratch,
+        bool updateTextureIndex,
+        out long quadTicks,
+        out long packTicks,
+        bool countAnchoredForeground = false)
     {
         int gridX = minX + x;
         int unityY = minY + y;
@@ -440,22 +578,18 @@ public sealed class TerrainCellBuilder : IDisposable
         TerrainQuadResult foregroundQuad = TerrainQuadBuilder.FillQuad(
             sources, site, TerrainQuadLayer.Foreground, scratch.Foreground);
         int foreground = foregroundQuad.AtlasIndex;
-        _quadTicks += System.Diagnostics.Stopwatch.GetTimestamp() - quadStart;
+        quadTicks = System.Diagnostics.Stopwatch.GetTimestamp() - quadStart;
 
-        if (foregroundQuad.HasAtlas && scratch.Vertices[4].UV5x != 0)
+        if (countAnchoredForeground && foregroundQuad.HasAtlas && scratch.Vertices[4].UV5x != 0)
         {
             Interlocked.Increment(ref _lastFullBuildAnchoredForegroundCellCount);
         }
 
         bool doorsChanged = _doors.RecordCell(
             x, y, foreground, foregroundQuad.IsDoor, scratch.Foreground);
-        if (_trackTextureIndex)
+        if (_trackTextureIndex && updateTextureIndex)
         {
-            _textureIndex.UpdateCell(
-                gridX,
-                unityY,
-                sources.FloodFill.Buffer[x, y],
-                sources.CellCache.GetCellData(x + 1, y + 1).Type);
+            UpdateTextureIndexCell(x, y, minX, minY, sources);
         }
 
         long packStart = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -478,7 +612,15 @@ public sealed class TerrainCellBuilder : IDisposable
         _textures.SetCell(
             ringX, ringY, TerrainCellDataPacker.ForegroundLayer,
             TerrainCellDataPacker.PackQuad(scratch.Vertices.AsSpan(4, 4), foreground));
-        _packTicks += System.Diagnostics.Stopwatch.GetTimestamp() - packStart;
+        packTicks = System.Diagnostics.Stopwatch.GetTimestamp() - packStart;
         return doorsChanged;
+    }
+
+    private void UpdateTextureIndexCell(int x, int y, int minX, int minY, TerrainCellSources sources)
+    {
+        CachedCellData cell = sources.CellCache.GetCellData(x + 1, y + 1);
+        CellType background = TerrainCellLayers.ResolveBackground(
+            cell.Type, sources.FloodFill.Buffer[x, y], cell.Properties);
+        _textureIndex.UpdateCell(minX + x, minY + y, background, cell.Type);
     }
 }

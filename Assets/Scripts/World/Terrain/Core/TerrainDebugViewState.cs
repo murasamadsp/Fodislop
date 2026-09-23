@@ -36,6 +36,12 @@ public static class TerrainDebugViewState
     // перезагрузку, а статическое поле — нет. Без публикации на старте они
     // расходятся: C# считает, что вид выключен, а кадр рисуется прошлым
     // выбранным видом, которого может уже и не быть в перечислении.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetForRuntime()
+    {
+        Active = TerrainDebugView.Off;
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     public static void PublishOnLoad() => Publish();
 

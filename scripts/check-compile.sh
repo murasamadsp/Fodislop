@@ -53,10 +53,34 @@ else
             ASSEMBLIES+=("$name")
         fi
     done < <(find "$DAG" -maxdepth 1 -name 'Kern.*.rsp' ! -name '*mvfrm*' -exec basename {} .rsp \; | sort)
+
+    # Compile changed producers before their consumers so a full check cannot
+    # silently use stale Unity ScriptAssemblies copies. The order here follows
+    # the asmdef chain: core constants/contracts, persistence and asset
+    # pipeline (both referenced by Kern.World), terrain world, then
+    # presentation and tests.
+    ORDERED=()
+    for TARGET in Kern.Core Kern.Contracts Kern.Persistence Kern.AssetPipeline Kern.World; do
+        for ASM in "${ASSEMBLIES[@]}"; do
+            if [ "$ASM" = "$TARGET" ]; then
+                ORDERED+=("$ASM")
+                break
+            fi
+        done
+    done
+
+    for ASM in "${ASSEMBLIES[@]}"; do
+        case " ${ORDERED[*]} " in
+            *" $ASM "*) ;;
+            *) ORDERED+=("$ASM") ;;
+        esac
+    done
+    ASSEMBLIES=("${ORDERED[@]}")
 fi
 
 mkdir -p "$WORK"
 STATUS=0
+CHECKED_ASSEMBLIES=()
 
 for ASM in ${ASSEMBLIES[@]+"${ASSEMBLIES[@]}"}; do
     SRC="$DAG/$ASM.rsp"
@@ -79,6 +103,13 @@ for ASM in ${ASSEMBLIES[@]+"${ASSEMBLIES[@]}"}; do
     sed -i.bak -E "s|-r:\"$DAG_REL/([A-Za-z0-9_.]+)\.ref\.dll\"|-r:\"Library/ScriptAssemblies/\1.dll\"|g" "$RSP"
     rm -f "$RSP.bak"
 
+    # Проверяем потребителей против зависимостей, собранных ЭТИМ запуском,
+    # а не против старых DLL редактора. Передавайте зависимости первыми.
+    for CHECKED in ${CHECKED_ASSEMBLIES[@]+"${CHECKED_ASSEMBLIES[@]}"}; do
+        sed -i.bak "s|-r:\"Library/ScriptAssemblies/$CHECKED.dll\"|-r:\"$OUT/$CHECKED/$CHECKED.dll\"|g" "$RSP"
+        rm -f "$RSP.bak"
+    done
+
     MISSING=0
     while IFS= read -r ref; do
         [ -f "$ref" ] || { echo "$ASM: нет ссылки $ref"; MISSING=$((MISSING + 1)); }
@@ -97,6 +128,19 @@ for ASM in ${ASSEMBLIES[@]+"${ASSEMBLIES[@]}"}; do
     fi
 
     grep '^"' "$RSP" | tr -d '"' > "$WORK/$ASM.listed"
+
+    # Обратный случай: файл удалён после последнего импорта. Без этого любая
+    # чистка кода роняла бы проверку на CS2001, а не на настоящей ошибке.
+    while IFS= read -r file; do
+        case "$file" in
+            *.cs) ;;
+            *) continue ;;
+        esac
+        [ -f "$file" ] && continue
+        grep -vxF "\"$file\"" "$RSP" > "$RSP.tmp" && mv "$RSP.tmp" "$RSP"
+        echo "$ASM: пропущен удалённый файл $file"
+    done < "$WORK/$ASM.listed"
+
     while IFS= read -r dir; do
         while IFS= read -r file; do
             grep -qxF "$file" "$WORK/$ASM.listed" && continue
@@ -111,6 +155,7 @@ for ASM in ${ASSEMBLIES[@]+"${ASSEMBLIES[@]}"}; do
     WARNINGS=$(grep -cE '(^|[^:])warning CS[0-9]+' "$LOG")
 
     if [ "$CODE" -eq 0 ] && [ "$ERRORS" -eq 0 ]; then
+        CHECKED_ASSEMBLIES+=("$ASM")
         echo "$ASM: ok (предупреждений $WARNINGS)"
     else
         echo "$ASM: ошибок $ERRORS, смотри $LOG"

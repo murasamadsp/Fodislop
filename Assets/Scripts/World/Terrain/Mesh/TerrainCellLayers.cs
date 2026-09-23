@@ -1,6 +1,7 @@
 #nullable enable
 
 using MinesServer.Data;
+using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Kern.World.Terrain;
 
@@ -8,6 +9,21 @@ namespace Kern.World.Terrain;
 // to the rectangular background, even when it came from foreground map data.
 internal static class TerrainCellLayers
 {
+    public static CellType ResolveBackground(
+        CellType foreground, CellType propagated, CellConfigProperties properties)
+    {
+        if (foreground == CellType.Empty)
+        {
+            return CellType.Empty;
+        }
+
+        bool building = foreground is CellType.BuildingWall or
+            CellType.BuildingDoor or CellType.BuildingCorner;
+        return building && (properties & CellConfigProperties.Passable) != 0
+            ? CellType.Road
+            : propagated;
+    }
+
     public static bool TryGetType(
         CellType foreground,
         CellType background,

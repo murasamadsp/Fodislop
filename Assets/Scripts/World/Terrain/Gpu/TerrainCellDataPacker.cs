@@ -46,7 +46,9 @@ public readonly record struct TerrainCellTexels(
 // Поля half копируются сырыми байтами: шейдер читает ровно то, что читал
 // из вершины, без второго округления. GeometryX/GeometryY — канонические
 // локальные координаты четырёх углов квада; они идут вместе с cell-data в
-// одном dirty/snapshot contract.
+// одном dirty/snapshot contract. Для Organic четыре изгиба рёбер кодируются
+// числом 1..625: младший байт в Meta.b, старшие биты в Meta.a от 128.
+// У Classic Meta.a остаётся 255, у ровной клетки 0.
 public static class TerrainCellDataPacker
 {
     public const int LayersPerCell = 2;
@@ -65,10 +67,13 @@ public static class TerrainCellDataPacker
 
         ref readonly TerrainVertex v = ref quad[0];
         byte drawn = atlasIndex < 0 ? (byte)0 : (byte)Math.Min(atlasIndex + 1, byte.MaxValue);
-        byte anchored = v.UV5x != 0 ? byte.MaxValue : (byte)0;
+        int organicEdges = Mathf.RoundToInt(Mathf.HalfToFloat(v.UV5w));
+        byte anchored = organicEdges > 0
+            ? (byte)(128 + (organicEdges >> 8))
+            : v.UV5x != 0 ? byte.MaxValue : (byte)0;
         return new TerrainCellTexels(
             v.Color,
-            new Color32(drawn, PackCornerUvs(quad), 0, anchored),
+            new Color32(drawn, PackCornerUvs(quad), (byte)(organicEdges & 0xFF), anchored),
             new TerrainHalfTexel(v.UV1x, v.UV1y, v.UV1z, v.UV1w),
             new TerrainHalfTexel(v.UV2x, v.UV2y, v.UV2z, v.UV2w),
             new TerrainHalfTexel(v.UV4x, v.UV4y, v.UV4z, v.UV4w),
@@ -96,5 +101,7 @@ public static class TerrainCellDataPacker
 
     public static int UnpackAtlasIndex(Color32 meta) => meta.r - 1;
 
-    private static int HalfBit(ushort half) => Mathf.HalfToFloat(half) > 0.5f ? 1 : 0;
+    // Positive IEEE half values are ordered by their bits. 0x3800 is 0.5,
+    // 0x7C00 is +infinity; exclude NaNs just like a floating-point comparison.
+    private static int HalfBit(ushort half) => half > 0x3800 && half <= 0x7C00 ? 1 : 0;
 }

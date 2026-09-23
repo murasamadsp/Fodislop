@@ -16,6 +16,12 @@ namespace Kern.AssetPipeline
 {
     public class TextureStorageManager : MonoBehaviour, ITextureStorageService
     {
+        // Декодирование и копия в RGBA32 идут на главном потоке: маркер
+        // нужен, чтобы провис кадра на приезде текстур был виден в FrameStall.
+        private static readonly Unity.Profiling.ProfilerMarker _DecodeMarker = new("Kern.Textures.Decode");
+
+        private int _lastDecodeFrame = -1;
+
         [Inject]
         private IRuntimeAssetPaths _runtimeAssetPaths = null!;
         [SerializeField]
@@ -63,7 +69,26 @@ namespace Kern.AssetPipeline
             }
 
             await UniTask.SwitchToMainThread(cancellationToken);
-            Texture2D texture = DecodeTexture(normalizedFilename, rawData);
+
+            // Не больше одного декодирования за кадр. Декодирование и копия в
+            // RGBA32 стоят миллисекунды на главном потоке, а текстуры
+            // приезжают пачками: несколько штук подряд в одном кадре давали
+            // фриз. Очередь по кадрам растягивает ту же работу без пиков.
+            while (_lastDecodeFrame == Time.frameCount)
+            {
+                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+            }
+
+            _lastDecodeFrame = Time.frameCount;
+            Texture2D texture;
+            using (_DecodeMarker.Auto())
+            {
+                texture = DecodeTexture(normalizedFilename, rawData);
+            }
+
+            Kern.Core.Interfaces.Diagnostics.FrameEventLog.Record(
+                $"декодирована {normalizedFilename} {texture.width}×{texture.height}");
+
             bool cacheOwnsTexture = false;
             try
             {

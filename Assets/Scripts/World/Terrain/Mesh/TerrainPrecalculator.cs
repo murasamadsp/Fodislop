@@ -1,5 +1,6 @@
 #nullable enable
 
+using Kern.Core;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
@@ -25,25 +26,31 @@ public class TerrainPrecalculator
         set => _distortion.EnableDistortion = value;
     }
 
+    public TerrainDistortionStyle DistortionStyle
+    {
+        get => _distortion.DistortionStyle;
+        set => _distortion.DistortionStyle = value;
+    }
+
     public void EnsureCapacity(int meshWidth, int meshHeight)
     {
         _distortion.EnsureCapacity(meshWidth, meshHeight);
         _cellMask.EnsureCapacity(meshWidth, meshHeight);
     }
 
-    public void PrecalculateFull(TerrainCellCache cellCache, int meshWidth, int meshHeight, int worldWidth, int worldHeight)
+    public void PrecalculateFull(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int worldWidth, int worldHeight)
     {
         _distortion.PrecalculateFull(cellCache, meshWidth, meshHeight, worldWidth, worldHeight);
         _cellMask.PrecalculateFull(cellCache, meshWidth, meshHeight);
     }
 
-    public void PrecalculateRegion(TerrainCellCache cellCache, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY, int worldWidth, int worldHeight)
+    public void PrecalculateRegion(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY, int worldWidth, int worldHeight)
     {
         _distortion.PrecalculateRegion(cellCache, meshWidth, meshHeight, startX, startY, countX, countY, worldWidth, worldHeight);
         _cellMask.PrecalculateRegion(cellCache, meshWidth, meshHeight, startX, startY, countX, countY);
     }
 
-    public void PrecalculateIncremental(TerrainCellCache cellCache, int meshWidth, int meshHeight, int dx, int dy, int worldWidth, int worldHeight)
+    public void PrecalculateIncremental(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int dx, int dy, int worldWidth, int worldHeight)
     {
         _distortion.PrecalculateIncremental(cellCache, meshWidth, meshHeight, dx, dy, worldWidth, worldHeight);
         _cellMask.PrecalculateIncremental(cellCache, meshWidth, meshHeight, dx, dy);

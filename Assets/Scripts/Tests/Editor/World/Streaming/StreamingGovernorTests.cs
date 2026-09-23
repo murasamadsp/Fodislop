@@ -267,4 +267,41 @@ public sealed class StreamingGovernorTests
         Assert.That(dimension, Is.EqualTo(StreamingPolicy.DefaultMaximumWindowDimension));
     }
 
+    [Test]
+    public void SpeedLeadUsesMeasuredPreparationLatencyAndHasACap()
+    {
+        Assert.That(
+            _governor.Policy.ResolveSpeedLeadCells(20f, 0.5f),
+            Is.EqualTo(10 + StreamingPolicy.SpeedLeadSafetyCells));
+        Assert.That(
+            _governor.Policy.ResolveSpeedLeadCells(10000f, 10f),
+            Is.EqualTo(StreamingPolicy.MaximumSpeedLeadCells));
+        Assert.That(_governor.Policy.ResolveSpeedLeadCells(20f, 0f), Is.Zero);
+        Assert.That(_governor.Policy.ResolveSpeedLeadCells(0f, 0.5f), Is.Zero);
+    }
+
+    [Test]
+    public void SpeedLeadWidensTheReanchorMarginWithoutResizingTheWindow()
+    {
+        var window = new Vector2Int(192, 160);
+        var viewport = new Vector2Int(64, 40);
+        int stationary = _governor.Policy.ResolvePrefetchMarginCells(window, viewport, 0);
+        int moving = _governor.Policy.ResolvePrefetchMarginCells(window, viewport, 50);
+
+        Assert.That(stationary, Is.EqualTo(_governor.Policy.ResolvePrefetchMarginCells(160)));
+        Assert.That(moving, Is.EqualTo(50));
+    }
+
+    [Test]
+    public void SpeedLeadNeverExceedsTheFreeSpaceAroundTheViewport()
+    {
+        var window = new Vector2Int(192, 160);
+        var viewport = new Vector2Int(64, 60);
+        int margin = _governor.Policy.ResolvePrefetchMarginCells(
+            window,
+            viewport,
+            StreamingPolicy.MaximumSpeedLeadCells);
+
+        Assert.That(margin, Is.EqualTo(((160 - 60) / 2) - 1));
+    }
 }

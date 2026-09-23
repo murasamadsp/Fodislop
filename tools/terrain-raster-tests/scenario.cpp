@@ -86,7 +86,7 @@ static void checkAmbientOcclusionFloor()
     _WorldAmbientOcclusionTexture.generate(std::move(solid));
     _WorldAmbientOcclusionTexelsPerCell=8;
     float darkest=KernTerrainAmbientOcclusionMultiplier(
-        0, float2{4.0f,4.0f}, float4{0,0,8,8});
+        0, 0, float2{0.5f,0.5f}, float2{4.0f,4.0f}, float4{0,0,8,8});
     if(std::fabs(darkest-0.51f)>1e-3f)
         throw std::runtime_error(
             "Contact occlusion does not stop at the floor: " + std::to_string(darkest));
@@ -97,19 +97,19 @@ static void checkAmbientOcclusionFloor()
     _WorldAmbientOcclusionTexture.generate(std::move(empty));
     _WorldAmbientOcclusionTexelsPerCell=8;
     float brightest=KernTerrainAmbientOcclusionMultiplier(
-        0, float2{4.0f,4.0f}, float4{0,0,8,8});
+        0, 0, float2{0.5f,0.5f}, float2{4.0f,4.0f}, float4{0,0,8,8});
     if(std::fabs(brightest-1.0f)>1e-3f)
         throw std::runtime_error(
             "Contact occlusion darkens an empty neighbourhood");
 }
 
 // Упаковка слова контура — та же арифметика, что в TerrainLightingData.Pack:
-// биты 0-1 флаги контура, 2-5 диагональные соседи, 6+ код рельефа. Хендмейдный
-// reliefCode*64 проверял только шейдер и молчал о том, переживает ли код
+// бит 0 — флаг контура, 1-4 — диагональные соседи, 5+ — код рельефа. Хендмейдный
+// reliefCode*32 проверял только шейдер и молчал о том, переживает ли код
 // соседство с занятыми младшими битами.
 static float packContourFull(int reliefCode, int contourFlags, int solidDiagonal)
 {
-    return float(contourFlags + solidDiagonal * 4 + reliefCode * 64);
+    return float(contourFlags + solidDiagonal * 2 + reliefCode * 32);
 }
 
 static float packContour(int reliefCode) { return packContourFull(reliefCode, 0, 0); }
@@ -254,13 +254,13 @@ static void checkReliefRim()
     // Флаги контура и маска диагональных соседей меняются от клетки к клетке,
     // и если бы код рельефа стоял не на своём месте, кайма то появлялась бы,
     // то исчезала по соседству, которое к ней отношения не имеет. Здесь
-    // прогоняются все 16 масок против всех 64 комбинаций младших битов.
+    // прогоняются все 16 масок против всех 32 комбинаций младших битов.
     {
         const float2 sideProbes[4] = {nearTop, nearLeft, nearBottom, nearRight};
         for(int reliefMask = 0; reliefMask <= 0x0F; ++reliefMask)
         {
             float clean = packReliefMask(reliefMask, 0, 0);
-            for(int contourFlags = 0; contourFlags <= 3; ++contourFlags)
+            for(int contourFlags = 0; contourFlags <= 1; ++contourFlags)
             for(int solidDiagonal = 0; solidDiagonal <= 0x0F; ++solidDiagonal)
             {
                 float packed = packReliefMask(reliefMask, contourFlags, solidDiagonal);
@@ -361,7 +361,7 @@ void checkAo()
             samples[shape]=KernSampleTerrainAmbientOcclusion(float2{4.0625f,3.875f},float4{0,0,8,8});
             float far=KernSampleTerrainAmbientOcclusion(float2{6,6},float4{0,0,8,8});
             if(far!=0) throw std::runtime_error("Isolated block AO leaks beyond the contact neighbourhood");
-            float mass=KernTerrainAmbientOcclusionMultiplier(64,float2{4.0625f,3.875f},float4{0,0,8,8});
+            float mass=KernTerrainAmbientOcclusionMultiplier(32,0,float2{0.5f,0.5f},float2{4.0625f,3.875f},float4{0,0,8,8});
             if(mass!=1) throw std::runtime_error("Physical foreground self-darkens");
         }
         float difference=samples[0]-samples[1];

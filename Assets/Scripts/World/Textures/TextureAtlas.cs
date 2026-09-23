@@ -9,6 +9,7 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
+using Kern.Core.Interfaces.Diagnostics;
 
 namespace Kern.World;
 internal struct AtlasCell
@@ -81,6 +82,7 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
         // cells and unused atlas regions never sample uninitialized GPU VRAM.
         _atlasTexture.SetPixels32(new Color32[size * size]);
         _atlasTexture.Apply(false, false);
+        FrameEventLog.Record($"атлас {size}×{size} создан");
     }
 
     public void Dispose()
@@ -155,15 +157,31 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
             return false;
         }
 
-            foreach (Color32 pixel in texture.GetPixels32())
+        // RGBA32 читается прямо из буфера текстуры, без копии: GetPixels32
+        // выделял массив на всю текстуру при каждом приезде типа.
+        if (texture.format == TextureFormat.RGBA32)
+        {
+            Unity.Collections.NativeArray<Color32> pixels = texture.GetPixelData<Color32>(0);
+            for (int index = 0; index < pixels.Length; index++)
             {
-                if (pixel.a < OpaqueAlpha)
+                if (pixels[index].a < OpaqueAlpha)
                 {
                     return false;
                 }
             }
 
             return true;
+        }
+
+        foreach (Color32 pixel in texture.GetPixels32())
+        {
+            if (pixel.a < OpaqueAlpha)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public AtlasCoordinate GetWrappedCoordinate(CellType cellType, int globalX, int globalY, CellVariation variation, int frameHeightPixels = 0, int frameIndex = 0)
