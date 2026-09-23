@@ -6,7 +6,6 @@ using Kern.Core.Interfaces;
 using Kern.Core.Localization;
 using Kern.Game.Managers;
 using Kern.Networking;
-using Kern.Game.Inventory;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
@@ -22,7 +21,6 @@ namespace Kern.UI
         [Inject] private UIDocument _doc = null!;
         [Inject] private INetworkService _networkService = null!;
         [Inject] private IInputBlocker _inputBlocker = null!;
-        [Inject] private InventoryModel _inventory = null!;
         [Inject] private UIInputManager _uiInput = null!;
         [Inject] private ILocalizationService _loc = null!;
         [Inject] private IAsyncOperationSupervisor _operations = null!;
@@ -33,11 +31,12 @@ namespace Kern.UI
         private ChatBlinkController? _blink;
         private bool _isOpen;
         private bool _initialized;
-        private ChatChannel _activeChannel;
         private readonly ChatMessageHistory _history = new();
         private readonly ChatMuteTracker _muteTracker = new();
         private bool _lastMutedState;
         private bool _hasCachedMuteState;
+        private bool _hasServerChatList;
+        private bool _hasGlobalChannel;
 
         protected void Start()
         {
@@ -56,6 +55,11 @@ namespace Kern.UI
             _chatEvents.MessageReceived += AddMessage;
             _chatEvents.HistoryReceived += AddHistory;
             _chatEvents.MuteReceived += ApplyMute;
+            _chatEvents.ChatListReceived += ApplyChatList;
+            if (_chatEvents.LastChatList is ChatListPacket lastChatList)
+            {
+                ApplyChatList(lastChatList);
+            }
         }
 
         private void TryInitialize()
@@ -115,7 +119,10 @@ namespace Kern.UI
 
             UILocalizer.Apply(_view.Tree, _loc);
             UILocalizer.AssertLocalized(_view.Tree, _loc);
-            UpdateChannelPresentation();
+            ChatChannelPresenter.UpdatePresentation(
+                _view.ChatHeader,
+                _view.GlobalChannelButton,
+                _loc);
         }
 
         protected void OnDestroy()
@@ -135,6 +142,7 @@ namespace Kern.UI
                 _chatEvents.MessageReceived -= AddMessage;
                 _chatEvents.HistoryReceived -= AddHistory;
                 _chatEvents.MuteReceived -= ApplyMute;
+                _chatEvents.ChatListReceived -= ApplyChatList;
             }
 
             _blink?.Dispose();
@@ -173,20 +181,7 @@ namespace Kern.UI
             {
                 if (Keyboard.current.tKey.wasPressedThisFrame && !inputBlocked)
                 {
-                    SelectChannel(ChatChannel.Local);
-                    Show();
-                    return;
-                }
-
-                // Enter открывает чат только если ввод не заблокирован системно
-                // И не выбран предмет инвентаря: когда слот выбран, Enter применяет
-                // предмет (InventoryView.Update), и чат не должен перехватывать
-                // клавишу и красть фокус.
-                if ((Keyboard.current.enterKey.wasPressedThisFrame ||
-                     Keyboard.current.numpadEnterKey.wasPressedThisFrame) && !inputBlocked &&
-                    !_inventory.HasSelectedItem)
-                {
-                    SelectChannel(ChatChannel.Global);
+                    SelectGlobalChannel();
                     Show();
                 }
 
@@ -250,15 +245,20 @@ namespace Kern.UI
 
             _view.BindActions(
                 OnSendClicked,
-                () => SelectChannel(ChatChannel.Global));
+                SelectGlobalChannel);
 
             _colorController = new ChatColorController(_networkService, _view.ColorButton, _view.ColorGrid);
-            SelectChannel(ChatChannel.Global);
+            SelectGlobalChannel();
         }
 
         private void OnSendClicked()
         {
             if (_view?.InputField == null || _muteTracker.IsMuted)
+            {
+                return;
+            }
+
+            if (!_hasGlobalChannel)
             {
                 return;
             }
@@ -269,9 +269,7 @@ namespace Kern.UI
                 return;
             }
 
-            int chatMaxLen = _activeChannel == ChatChannel.Local
-                ? ProjectRuntimeContracts.Chat.MaximumLocalChatLength
-                : ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
+            int chatMaxLen = ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
             if (text.Length > chatMaxLen)
             {
                 text = text.Substring(0, chatMaxLen);
@@ -279,14 +277,7 @@ namespace Kern.UI
 
             try
             {
-                if (_activeChannel == ChatChannel.Local)
-                {
-                    _networkService.Send(new SendLocalChatMessagePacket(text));
-                }
-                else
-                {
-                    _networkService.Send(new SendChatMessagePacket("global", text));
-                }
+                _networkService.Send(new SendChatMessagePacket("global", text));
             }
             catch (Exception ex)
             {
@@ -342,21 +333,12 @@ namespace Kern.UI
                 return;
             }
 
-            AppendMessage(ChatChannel.Global, ChatMessageFormatter.FormatGlobal(msg, DateTime.Now));
+            AppendMessage(ChatMessageFormatter.FormatGlobal(msg, DateTime.Now));
         }
 
         private void AddHistory(ChatMessageListPacket packet)
         {
-            ChatChannel channel;
-            if (string.Equals(packet.Tag, "global", StringComparison.OrdinalIgnoreCase))
-            {
-                channel = ChatChannel.Global;
-            }
-            else if (string.Equals(packet.Tag, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                channel = ChatChannel.Local;
-            }
-            else
+            if (!string.Equals(packet.Tag, "global", StringComparison.OrdinalIgnoreCase))
             {
                 Debug.LogWarning($"[GlobalChatUI] Ignoring history for unsupported channel '{packet.Tag}'.");
                 return;
@@ -364,23 +346,17 @@ namespace Kern.UI
 
             foreach (ChatMessagePacket message in packet.Messages)
             {
-                AppendMessage(channel, ChatMessageFormatter.FormatGlobal(message, DateTime.Now));
+                AppendMessage(ChatMessageFormatter.FormatGlobal(message, DateTime.Now));
             }
         }
 
-        // Локальные сообщения в окне не показываются и потому здесь не
-        // выписываются вовсе. Локальный чат — это облако над роботом, а не строка
-        // в журнале; пока он был и там, и там, сообщение появлялось дважды, причём
-        // в журнале без всякой привязки к тому, кто и где его сказал. Показ —
-        // у FloatingChatManager, вкладка осталась только режимом ввода.
+        // Локальные сообщения выводит FloatingChatManager над роботом; это окно
+        // принимает только global-сообщения и global-историю.
 
-        private void AppendMessage(ChatChannel channel, string formattedMessage)
+        private void AppendMessage(string formattedMessage)
         {
-            _history.Add(channel, formattedMessage);
-            if (_activeChannel == channel)
-            {
-                AppendVisibleMessage(formattedMessage);
-            }
+            _history.Add(formattedMessage);
+            AppendVisibleMessage(formattedMessage);
         }
 
         private void AppendVisibleMessage(string formattedMessage)
@@ -401,33 +377,35 @@ namespace Kern.UI
             _view.ScrollView.scrollOffset = new Vector2(0, float.MaxValue);
         }
 
-        private void SelectChannel(ChatChannel channel)
+        private void SelectGlobalChannel()
         {
-            _activeChannel = channel;
             if (_view?.InputField != null)
             {
-                _view.InputField.maxLength = channel == ChatChannel.Local
-                    ? ProjectRuntimeContracts.Chat.MaximumLocalChatLength
-                    : ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
+                _view.InputField.maxLength = ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
             }
 
-            UpdateChannelPresentation();
+            ChatChannelPresenter.UpdatePresentation(
+                _view?.ChatHeader,
+                _view?.GlobalChannelButton,
+                _loc);
+            RefreshChatControls(_muteTracker.IsMuted);
             RenderActiveMessages();
         }
 
-        private void UpdateChannelPresentation()
+        private void ApplyChatList(ChatListPacket packet)
         {
-            ChatChannelPresenter.UpdatePresentation(
-                _activeChannel,
-                _view?.ChatHeader,
-                _view?.GlobalChannelButton,
-                _view?.ColorButton,
-                _loc);
-
-            if (_activeChannel == ChatChannel.Local)
+            _hasServerChatList = true;
+            _hasGlobalChannel = false;
+            foreach (var (tag, _, _) in packet.Chats)
             {
-                _colorController?.CloseColorGrid();
+                if (string.Equals(tag, "global", StringComparison.OrdinalIgnoreCase))
+                {
+                    _hasGlobalChannel = true;
+                    break;
+                }
             }
+
+            RefreshChatControls(_muteTracker.IsMuted);
         }
 
         private void RenderActiveMessages()
@@ -438,7 +416,7 @@ namespace Kern.UI
             }
 
             _view.ScrollView.Clear();
-            var messages = _history.GetMessages(_activeChannel);
+            var messages = _history.GetMessages();
             for (int i = 0; i < messages.Count; i++)
             {
                 AppendVisibleMessage(messages[i]);
@@ -479,18 +457,30 @@ namespace Kern.UI
                 return;
             }
 
-            if (_hasCachedMuteState && _lastMutedState == muted)
+            bool muteChanged = !_hasCachedMuteState || _lastMutedState != muted;
+            _lastMutedState = muted;
+            _hasCachedMuteState = true;
+            if (muteChanged)
+            {
+                RefreshChatControls(muted);
+            }
+        }
+
+        private void RefreshChatControls(bool muted)
+        {
+            if (_view == null)
             {
                 return;
             }
 
-            _lastMutedState = muted;
-            _hasCachedMuteState = true;
-            _view?.InputField?.SetEnabled(!muted);
-            _view?.SendButton?.SetEnabled(!muted);
-            _view?.ColorButton?.SetEnabled(!muted);
+            bool globalAvailable = _hasServerChatList && _hasGlobalChannel;
+            bool activeChannelAvailable = globalAvailable;
+            _view.InputField?.SetEnabled(!muted);
+            _view.SendButton?.SetEnabled(!muted && activeChannelAvailable);
+            _view.ColorButton?.SetEnabled(!muted && globalAvailable);
+            _view.GlobalChannelButton?.SetEnabled(globalAvailable);
         }
 
-        private void AddSystemMessage(string message) => AppendMessage(ChatChannel.Global, message);
+        private void AddSystemMessage(string message) => AppendMessage(message);
     }
 }

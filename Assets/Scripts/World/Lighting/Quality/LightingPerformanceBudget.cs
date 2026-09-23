@@ -1,12 +1,13 @@
 #nullable enable
 
 using Kern.Core;
+using Kern.Core.Interfaces.Diagnostics;
 
 namespace Kern.World.Lighting.Quality;
 
 public static class LightingPerformanceBudget
 {
-    public const float FrameBudgetMs = 16.7f;
+    public const float FrameBudgetMs = (float)FrameBudget.TargetFrameMilliseconds;
     public const float CascadeTraceMaxMs = 1.0f;
     public const float CascadeMergeMaxMs = 0.25f;
     public const float DynamicLightingMaxMs = 0.7f;

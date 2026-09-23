@@ -1,0 +1,67 @@
+name: Set up Unity CLI, Editor, and license
+description: Install the repository's Unity Editor and activate it on a GitHub-hosted runner.
+inputs:
+  license:
+    description: Unity license file contents from the UNITY_LICENSE secret.
+    required: true
+  modules:
+    description: Optional comma-separated Unity Editor modules.
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Install Unity CLI and Editor (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        UNITY_LICENSE: ${{ inputs.license }}
+        UNITY_MODULES: ${{ inputs.modules }}
+      run: |
+        if [ -z "$UNITY_LICENSE" ]; then
+          echo "::error::Set the UNITY_LICENSE repository or organization secret before running Unity jobs."
+          exit 1
+        fi
+        curl -fsSL https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.sh | UNITY_CLI_CHANNEL=beta bash
+
+        extra_modules=()
+        if [ -n "$UNITY_MODULES" ]; then
+          IFS=',' read -r -a module_names <<< "$UNITY_MODULES"
+          for module_name in "${module_names[@]}"; do
+            extra_modules+=(--module "$module_name")
+          done
+        fi
+
+        unity install "$UNITY_EDITOR_VERSION" "${extra_modules[@]}" --yes --accept-eula --non-interactive
+        license_path="$RUNNER_TEMP/Unity.ulf"
+        printf '%s' "$UNITY_LICENSE" > "$license_path"
+        unity license activate --file "$license_path" --non-interactive
+
+    - name: Install Unity CLI and Editor (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        UNITY_LICENSE: ${{ inputs.license }}
+        UNITY_MODULES: ${{ inputs.modules }}
+      run: |
+        if ([string]::IsNullOrWhiteSpace($env:UNITY_LICENSE)) {
+          Write-Error 'Set the UNITY_LICENSE repository or organization secret before running Unity jobs.'
+          exit 1
+        }
+        $env:UNITY_CLI_CHANNEL = 'beta'
+        Invoke-RestMethod https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.ps1 | Invoke-Expression
+
+        $installArguments = @($env:UNITY_EDITOR_VERSION)
+        if (-not [string]::IsNullOrWhiteSpace($env:UNITY_MODULES)) {
+          foreach ($moduleName in $env:UNITY_MODULES.Split(',')) {
+            $installArguments += @('--module', $moduleName.Trim())
+          }
+        }
+        $installArguments += @('--yes', '--accept-eula', '--non-interactive')
+        & unity install @installArguments
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        $licensePath = Join-Path $env:RUNNER_TEMP 'Unity.ulf'
+        [System.IO.File]::WriteAllText($licensePath, $env:UNITY_LICENSE)
+        & unity license activate --file $licensePath --non-interactive
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

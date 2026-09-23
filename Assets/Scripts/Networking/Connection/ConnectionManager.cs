@@ -296,7 +296,7 @@ namespace Kern.Networking.Connection
                 return;
             }
 
-            Disconnect();
+            HandleServerDisconnect(reason);
         }
 
         public void TriggerReconnect(string reason)

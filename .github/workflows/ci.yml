@@ -57,7 +57,7 @@ jobs:
             files=$(git diff --name-only "$from" "$HEAD_SHA")
           fi
 
-          if printf '%s\n' "$files" | grep -Eq '^(Assets/|Packages/|ProjectSettings/|tools/|\.github/workflows/)|\.(cs|asmdef|shader|hlsl|compute|cginc|uxml|uss|unity|prefab|asset|meta|csproj|sln)$'; then
+          if printf '%s\n' "$files" | grep -Eq '^(Assets/|Packages/|ProjectSettings/|tools/|\.github/(workflows|actions)/)|\.(cs|asmdef|shader|hlsl|compute|cginc|uxml|uss|unity|prefab|asset|meta|csproj|sln)$'; then
             echo "code_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "code_changed=false" >> "$GITHUB_OUTPUT"
@@ -67,12 +67,16 @@ jobs:
     name: Architecture and asset contracts
     needs: changes
     if: needs.changes.outputs.code_changed == 'true'
-    runs-on: [self-hosted, macOS, ARM64, kern-unity]
+    runs-on: macos-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Set up Unity
+        uses: ./.github/actions/setup-unity
+        with:
+          license: ${{ secrets.UNITY_LICENSE }}
       - name: Verify Unity toolchain
         run: |
           unity --version
@@ -90,19 +94,23 @@ jobs:
       - name: Run the same C# checks as the local pre-commit hook
         run: CI=true ./scripts/pre-commit-lint.sh
       - name: Test terrain raster coverage and AO geometry without Unity
-        run: node tools/terrain-raster-tests/run.js
+        run: node tools/Kern.TerrainRasterTests/run.js
       - name: Test display mode lifecycle without Unity
         run: dotnet test tools/Kern.DisplayTests/Kern.DisplayTests.csproj --verbosity minimal
 
   macos-tests:
     name: Unity tests (macOS ARM64)
     needs: architecture
-    runs-on: [self-hosted, macOS, ARM64, kern-unity]
+    runs-on: macos-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Set up Unity
+        uses: ./.github/actions/setup-unity
+        with:
+          license: ${{ secrets.UNITY_LICENSE }}
       - name: Verify toolchain
         run: |
           unity --version
@@ -134,12 +142,16 @@ jobs:
   windows-tests:
     name: Unity tests (Windows x64)
     needs: architecture
-    runs-on: [self-hosted, Windows, X64, kern-unity]
+    runs-on: windows-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Set up Unity
+        uses: ./.github/actions/setup-unity
+        with:
+          license: ${{ secrets.UNITY_LICENSE }}
       - name: Verify toolchain
         shell: pwsh
         run: |
@@ -175,12 +187,16 @@ jobs:
     name: Soak (macOS ARM64)
     if: github.event_name == 'schedule' || inputs.soak
     needs: macos-tests
-    runs-on: [self-hosted, macOS, ARM64, kern-unity]
+    runs-on: macos-latest
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Set up Unity
+        uses: ./.github/actions/setup-unity
+        with:
+          license: ${{ secrets.UNITY_LICENSE }}
       - name: Soak tests
         run: >-
           unity test . --editor-version "$UNITY_EDITOR_VERSION"
@@ -207,12 +223,17 @@ jobs:
     name: IL2CPP player (macOS ARM64)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     needs: macos-tests
-    runs-on: [self-hosted, macOS, ARM64, kern-unity]
+    runs-on: macos-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Set up Unity
+        uses: ./.github/actions/setup-unity
+        with:
+          license: ${{ secrets.UNITY_LICENSE }}
+          modules: mac-il2cpp
       - name: Build player
         run: >-
           unity run . --editor-version "$UNITY_EDITOR_VERSION"
@@ -229,12 +250,17 @@ jobs:
     name: IL2CPP player (Windows x64)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     needs: windows-tests
-    runs-on: [self-hosted, Windows, X64, kern-unity]
+    runs-on: windows-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Set up Unity
+        uses: ./.github/actions/setup-unity
+        with:
+          license: ${{ secrets.UNITY_LICENSE }}
+          modules: windows-il2cpp
       - name: Build player
         shell: pwsh
         run: >-

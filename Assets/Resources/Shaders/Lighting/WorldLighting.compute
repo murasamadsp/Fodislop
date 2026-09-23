@@ -106,6 +106,12 @@ int _DynamicPolarPoint;
 RWTexture2D<float4> _DynamicPolar;
 Texture2D<float4> _DynamicPolarInput;
 
+// Дальность фонаря в текселях поля: самый дальний радиус по всем его лучам,
+// до которого свет ещё может быть видимым. TraceDynamicPolar копит максимум,
+// SolveDynamicLighting не считает пиксели дальше — под землёй это большая
+// часть поля.
+RWStructuredBuffer<uint> _DynamicReach;
+
 // ============================================================================
 // Shared Parameters
 // ============================================================================

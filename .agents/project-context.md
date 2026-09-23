@@ -279,3 +279,19 @@ MCP verification when explicitly authorized.
 
 Use the existing F1 diagnostics window, `FPSCounter`, and subsystem bypasses before
 adding new counters. Do not make changes based on unverified hypotheses.
+
+Performance diagnostics have one path per concern; extend it, do not add a parallel one:
+
+- **Stall definition** — `FrameBudget` (`Kern.Contracts`): stall = frame ≥ 25 ms and
+  ≥ 1.6× the median (`FrameBaseline`). Monitor, F1 «Всплески», tests and budgets use it.
+- **Background stall report** — `FrameStallMonitor` (entry point in `GameLifetimeScope`),
+  log tag `[FrameStall]`. It opens a fixed probe set (`FrameProbeCatalog.CreateStallProbes`)
+  once; it never sweeps all markers in the background (opening batches causes stalls).
+- **Subsystem stall context** — `FrameEventLog.Record` for rare events, or an
+  `IFrameEventSource` that keeps frames as structs and formats only on report
+  (terrain: `TerrainStallReport`). No subsystem logs its own stall line.
+- **Full marker sweeps** — on demand only, F1 «Горячее»/«Всплески», via `MarkerBatch`;
+  `MarkerInfo.IsSweepable` excludes GPU-sampled markers.
+- **Files** — `DiagnosticArtifactPaths` (category folders, timestamped names, retention)
+  and `DiagnosticReport` (shared header, `[Diag] <kind> → <path>` log line). Editor:
+  `Logs/Diagnostics/<category>/`; player: `persistentDataPath/Diagnostics/`.

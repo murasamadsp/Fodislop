@@ -125,6 +125,109 @@ internal sealed class WorldLayerFile<T>
         }
     }
 
+    public bool TryLoadInto(int index, int chunkArea, T[] destination)
+    {
+        if (index < 0 || index >= _chunkOffsets.Length)
+        {
+            return false;
+        }
+
+        if (destination == null || destination.Length < chunkArea)
+        {
+            throw new ArgumentException(
+                $"Chunk destination must contain at least {chunkArea} cells.",
+                nameof(destination));
+        }
+
+        lock (_lifetime.IoLock)
+        {
+            if (_lifetime.Disposed || _fileStream == null)
+            {
+                return false;
+            }
+
+            long offset = _chunkOffsets[index];
+            if (offset < 0)
+            {
+                return false;
+            }
+
+            _fileStream.Seek(offset, SeekOrigin.Begin);
+            _reader ??= new BinaryReader(_fileStream, System.Text.Encoding.UTF8, leaveOpen: true);
+            WorldChunkRleCodec.DecodeChunk(_reader, chunkArea, destination);
+            return true;
+        }
+    }
+
+    public bool VisitChunkRuns(int index, int chunkArea, Action<int, T, int> visitor)
+    {
+        if (index < 0 || index >= _chunkOffsets.Length)
+        {
+            return false;
+        }
+
+        if (visitor == null)
+        {
+            throw new ArgumentNullException(nameof(visitor));
+        }
+
+        lock (_lifetime.IoLock)
+        {
+            if (_lifetime.Disposed || _fileStream == null)
+            {
+                return false;
+            }
+
+            long offset = _chunkOffsets[index];
+            if (offset < 0)
+            {
+                return false;
+            }
+
+            _fileStream.Seek(offset, SeekOrigin.Begin);
+            _reader ??= new BinaryReader(_fileStream, System.Text.Encoding.UTF8, leaveOpen: true);
+            WorldChunkRleCodec.VisitChunkRuns(_reader, chunkArea, index, visitor);
+            return true;
+        }
+    }
+
+    public int CopyStoredChunkIndices(int startIndex, int[] destination, out int nextIndex)
+    {
+        if (destination == null)
+        {
+            throw new ArgumentNullException(nameof(destination));
+        }
+
+        if (startIndex < 0 || startIndex > _chunkOffsets.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startIndex));
+        }
+
+        lock (_lifetime.IoLock)
+        {
+            if (_lifetime.Disposed)
+            {
+                nextIndex = _chunkOffsets.Length;
+                return 0;
+            }
+
+            int count = 0;
+            int index = startIndex;
+            while (index < _chunkOffsets.Length && index - startIndex < destination.Length)
+            {
+                if (_chunkOffsets[index] >= 0)
+                {
+                    destination[count++] = index;
+                }
+
+                index++;
+            }
+
+            nextIndex = index;
+            return count;
+        }
+    }
+
     public void Save(int index, T[] chunk, int chunkArea)
     {
         if (_fileStream == null)

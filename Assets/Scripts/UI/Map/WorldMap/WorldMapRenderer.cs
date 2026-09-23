@@ -1,8 +1,12 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.Core.Localization;
+using Kern.Persistence;
 using Kern.World;
 using MinesServer.Data;
 using UnityEngine;
@@ -19,17 +23,25 @@ namespace Kern.UI
         [SerializeField]
         private float _dragSpeed = 1f;
 
-        private const int MaxChunkCacheEntries = 4096;
-
         private UIDocument? _document;
         private VisualElement? _mapOverlay;
         private Image? _mapImage;
+        private Button? _mapCloseButton;
+        private Label? _mapStatus;
         private readonly MapTextureController _textureController = new();
         private IWorldLayer<CellType>? _cellLayer;
         private int _chunkSize = ProjectRuntimeContracts.World.ChunkSize;
         private readonly MapCellSampler _cellSampler = new();
         private readonly MapInteractionController _interaction = new();
         private readonly MapViewportRenderer _viewportRenderer = new();
+        private WorldMapMipCache? _mipCache;
+        private readonly HashSet<int> _pendingMipChunks = new();
+        private readonly int[] _pendingMipChunkBatch = new int[8];
+        private CancellationTokenSource? _mipScanCancellation;
+        private bool _mipReady;
+        private bool _mipScanFailed;
+        private int _mipScanProgress;
+        private int _mipScanTotal;
         private MapPlayerTracker _playerTracker = null!;
 
         private float _viewCenterX;
@@ -56,6 +68,13 @@ namespace Kern.UI
         private string _boundWorldCodeName = string.Empty;
         private bool _initialized;
 
+        [Inject]
+        private ILocalizationService _localization = null!;
+
+        private EventCallback<WheelEvent>? _worldMapWheelCallback;
+
+        public event Action? CloseRequested;
+
         protected void Start()
         {
             _playerTracker = new MapPlayerTracker(_localPlayer);
@@ -66,8 +85,17 @@ namespace Kern.UI
                 {
                     _viewCenterX = pos.x;
                     _viewCenterY = pos.y;
-                    _renderRequested = true;
                 }
+
+                _renderRequested = true;
+            };
+            _playerTracker.OnPlayerRelocated += pos =>
+            {
+                _followPlayer = true;
+                _viewCenterX = pos.x;
+                _viewCenterY = pos.y;
+                ClampViewCenter();
+                _renderRequested = true;
             };
             _playerTracker.OnBlinkFlipped += () => _renderRequested = true;
 
@@ -132,6 +160,7 @@ namespace Kern.UI
             }
 
             _initialized = true;
+            RebindRuntimeSources();
         }
 
         private bool TryBindUI()
@@ -155,15 +184,43 @@ namespace Kern.UI
             }
 
             Image? image = overlay.Q<Image>("WorldMapImage");
-            if (image == null)
+            Button? closeButton = overlay.Q<Button>("WorldMapCloseButton");
+            Label? status = overlay.Q<Label>("WorldMapStatus");
+            if (image == null || closeButton == null || status == null)
             {
                 return false;
             }
 
             _mapOverlay = overlay;
             _mapImage = image;
+            _mapCloseButton = closeButton;
+            _mapStatus = status;
             _mapImage.image = null;
+            _mapCloseButton.clicked += OnCloseButtonClicked;
+            _worldMapWheelCallback = OnWorldMapWheel;
+            _document.rootVisualElement.RegisterCallback(
+                _worldMapWheelCallback,
+                TrickleDown.TrickleDown);
             return true;
+        }
+
+        private void OnCloseButtonClicked() => CloseRequested?.Invoke();
+
+        private void OnWorldMapWheel(WheelEvent evt)
+        {
+            _interaction.HandleMouseScroll(
+                _mapOverlay,
+                _mapImage,
+                evt.delta.y,
+                evt.mousePosition,
+                _textureController.TexWidth,
+                _textureController.TexHeight,
+                _maxCellsPerPixel,
+                ref _cellsPerPixel,
+                ref _viewCenterX,
+                ref _viewCenterY,
+                ref _renderRequested,
+                ClampViewCenter);
         }
 
         private void ResetWorldViewState(IWorldDataStorage storage)
@@ -171,6 +228,7 @@ namespace Kern.UI
             BindWorldDimensions(_manager.WorldWidth, _manager.WorldHeight);
             _viewportRenderer.InitColorTable(_manager);
             BindCellLayer(storage.CellLayer);
+            BindMipCache();
             _cellsPerPixel = 1f;
             _maxCellsPerPixel = ComputeMaxZoomOut(_boundWorldWidth, _boundWorldHeight);
             _cellsPerPixel = Mathf.Min(_cellsPerPixel, _maxCellsPerPixel);
@@ -193,6 +251,18 @@ namespace Kern.UI
 
         protected void OnDestroy()
         {
+            if (_document?.rootVisualElement != null && _worldMapWheelCallback != null)
+            {
+                _document.rootVisualElement.UnregisterCallback(
+                    _worldMapWheelCallback,
+                    TrickleDown.TrickleDown);
+            }
+
+            if (_mapCloseButton != null)
+            {
+                _mapCloseButton.clicked -= OnCloseButtonClicked;
+            }
+
             _textureController.DestroyTexture();
 
             _manager.OnWorldInitialized -= OnWorldReady;
@@ -205,6 +275,11 @@ namespace Kern.UI
                 _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
                 _subscribedCellLayer = null;
             }
+
+            _storage.RegionChanged -= OnRegionChanged;
+            _mipScanCancellation?.Cancel();
+            _mipScanCancellation?.Dispose();
+            _mipScanCancellation = null;
         }
 
         private void RebindRuntimeSources()
@@ -215,6 +290,8 @@ namespace Kern.UI
             }
 
             _playerTracker?.EnsureBinding();
+            _storage.RegionChanged -= OnRegionChanged;
+            _storage.RegionChanged += OnRegionChanged;
 
             if (_storage.CellLayer == null)
             {
@@ -226,19 +303,210 @@ namespace Kern.UI
             if (!ReferenceEquals(_subscribedCellLayer, cellLayer))
             {
                 BindCellLayer(cellLayer);
+                BindMipCache();
                 return;
             }
 
             cellLayer.ChunkLoaded -= OnChunkLoaded;
             cellLayer.ChunkLoaded += OnChunkLoaded;
-            _cellSampler.Bind(cellLayer);
-            _cellSampler.Invalidate();
         }
 
         private void OnChunkLoaded(int serverX, int serverY, int width, int height)
         {
             _cellSampler.InvalidateChunk(serverX, serverY);
+            QueueMipChunk(serverX / Mathf.Max(1, _chunkSize), serverY / Mathf.Max(1, _chunkSize));
             _renderRequested = true;
+        }
+
+        private void OnRegionChanged(int startX, int startY, int width, int height)
+        {
+            if (width <= 0 || height <= 0 || _chunkSize <= 0)
+            {
+                return;
+            }
+
+            int endX = startX + width - 1;
+            int endY = startY + height - 1;
+            for (int chunkX = Mathf.Max(0, startX / _chunkSize); chunkX <= endX / _chunkSize; chunkX++)
+            {
+                for (int chunkY = Mathf.Max(0, startY / _chunkSize); chunkY <= endY / _chunkSize; chunkY++)
+                {
+                    QueueMipChunk(chunkX, chunkY);
+                    _cellSampler.InvalidateChunk(chunkX * _chunkSize, chunkY * _chunkSize);
+                }
+            }
+
+            _renderRequested = true;
+        }
+
+        private void QueueMipChunk(int chunkX, int chunkY)
+        {
+            if (_mipCache == null || chunkX < 0 || chunkY < 0 ||
+                chunkX >= _mipCache.WidthChunks || chunkY >= _mipCache.HeightChunks)
+            {
+                return;
+            }
+
+            _pendingMipChunks.Add(chunkY + (chunkX * _mipCache.HeightChunks));
+        }
+
+        private void BindMipCache()
+        {
+            _mipScanCancellation?.Cancel();
+            _mipScanCancellation = null;
+            int widthChunks = _cellLayer?.WidthChunks ?? 0;
+            int heightChunks = _cellLayer?.HeightChunks ?? 0;
+            if (widthChunks <= 0 || heightChunks <= 0 || _chunkSize <= 0)
+            {
+                _mipCache = null;
+                _mipReady = false;
+                return;
+            }
+
+            _mipCache = new WorldMapMipCache(
+                widthChunks,
+                heightChunks,
+                _chunkSize,
+                _viewportRenderer.CellColorTable,
+                new Color32(0, 0, 0, 255));
+            _pendingMipChunks.Clear();
+            _mipReady = false;
+            _mipScanFailed = false;
+            _mipScanProgress = 0;
+            _mipScanTotal = 0;
+        }
+
+        private void BeginMipScan()
+        {
+            if (_mipReady || _mipScanFailed || _mipScanCancellation != null ||
+                _mipCache == null || _cellLayer == null)
+            {
+                return;
+            }
+
+            _mipScanCancellation = new CancellationTokenSource();
+            _ = PrepareMipCacheAsync(_mipScanCancellation);
+        }
+
+        private async Cysharp.Threading.Tasks.UniTask PrepareMipCacheAsync(CancellationTokenSource scanCancellation)
+        {
+            CancellationToken cancellationToken = scanCancellation.Token;
+            WorldMapMipCache? cache = _mipCache;
+            IWorldLayer<CellType>? layer = _cellLayer;
+            if (cache == null || layer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (layer is IStoredChunkSource<CellType> source)
+                {
+                    await source.VisitStoredChunkRunsAsync(
+                        (chunkIndex, cellType, runLength) => cache.AddStoredRun(chunkIndex, cellType, runLength),
+                        (progress, total) =>
+                        {
+                            Volatile.Write(ref _mipScanProgress, progress);
+                            Volatile.Write(ref _mipScanTotal, total);
+                        },
+                        cancellationToken);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                cache.CompleteStoredScan();
+                foreach (int chunkIndex in layer.GetLoadedChunkIndices())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    ChunkReadResult<CellType> result = layer.ReadChunk(chunkIndex, touchLru: false);
+                    if (result.Status == ChunkReadStatus.Available && result.Data != null)
+                    {
+                        cache.SetChunkCells(chunkIndex, result.Data);
+                    }
+                }
+
+                foreach (int chunkIndex in _pendingMipChunks)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    ChunkReadResult<CellType> result = layer.ReadChunk(chunkIndex, touchLru: false);
+                    if (result.Status == ChunkReadStatus.Available && result.Data != null)
+                    {
+                        cache.SetChunkCells(chunkIndex, result.Data);
+                    }
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                _mipReady = true;
+                _pendingMipChunks.Clear();
+                _renderRequested = true;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                _mipScanFailed = true;
+            }
+            finally
+            {
+                if (ReferenceEquals(_mipScanCancellation, scanCancellation))
+                {
+                    _mipScanCancellation = null;
+                }
+
+                scanCancellation.Dispose();
+            }
+        }
+
+        private void UpdatePendingMipChunks()
+        {
+            if (!_mipReady || _mipCache == null || _cellLayer == null || _pendingMipChunks.Count == 0)
+            {
+                return;
+            }
+
+            int pendingCount = 0;
+            foreach (int chunkIndex in _pendingMipChunks)
+            {
+                _pendingMipChunkBatch[pendingCount++] = chunkIndex;
+                if (pendingCount == _pendingMipChunkBatch.Length)
+                {
+                    break;
+                }
+            }
+
+            for (int i = 0; i < pendingCount; i++)
+            {
+                int chunkIndex = _pendingMipChunkBatch[i];
+                ChunkReadResult<CellType> result = _cellLayer.ReadChunk(chunkIndex, touchLru: false);
+                if (result.Status == ChunkReadStatus.Available && result.Data != null)
+                {
+                    _mipCache.SetChunkCells(chunkIndex, result.Data);
+                }
+
+                _pendingMipChunks.Remove(chunkIndex);
+            }
+        }
+
+        private void UpdateMipStatus()
+        {
+            if (_mapStatus == null)
+            {
+                return;
+            }
+
+            bool visible = !_mipReady && _cellsPerPixel >= _chunkSize;
+            _mapStatus.EnableInClassList("is-hidden", !visible);
+            if (!visible)
+            {
+                return;
+            }
+
+            _mapStatus.text = _mipScanFailed
+                ? _localization.Get("hud.map_prepare_failed")
+                : _mipScanTotal > 0
+                    ? _localization.Get("hud.map_preparing_progress", (int)(100f * _mipScanProgress / _mipScanTotal))
+                    : _localization.Get("hud.map_preparing");
         }
 
         private void BindCellLayer(IWorldLayer<CellType>? cellLayer)
@@ -267,6 +535,7 @@ namespace Kern.UI
             {
                 _chunkSize = 0;
             }
+
         }
 
         private void BindWorldDimensions(int worldWidth, int worldHeight)
@@ -311,26 +580,20 @@ namespace Kern.UI
                 return;
             }
 
-            if (_mapOverlay != null && _textureController.CheckPanelResize(_mapOverlay))
+            if (_mapImage != null && _textureController.CheckPanelResize(_mapImage))
             {
                 InitTexture();
+                _maxCellsPerPixel = ComputeMaxZoomOut(_boundWorldWidth, _boundWorldHeight);
+                _cellsPerPixel = Mathf.Min(_cellsPerPixel, _maxCellsPerPixel);
+                ClampViewCenter();
                 _renderRequested = true;
             }
 
-            _interaction.HandleMouseScroll(
-                _mapOverlay,
+            _interaction.HandleDrag(
                 _mapImage,
                 _document,
                 _textureController.TexWidth,
                 _textureController.TexHeight,
-                _maxCellsPerPixel,
-                ref _cellsPerPixel,
-                ref _viewCenterX,
-                ref _viewCenterY,
-                ref _renderRequested,
-                ClampViewCenter);
-
-            _interaction.HandleDrag(
                 _cellsPerPixel,
                 _dragSpeed,
                 ref _viewCenterX,
@@ -345,6 +608,8 @@ namespace Kern.UI
                 ref _viewCenterX,
                 ref _viewCenterY,
                 ref _renderRequested);
+
+            UpdatePendingMipChunks();
 
             HandleQueuedRender();
         }
@@ -369,6 +634,7 @@ namespace Kern.UI
             _lastRenderedStorageRevision = -1;
             _followPlayer = true;
             _playerTracker?.ResetState();
+            UpdateMipStatus();
         }
 
         public void Hide()
@@ -396,9 +662,9 @@ namespace Kern.UI
 
         private void InitTexture()
         {
-            VisualElement overlay = _mapOverlay ?? throw new InvalidOperationException(
+            Image viewport = _mapImage ?? throw new InvalidOperationException(
                 "[WorldMapRenderer] UI must be bound before the map texture.");
-            _textureController.InitTexture(overlay, _mapImage);
+            _textureController.InitTexture(viewport, viewport);
         }
 
         private void HandleQueuedRender()
@@ -407,13 +673,13 @@ namespace Kern.UI
                 throw new InvalidOperationException("WorldMapRenderer storage is not initialized.");
             if (storage.Revision != _lastRenderedStorageRevision)
             {
-                _cellSampler.Invalidate();
                 _renderRequested = true;
             }
 
             if (!ReferenceEquals(_cellLayer, storage.CellLayer))
             {
                 BindCellLayer(storage.CellLayer);
+                BindMipCache();
                 _renderRequested = true;
                 _lastRenderedStorageRevision = -1;
             }
@@ -428,6 +694,13 @@ namespace Kern.UI
 
             if (!_renderRequested)
             {
+                return;
+            }
+
+            UpdateMipStatus();
+            if (!_mipReady && _cellsPerPixel >= _chunkSize)
+            {
+                BeginMipScan();
                 return;
             }
 
@@ -448,6 +721,7 @@ namespace Kern.UI
                 _textureController.MapTexture,
                 _manager,
                 _cellSampler,
+                _mipReady ? _mipCache : null,
                 _textureController.TexWidth,
                 _textureController.TexHeight,
                 _cellsPerPixel,
@@ -462,7 +736,7 @@ namespace Kern.UI
         }
 
         private float ComputeMaxZoomOut(int worldW, int worldH) =>
-            MapViewportBounds.ComputeMaxZoomOut(_textureController.TexWidth, _textureController.TexHeight, _chunkSize, MaxChunkCacheEntries);
+            MapViewportBounds.ComputeMaxZoomOut(_textureController.TexWidth, _textureController.TexHeight, worldW, worldH);
 
         private void ClampViewCenter()
         {

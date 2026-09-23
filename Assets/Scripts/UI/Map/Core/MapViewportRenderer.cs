@@ -16,6 +16,8 @@ internal sealed class MapViewportRenderer
     private readonly Color32[] _cellColorTable = new Color32[256];
     private Color32[]? _pixelBuffer;
 
+    public Color32[] CellColorTable => _cellColorTable;
+
     public void InitColorTable(MapManager manager)
     {
         if (manager == null)
@@ -40,6 +42,7 @@ internal sealed class MapViewportRenderer
         Texture2D? mapTexture,
         MapManager manager,
         MapCellSampler cellSampler,
+        WorldMapMipCache? mipCache,
         int texWidth,
         int texHeight,
         float cellsPerPixel,
@@ -88,13 +91,20 @@ internal sealed class MapViewportRenderer
 
                 if (serverX >= 0 && serverX < worldW && serverY >= 0 && serverY < worldH)
                 {
-                    CellType type = cellSampler.TryGetCell(serverX, serverY, out CellType sampled)
-                        ? sampled
-                        : CellType.Unloaded;
+                    if (mipCache != null && cp >= mipCache.ChunkSize)
+                    {
+                        color = mipCache.Sample(worldX, worldY, cp);
+                    }
+                    else
+                    {
+                        CellType type = cellSampler.TryGetCell(serverX, serverY, out CellType sampled)
+                            ? sampled
+                            : CellType.Unloaded;
 
-                    color = type == CellType.Unloaded
-                        ? _UnloadedColor
-                        : _cellColorTable[(byte)type];
+                        color = type == CellType.Unloaded
+                            ? _UnloadedColor
+                            : _cellColorTable[(byte)type];
+                    }
                 }
 
                 _pixelBuffer[rowStart + px] = color;

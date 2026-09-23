@@ -168,6 +168,33 @@ float TerrainOrganicGeometryCoverage(
     bends *= 2.0 / KERN_TERRAIN_FACE_GRID_SIZE;
 
     float2 quantizedPoint = QuantizeTerrainGeometryPoint(samplePosition);
+
+    // Вершины восьмиугольника — углы и точки рёбер, сдвинутые изгибом вдоль
+    // оси не дальше чем на два шага изгиба (4/32 клетки). Вся его граница
+    // лежит в этой полосе вокруг прямого четырёхугольника углов, и точка
+    // глубже полосы от всех четырёх прямых рёбер внутри при любых изгибах.
+    // Это большая часть клетки: цикл по восьми рёбрам нужен только у края.
+    const float interiorMargin =
+        (4.0 / KERN_TERRAIN_FACE_GRID_SIZE) + KERN_TERRAIN_EDGE_SEAL;
+    float nearestInside = 1.0e6;
+    float nearestOutside = 1.0e6;
+    for (int side = 0; side < 4; side++)
+    {
+        float2 sideStart = TerrainGeometryCorner(cornersX, cornersY, side);
+        float2 sideEnd = TerrainGeometryCorner(cornersX, cornersY, (side + 1) & 3);
+        float2 sideVector = sideEnd - sideStart;
+        float signedDistance = TerrainGeometryEdgeCross(sideStart, sideEnd, quantizedPoint) /
+            sqrt(max(dot(sideVector, sideVector), KERN_TERRAIN_GEOMETRY_EPSILON));
+        nearestInside = min(nearestInside, signedDistance);
+        nearestOutside = min(nearestOutside, -signedDistance);
+    }
+
+    // Обход углов в любую сторону: внутри — все расстояния одного знака.
+    if (nearestInside > interiorMargin || nearestOutside > interiorMargin)
+    {
+        return 1.0;
+    }
+
     bool inside = false;
     for (int index = 0; index < 8; index++)
     {

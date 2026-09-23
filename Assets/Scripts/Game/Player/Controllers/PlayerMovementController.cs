@@ -45,6 +45,7 @@ namespace Kern.Player.Logic
         private float _lastMoveTime;
         private Direction? _lastSentDirection;
         private bool _movementValidationFailed;
+        private bool _awaitingMoveConfirmation;
         [Inject]
         private IWorldDataStorage _storage = null!;
 
@@ -176,7 +177,11 @@ namespace Kern.Player.Logic
                 return;
             }
 
-            _actionDispatcher?.HandleDig(Position, _lastSentDirection ?? Direction.Down, _mapDataProvider);
+            if (!_awaitingMoveConfirmation)
+            {
+                _actionDispatcher?.HandleDig(Position, _lastSentDirection ?? Direction.Down, _mapDataProvider);
+            }
+
             _actionDispatcher?.DispatchHotkeys();
         }
 
@@ -185,6 +190,7 @@ namespace Kern.Player.Logic
             BotID = botID;
             HasServerPosition = false;
             IsGameplayVisible = false;
+            _awaitingMoveConfirmation = false;
             _lastSentDirection = null;
             _lastMoveTime = 0f;
             _actionDispatcher?.ResetDigCooldown();
@@ -246,6 +252,7 @@ namespace Kern.Player.Logic
             }
 
             Vector2Int oldPos = Position;
+            _awaitingMoveConfirmation = false;
             Position = position;
             HasServerPosition = true;
             Vector3 targetWorldPos = CoordinateUtils.ServerToUnityPos(position.x, position.y, worldHeight, transform.position.z);
@@ -280,6 +287,9 @@ namespace Kern.Player.Logic
             _robot?.SetBatchedBodyVisible(true);
         }
 
+        public void ConfirmDigAction(ushort x, ushort y) =>
+            _actionDispatcher?.ConfirmDigAction(x, y);
+
         private void ApplyMovement()
         {
             if (_robot is null || _input is null)
@@ -293,7 +303,7 @@ namespace Kern.Player.Logic
             }
 
             Vector2 moveInput = _input.MoveInput;
-            if (moveInput == Vector2.zero)
+            if (_awaitingMoveConfirmation || moveInput == Vector2.zero)
             {
                 return;
             }
@@ -308,7 +318,7 @@ namespace Kern.Player.Logic
             // repeated digging. Without this check auto-dig used the
             // current terrain cell's movement delay and could send a
             // BzPacket every movement tick, ignoring ServerConfig.
-            if (_actionDispatcher is { IsDigOnCooldown: true })
+            if (_actionDispatcher is { IsDigOnCooldown: true } or { IsDigAwaitingConfirmation: true })
             {
                 return;
             }
@@ -360,8 +370,6 @@ namespace Kern.Player.Logic
                 _lastMoveTime = Time.time;
             }
 
-            _robot.TargetAngle = PlayerMovementMath.DirectionToAngle(direction);
-
             if (_input.IsShiftPressed)
             {
                 return;
@@ -391,6 +399,7 @@ namespace Kern.Player.Logic
                         residentTargetCellType == CellType.Unloaded))
                 {
                     _lastMoveTime = Time.time;
+                    _awaitingMoveConfirmation = true;
                     _networkService?.SendAction(new MovePacket((ushort)targetPosition.x, (ushort)targetPosition.y));
                 }
 
@@ -402,22 +411,15 @@ namespace Kern.Player.Logic
 
             if (isPassable || _ignoreCollision)
             {
-                _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(
-                    targetServerX,
-                    targetServerY,
-                    mapDataProvider.WorldHeight,
-                    transform.position.z);
-                Vector2Int oldPos = Position;
-                Position = targetPosition;
-                OnPlayerMoved?.Invoke(oldPos, Position);
                 _lastMoveTime = Time.time;
+                _awaitingMoveConfirmation = true;
                 _networkService?.SendAction(new MovePacket(targetServerX, targetServerY));
             }
             else if (_autoDig)
             {
+                _actionDispatcher?.NotifyDug(targetPosition);
                 _networkService?.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
                 _lastMoveTime = Time.time;
-                _actionDispatcher?.NotifyDug();
             }
         }
 

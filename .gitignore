@@ -275,6 +275,11 @@ Assets/_Recovery.meta
 !/tools/Kern.DisplayTests/Kern.DisplayTests.csproj
 !/tools/Kern.TerrainBench/Kern.TerrainBench.csproj
 !/tools/Kern.TerrainTests/Kern.TerrainTests.csproj
+!/tools/Kern.LightingTests/Kern.LightingTests.csproj
+!/tools/Kern.TerrainCrystalTests/GenerateCrystalFixtures/GenerateCrystalFixtures.csproj
+!/tools/Kern.TerrainCrystalTests/GenerateLava/GenerateLava.csproj
+!/tools/Kern.TerrainCrystalTests/RunCrystalTests/RunCrystalTests.csproj
+!/tools/Kern.TerrainRasterTests/RunRasterTests/RunRasterTests.csproj
 *.sln
 *.slnx
 *.suo
@@ -283,6 +288,7 @@ Assets/_Recovery.meta
 diagnostic.txt
 memory_growth.txt
 /LightingDumps/
+/Logs/Diagnostics/
 .omo/
 .commandcode/
 !/[Aa]ssets/Plugins/FMOD/**/lib/*

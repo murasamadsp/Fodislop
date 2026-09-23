@@ -25,9 +25,9 @@
 | Global light texture/origin | `Assets/Scripts/World/Lighting/Core/LightingPresentation.cs` | `Publish` |
 | Frame counters | `Assets/Scripts/World/Common/FrameTelemetry.cs` | reset/accumulate semantics |
 | Dump current frame | `Assets/Scripts/World/Lighting/Diagnostics/LightingFrameDumper.cs` | config/counters/textures |
-| CPU transport oracle | `tools/lighting-tests/LightingOracle.cs` | brute-force reference |
-| HLSL transport tests | `tools/lighting-tests/NativeHarness.cs` + `NativeTransport*.cpp` | actual transport functions |
-| Layout/binding checks | `tools/lighting-tests/Program.cs` | production source checks |
+| CPU transport oracle | `tools/Kern.LightingTests/LightingOracle.cs` | brute-force reference |
+| HLSL transport tests | `tools/Kern.LightingTests/NativeHarness.cs` + `NativeTransport*.cpp` | actual transport functions |
+| Layout/binding checks | `tools/Kern.LightingTests/Program.cs` | production source checks |
 
 ## Dataflow lookup
 
@@ -72,10 +72,10 @@ Camera
 ## Verification commands without Unity
 
 ```bash
-dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- all
-dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- transport
-dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- equivalence Assets/Resources/Shaders/Lighting/WorldLighting.compute
-dotnet run --project tools/lighting-tests/Kern.LightingTests.csproj -- compile
+dotnet run --project tools/Kern.LightingTests/Kern.LightingTests.csproj -- all
+dotnet run --project tools/Kern.LightingTests/Kern.LightingTests.csproj -- transport
+dotnet run --project tools/Kern.LightingTests/Kern.LightingTests.csproj -- equivalence Assets/Resources/Shaders/Lighting/WorldLighting.compute
+dotnet run --project tools/Kern.LightingTests/Kern.LightingTests.csproj -- compile
 dotnet test tools/Kern.TerrainTests/Kern.TerrainTests.csproj --no-restore
 git diff --check
 ```

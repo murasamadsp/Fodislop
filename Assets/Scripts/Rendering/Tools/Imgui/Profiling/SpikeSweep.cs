@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Kern.Core.Interfaces.Diagnostics;
 using Unity.Profiling;
 
 namespace Kern.Tools.Imgui.Profiling;
@@ -11,10 +12,11 @@ namespace Kern.Tools.Imgui.Profiling;
 // Средние из HotMarkerSweep размазывают кадр, который раз в секунду стоит
 // втрое дороже: 12 кадров пачки его то ловят, то нет, а в среднем он теряется.
 // Здесь пачка держит рекордеры дольше секунды и хранит значения покадрово
-// вместе с временем кадра главного потока. Кадры-выбросы находятся по
-// медиане кадра, и для каждого маркера считается, на сколько он в этих кадрах
-// дороже своей обычной медианы. Наверху оказывается то, что растёт именно в
-// просевшем кадре, а не то, что дорого всегда.
+// вместе с временем кадра главного потока. Провисшие кадры находятся тем же
+// правилом, что и везде (FrameBudget), относительно медианы пачки, и для
+// каждого маркера считается, на сколько он в этих кадрах дороже своей
+// обычной медианы. Наверху оказывается то, что растёт именно в просевшем
+// кадре, а не то, что дорого всегда.
 public sealed class SpikeSweep : IDisposable
 {
     public const int KeepTop = 60;
@@ -23,14 +25,11 @@ public sealed class SpikeSweep : IDisposable
 
     // Открытие пачки само создаёт сотни рекордеров: первые кадры не в счёт.
     private const int SkipFirstFrames = 4;
-    private const double SpikeRatio = 1.5;
-    private const double SpikeMinimumExtraMilliseconds = 4.0;
     private const double MinimumExcessMilliseconds = 0.2;
 
     public readonly record struct Hit(MarkerInfo Marker, double ExcessMilliseconds, double BaselineMilliseconds, int SpikeFrames);
 
-    private readonly List<MarkerInfo> _queue = [];
-    private readonly List<(MarkerInfo Marker, ProfilerRecorder Recorder)> _batch = [];
+    private readonly MarkerBatch _batch = new(BatchSize, FramesPerBatch);
     private readonly List<Hit> _hits = [];
     private readonly List<Hit> _pendingHits = [];
     private readonly List<int> _spikeIndices = [];
@@ -38,16 +37,17 @@ public sealed class SpikeSweep : IDisposable
     private readonly double[] _values = new double[FramesPerBatch];
     private readonly double[] _sorted = new double[FramesPerBatch];
     private ProfilerRecorder _frameRecorder;
-    private int _next;
-    private int _batchFrames;
+    private double _medianSum;
+    private double _spikeSum;
+    private int _batchesWithFrames;
 
     public bool Running { get; private set; }
 
     public bool HasResults { get; private set; }
 
-    public int Total => _queue.Count;
+    public int Total => _batch.Total;
 
-    public int Processed => Math.Min(_next, _queue.Count);
+    public int Processed => _batch.Processed;
 
     public IReadOnlyList<Hit> Hits => _hits;
 
@@ -61,30 +61,16 @@ public sealed class SpikeSweep : IDisposable
 
     public double SpikeFrameMilliseconds { get; private set; }
 
-    private double _medianSum;
-    private double _spikeSum;
-    private int _batchesWithFrames;
-
     public void Begin()
     {
         Cancel();
-        _queue.Clear();
-        MarkerDirectory.Refresh(force: true);
-        foreach (MarkerInfo info in MarkerDirectory.All)
-        {
-            if (info.Unit == ProfilerMarkerDataUnit.TimeNanoseconds)
-            {
-                _queue.Add(info);
-            }
-        }
-
-        _next = 0;
+        _batch.Reset();
         FramesSeen = 0;
         SpikesSeen = 0;
         _medianSum = 0;
         _spikeSum = 0;
         _batchesWithFrames = 0;
-        Running = _queue.Count > 0;
+        Running = _batch.Total > 0;
         if (Running)
         {
             OpenBatch();
@@ -94,19 +80,13 @@ public sealed class SpikeSweep : IDisposable
     // Каждый кадр, пока идёт проход.
     public void Tick()
     {
-        if (!Running)
-        {
-            return;
-        }
-
-        _batchFrames++;
-        if (_batchFrames < FramesPerBatch)
+        if (!Running || !_batch.Advance())
         {
             return;
         }
 
         CloseBatch(keep: true);
-        if (_next >= _queue.Count)
+        if (!_batch.HasMore)
         {
             Finish();
             return;
@@ -124,8 +104,6 @@ public sealed class SpikeSweep : IDisposable
 
     private void OpenBatch()
     {
-        _batchFrames = 0;
-
         // «Main Thread» охватывает весь кадр главного потока, в редакторе
         // вместе с его окнами; PlayerLoop — запасной вариант без них.
         _frameRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", FramesPerBatch);
@@ -137,23 +115,7 @@ public sealed class SpikeSweep : IDisposable
             FrameSource = "PlayerLoop";
         }
 
-        int end = Math.Min(_queue.Count, _next + BatchSize);
-        for (; _next < end; _next++)
-        {
-            MarkerInfo info = _queue[_next];
-            var recorder = new ProfilerRecorder(
-                info.Handle,
-                FramesPerBatch,
-                ProfilerRecorderOptions.Default | ProfilerRecorderOptions.SumAllSamplesInFrame);
-            if (!recorder.Valid)
-            {
-                recorder.Dispose();
-                continue;
-            }
-
-            recorder.Start();
-            _batch.Add((info, recorder));
-        }
+        _batch.OpenNext();
     }
 
     private void CloseBatch(bool keep)
@@ -165,12 +127,7 @@ public sealed class SpikeSweep : IDisposable
 
         _frameRecorder.Dispose();
         _frameRecorder = default;
-        foreach ((_, ProfilerRecorder recorder) in _batch)
-        {
-            recorder.Dispose();
-        }
-
-        _batch.Clear();
+        _batch.Close();
     }
 
     private void Analyze()
@@ -191,7 +148,7 @@ public sealed class SpikeSweep : IDisposable
         double spikeSum = 0;
         for (int i = SkipFirstFrames; i < frames; i++)
         {
-            if (_frame[i] >= median * SpikeRatio && _frame[i] - median >= SpikeMinimumExtraMilliseconds)
+            if (FrameBudget.IsStall(_frame[i], median))
             {
                 _spikeIndices.Add(i);
                 spikeSum += _frame[i];
@@ -203,18 +160,14 @@ public sealed class SpikeSweep : IDisposable
         _batchesWithFrames++;
         _medianSum += median;
         MedianFrameMilliseconds = _medianSum / _batchesWithFrames;
-        if (_spikeIndices.Count > 0)
-        {
-            _spikeSum += spikeSum;
-            SpikeFrameMilliseconds = _spikeSum / SpikesSeen;
-        }
-
         if (_spikeIndices.Count == 0)
         {
             return;
         }
 
-        foreach ((MarkerInfo marker, ProfilerRecorder recorder) in _batch)
+        _spikeSum += spikeSum;
+        SpikeFrameMilliseconds = _spikeSum / SpikesSeen;
+        foreach ((MarkerInfo marker, ProfilerRecorder recorder) in _batch.Open)
         {
             if (!recorder.Valid)
             {
@@ -230,9 +183,7 @@ public sealed class SpikeSweep : IDisposable
             {
                 int source = i + offset;
                 long value = source >= 0 && source < count ? recorder.GetSample(source).Value : 0;
-
-                // Маркеры джобов и загрузки пишут в «наносекунды» не время.
-                if (value >= 1_000_000_000L)
+                if (!MarkerBatch.IsPlausibleTime(value))
                 {
                     invalid = true;
                     break;
@@ -286,5 +237,6 @@ public sealed class SpikeSweep : IDisposable
     public void Dispose()
     {
         Cancel();
+        _batch.Dispose();
     }
 }

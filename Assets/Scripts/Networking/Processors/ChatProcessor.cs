@@ -4,7 +4,6 @@ using System;
 using Kern.Networking;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
-using UnityEngine;
 
 namespace Kern.Networking.Processors;
 
@@ -21,11 +20,5 @@ public sealed class ChatProcessor(ChatEventGateway events) :
 
     public void Process(ChatMutePacket packet) => events.Publish(packet);
 
-    public void Process(ChatListPacket packet)
-    {
-        foreach (var chat in packet.Chats)
-        {
-            Debug.Log($"[ChatProcessor] Channel available: tag={chat.Tag}, name={chat.Name}");
-        }
-    }
+    public void Process(ChatListPacket packet) => events.Publish(packet);
 }

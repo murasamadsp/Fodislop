@@ -14,7 +14,15 @@ public readonly record struct MarkerInfo(
     string Name,
     ProfilerCategory Category,
     ProfilerMarkerDataUnit Unit,
-    MarkerFlags Flags);
+    MarkerFlags Flags)
+{
+    // Годится для перебора всех маркеров: это время и у маркера нет замера
+    // GPU. Рекордер на маркере с SampleGPU ставит метки времени в командный
+    // буфер вокруг прохода — перебор, который меняет то, что меряет: под ним
+    // террейн становился чёрным.
+    public bool IsSweepable =>
+        Unit == ProfilerMarkerDataUnit.TimeNanoseconds && (Flags & MarkerFlags.SampleGPU) == 0;
+}
 
 // Справочник всех маркеров и счётчиков, которые профайлер знает прямо сейчас.
 //

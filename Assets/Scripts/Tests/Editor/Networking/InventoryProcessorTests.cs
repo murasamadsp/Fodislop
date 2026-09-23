@@ -111,6 +111,30 @@ public class InventoryProcessorTests
     }
 
     [Test]
+    public void Process_LateSelectItemPacket_UpdatesMatchingItemInsteadOfCurrentSelection()
+    {
+        _model.SetSlot(2, new ItemData("Old pickaxe", Color.gray, 1) { ItemType = (ItemType)1 });
+        _model.SetSlot(3, new ItemData("Scanner", Color.gray, 1) { ItemType = (ItemType)2 });
+        _model.SelectSlot(2);
+        _model.SelectSlot(3);
+
+        _processor.Process(new SelectItemPacket(
+            (ItemType)1,
+            "Super Pickaxe",
+            "Mines instantly",
+            0,
+            0,
+            0,
+            false,
+            new BitArray(8)));
+
+        Assert.AreEqual("Super Pickaxe", _model.GetSlot(2)!.Name);
+        Assert.AreEqual("Mines instantly", _model.GetSlot(2)!.Description);
+        Assert.AreEqual("Scanner", _model.GetSlot(3)!.Name);
+        Assert.AreEqual(3, _model.SelectedSlot);
+    }
+
+    [Test]
     public void Process_DeselectItemPacket_ClearsSelection()
     {
         _model.SelectSlot(2);

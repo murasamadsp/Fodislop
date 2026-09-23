@@ -3,6 +3,7 @@
 using System;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.Core.Interfaces.Diagnostics;
 using Kern.World;
 using UnityEngine;
 
@@ -23,16 +24,23 @@ public readonly record struct TerrainFrameTimings(
 ///
 /// Renderer отвечает за порядок кадра, а не за то, чем этот кадр меряется.
 /// Здесь собирается <see cref="TerrainStallFrame"/> из состояния окна и
-/// конвейера и печатается тот кадр, который съел бюджет. Сюда же вынесено
+/// конвейера; дорогие кадры уходят в отчёт о провисе через
+/// <see cref="FrameEventLog"/>, пока диагностика жива. Сюда же вынесено
 /// сообщение об отказе сборки: оно снимает снимок мира в момент падения, а
 /// после перезапуска сцены его уже не снять.
-public sealed class TerrainFrameDiagnostics
+public sealed class TerrainFrameDiagnostics : IDisposable
 {
     private readonly TerrainWindow _window;
     private readonly TerrainDiagnosticLog _log = new();
     private readonly TerrainStallReport _stall = new();
 
-    public TerrainFrameDiagnostics(TerrainWindow window) => _window = window;
+    public TerrainFrameDiagnostics(TerrainWindow window)
+    {
+        _window = window;
+        FrameEventLog.AddSource(_stall);
+    }
+
+    public void Dispose() => FrameEventLog.RemoveSource(_stall);
 
     /// <summary>Одноразовая отметка о том, как террейн проходит старт.</summary>
     public void Mark(int bit, string message) => _log.Once(bit, message);

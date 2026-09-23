@@ -18,6 +18,7 @@ internal sealed class PlayerActionDispatcher
     private readonly IPlayerInput _input;
     private readonly INetworkService? _networkService;
     private float _lastDigTime;
+    private Vector2Int? _pendingDigTarget;
 
     public PlayerActionDispatcher(
         IPlayerInput input,
@@ -40,13 +41,31 @@ internal sealed class PlayerActionDispatcher
         _lastDigTime,
         ProjectRuntimeContracts.Gameplay.DefaultDigCooldown);
 
-    public void ResetDigCooldown() => _lastDigTime = 0f;
+    public bool IsDigAwaitingConfirmation => _pendingDigTarget.HasValue;
 
-    public void NotifyDug() => _lastDigTime = Time.time;
+    public void ResetDigCooldown()
+    {
+        _lastDigTime = 0f;
+        _pendingDigTarget = null;
+    }
+
+    public void NotifyDug(Vector2Int target)
+    {
+        _lastDigTime = Time.time;
+        _pendingDigTarget = target;
+    }
+
+    public void ConfirmDigAction(ushort x, ushort y)
+    {
+        if (_pendingDigTarget == new Vector2Int(x, y))
+        {
+            _pendingDigTarget = null;
+        }
+    }
 
     public void HandleDig(Vector2Int position, Direction direction, IMapDataProvider? mapDataProvider)
     {
-        if (!_input.WantsToDig || IsDigOnCooldown)
+        if (!_input.WantsToDig || IsDigOnCooldown || IsDigAwaitingConfirmation)
         {
             return;
         }
@@ -61,9 +80,9 @@ internal sealed class PlayerActionDispatcher
             return;
         }
 
+        NotifyDug(digTarget);
         _networkService?.Send(
             new ActionClientPacket((ushort)digTarget.x, (ushort)digTarget.y, new BzPacket()));
-        _lastDigTime = Time.time;
     }
 
     public void DispatchHotkeys()

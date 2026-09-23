@@ -15,9 +15,9 @@ using UnityEngine;
 namespace Kern.Tests.Core;
 
 // Всё, что клиент хранит в persistentDataPath, проверяется вместе на одной
-// папке: конфиг, кэш ассетов и карта мира. Легаси запрещено: файл чужой
-// версии не мигрируется, а сбрасывается (конфиг — на дефолты, карта —
-// пересоздаётся, маркер кеша — перештамповывается). Бэкапов версий нет.
+// папке: конфиг, кэш ассетов и карта мира. Старые конфиги мигрируются с
+// backup; будущая схема отклоняется без перезаписи. Старые карта и маркер
+// кеша обновляются.
 [TestFixture]
 public sealed class InstallUpgradeTests
 {
@@ -86,20 +86,40 @@ public sealed class InstallUpgradeTests
     }
 
     [Test]
-    public void OldConfigVersion_ResetsToDefaultsAndOverwrites()
+    public void OldConfigVersion_MigratesSettingsAndKeepsBackup()
     {
-        OldVersionConfig(
+        string oldJson = OldVersionConfig(
             schemaVersion: ClientConfig.CurrentSchemaVersion - 3,
             PixelSamplingMode.PixelPerfect);
 
         ClientConfigLoader.Result config = LoadConfig();
 
-        Assert.That(config.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.ResetToDefaults));
+        Assert.That(config.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
         Assert.That(config.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 3));
+        Assert.That(config.Config.Display.PixelSampling, Is.EqualTo(PixelSamplingMode.PixelPerfect));
         Assert.That(
             new ClientConfigRepository(ConfigPath).Load().Config.SchemaVersion,
             Is.EqualTo(ClientConfig.CurrentSchemaVersion));
-        Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Empty);
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(oldJson));
+    }
+
+    [Test]
+    public void Schema15Config_MigratesToCurrentSchemaAndKeepsUserSettings()
+    {
+        ClientConfig legacy = ClientConfigDefaults.Create(_profile);
+        legacy.SchemaVersion = 15;
+        legacy.Audio.MasterVolume = 0.37f;
+        string legacyJson = JsonUtility.ToJson(legacy, prettyPrint: true);
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, legacyJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.SourceSchemaVersion, Is.EqualTo(15));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Audio.MasterVolume, Is.EqualTo(0.37f));
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
     }
 
     [Test]
@@ -160,21 +180,18 @@ public sealed class InstallUpgradeTests
     }
 
     [Test]
-    public void NewerVersions_ResetWithoutThrowing()
+    public void NewerConfigVersion_IsRejectedAndLeftUntouched()
     {
-        OldVersionConfig(
+        string newerJson = OldVersionConfig(
             schemaVersion: ClientConfig.CurrentSchemaVersion + 1,
             PixelSamplingMode.SmoothFiltered);
         WriteCache(markerVersion: PersistentAssetCacheFormat.CurrentSchemaVersion + 1);
         WriteMap(formatVersion: WorldLayerFileHeader.CurrentFormatVersion + 1);
 
-        ClientConfigLoader.Result config = LoadConfig();
+        Assert.Throws<InvalidDataException>(() => LoadConfig());
         _ = new PersistentAssetCache(CachePath);
 
-        Assert.That(config.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.ResetToDefaults));
-        Assert.That(
-            new ClientConfigRepository(ConfigPath).Load().Config.SchemaVersion,
-            Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(File.ReadAllText(ConfigPath), Is.EqualTo(newerJson));
         Assert.That(ReadCacheMarker(), Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion));
         WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(_StoredCell)));
         Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Empty);

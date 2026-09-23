@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Kern.Core.Interfaces.Diagnostics;
 using Kern.Tools.Imgui.Profiling;
 using UnityEngine;
 
@@ -11,7 +12,8 @@ namespace Kern.Tools.Imgui.Windows;
 public sealed class FrameBreakdownWindow : ToolWindow
 {
     private const float RefreshInterval = 0.25f;
-    private const double BudgetMilliseconds = 1000.0 / 60.0;
+    private const string ReportCategory = "FrameBreakdown";
+    private const string ReportKind = "Разбор кадра";
     private const int FrameTabLoopRows = 8;
 
     private enum Tab
@@ -192,11 +194,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         if (_layoutTodoRequested)
         {
             _layoutTodoRequested = false;
-            string? todo = _layout.WriteTodo();
-            if (todo != null)
-            {
-                Debug.Log($"[FrameBreakdown] TODO раскладки: {todo}");
-            }
+            _layout.WriteTodo();
         }
 
         // Отчёт без прохода по всем маркерам бесполезен для вопроса «что
@@ -209,7 +207,9 @@ public sealed class FrameBreakdownWindow : ToolWindow
         if (_copyRequested && !_sweep.Running)
         {
             _copyRequested = false;
-            GUIUtility.systemCopyBuffer = BuildReport();
+            string report = BuildReport();
+            DiagnosticReport.Write(ReportCategory, "frame_breakdown", ReportKind, report);
+            GUIUtility.systemCopyBuffer = DiagnosticReport.Header(ReportKind) + Environment.NewLine + report;
             _copiedUntil = Time.unscaledTime + 2f;
         }
 

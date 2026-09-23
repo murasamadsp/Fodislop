@@ -69,22 +69,19 @@ public sealed class InventoryProcessor(IInventoryState model) :
 
     public void Process(MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket packet)
     {
-        int slot = model.SelectedSlot;
-        if (slot < 0)
+        for (int slot = 0; slot < TotalSlots; slot++)
         {
-            return;
-        }
+            var item = model.GetSlot(slot);
+            if (item == null || item.ItemType != packet.Item)
+            {
+                continue;
+            }
 
-        var item = model.GetSlot(slot);
-        if (item == null)
-        {
-            return;
+            ItemData updated = item.Clone();
+            updated.Name = packet.Name;
+            updated.Description = packet.Description;
+            model.SetSlot(slot, updated);
         }
-
-        ItemData updated = item.Clone();
-        updated.Name = packet.Name;
-        updated.Description = packet.Description;
-        model.SetSlot(slot, updated);
     }
 
     public void Process(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket packet) =>

@@ -330,7 +330,8 @@ namespace Kern.UI
 
             public MissionRingVisual()
             {
-                Shader? shader = Shader.Find(ProjectRuntimeContracts.ShaderNames.MissionVirtualRing);
+                Shader? shader = Resources.Load<Shader>(
+                    ProjectRuntimeContracts.ResourcePaths.MissionVirtualRingShader);
                 if (shader == null || !shader.isSupported)
                 {
                     throw new InvalidOperationException(

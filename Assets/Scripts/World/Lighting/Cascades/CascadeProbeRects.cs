@@ -13,7 +13,7 @@ namespace Kern.World.Lighting;
 // probe space. Far cascades have huge intervals, so they naturally fall back
 // to the full grid (which is also where the cost is lowest: coarse grids).
 //
-// Pure C# (no UnityEngine) so tools/lighting-tests links this file directly
+// Pure C# (no UnityEngine) so tools/Kern.LightingTests links this file directly
 // for the full-vs-partial golden test.
 public readonly record struct ProbeRect(int X, int Y, int Width, int Height)
 {

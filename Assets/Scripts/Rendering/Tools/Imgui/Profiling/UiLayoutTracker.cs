@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Kern.Core.Interfaces.Diagnostics;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -20,8 +21,7 @@ namespace Kern.Tools.Imgui.Profiling;
 // позиция. Изменения, накопленные между двумя Tick, относятся к одному кадру
 // и сравниваются со временем раскладки этого кадра.
 //
-// Каждое изменение пишется в журнал Logs/ui_layout_*.tsv, а по кнопке из
-// накопленного собирается список правок Logs/ui_layout_todo.md.
+// Журнал и список правок сохраняются в каталог диагностики, вид «UI».
 public sealed class UiLayoutTracker : IDisposable
 {
     public const double SpikeMilliseconds = 2.0;
@@ -79,10 +79,7 @@ public sealed class UiLayoutTracker : IDisposable
         _onGeometryChanged = OnGeometryChanged;
     }
 
-    public static string LogDirectory =>
-        Application.isEditor
-            ? Path.Combine(Path.GetDirectoryName(Application.dataPath) ?? ".", "Logs")
-            : Path.Combine(Application.persistentDataPath, "Logs");
+    public const string ArtifactCategory = "UI";
 
     public string? LogPath { get; private set; }
 
@@ -124,10 +121,10 @@ public sealed class UiLayoutTracker : IDisposable
 
         try
         {
-            Directory.CreateDirectory(LogDirectory);
-            LogPath = Path.Combine(LogDirectory, $"ui_layout_{DateTime.Now:yyyyMMdd_HHmmss}.tsv");
+            LogPath = DiagnosticArtifactPaths.CreatePath(ArtifactCategory, "ui_layout", "tsv");
             _log = new StreamWriter(LogPath, append: false, new UTF8Encoding(false));
             _log.WriteLine("frame\ttime_s\tlayout_ms\tspike\tchanged_in_frame\tkind\tpath\told_x\told_y\told_w\told_h\tnew_x\tnew_y\tnew_w\tnew_h\ttext");
+            DiagnosticReport.Announce("Журнал раскладки UI", LogPath);
         }
         catch (Exception exception)
         {
@@ -390,7 +387,6 @@ public sealed class UiLayoutTracker : IDisposable
         SortInto(all);
 
         string? path = UiLayoutTodoWriter.WriteTodo(
-            LogDirectory,
             LogPath,
             Frames,
             SpikeFrames,

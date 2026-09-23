@@ -46,6 +46,7 @@ internal sealed class LightingResourceManager
     public ComputeBuffer? DirtyRegions => _buffers.DirtyRegions;
     public ComputeBuffer? CascadeChangedMask => _buffers.CascadeChangedMask;
     public ComputeBuffer? DynamicLightBuffer => _buffers.DynamicLightBuffer;
+    public ComputeBuffer? DynamicReachBuffer => _buffers.DynamicReachBuffer;
     public ComputeBuffer? LightingCounters => _buffers.LightingCounters;
 
     // Geometry caches: depend only on the material field and are rebuilt with

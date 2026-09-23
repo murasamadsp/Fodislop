@@ -28,12 +28,12 @@ internal static class MapStorageDiskWriter
 
     internal static void CreateBackup(string mapPath, string backupPath)
     {
-        if (!File.Exists(mapPath))
+        if (File.Exists(backupPath) || !File.Exists(mapPath))
         {
             return;
         }
 
-        File.Copy(mapPath, backupPath, overwrite: true);
+        CopyAtomically(mapPath, backupPath);
     }
 
     internal static WorldLayer<CellType> OpenWorldLayer(
@@ -50,6 +50,12 @@ internal static class MapStorageDiskWriter
             Directory.CreateDirectory(directory);
         }
 
+        RestoreBackupWhenPrimaryHeaderIsDamaged(
+            path,
+            backupMapFilePath,
+            widthChunks,
+            heightChunks,
+            ProjectRuntimeContracts.World.ChunkSize);
         CreateBackup(path, backupMapFilePath);
         try
         {
@@ -69,6 +75,168 @@ internal static class MapStorageDiskWriter
         catch (UnauthorizedAccessException authEx)
         {
             throw new UnauthorizedAccessException($"[MapStorage] Access denied for map file '{path}': {authEx.Message}", authEx);
+        }
+    }
+
+    private static void RestoreBackupWhenPrimaryHeaderIsDamaged(
+        string mapPath,
+        string backupMapFilePath,
+        int widthChunks,
+        int heightChunks,
+        int chunkSize)
+    {
+        if (!File.Exists(backupMapFilePath))
+        {
+            return;
+        }
+
+        bool primaryExists = File.Exists(mapPath);
+        int? primaryFormatVersion = primaryExists ? ReadFormatVersion(mapPath) : null;
+        if (primaryExists && HasCurrentHeader(mapPath, widthChunks, heightChunks, chunkSize))
+        {
+            return;
+        }
+
+        if (primaryFormatVersion == 0)
+        {
+            // Version zero has an explicit migration path. Let that migration
+            // preserve the source instead of replacing it from an older backup.
+            return;
+        }
+
+        if (primaryFormatVersion > WorldLayerFileHeader.CurrentFormatVersion)
+        {
+            // Never silently downgrade a map created by a newer client.
+            return;
+        }
+
+        if (!HasRecoverableHeader(backupMapFilePath, widthChunks, heightChunks, chunkSize))
+        {
+            return;
+        }
+
+        CopyAtomically(backupMapFilePath, mapPath);
+    }
+
+    private static int? ReadFormatVersion(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return WorldLayerFileHeader.TryReadFormatVersion(stream);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static bool HasCurrentHeader(string path, int widthChunks, int heightChunks, int chunkSize)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length < WorldLayerFileHeader.HeaderSize)
+            {
+                return false;
+            }
+
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+            int width = reader.ReadInt32();
+            int height = reader.ReadInt32();
+            int storedChunkSize = reader.ReadInt32();
+            int formatVersion = reader.ReadInt32();
+            long tableLength = (long)widthChunks * heightChunks * sizeof(long);
+
+            return width == widthChunks && height == heightChunks &&
+                storedChunkSize == chunkSize &&
+                formatVersion == WorldLayerFileHeader.CurrentFormatVersion &&
+                stream.Length >= WorldLayerFileHeader.HeaderSize + tableLength;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool HasRecoverableHeader(string path, int widthChunks, int heightChunks, int chunkSize)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length < WorldLayerFileHeader.HeaderSize)
+            {
+                return false;
+            }
+
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+            int width = reader.ReadInt32();
+            int height = reader.ReadInt32();
+            int storedChunkSize = reader.ReadInt32();
+            int formatVersion = reader.ReadInt32();
+            if (width != widthChunks || height != heightChunks || storedChunkSize != chunkSize)
+            {
+                return false;
+            }
+
+            if (formatVersion == 0)
+            {
+                return true;
+            }
+
+            long tableLength = (long)widthChunks * heightChunks * sizeof(long);
+            return formatVersion == WorldLayerFileHeader.CurrentFormatVersion &&
+                stream.Length >= WorldLayerFileHeader.HeaderSize + tableLength;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static void CopyAtomically(string sourcePath, string destinationPath)
+    {
+        string temporaryPath = destinationPath + ".tmp";
+        try
+        {
+            using (var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var destination = new FileStream(
+                       temporaryPath,
+                       FileMode.Create,
+                       FileAccess.Write,
+                       FileShare.None))
+            {
+                source.CopyTo(destination);
+                destination.Flush(flushToDisk: true);
+            }
+
+            if (File.Exists(destinationPath))
+            {
+                File.Replace(temporaryPath, destinationPath, destinationBackupFileName: null);
+            }
+            else
+            {
+                File.Move(temporaryPath, destinationPath);
+            }
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
         }
     }
 
