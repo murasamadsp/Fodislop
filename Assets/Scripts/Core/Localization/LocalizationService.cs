@@ -140,7 +140,6 @@ public class LocalizationService : ILocalizationService
     private static Dictionary<string, string> ParseSimpleJsonDictionary(string json)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var parsed = JsonUtility.FromJson<JsonDictionaryWrapper>("{\"items\":" + json + "}");
         // High performance token-based flat JSON parser for Unity compatibility
         int index = 0;
         while (index < json.Length)
@@ -196,11 +195,5 @@ public class LocalizationService : ILocalizationService
         }
 
         return result;
-    }
-
-    [Serializable]
-    private class JsonDictionaryWrapper
-    {
-        public string[]? Items;
     }
 }

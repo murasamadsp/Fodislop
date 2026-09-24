@@ -1,7 +1,12 @@
 {
     "name": "Kern.Tests.Shared",
     "rootNamespace": "Kern.Tests",
-    "references": [],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "references": [
+        "Kern.Contracts"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

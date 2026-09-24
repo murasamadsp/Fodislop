@@ -60,7 +60,7 @@ public sealed class FrameProbe : IDisposable
     // Маркер есть, но у него нет GPU-метки: время видеокарты по нему не снять.
     public bool GPUUnsupported { get; private set; }
 
-    public void Start()
+    public void EnsureStarted()
     {
         if (Available)
         {
@@ -159,7 +159,7 @@ public sealed class FrameProbe : IDisposable
     {
         if (!Available)
         {
-            Start();
+            EnsureStarted();
             if (!Available)
             {
                 return;
@@ -205,6 +205,10 @@ public sealed class FrameProbe : IDisposable
         }
 #endif
     }
+
+    // Значение прошлого кадра без разбора истории: фоновый монитор читает его
+    // только в провисшем кадре, и обходить 60 сэмплов там незачем.
+    public double ReadLast() => _recorder.Valid ? _recorder.LastValue * (IsTime ? 1e-6 : 1d) : 0d;
 
     public string FormatValue(double value) => Format(value, Unit);
 

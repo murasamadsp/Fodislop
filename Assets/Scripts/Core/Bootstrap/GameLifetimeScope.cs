@@ -248,6 +248,10 @@ namespace Kern.Core
             RegisterManager<WorldMapRenderer>(builder, "UI");
             builder.RegisterEntryPoint<DisplayManager>().AsSelf();
             RegisterManager<InGameDebugOverlay>(builder, "UI");
+
+            // Единственный фоновый отчёт о провисе кадра: живёт со сценой игры,
+            // а не внутри компонента, который случайно тикает каждый кадр.
+            builder.RegisterEntryPoint<Kern.Tools.Imgui.Profiling.FrameStallMonitor>();
             builder.Register<GameInfrastructureStartup>(Lifetime.Singleton);
             builder.Register<GamePresentationStartup>(Lifetime.Singleton);
             builder.Register<GameStartupPipeline>(Lifetime.Singleton);

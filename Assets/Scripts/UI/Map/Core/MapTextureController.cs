@@ -18,22 +18,22 @@ internal sealed class MapTextureController
 
     public Texture2D? MapTexture { get; private set; }
 
-    public bool CheckPanelResize(VisualElement? mapOverlay)
+    public bool CheckPanelResize(VisualElement? mapViewport)
     {
-        if (mapOverlay == null)
+        if (mapViewport == null)
         {
             return false;
         }
 
-        Rect panelRect = mapOverlay.worldBound;
+        Rect panelRect = mapViewport.worldBound;
         int curW = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 0;
         int curH = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 0;
         return curW > 0 && curH > 0 && (curW != _lastPanelWidth || curH != _lastPanelHeight);
     }
 
-    public void InitTexture(VisualElement mapOverlay, Image? mapImage)
+    public void InitTexture(VisualElement mapViewport, Image? mapImage)
     {
-        Rect panelRect = mapOverlay.worldBound;
+        Rect panelRect = mapViewport.worldBound;
 
         MapViewportBounds.CalculateTextureDimensions(
             panelRect.width,
@@ -54,7 +54,7 @@ internal sealed class MapTextureController
             TexHeight,
             "WorldMapTexture",
             RuntimeTextureColorSpace.Srgb,
-            FilterMode.Point,
+            FilterMode.Bilinear,
             TextureWrapMode.Clamp);
 
         if (mapImage != null)

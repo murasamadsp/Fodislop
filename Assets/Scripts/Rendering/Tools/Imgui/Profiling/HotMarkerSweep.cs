@@ -6,11 +6,9 @@ using Unity.Profiling;
 
 namespace Kern.Tools.Imgui.Profiling;
 
-// Прочёсывание всех временных маркеров профайлера.
+// Прочёсывание всех временных маркеров профайлера: средняя стоимость.
 //
-// Рекордер не видит иерархию, а держать открытыми тысячи рекордеров сразу
-// дорого. Поэтому маркеры записываются пачками: пачка открывается, копит
-// FramesPerBatch кадров, её средние запоминаются, пачка закрывается. После
+// Пачки ведёт MarkerBatch; здесь только разбор: средние и пики пачки. После
 // прохода остаются самые горячие маркеры — в них видны пассы RenderGraph,
 // участки UI и всё, что не размечено нашим перечнем.
 //
@@ -24,123 +22,81 @@ public sealed class HotMarkerSweep : IDisposable
 
     public readonly record struct Hit(MarkerInfo Marker, double AverageMilliseconds, double PeakMilliseconds, int Frames);
 
-    private readonly List<MarkerInfo> _queue = [];
-    private readonly List<(MarkerInfo Marker, ProfilerRecorder Recorder)> _batch = [];
+    private readonly MarkerBatch _batch = new(BatchSize, FramesPerBatch);
     private readonly List<Hit> _hits = [];
     private readonly List<Hit> _pendingHits = [];
-    private int _next;
-    private int _batchFrames;
 
     public bool Running { get; private set; }
 
     public bool HasResults => _hits.Count > 0;
 
-    public int Total => _queue.Count;
+    public int Total => _batch.Total;
 
-    public int Processed => Math.Min(_next, _queue.Count);
+    public int Processed => _batch.Processed;
 
     public IReadOnlyList<Hit> Hits => _hits;
 
     public void Begin()
     {
-        CloseBatch(keep: false);
-        _queue.Clear();
         _pendingHits.Clear();
-        MarkerDirectory.Refresh(force: true);
-        foreach (MarkerInfo info in MarkerDirectory.All)
+        _batch.Reset();
+        Running = _batch.Total > 0;
+        if (Running)
         {
-            if (info.Unit == ProfilerMarkerDataUnit.TimeNanoseconds)
-            {
-                _queue.Add(info);
-            }
+            _batch.OpenNext();
         }
-
-        _next = 0;
-        Running = _queue.Count > 0;
-        OpenBatch();
     }
 
     // Каждый кадр, пока идёт проход.
     public void Tick()
     {
-        if (!Running)
+        if (!Running || !_batch.Advance())
         {
             return;
         }
 
-        _batchFrames++;
-        if (_batchFrames < FramesPerBatch)
-        {
-            return;
-        }
-
-        CloseBatch(keep: true);
-        if (_next >= _queue.Count)
+        Collect();
+        _batch.Close();
+        if (!_batch.HasMore)
         {
             Finish();
             return;
         }
 
-        OpenBatch();
+        _batch.OpenNext();
     }
 
     public void Cancel()
     {
-        CloseBatch(keep: false);
+        _batch.Close();
         _pendingHits.Clear();
         Running = false;
     }
 
-    private void OpenBatch()
+    private void Collect()
     {
-        _batchFrames = 0;
-        int end = Math.Min(_queue.Count, _next + BatchSize);
-        for (; _next < end; _next++)
+        foreach ((MarkerInfo marker, ProfilerRecorder recorder) in _batch.Open)
         {
-            MarkerInfo info = _queue[_next];
-            var recorder = new ProfilerRecorder(
-                info.Handle,
-                FramesPerBatch,
-                ProfilerRecorderOptions.Default | ProfilerRecorderOptions.SumAllSamplesInFrame);
             if (!recorder.Valid)
             {
-                recorder.Dispose();
                 continue;
             }
 
-            recorder.Start();
-            _batch.Add((info, recorder));
-        }
-    }
-
-    private void CloseBatch(bool keep)
-    {
-        foreach ((MarkerInfo marker, ProfilerRecorder recorder) in _batch)
-        {
-            if (keep && recorder.Valid)
+            int count = recorder.Count;
+            long total = 0;
+            long peak = 0;
+            for (int i = 0; i < count; i++)
             {
-                int count = recorder.Count;
-                long total = 0;
-                long peak = 0;
-                for (int i = 0; i < count; i++)
-                {
-                    long value = recorder.GetSample(i).Value;
-                    total += value;
-                    peak = Math.Max(peak, value);
-                }
-
-                // Маркеры джобов и загрузки пишут в «наносекунды» не время,
-                // а идентификаторы: больше секунды на кадр — не замер.
-                if (count > 0 && total > 0 && peak < 1_000_000_000L)
-                {
-                    _pendingHits.Add(new Hit(marker, total * 1e-6 / count, peak * 1e-6, count));
-                }
+                long value = recorder.GetSample(i).Value;
+                total += value;
+                peak = Math.Max(peak, value);
             }
 
-            recorder.Dispose();
+            if (count > 0 && total > 0 && MarkerBatch.IsPlausibleTime(peak))
+            {
+                _pendingHits.Add(new Hit(marker, total * 1e-6 / count, peak * 1e-6, count));
+            }
         }
-
-        _batch.Clear();
     }
 
     private void Finish()
@@ -159,5 +115,6 @@ public sealed class HotMarkerSweep : IDisposable
     public void Dispose()
     {
         Cancel();
+        _batch.Dispose();
     }
 }

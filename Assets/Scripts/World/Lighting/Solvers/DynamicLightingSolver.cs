@@ -9,6 +9,8 @@ namespace Kern.World.Lighting;
 
 internal sealed class DynamicLightingSolver
 {
+    private static readonly uint[] _ZeroReach = [0u];
+
     // Polar tracing is required for every moved dynamic light, but one texel-wide ray
     // fan at the edge of a large field creates a quadratic-looking burst:
     // angles * emitter points * ray length. This is a frame-wide budget, not a
@@ -225,9 +227,11 @@ internal sealed class DynamicLightingSolver
         ComputeShader compute = _resources.LightingCompute!;
         RenderTexture tiles = _tileCache.Tiles!;
         RenderTexture polarRays = _tileCache.Polar!;
+        ComputeBuffer reachBuffer = _resources.DynamicReachBuffer!;
         int traceKernel = _resources.SolveDynamicLightingKernel;
         BindFieldTextures(commandBuffer, traceKernel, _resources.StaticEmissionField!);
         commandBuffer.SetComputeBufferParam(compute, traceKernel, LightingComputeBinder.DynamicLightsID, _resources.DynamicLightBuffer!);
+        commandBuffer.SetComputeBufferParam(compute, traceKernel, LightingComputeBinder.DynamicReachID, reachBuffer);
         commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.DynamicTilesID, tiles);
         commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.DynamicPolarInputID, polarRays);
         commandBuffer.SetComputeTextureParam(
@@ -244,6 +248,7 @@ internal sealed class DynamicLightingSolver
         BindFieldTextures(commandBuffer, rayKernel, _resources.StaticEmissionField!);
         commandBuffer.SetComputeTextureParam(compute, rayKernel, LightingComputeBinder.DynamicPolarID, polarRays);
         commandBuffer.SetComputeBufferParam(compute, rayKernel, LightingComputeBinder.DynamicLightsID, _resources.DynamicLightBuffer!);
+        commandBuffer.SetComputeBufferParam(compute, rayKernel, LightingComputeBinder.DynamicReachID, reachBuffer);
         commandBuffer.SetComputeTextureParam(
             compute,
             rayKernel,
@@ -276,6 +281,10 @@ internal sealed class DynamicLightingSolver
             singleLightDirectWritten |= writeDynamicDirect;
             commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.DynamicPolarSizeID, raySize.x, raySize.y);
             commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicLightIndexID, lightIndex);
+
+            // Дальность копится максимумом по всем веерам этого фонаря и
+            // читается сбором ниже: перед первым веером — ноль.
+            commandBuffer.SetBufferData(reachBuffer, _ZeroReach, 0, lightIndex, 1);
             for (int point = 0; point < LightingComputeBinder.DynamicEmitterPointCount; point++)
             {
                 commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicPolarPointID, point);

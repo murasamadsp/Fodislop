@@ -94,8 +94,15 @@
         </ui:VisualElement>
 
         <!-- ════════════ КАРТА МИРА (WorldMapRenderer) ════════════ -->
-        <ui:VisualElement name="WorldMapOverlay" class="world-map-overlay" picking-mode="Ignore" style="display: none;">
-            <ui:Image name="WorldMapImage" class="world-map-image" picking-mode="Ignore" />
+        <ui:VisualElement name="WorldMapOverlay" class="world-map-overlay" picking-mode="Position" style="display: none;">
+            <ui:VisualElement name="WorldMapWindow" class="world-map-window">
+                <ui:VisualElement class="world-map-header">
+                    <ui:Label class="world-map-title" text="hud.world_map" />
+                    <ui:Button name="WorldMapCloseButton" class="world-map-close" text="×" />
+                </ui:VisualElement>
+                <ui:Label name="WorldMapStatus" class="world-map-status is-hidden" text="hud.map_preparing" picking-mode="Ignore" />
+                <ui:Image name="WorldMapImage" class="world-map-image" picking-mode="Position" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <!-- ════════════ ПОПАПЫ ════════════ -->

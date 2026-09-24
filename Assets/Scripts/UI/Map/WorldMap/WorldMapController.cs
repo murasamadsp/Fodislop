@@ -41,6 +41,7 @@ namespace Kern.UI
         protected void Start()
         {
             _mapModeState.Changed += OnMapModeChanged;
+            _mapRenderer.CloseRequested += OnMapCloseRequested;
             _player = _localPlayer.Current;
             if (_player == null)
             {
@@ -68,9 +69,12 @@ namespace Kern.UI
         protected void OnDestroy()
         {
             _mapModeState.Changed -= OnMapModeChanged;
+            _mapRenderer.CloseRequested -= OnMapCloseRequested;
 
             UnsubscribeFromPlayerSpawn();
         }
+
+        private void OnMapCloseRequested() => _mapModeState.SetOpen(false);
 
         protected void OnDisable()
         {

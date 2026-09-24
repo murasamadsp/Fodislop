@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Kern.Core.Interfaces.Diagnostics;
 using Kern.Tools.Imgui.Profiling;
 using UnityEngine;
 
@@ -9,7 +10,7 @@ namespace Kern.Tools.Imgui.Windows;
 
 internal static class FrameBreakdownRowBuilder
 {
-    private const double BudgetMilliseconds = 1000.0 / 60.0;
+    private const double BudgetMilliseconds = FrameBudget.TargetFrameMilliseconds;
     private const int FrameTabLoopRows = 8;
 
     private static readonly List<(int Start, int Length, double Weight)> _stageOrder = [];

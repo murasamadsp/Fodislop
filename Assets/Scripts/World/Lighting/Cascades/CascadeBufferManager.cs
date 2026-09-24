@@ -19,6 +19,10 @@ internal sealed class CascadeBufferManager
     public ComputeBuffer? DirtyRegions { get; private set; }
     public ComputeBuffer? CascadeChangedMask { get; private set; }
     public ComputeBuffer? DynamicLightBuffer { get; private set; }
+
+    // Дальность каждого фонаря в текселях поля (см. _DynamicReach в
+    // WorldLighting.compute): по элементу на слот буфера фонарей.
+    public ComputeBuffer? DynamicReachBuffer { get; private set; }
     public ComputeBuffer? LightingCounters => _lightingCounterBuffers[_activeLightingCounterBuffer];
     public int AtlasCapacity { get; private set; }
 
@@ -70,6 +74,15 @@ internal sealed class CascadeBufferManager
             DynamicLightBuffer = new ComputeBuffer(
                 clampedLightCount,
                 sizeof(float) * 8,
+                ComputeBufferType.Structured);
+        }
+
+        if (DynamicReachBuffer == null || DynamicReachBuffer.count != clampedLightCount)
+        {
+            DynamicReachBuffer?.Release();
+            DynamicReachBuffer = new ComputeBuffer(
+                clampedLightCount,
+                sizeof(uint),
                 ComputeBufferType.Structured);
         }
 
@@ -130,6 +143,8 @@ internal sealed class CascadeBufferManager
     {
         DynamicLightBuffer?.Release();
         DynamicLightBuffer = null;
+        DynamicReachBuffer?.Release();
+        DynamicReachBuffer = null;
         for (int index = 0; index < _lightingCounterBuffers.Length; index++)
         {
             _lightingCounterBuffers[index]?.Release();

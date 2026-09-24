@@ -59,6 +59,29 @@ public class ChatEventGatewayTests
     }
 
     [Test]
+    public void PublishChatList_CachesAndRaisesChatListReceived()
+    {
+        var gateway = new ChatEventGateway();
+        ChatListPacket? received = null;
+        gateway.ChatListReceived += packet => received = packet;
+        var message = new ChatMessagePacket(
+            1,
+            123,
+            1,
+            0,
+            System.Drawing.Color.White,
+            "tester",
+            System.Drawing.Color.White,
+            "hello");
+        var packet = new ChatListPacket([("global", "Global", message)]);
+
+        gateway.Publish(packet);
+
+        Assert.AreEqual(packet, received);
+        Assert.AreEqual(packet, gateway.LastChatList);
+    }
+
+    [Test]
     public void PublishWithoutSubscribers_DoesNotThrow()
     {
         var gateway = new ChatEventGateway();

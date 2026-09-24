@@ -25,6 +25,7 @@ Code is the source of truth if reference context is stale. Don't read everything
 - Unity CLI is available as `unity`; invoke it only for a specific Unity operation explicitly named in the current user request.
 - Do not launch, open, close, or control Unity Editor/Hub; do not invoke Unity CLI, MCP, Editor API, batch mode, build, tests, import, or read Editor logs unless the current user request explicitly names a specific Unity operation. Do not solicit system permission to act in Unity on your own initiative.
 - Permission extends only to the explicitly named Unity operation. If the verification cannot be completed without Unity, stop and name the specific operation left for the user.
+- Mentioning a Unity operation in acceptance criteria, a Definition of Ready, a plan, a CI table, or a broad request such as “do everything” does not authorize running it. The current user message must directly request the specific action (for example, “run EditMode tests”, “build for macOS”, or “close Unity Editor”). Authorization covers only that named operation, not related Unity actions.
 - Do not perform Git rollback or history rewriting without an explicit request in the current message: `reset`, `restore`, checkout for restoration, `revert`, `clean`, amend, rebase, or force-push. Do not restore files from `HEAD`, stash, or reflog, and do not solicit such permission on your own initiative.
 - NEVER ROLL BACK ANYTHING. This rule is broader than Git: it is forbidden to undo your own edit by any means — neither a `git` command, nor manually reverting file text, nor deleting added code and tests. Rollback is permitted ONLY when the user explicitly requests it in the current message.
 - Do not edit `.prefab`, `.unity`, or `.asset` files as text; modify them only through explicitly permitted Unity Editor API/Inspector. Preserve GUIDs and `.meta` files.
@@ -50,6 +51,10 @@ For claims about visual or GPU results, the test must go through the production 
 The visual test oracle must be independent of production functions. A helper matching itself is not valid as a regression proof.
 
 Never explain a visual or runtime problem by saying that debug mode is enabled. Debug state may be inspected as one hypothesis, but it is not evidence of the root cause and must never end the investigation or replace a production-path fix. A screenshot with flat colors must be traced through the real shader, mesh data, material keywords, textures, and camera path; if that production verification cannot be performed, report the result as unverified instead of attributing it to `TerrainDebugView` or any other debug feature.
+
+Never explain freezes, frame spikes, or other performance problems by the Unity Editor (editor overhead, inspector repaint, editor GC, play mode in editor) and never propose checking in a player build as a way to dismiss them. The root cause must be found in project code, shaders, or assets and fixed there.
+
+Never explain lag, low FPS, freezes, or frame spikes by other processes or system load (other apps or games, emulators, browsers, IDE extensions, WindowServer, memory pressure, swap) and never propose closing other programs to make the problem go away. The root cause must be found in project code, shaders, or assets and fixed there.
 
 Do not invent things the user did not ask for. Motion, rotation, animation, pulsing, flickering — NOT added on the agent's initiative. A static image means a static result. A correction to one word in the description applies to the entire entity.
 

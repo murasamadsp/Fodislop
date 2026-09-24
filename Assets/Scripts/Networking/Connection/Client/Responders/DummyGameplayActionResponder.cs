@@ -98,6 +98,14 @@ internal sealed class DummyGameplayActionResponder(
     private void HandleDig(ushort cellX, ushort cellY)
     {
         SendAudio(SFX.Bz, cellX, cellY);
+        sendPacket(new ServerPacket(new HBPacket([
+            new VFXPacket(
+                VFX.Bz,
+                playerBotID,
+                cellX,
+                cellY,
+                Array.Empty<StringPairPacket>())])));
+
         if (worldState.HasLayer)
         {
             CellType cellType = worldState.GetCell(cellX, cellY);

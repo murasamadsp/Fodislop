@@ -34,17 +34,17 @@ public static class MapViewportBounds
     public static float ComputeMaxZoomOut(
         int texWidth,
         int texHeight,
-        int chunkSize,
-        int maxChunkCacheEntries)
+        int worldWidth,
+        int worldHeight)
     {
-        if (texWidth <= 0 || texHeight <= 0 || chunkSize <= 0)
+        if (texWidth <= 0 || texHeight <= 0 || worldWidth <= 0 || worldHeight <= 0)
         {
-            return 10f;
+            return 1f;
         }
 
-        int visibleCellBudget = maxChunkCacheEntries * chunkSize * chunkSize;
-        float maxCp = Mathf.Sqrt((float)visibleCellBudget / (texWidth * texHeight));
-        return Mathf.Max(1f, maxCp);
+        return Mathf.Max(
+            0.25f,
+            Mathf.Max((float)worldWidth / texWidth, (float)worldHeight / texHeight));
     }
 
     public static void ClampViewCenter(

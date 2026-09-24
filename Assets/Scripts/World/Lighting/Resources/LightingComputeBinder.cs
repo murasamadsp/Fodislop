@@ -70,6 +70,7 @@ internal static class LightingComputeBinder
     public static readonly int CascadeMaskEnabledID = Shader.PropertyToID("_CascadeMaskEnabled");
     public static readonly int BlockAveragedID = Shader.PropertyToID("_BlockAveraged");
     public static readonly int DynamicLightsID = Shader.PropertyToID("_DynamicLights");
+    public static readonly int DynamicReachID = Shader.PropertyToID("_DynamicReach");
     public static readonly int DynamicDispatchOriginID = Shader.PropertyToID("_DynamicDispatchOrigin");
     public static readonly int DynamicDispatchSizeID = Shader.PropertyToID("_DynamicDispatchSize");
     public static readonly int DynamicLightIndexID = Shader.PropertyToID("_DynamicLightIndex");

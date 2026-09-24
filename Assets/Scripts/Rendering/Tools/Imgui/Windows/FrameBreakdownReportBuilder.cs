@@ -1,10 +1,8 @@
 #nullable enable
 
-using System;
 using System.Collections.Generic;
 using System.Text;
 using Kern.Tools.Imgui.Profiling;
-using UnityEngine;
 
 namespace Kern.Tools.Imgui.Windows;
 
@@ -17,13 +15,8 @@ internal static class FrameBreakdownReportBuilder
         MarkerSearch search)
         where TTab : notnull
     {
+        // Время, сборку, экран и устройство пишет общая шапка DiagnosticReport.
         var report = new StringBuilder(8192);
-        report.Append("Разбор кадра, ")
-            .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
-            .Append(Application.isEditor ? ", редактор" : ", сборка")
-            .Append(", ").Append(Screen.width).Append('×').Append(Screen.height)
-            .Append(", ").Append(SystemInfo.graphicsDeviceType)
-            .AppendLine();
 
         foreach ((TTab tab, string label) in tabs)
         {

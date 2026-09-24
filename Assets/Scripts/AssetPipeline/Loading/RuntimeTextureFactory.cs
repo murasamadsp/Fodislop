@@ -25,6 +25,43 @@ public static class RuntimeTextureFactory
         FilterMode filterMode,
         TextureWrapMode wrapMode)
     {
+        return CreateRGBA32(
+            width,
+            height,
+            name,
+            colorSpace,
+            filterMode,
+            wrapMode,
+            mipChain: false);
+    }
+
+    public static Texture2D CreateRGBA32WithMipmaps(
+        int width,
+        int height,
+        string name,
+        RuntimeTextureColorSpace colorSpace,
+        FilterMode filterMode,
+        TextureWrapMode wrapMode)
+    {
+        return CreateRGBA32(
+            width,
+            height,
+            name,
+            colorSpace,
+            filterMode,
+            wrapMode,
+            mipChain: true);
+    }
+
+    private static Texture2D CreateRGBA32(
+        int width,
+        int height,
+        string name,
+        RuntimeTextureColorSpace colorSpace,
+        FilterMode filterMode,
+        TextureWrapMode wrapMode,
+        bool mipChain)
+    {
         if (width <= 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -72,7 +109,7 @@ public static class RuntimeTextureFactory
             width,
             height,
             TextureFormat.RGBA32,
-            mipChain: false,
+            mipChain: mipChain,
             linear: colorSpace == RuntimeTextureColorSpace.Linear)
         {
             name = name,

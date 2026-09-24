@@ -94,7 +94,6 @@ namespace Kern.World.Terrain
         private ulong _terrainContentRevision = 1;
         private readonly List<RectInt> _publishedChangedRegions = [];
         private readonly TerrainTexturePrefetch _texturePrefetch = new();
-        private FrameStallReport? _frameStall;
         private bool _hasCameraSpeedSample;
         private Vector3 _lastCameraPosition;
         private float _cameraSpeedCellsPerSecond;
@@ -192,13 +191,6 @@ namespace Kern.World.Terrain
         protected void Awake()
         {
             InitializeSceneBindings();
-
-            // Разбор провиса всего кадра: террейн — единственный компонент,
-            // который гарантированно тикает каждый кадр игры.
-            if (Application.isPlaying)
-            {
-                _frameStall = new FrameStallReport();
-            }
         }
 
         protected void Start() => _mainCamera = _gameplayCamera?.Camera;
@@ -208,14 +200,13 @@ namespace Kern.World.Terrain
             _subscriptions?.Dispose();
             _subscriptions = null;
             _presentation.Dispose();
+            _diagnostics?.Dispose();
+            _diagnostics = null;
             _window.Dispose();
-            _frameStall?.Dispose();
-            _frameStall = null;
         }
 
         protected void LateUpdate()
         {
-            _frameStall?.Tick();
             if (_fatalBuildError)
             {
                 return;

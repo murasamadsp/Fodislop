@@ -285,13 +285,13 @@
 .inv-tooltip-meta {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-1);
 }
 
 .inv-tooltip-title {
     font-size: var(--size-base);
     -unity-font-style: bold;
     color: var(--text-primary);
+    margin-bottom: var(--space-1);
 }
 
 .inv-tooltip-desc {

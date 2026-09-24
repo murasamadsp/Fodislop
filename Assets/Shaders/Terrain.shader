@@ -98,13 +98,21 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             half4 SampleAtlasColor(int slot, float2 uv)
             {
             #if defined(KERN_TERRAIN_CELLS)
-                return _PixelArtFiltering < 0.5
-                    ? TerrainSampleAtlas(slot, sampler_PointClamp, uv)
-                    : TerrainSampleAtlas(slot, sampler_LinearClamp, uv);
+                [branch]
+                if (_PixelArtFiltering < 0.5)
+                {
+                    return TerrainSampleAtlas(slot, sampler_PointClamp, uv);
+                }
+
+                return TerrainSampleAtlas(slot, sampler_LinearClamp, uv);
             #else
-                return _PixelArtFiltering < 0.5
-                    ? SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, uv, 0)
-                    : SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, uv, 0);
+                [branch]
+                if (_PixelArtFiltering < 0.5)
+                {
+                    return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, uv, 0);
+                }
+
+                return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, uv, 0);
             #endif
             }
 

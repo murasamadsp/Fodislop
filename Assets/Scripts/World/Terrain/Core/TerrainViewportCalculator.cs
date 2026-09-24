@@ -187,7 +187,7 @@ public sealed class TerrainViewportCalculator
 
         if (!isRequestedResident || cpuBuildInFlight)
         {
-            if (!cellsCommitted || retainedLightingViewport.width <= 0 || retainedLightingViewport.height <= 0)
+            if (!cellsCommitted)
             {
                 return new TerrainFramePlan(
                     requestedWindow,
@@ -197,6 +197,17 @@ public sealed class TerrainViewportCalculator
                     retainedLightingViewport,
                     DimensionsChanged: false,
                     ShouldProcess: false);
+            }
+
+            // Окно опубликовано, а свет ещё ни разу не ставился: запрос
+            // (новый размер или начало) не приехал в кадре первой
+            // публикации. Отказ от обработки здесь не ждёт, а запирает:
+            // без обработки свет не ставится никогда, меш показа тоже, и
+            // экран остаётся чёрным, пока запрос не станет резидентным.
+            // Свет ставится по кадру камеры внутри опубликованного окна.
+            if (retainedLightingViewport.width <= 0 || retainedLightingViewport.height <= 0)
+            {
+                retainedLightingViewport = ClampInto(cameraViewport, committedWindow);
             }
 
             // Keep processing the committed window, including dirty terrain
@@ -220,5 +231,16 @@ public sealed class TerrainViewportCalculator
             cameraViewport,
             DimensionsChanged: requestedDimensionsChanged,
             ShouldProcess: true);
+    }
+
+    // Прямоугольник сдвигается (а если не влезает — обрезается) так, чтобы
+    // лежать внутри окна.
+    private static RectInt ClampInto(RectInt rect, StreamingWindow window)
+    {
+        int width = Mathf.Min(rect.width, window.Size.x);
+        int height = Mathf.Min(rect.height, window.Size.y);
+        int x = Mathf.Clamp(rect.x, window.Origin.x, window.Origin.x + window.Size.x - width);
+        int y = Mathf.Clamp(rect.y, window.Origin.y, window.Origin.y + window.Size.y - height);
+        return new RectInt(x, y, width, height);
     }
 }

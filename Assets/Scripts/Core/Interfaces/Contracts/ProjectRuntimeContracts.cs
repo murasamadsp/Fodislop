@@ -94,6 +94,7 @@ public static class ProjectRuntimeContracts
         // persistentDataPath: из persistentDataPath в билд не попадает ничего,
         // а ассет едет со сборкой сам и приезжает к игроку.
         public const string GraphicsStateCollection = "Rendering/GraphicsStates";
+        public const string MissionVirtualRingShader = "Shaders/UI/MissionVirtualRing";
         public const string GatewayUxml = "UI/Gateway";
         public const string MainMenuUxml = "UI/MainMenu";
         public const string AssetLoadingIndicatorUxml = "UI/AssetLoadingIndicator";

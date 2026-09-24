@@ -51,9 +51,27 @@ public static class WorldChunkRleCodec
     public static T[] DecodeChunk<T>(BinaryReader reader, int chunkArea)
         where T : unmanaged
     {
+        if (chunkArea <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(chunkArea), "Chunk area must be positive.");
+        }
+
+        var chunk = new T[chunkArea];
+        DecodeChunk(reader, chunkArea, chunk);
+        return chunk;
+    }
+
+    public static void DecodeChunk<T>(BinaryReader reader, int chunkArea, T[] chunk)
+        where T : unmanaged
+    {
         if (reader == null)
         {
             throw new ArgumentNullException(nameof(reader));
+        }
+
+        if (chunk == null)
+        {
+            throw new ArgumentNullException(nameof(chunk));
         }
 
         if (chunkArea <= 0)
@@ -61,7 +79,13 @@ public static class WorldChunkRleCodec
             throw new ArgumentOutOfRangeException(nameof(chunkArea), "Chunk area must be positive.");
         }
 
-        T[] chunk = new T[chunkArea];
+        if (chunk.Length < chunkArea)
+        {
+            throw new ArgumentException(
+                $"Chunk buffer has {chunk.Length} cells; expected at least {chunkArea}.",
+                nameof(chunk));
+        }
+
         int ptr = 0;
         try
         {
@@ -94,8 +118,62 @@ public static class WorldChunkRleCodec
             throw new InvalidDataException(
                 $"World layer chunk contains {ptr} cells; expected {chunkArea}.");
         }
+    }
 
-        return chunk;
+    public static void VisitChunkRuns<T>(
+        BinaryReader reader,
+        int chunkArea,
+        int chunkIndex,
+        Action<int, T, int> visitor)
+        where T : unmanaged
+    {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        if (visitor == null)
+        {
+            throw new ArgumentNullException(nameof(visitor));
+        }
+
+        if (chunkArea <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(chunkArea), "Chunk area must be positive.");
+        }
+
+        int decodedCells = 0;
+        try
+        {
+            while (decodedCells < chunkArea)
+            {
+                ushort runLength = reader.ReadUInt16();
+                T value = ReadT<T>(reader);
+                if (runLength == 0)
+                {
+                    break;
+                }
+
+                int acceptedRunLength = Math.Min(runLength, chunkArea - decodedCells);
+                visitor(chunkIndex, value, acceptedRunLength);
+                decodedCells += acceptedRunLength;
+                if (acceptedRunLength < runLength)
+                {
+                    break;
+                }
+            }
+        }
+        catch (EndOfStreamException)
+        {
+            throw new InvalidDataException(
+                $"World layer chunk ended before {chunkArea} cells were decoded.");
+        }
+
+        if (decodedCells != chunkArea)
+        {
+            throw new InvalidDataException(
+                $"World layer chunk contains {decodedCells} cells; expected {chunkArea}.");
+        }
     }
 
     private static void WriteT<T>(BinaryWriter writer, T value)

@@ -19,27 +19,25 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "bf2fce624cd48e0427890f3897f995d0"
+                "Hash": "0e50bbc8cb86d67ac13eba4d635f4e66"
             },
             "second": {
                 "shader": {
-                    "fileID": 70,
-                    "guid": "0000000000000000e000000000000000",
-                    "type": 0
+                    "instanceID": 0
                 },
-                "shaderName": "Hidden/Internal-Loading",
-                "shaderAssetGUID": "7d3344c24e361eb40bbe181c1c6b910b",
+                "shaderName": "Hidden/Editor Gizmo",
+                "shaderAssetGUID": "ca43ce2f4a87bd44b81bdae82dcbc066",
                 "shaderAssetLocalIdentifierInFile": 4800000,
                 "keywordNames": "",
                 "subShaderIndex": 0,
-                "passIndex": 0,
+                "passIndex": 1,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 9346122305125408839,
-                        "renderPass": 15945554207292896147,
-                        "renderState": 15649462741326987297,
-                        "subPassIndex": 0,
-                        "topology": 0,
+                        "vertexLayout": 15933458755787866262,
+                        "renderPass": 6414441604444330763,
+                        "renderState": 4344234531264550204,
+                        "subPassIndex": -1,
+                        "topology": 3,
                         "forceCullMode": -1,
                         "shadingRateCombinerPrimitive": 0,
                         "shadingRateCombinerFragment": 0,
@@ -49,26 +47,7 @@
                         "userBackface": false,
                         "appBackface": false,
                         "wireframe": false,
-                        "invertProjectionMatrix": true,
-                        "unfilterableTextureBindings": 0,
-                        "nonfilteringSamplerBindings": 0
-                    },
-                    {
-                        "vertexLayout": 1433109904469103815,
-                        "renderPass": 15945554207292896147,
-                        "renderState": 15649462741326987297,
-                        "subPassIndex": 0,
-                        "topology": 0,
-                        "forceCullMode": -1,
-                        "shadingRateCombinerPrimitive": 0,
-                        "shadingRateCombinerFragment": 0,
-                        "baseShadingRate": 0,
-                        "depthBias": 0.0,
-                        "slopeDepthBias": 0.0,
-                        "userBackface": false,
-                        "appBackface": false,
-                        "wireframe": false,
-                        "invertProjectionMatrix": true,
+                        "invertProjectionMatrix": false,
                         "unfilterableTextureBindings": 0,
                         "nonfilteringSamplerBindings": 0
                     }
@@ -649,6 +628,44 @@
         {
             "first": {
                 "serializedVersion": "2",
+                "Hash": "cd41288509541fa21c1e0bea821ad796"
+            },
+            "second": {
+                "shader": {
+                    "instanceID": 0
+                },
+                "shaderName": "Hidden/Editor Gizmo",
+                "shaderAssetGUID": "ca43ce2f4a87bd44b81bdae82dcbc066",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "",
+                "subShaderIndex": 0,
+                "passIndex": 0,
+                "graphicsStateInfoSet": [
+                    {
+                        "vertexLayout": 15933458755787866262,
+                        "renderPass": 6414441604444330763,
+                        "renderState": 17750984106814467797,
+                        "subPassIndex": -1,
+                        "topology": 3,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": false,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    }
+                ]
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
                 "Hash": "6562e78e3a3ba592ac96adeafea9a885"
             },
             "second": {
@@ -1199,6 +1216,46 @@
         {
             "first": {
                 "serializedVersion": "2",
+                "Hash": "dd04373462bf903e8193c18e9275ac8f"
+            },
+            "second": {
+                "shader": {
+                    "fileID": 4800000,
+                    "guid": "b5b2cd0432454877a4825471a6e12a70",
+                    "type": 3
+                },
+                "shaderName": "Kern/World Surface",
+                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "KERN_SURFACE_PERSPECTIVE",
+                "subShaderIndex": 0,
+                "passIndex": 0,
+                "graphicsStateInfoSet": [
+                    {
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 2874810695172648804,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    }
+                ]
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
                 "Hash": "f1d4ad93e2a625cda780dba28bbfbaf1"
             },
             "second": {
@@ -1574,6 +1631,24 @@
         {
             "first": {
                 "serializedVersion": "2",
+                "Hash": "1066e2fe471f198a37193973c1071b75"
+            },
+            "second": {
+                "shader": {
+                    "instanceID": 0
+                },
+                "shaderName": "Hidden/Light Probe Wire",
+                "shaderAssetGUID": "61e023e2052b43048b19177b2a4ebc05",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "",
+                "subShaderIndex": 0,
+                "passIndex": 0,
+                "graphicsStateInfoSet": []
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
                 "Hash": "55becdc293d48e38558daaa200d1c7f1"
             },
             "second": {
@@ -1786,6 +1861,24 @@
                         "nonfilteringSamplerBindings": 0
                     }
                 ]
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
+                "Hash": "bcbe984d811a89b99e47aee4f482ff7c"
+            },
+            "second": {
+                "shader": {
+                    "instanceID": 0
+                },
+                "shaderName": "Hidden/SH",
+                "shaderAssetGUID": "5f839f58fafbe2847bfd524a316494fe",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "",
+                "subShaderIndex": 0,
+                "passIndex": 0,
+                "graphicsStateInfoSet": []
             }
         },
         {
@@ -2029,6 +2122,102 @@
         {
             "first": {
                 "serializedVersion": "2",
+                "Hash": "197f982e9fd2892f8c1ae1338c4c6e40"
+            },
+            "second": {
+                "shader": {
+                    "instanceID": 0
+                },
+                "shaderName": "Hidden/Handles Lines",
+                "shaderAssetGUID": "61b9847591d4641e49af80a989ab633f",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "",
+                "subShaderIndex": 0,
+                "passIndex": 0,
+                "graphicsStateInfoSet": [
+                    {
+                        "vertexLayout": 12695440296898572277,
+                        "renderPass": 6414441604444330763,
+                        "renderState": 5667225584259519485,
+                        "subPassIndex": -1,
+                        "topology": 3,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": false,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    }
+                ]
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
+                "Hash": "222fff5a694fab63b986ab2a1fb8b73c"
+            },
+            "second": {
+                "shader": {
+                    "instanceID": 0
+                },
+                "shaderName": "Hidden/SH",
+                "shaderAssetGUID": "5f839f58fafbe2847bfd524a316494fe",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "",
+                "subShaderIndex": 0,
+                "passIndex": 1,
+                "graphicsStateInfoSet": []
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
+                "Hash": "9756dc62848710360dc8cd24c32a703b"
+            },
+            "second": {
+                "shader": {
+                    "fileID": 4800000,
+                    "guid": "a89bee29cffa951418fc1e2da94d1959",
+                    "type": 3
+                },
+                "shaderName": "Hidden/Universal/BlitHDROverlay",
+                "shaderAssetGUID": "a89bee29cffa951418fc1e2da94d1959",
+                "shaderAssetLocalIdentifierInFile": 4800000,
+                "keywordNames": "HDR_ENCODING _HDR_OVERLAY",
+                "subShaderIndex": 0,
+                "passIndex": 1,
+                "graphicsStateInfoSet": [
+                    {
+                        "vertexLayout": 15807068410263000910,
+                        "renderPass": 17386594603764001319,
+                        "renderState": 17623681824384884761,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": false,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    }
+                ]
+            }
+        },
+        {
+            "first": {
+                "serializedVersion": "2",
                 "Hash": "86e77ea02154a58a9d2faada13c68f58"
             },
             "second": {
@@ -2088,25 +2277,63 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "b3278976068a6228567c026a179d5888"
+                "Hash": "bf2fce624cd48e0427890f3897f995d0"
             },
             "second": {
                 "shader": {
-                    "fileID": 4800000,
-                    "guid": "b5b2cd0432454877a4825471a6e12a70",
-                    "type": 3
+                    "fileID": 70,
+                    "guid": "0000000000000000e000000000000000",
+                    "type": 0
                 },
-                "shaderName": "Kern/World Surface",
-                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
+                "shaderName": "Hidden/Internal-Loading",
+                "shaderAssetGUID": "7d3344c24e361eb40bbe181c1c6b910b",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "KERN_SURFACE_REDROCK",
+                "keywordNames": "",
                 "subShaderIndex": 0,
                 "passIndex": 0,
                 "graphicsStateInfoSet": [
                     {
+                        "vertexLayout": 9346122305125408839,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 15649462741326987297,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    },
+                    {
                         "vertexLayout": 4933427786327595115,
                         "renderPass": 15945554207292896147,
-                        "renderState": 2874810695172648804,
+                        "renderState": 15649462741326987297,
+                        "subPassIndex": 0,
+                        "topology": 0,
+                        "forceCullMode": -1,
+                        "shadingRateCombinerPrimitive": 0,
+                        "shadingRateCombinerFragment": 0,
+                        "baseShadingRate": 0,
+                        "depthBias": 0.0,
+                        "slopeDepthBias": 0.0,
+                        "userBackface": false,
+                        "appBackface": false,
+                        "wireframe": false,
+                        "invertProjectionMatrix": true,
+                        "unfilterableTextureBindings": 0,
+                        "nonfilteringSamplerBindings": 0
+                    },
+                    {
+                        "vertexLayout": 1433109904469103815,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 15649462741326987297,
                         "subPassIndex": 0,
                         "topology": 0,
                         "forceCullMode": -1,
@@ -2227,25 +2454,25 @@
         {
             "first": {
                 "serializedVersion": "2",
-                "Hash": "9756dc62848710360dc8cd24c32a703b"
+                "Hash": "b3278976068a6228567c026a179d5888"
             },
             "second": {
                 "shader": {
                     "fileID": 4800000,
-                    "guid": "a89bee29cffa951418fc1e2da94d1959",
+                    "guid": "b5b2cd0432454877a4825471a6e12a70",
                     "type": 3
                 },
-                "shaderName": "Hidden/Universal/BlitHDROverlay",
-                "shaderAssetGUID": "a89bee29cffa951418fc1e2da94d1959",
+                "shaderName": "Kern/World Surface",
+                "shaderAssetGUID": "b5b2cd0432454877a4825471a6e12a70",
                 "shaderAssetLocalIdentifierInFile": 4800000,
-                "keywordNames": "HDR_ENCODING _HDR_OVERLAY",
+                "keywordNames": "KERN_SURFACE_REDROCK",
                 "subShaderIndex": 0,
-                "passIndex": 1,
+                "passIndex": 0,
                 "graphicsStateInfoSet": [
                     {
-                        "vertexLayout": 15807068410263000910,
-                        "renderPass": 17386594603764001319,
-                        "renderState": 17623681824384884761,
+                        "vertexLayout": 4933427786327595115,
+                        "renderPass": 15945554207292896147,
+                        "renderState": 2874810695172648804,
                         "subPassIndex": 0,
                         "topology": 0,
                         "forceCullMode": -1,
@@ -2257,7 +2484,7 @@
                         "userBackface": false,
                         "appBackface": false,
                         "wireframe": false,
-                        "invertProjectionMatrix": false,
+                        "invertProjectionMatrix": true,
                         "unfilterableTextureBindings": 0,
                         "nonfilteringSamplerBindings": 0
                     }
@@ -13897,6 +14124,118 @@
             }
         },
         {
+            "first": 17750984106814467797,
+            "second": {
+                "renderState": {
+                    "blendState": {
+                        "rt": [
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 5,
+                                "dstBlend": 10,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 10,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            }
+                        ],
+                        "separateMRTBlend": 0,
+                        "alphaToMask": 0
+                    },
+                    "rasterState": {
+                        "cullMode": 0,
+                        "depthBias": -1,
+                        "slopeScaledDepthBias": -1.0,
+                        "depthClip": 1,
+                        "conservative": 0
+                    },
+                    "depthState": {
+                        "depthWrite": 0,
+                        "depthFunc": 4
+                    },
+                    "stencilState": {
+                        "stencilEnable": 0,
+                        "readMask": 255,
+                        "writeMask": 255,
+                        "padding": 0,
+                        "stencilFuncFront": 8,
+                        "stencilPassOpFront": 0,
+                        "stencilFailOpFront": 0,
+                        "stencilZFailOpFront": 0,
+                        "stencilFuncBack": 8,
+                        "stencilPassOpBack": 0,
+                        "stencilFailOpBack": 0,
+                        "stencilZFailOpBack": 0
+                    },
+                    "stencilRef": 0,
+                    "mask": 15
+                }
+            }
+        },
+        {
             "first": 17905316057205185287,
             "second": {
                 "renderState": {
@@ -13988,6 +14327,118 @@
                     "depthState": {
                         "depthWrite": 0,
                         "depthFunc": 8
+                    },
+                    "stencilState": {
+                        "stencilEnable": 0,
+                        "readMask": 255,
+                        "writeMask": 255,
+                        "padding": 0,
+                        "stencilFuncFront": 8,
+                        "stencilPassOpFront": 0,
+                        "stencilFailOpFront": 0,
+                        "stencilZFailOpFront": 0,
+                        "stencilFuncBack": 8,
+                        "stencilPassOpBack": 0,
+                        "stencilFailOpBack": 0,
+                        "stencilZFailOpBack": 0
+                    },
+                    "stencilRef": 0,
+                    "mask": 15
+                }
+            }
+        },
+        {
+            "first": 4344234531264550204,
+            "second": {
+                "renderState": {
+                    "blendState": {
+                        "rt": [
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 5,
+                                "dstBlend": 10,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 10,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            },
+                            {
+                                "writeMask": 15,
+                                "srcBlend": 1,
+                                "dstBlend": 0,
+                                "srcBlendAlpha": 1,
+                                "dstBlendAlpha": 0,
+                                "blendOp": 0,
+                                "blendOpAlpha": 0
+                            }
+                        ],
+                        "separateMRTBlend": 0,
+                        "alphaToMask": 0
+                    },
+                    "rasterState": {
+                        "cullMode": 0,
+                        "depthBias": -1,
+                        "slopeScaledDepthBias": -1.0,
+                        "depthClip": 1,
+                        "conservative": 0
+                    },
+                    "depthState": {
+                        "depthWrite": 0,
+                        "depthFunc": 5
                     },
                     "stencilState": {
                         "stencilEnable": 0,
