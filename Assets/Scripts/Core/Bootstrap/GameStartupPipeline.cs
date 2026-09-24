@@ -264,7 +264,9 @@ public sealed class GamePresentationStartup
 
     private static void ValidateShader(GameStartupReport report, string shaderName)
     {
-        Shader? shader = Shader.Find(shaderName);
+        Shader? shader = shaderName == ProjectRuntimeContracts.ShaderNames.MissionVirtualRing
+            ? Resources.Load<Shader>(ProjectRuntimeContracts.ResourcePaths.MissionVirtualRingShader)
+            : Shader.Find(shaderName);
         if (shader == null || !shader.isSupported)
         {
             report.Critical("shader", $"Required shader '{shaderName}' is missing or unsupported.");

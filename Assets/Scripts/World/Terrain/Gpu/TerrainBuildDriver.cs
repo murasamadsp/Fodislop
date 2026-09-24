@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Interfaces.Diagnostics;
@@ -28,6 +29,10 @@ public readonly record struct TerrainBuildServices(
 /// собирается из тех же источников, что тексели, и пересобирается ровно тогда,
 /// когда сборка задела дверь. Держать их врозь значит каждый раз вручную
 /// вспоминать эти связи — чем рендерер и занимался.
+///
+/// Тексели считаются в фоне, а накладка дверей и привязка атласов меняются
+/// только в <see cref="Publish"/> — в том же кадре, что выгрузка текселей и
+/// новое начало окна. До этого кадр видит целиком прежнюю версию.
 public sealed class TerrainBuildDriver : IDisposable
 {
     private readonly TerrainBuildPipeline _pipeline = new();
@@ -90,10 +95,17 @@ public sealed class TerrainBuildDriver : IDisposable
         materialsChanged = _materials.EnsureMaterials(
             atlases, _meshWidth, _meshHeight, clientConfigManager, _pipeline.CellCache);
         FlushAtlases(services, atlases, out context);
+        if (materialsChanged)
+        {
+            // Прежние материалы уничтожены вместе с прежними атласами: новые
+            // получают текстуры сразу, а не в кадре публикации.
+            _materials.BindAtlasTextures(atlases, services.TextureService);
+        }
+
         return true;
     }
 
-    /// <summary>Контекст без пересоздания материалов: заплатка их не меняет.</summary>
+    /// <summary>Контекст без пересоздания материалов: публикация их не меняет.</summary>
     public bool TryContinueBuild(
         in TerrainBuildServices services,
         out TerrainBuildContext context)
@@ -109,56 +121,67 @@ public sealed class TerrainBuildDriver : IDisposable
         return true;
     }
 
-    public void BuildWindow(
+    internal TerrainCpuBuildRequest Prepare(
         in TerrainBuildContext context,
-        int minX,
-        int minY,
+        Vector2Int origin,
         bool forceFull,
-        bool materialsChanged)
+        bool rebuildAllCells,
+        DirtyRectSet dirtyRects,
+        HashSet<CellType> textureTypes,
+        ulong contentRevision,
+        long worldGeneration) =>
+        _pipeline.Prepare(
+            context,
+            origin,
+            forceFull,
+            rebuildAllCells,
+            dirtyRects,
+            textureTypes,
+            contentRevision,
+            worldGeneration);
+
+    internal TerrainCpuBuildResult Execute(
+        TerrainCpuBuildRequest request,
+        CancellationToken cancellationToken) =>
+        _pipeline.Execute(request, cancellationToken);
+
+    /// <summary>
+    /// Главный поток, шаг завершён: привязать атласы и довести накладку дверей
+    /// до той же версии, что тексели. Вызывается до переноса родителя.
+    /// </summary>
+    internal void Publish(
+        in TerrainBuildContext context,
+        TerrainCpuBuildRequest request,
+        TerrainCpuBuildResult result,
+        float latencyMs)
     {
-        _pipeline.BuildWindow(context, minX, minY, forceFull, materialsChanged);
+        _pipeline.RecordPublished(request, result, latencyMs);
         _materials.BindAtlasTextures(context.Atlases, context.TextureService);
 
-        if (_pipeline.CellBuilder.DoorsTouched)
+        if (result.DoorsTouched)
         {
-            RebuildDoorOverlay(context, minX, minY);
+            // Накладка берёт индексы атласов из тех же текселей, что шаг, —
+            // значит, и число подмешей по тому же набору, а не по живому,
+            // который мог вырасти после постановки шага.
+            RebuildDoorOverlay(
+                context with { Atlases = request.Atlases },
+                request.Origin.x,
+                request.Origin.y);
             return;
         }
 
         if (_pipeline.LastBuildScrolled)
         {
-            // Состав дверей не изменился: накладке достаточно переехать вместе
-            // с родителем, её квады пересобирать незачем.
+            // Состав дверей не изменился: накладке достаточно переехать
+            // вместе с родителем, её квады пересобирать незачем.
             Vector2Int delta = _pipeline.LastScrollDelta;
             _doorOverlay.CompensateParentTranslation(
                 new Vector3(delta.x * _cellSize, delta.y * _cellSize, 0f));
         }
     }
 
-    public void PatchRegions(in TerrainBuildContext context, int minX, int minY, DirtyRectSet rects)
-    {
-        // Накладка пересобирается, только если заплатка задела двери: заплатка
-        // на ходу есть почти в каждом кадре, а двери в ней редки.
-        if (_pipeline.PatchRegions(context, minX, minY, rects))
-        {
-            RebuildDoorOverlay(context, minX, minY);
-        }
-    }
-
-    public void RefreshTextureCells(
-        in TerrainBuildContext context,
-        HashSet<CellType> cellTypes,
-        int minX,
-        int minY,
-        bool rebuildCells)
-    {
-        _pipeline.RefreshTextureCells(context, cellTypes, minX, minY, rebuildCells);
-        _materials.BindAtlasTextures(context.Atlases, context.TextureService);
-        if (_pipeline.CellBuilder.DoorsTouched)
-        {
-            RebuildDoorOverlay(context, minX, minY);
-        }
-    }
+    /// <summary>Опубликованной версии больше нет: её двери не показываются.</summary>
+    public void HideDoorOverlay() => _doorOverlay.Hide();
 
     public float Commit(int originX, int originY) => _pipeline.Commit(originX, originY);
 

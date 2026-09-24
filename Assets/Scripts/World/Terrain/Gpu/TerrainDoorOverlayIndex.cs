@@ -21,6 +21,7 @@ public sealed class TerrainDoorOverlayIndex
     private readonly TerrainRingGrid<bool> _flags = new();
     private readonly TerrainRingGrid<int> _fingerprints = new();
     private readonly HashSet<int> _quads = [];
+    private readonly object _quadLock = new();
     private int[] _quadScratch = [];
     private int _width;
     private int _height;
@@ -109,7 +110,7 @@ public sealed class TerrainDoorOverlayIndex
         bool wasDoor = _flags[x, y];
         int fingerprint = door ? DoorQuadFingerprint(foregroundVertices) : 0;
         bool doorsChanged = door != wasDoor ||
-            (door && fingerprint != _fingerprints[x, y]);
+            (door && (fingerprint != _fingerprints[x, y] || foreground != _atlases[x, y]));
 
         _atlases[x, y] = foreground;
         _flags[x, y] = door;
@@ -119,13 +120,16 @@ public sealed class TerrainDoorOverlayIndex
         // Безусловный Remove на каждой не-двери был хешированием впустую.
         if (_trackQuads && door != wasDoor)
         {
-            if (door)
+            lock (_quadLock)
             {
-                _quads.Add(quad);
-            }
-            else
-            {
-                _quads.Remove(quad);
+                if (door)
+                {
+                    _quads.Add(quad);
+                }
+                else
+                {
+                    _quads.Remove(quad);
+                }
             }
         }
 

@@ -68,6 +68,41 @@ public static class FrameProbeCatalog
         new("Сеть — разбор очереди", "Kern.Net.DrainPacketQueue"),
     ];
 
+    // Набор фонового монитора провисов: участки окна «Разбор кадра» плюс то,
+    // что провисает вне наших участков. Фазы цикла игры покрывают его целиком,
+    // поэтому провис вне скриптов ложится ровно в одну из них. Набор
+    // фиксированный и открывается один раз: перебор всех маркеров в фоне сам
+    // давал длинные кадры при открытии каждой пачки.
+    public static List<FrameProbe> CreateStallProbes() =>
+    [
+        new("Цикл игры", "PlayerLoop"),
+        new("Цикл редактора", "EditorLoop"),
+        new("Фаза Initialization", "Initialization"),
+        new("Фаза EarlyUpdate", "EarlyUpdate"),
+        new("Фаза FixedUpdate", "FixedUpdate"),
+        new("Фаза PreUpdate", "PreUpdate"),
+        new("Фаза Update", "Update"),
+        new("Фаза PreLateUpdate", "PreLateUpdate"),
+        new("Фаза PostLateUpdate", "PostLateUpdate"),
+        ..CreateCpuProbes(),
+        ..CreateInterfaceProbes(),
+        new("Физика 2D", "Physics2D.Simulate", false, false, "Physics2D.FixedUpdate"),
+        new("Анимация", "Director.ProcessFrame", false, false, "PreLateUpdate.DirectorUpdateAnimationBegin"),
+        new("UniTask Update", "UniTaskLoopRunnerUpdate"),
+        new("UniTask Yield", "UniTaskLoopRunnerYieldUpdate"),
+        new("Текстуры — декодирование", "Kern.Textures.Decode"),
+        new("Текстуры — в атлас", "Kern.Textures.AtlasAdd"),
+
+        // Поток рендера: рекордер без CollectOnlyOnCurrentThread суммирует
+        // маркер по всем потокам. Компиляция шейдера при первом показе
+        // варианта — частая причина ожидания потока рендера.
+        new("Ожидание команд рендера", "Gfx.WaitForGfxCommandsFromMainThread"),
+        new("Рендер: команды", "Gfx.ProcessCommands"),
+        new("Рендер: компиляция шейдера", "Shader.CreateGPUProgram"),
+        new("Рендер: разбор шейдера", "Shader.Parse"),
+        new("Загрузка текстуры на GPU", "Texture.AwakeFromLoad"),
+    ];
+
     // В редакторе эти маркеры суммируют и перерисовку окон самого редактора.
     public static List<FrameProbe> CreateInterfaceProbes() =>
     [

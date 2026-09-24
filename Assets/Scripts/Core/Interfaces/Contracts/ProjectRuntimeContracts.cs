@@ -75,6 +75,7 @@ public static class ProjectRuntimeContracts
     public static class AssetStreaming
     {
         public const int RequestBatchIntervalMilliseconds = 50;
+        public const int MaximumConcurrentTextureLoads = 2;
         public const int AssetRequestTimeoutSeconds = 5;
         public const int LargeAssetRequestTimeoutSeconds = 10;
         public const long AssetCacheCapacityBytes = 256L * 1024 * 1024;
@@ -93,6 +94,7 @@ public static class ProjectRuntimeContracts
         // persistentDataPath: из persistentDataPath в билд не попадает ничего,
         // а ассет едет со сборкой сам и приезжает к игроку.
         public const string GraphicsStateCollection = "Rendering/GraphicsStates";
+        public const string MissionVirtualRingShader = "Shaders/UI/MissionVirtualRing";
         public const string GatewayUxml = "UI/Gateway";
         public const string MainMenuUxml = "UI/MainMenu";
         public const string AssetLoadingIndicatorUxml = "UI/AssetLoadingIndicator";
@@ -176,5 +178,8 @@ public static class ProjectRuntimeContracts
 
     public static class RuntimeLimits
     {
-        public const int MaximumPacketBatchPerFrame = 250;    }
+        public const int MaximumPacketBatchPerFrame = 250;
+        public const int MaximumQueuedPacketCount = 4096;
+        public const long MaximumQueuedPacketBytes = 16L * 1024 * 1024;
+    }
 }

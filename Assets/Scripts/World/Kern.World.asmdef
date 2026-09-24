@@ -3,6 +3,7 @@
     "rootNamespace": "Kern.World",
     "references": [
         "UniTask",
+        "Kern.Core",
         "Kern.Contracts",
         "Kern.Persistence",
         "Kern.AssetPipeline",

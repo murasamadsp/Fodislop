@@ -16,7 +16,12 @@ public sealed class ChunkLruCache<T>
     private readonly Dictionary<int, LinkedListNode<int>> _lruIndexMap;
     private readonly LinkedList<int> _lruList;
     private readonly HashSet<int> _dirtyChunks;
-    private readonly HashSet<int> _detachedDirtyChunks;
+
+    // Отданные в запись чанки: индекс → тот самый массив, что ушёл в снимок.
+    // Завершение записи снимает отметку, только если массив тот же: иначе
+    // запись старого снимка сняла бы защиту copy-on-write с более нового,
+    // который уже отдан в следующую запись.
+    private readonly Dictionary<int, T[]> _detachedDirtyChunks;
 
     // Загруженные чанки, которые МОЖНО вытеснить: ни грязные, ни отданные в
     // запись. Держится отдельным множеством, а не выводится обходом, потому
@@ -43,7 +48,7 @@ public sealed class ChunkLruCache<T>
         _lruIndexMap = new Dictionary<int, LinkedListNode<int>>(maxCapacity);
         _lruList = new LinkedList<int>();
         _dirtyChunks = new HashSet<int>();
-        _detachedDirtyChunks = new HashSet<int>();
+        _detachedDirtyChunks = new Dictionary<int, T[]>();
         _evictableChunks = new HashSet<int>();
     }
 
@@ -116,7 +121,7 @@ public sealed class ChunkLruCache<T>
     {
         foreach (int index in _dirtyChunks)
         {
-            if (!_detachedDirtyChunks.Contains(index) && _loadedChunks.ContainsKey(index))
+            if (!_detachedDirtyChunks.ContainsKey(index) && _loadedChunks.ContainsKey(index))
             {
                 _evictableChunks.Add(index);
             }
@@ -138,7 +143,7 @@ public sealed class ChunkLruCache<T>
             if (_loadedChunks.TryGetValue(index, out T[]? chunk) && chunk != null)
             {
                 snapshot.Add((index, chunk));
-                _detachedDirtyChunks.Add(index);
+                _detachedDirtyChunks[index] = chunk;
             }
         }
 
@@ -159,20 +164,28 @@ public sealed class ChunkLruCache<T>
         return writableChunk;
     }
 
-    public void CompleteDirtySnapshot(IEnumerable<int> indices)
+    /// <summary>
+    /// Снимок записан. Главный поток: кэш не защищён от параллельного доступа,
+    /// а запись идёт в пуле, поэтому учёт делает тот, кто её дождался.
+    /// </summary>
+    public void CompleteDirtySnapshot(List<(int Index, T[] Chunk)> snapshot)
     {
-        foreach (int index in indices)
+        foreach ((int index, T[] chunk) in snapshot)
         {
-            _detachedDirtyChunks.Remove(index);
+            ReleaseDetached(index, chunk);
             RefreshEvictable(index);
         }
     }
 
-    public void RestoreDirtySnapshot(IEnumerable<int> indices)
+    /// <summary>
+    /// Запись не удалась: отметки возвращаются, следующее сохранение повторит.
+    /// Если чанк успели переписать, он и так грязный новой версией.
+    /// </summary>
+    public void RestoreDirtySnapshot(List<(int Index, T[] Chunk)> snapshot)
     {
-        foreach (int index in indices)
+        foreach ((int index, T[] chunk) in snapshot)
         {
-            _detachedDirtyChunks.Remove(index);
+            ReleaseDetached(index, chunk);
             _dirtyChunks.Add(index);
             _evictableChunks.Remove(index);
         }
@@ -248,9 +261,18 @@ public sealed class ChunkLruCache<T>
         return node;
     }
 
+    private void ReleaseDetached(int chunkIndex, T[] chunk)
+    {
+        if (_detachedDirtyChunks.TryGetValue(chunkIndex, out T[]? detached) &&
+            ReferenceEquals(detached, chunk))
+        {
+            _detachedDirtyChunks.Remove(chunkIndex);
+        }
+    }
+
     private void RefreshEvictable(int chunkIndex)
     {
-        if (_dirtyChunks.Contains(chunkIndex) || _detachedDirtyChunks.Contains(chunkIndex))
+        if (_dirtyChunks.Contains(chunkIndex) || _detachedDirtyChunks.ContainsKey(chunkIndex))
         {
             _evictableChunks.Remove(chunkIndex);
             return;

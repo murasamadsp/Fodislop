@@ -147,6 +147,11 @@ internal static class DebugOverlayTextFormatter
           .Append(telemetry.TerrainFloodFillTimeMs.ToString("F2")).Append(" мс\n")
           .Append("Кэш: ").Append(telemetry.TerrainCacheTimeMs.ToString("F2")).Append(" мс  ·  GPU: ")
           .Append(telemetry.TerrainGpuUploadTimeMs.ToString("F2")).Append(" мс\n")
+          .Append("Фон: ").Append(telemetry.TerrainWorkerBuildMs.ToString("F2")).Append(" мс  ·  до показа: ")
+          .Append(telemetry.TerrainBuildLatencyMs.ToString("F1")).Append(" мс  ·  правка: ")
+          .Append(telemetry.TerrainEditDisplayLatencyMs.ToString("F1")).Append(" мс  ·  ")
+          .Append(telemetry.TerrainBuildInFlight != 0 ? "идёт" : "простой")
+          .Append("  ·  отмен: ").Append(telemetry.TerrainBuildCancelCount).Append("\n")
           .Append("Перестроения: ").Append(telemetry.TerrainRebuildCount)
           .Append("  ·  патчи: ").Append(telemetry.TerrainDirtyPatchCount).Append("\n\n");
 

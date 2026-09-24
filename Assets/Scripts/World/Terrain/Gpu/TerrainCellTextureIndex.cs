@@ -44,23 +44,8 @@ internal sealed class TerrainCellTextureIndex
         _textureRefreshEntries.Clear();
     }
 
-    public void Rebuild(TerrainCellSources sources, int minX, int minY, int width, int height)
-    {
-        _background.Clear();
-        _foreground.Clear();
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                UpdateCell(
-                    minX + x,
-                    minY + y,
-                    sources.FloodFill.Buffer[x, y],
-                    sources.CellCache.GetCellData(x + 1, y + 1).Type);
-            }
-        }
-    }
-
+    // Types must already match the rendered layers, including Road under
+    // passable building cells and Empty under exposed ground.
     public void UpdateCell(int gridX, int unityY, CellType backgroundType, CellType foregroundType)
     {
         long key = TerrainCoordinateKey.Pack(gridX, unityY);

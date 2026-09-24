@@ -28,8 +28,15 @@ public sealed class TerrainClientConfigApplier
         bool enableDistortion = config.Terrain.EnableDistortion;
         if (_window.Driver.Pipeline.EnableDistortion != enableDistortion)
         {
-            _window.Driver.Pipeline.EnableDistortion = enableDistortion;
-            _window.NeedsRefresh = true;
+            // Предрасчёт может принадлежать фоновому шагу: флаг ляжет в
+            // следующий шаг, и тот соберёт окно целиком.
+            _window.RequestDistortion(enableDistortion);
+        }
+
+        TerrainDistortionStyle distortionStyle = config.Terrain.DistortionStyle;
+        if (_window.Driver.Pipeline.DistortionStyle != distortionStyle)
+        {
+            _window.RequestDistortionStyle(distortionStyle);
         }
 
         // Кайма живёт глобалью шейдера: маска и транспорт от тумблера не
@@ -40,6 +47,7 @@ public sealed class TerrainClientConfigApplier
         _window.Driver.Materials.ApplyClientConfig(config);
         Debug.Log(
             $"[TerrainRenderer] ApplyClientConfig: distortion={enableDistortion}, " +
+            $"distortionStyle={distortionStyle}, " +
             $"reliefRim={enableReliefRim}");
     }
 }

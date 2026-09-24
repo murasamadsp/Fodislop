@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Kern.Core.Interfaces.Diagnostics;
 using UnityEngine;
 
 namespace Kern.Tools.Imgui.Profiling;
@@ -11,7 +12,6 @@ namespace Kern.Tools.Imgui.Profiling;
 internal static class UiLayoutTodoWriter
 {
     public static string? WriteTodo(
-        string logDirectory,
         string? logPath,
         int frames,
         int spikeFrames,
@@ -73,9 +73,9 @@ internal static class UiLayoutTodoWriter
 
         try
         {
-            Directory.CreateDirectory(logDirectory);
-            string path = Path.Combine(logDirectory, "ui_layout_todo.md");
+            string path = DiagnosticArtifactPaths.CreatePath(UiLayoutTracker.ArtifactCategory, "ui_layout_todo", "md");
             File.WriteAllText(path, md.ToString(), new UTF8Encoding(false));
+            DiagnosticReport.Announce("TODO раскладки UI", path);
             return path;
         }
         catch (Exception exception)

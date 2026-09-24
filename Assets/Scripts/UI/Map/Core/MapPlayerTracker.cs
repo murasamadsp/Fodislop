@@ -24,6 +24,8 @@ public sealed class MapPlayerTracker
 
     public event Action<Vector2Int>? OnPlayerMoved;
 
+    public event Action<Vector2Int>? OnPlayerRelocated;
+
     public event Action? OnBlinkFlipped;
 
     public MapPlayerTracker(ILocalPlayerState localPlayer)
@@ -84,8 +86,9 @@ public sealed class MapPlayerTracker
                 {
                     viewCenterX = pos.x;
                     viewCenterY = pos.y;
-                    renderRequested = true;
                 }
+
+                renderRequested = true;
             }
         }
 
@@ -144,6 +147,13 @@ public sealed class MapPlayerTracker
     private void HandlePlayerPositionChanged(Vector2Int oldPosition, Vector2Int newPosition)
     {
         _lastPlayerPos = newPosition;
+        long distance = Math.Abs((long)newPosition.x - oldPosition.x) +
+            Math.Abs((long)newPosition.y - oldPosition.y);
+        if (distance > 1)
+        {
+            OnPlayerRelocated?.Invoke(newPosition);
+        }
+
         OnPlayerMoved?.Invoke(newPosition);
     }
 }

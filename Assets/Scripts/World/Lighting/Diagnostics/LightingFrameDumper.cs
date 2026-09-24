@@ -1,11 +1,9 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Text;
 using Kern.Core;
+using Kern.Core.Interfaces.Diagnostics;
 using Kern.World.Lighting.Quality;
 using Kern.World.Streaming;
 using UnityEngine;
@@ -15,7 +13,6 @@ namespace Kern.World.Lighting.Diagnostics;
 public static class LightingFrameDumper
 {
     private const int MaximumRetainedDumps = 3;
-    private const string DumpDirectoryPattern = "yyyy-MM-dd_HH-mm-ss";
 
     [Serializable]
     public sealed class ConfigDump
@@ -121,17 +118,12 @@ public static class LightingFrameDumper
         string? targetDirectory = null,
         bool includeTextures = true)
     {
-        bool useDefaultDirectory = targetDirectory == null;
-        string dir = targetDirectory ?? Path.Combine(
-            Application.dataPath,
-            "../LightingDumps",
-            DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss"));
-
+        // Дамп — несколько json и png, тяжёлый: хранятся только последние.
+        string dir = targetDirectory ?? DiagnosticArtifactPaths.CreateDirectory(
+            "Lighting",
+            "lighting_frame",
+            MaximumRetainedDumps);
         Directory.CreateDirectory(dir);
-        if (useDefaultDirectory)
-        {
-            RotateDefaultDumps(Path.GetDirectoryName(dir)!);
-        }
 
         // 1. Config Dump
         var cascades = resources.Cascade.Layouts;
@@ -254,51 +246,8 @@ public static class LightingFrameDumper
         SaveRenderTexture(resources.Direct.Dynamic, Path.Combine(dir, "DynamicDirect.png"));
         SaveRenderTexture(resources.Output.Lightmap, Path.Combine(dir, "FinalLightmap.png"));
 
-        Debug.Log($"[LightingFrameDumper] Lighting frame dumped successfully to: {dir}");
+        DiagnosticReport.Announce("Дамп кадра света", dir);
         return dir;
-    }
-
-    private static void RotateDefaultDumps(string rootDirectory)
-    {
-        if (!Directory.Exists(rootDirectory))
-        {
-            return;
-        }
-
-        var dumpDirectories = new List<string>();
-        string[] directories = Directory.GetDirectories(rootDirectory);
-        for (int index = 0; index < directories.Length; index++)
-        {
-            string name = Path.GetFileName(directories[index]);
-            if (DateTime.TryParseExact(
-                    name,
-                    DumpDirectoryPattern,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out _))
-            {
-                dumpDirectories.Add(directories[index]);
-            }
-        }
-
-        dumpDirectories.Sort(StringComparer.Ordinal);
-        int firstDirectoryToDelete = Math.Max(
-            0,
-            dumpDirectories.Count - MaximumRetainedDumps);
-        for (int index = 0; index < firstDirectoryToDelete; index++)
-        {
-            try
-            {
-                Directory.Delete(dumpDirectories[index], recursive: true);
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException)
-            {
-                Debug.LogWarning(
-                    $"[LightingFrameDumper] Could not rotate dump " +
-                    $"{dumpDirectories[index]}: {exception.Message}");
-            }
-        }
     }
 
     private static long EstimateCascadeDispatchThreads(LightingResources resources)

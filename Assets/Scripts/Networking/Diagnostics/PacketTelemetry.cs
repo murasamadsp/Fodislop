@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 namespace Kern.Networking.Diagnostics;
@@ -47,6 +48,24 @@ public static class PacketTelemetry
     public static int QueueDepth { get; private set; }
 
     public static int PeakQueueDepth { get; private set; }
+
+    public static long QueueBytes { get; private set; }
+
+    public static long PeakQueueBytes { get; private set; }
+
+    /// <summary>Сколько раз поток чтения ждал места в очереди (давление на сервер).</summary>
+    public static long BackpressureCount => Interlocked.Read(ref _backpressureCount);
+
+    /// <summary>Суммарное ожидание потока чтения, мс.</summary>
+    public static double BackpressureMilliseconds =>
+        Interlocked.Read(ref _backpressureMicroseconds) / 1000.0;
+
+    /// <summary>Пакеты главного потока, положенные сверх лимита.</summary>
+    public static long AdmissionOverflowCount => Interlocked.Read(ref _admissionOverflowCount);
+
+    private static long _backpressureCount;
+    private static long _backpressureMicroseconds;
+    private static long _admissionOverflowCount;
 
     public static long BudgetStopCount { get; private set; }
 
@@ -113,7 +132,11 @@ public static class PacketTelemetry
         PushHistory(new PacketEvent(packetType.Name, Incoming: false, Handled: true, timeSeconds));
     }
 
-    public static void RecordQueueState(int depth, bool stoppedByBudget, bool stoppedByCap)
+    public static void RecordQueueState(
+        int depth,
+        long bytes,
+        bool stoppedByBudget,
+        bool stoppedByCap)
     {
         if (!Enabled)
         {
@@ -122,6 +145,8 @@ public static class PacketTelemetry
 
         QueueDepth = depth;
         PeakQueueDepth = Math.Max(PeakQueueDepth, depth);
+        QueueBytes = bytes;
+        PeakQueueBytes = Math.Max(PeakQueueBytes, bytes);
         if (stoppedByBudget)
         {
             BudgetStopCount++;
@@ -131,6 +156,27 @@ public static class PacketTelemetry
         {
             BatchCapStopCount++;
         }
+    }
+
+    public static void RecordBackpressure(double waitMilliseconds)
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        Interlocked.Increment(ref _backpressureCount);
+        Interlocked.Add(ref _backpressureMicroseconds, (long)(Math.Max(0d, waitMilliseconds) * 1000.0));
+    }
+
+    public static void RecordAdmissionOverflow()
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        Interlocked.Increment(ref _admissionOverflowCount);
     }
 
     public static void Poll(double nowSeconds)
@@ -190,6 +236,11 @@ public static class PacketTelemetry
         OutgoingPerSecond = 0d;
         QueueDepth = 0;
         PeakQueueDepth = 0;
+        QueueBytes = 0;
+        PeakQueueBytes = 0;
+        Interlocked.Exchange(ref _backpressureCount, 0);
+        Interlocked.Exchange(ref _backpressureMicroseconds, 0);
+        Interlocked.Exchange(ref _admissionOverflowCount, 0);
         BudgetStopCount = 0;
         BatchCapStopCount = 0;
         SlowestHandlerMilliseconds = 0d;

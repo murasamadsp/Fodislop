@@ -89,7 +89,8 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         await gate.WaitAsync();
         try
         {
-            return await ReadVerifiedAssetAsync(assetPath);
+            (byte[]? payload, _) = await ReadVerifiedAssetAsync(assetPath);
+            return payload;
         }
         finally
         {
@@ -186,8 +187,9 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         await gate.WaitAsync();
         try
         {
-            byte[]? payload = await ReadVerifiedAssetAsync(assetPath);
-            if (payload == null || !TryReadManifest(assetPath, out PersistentAssetCacheEntryManifest manifest))
+            (byte[]? payload, PersistentAssetCacheEntryManifest manifest) =
+                await ReadVerifiedAssetAsync(assetPath);
+            if (payload == null)
             {
                 return null;
             }
@@ -293,22 +295,41 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         return null;
     }
 
-    private static async UniTask<byte[]?> ReadVerifiedAssetAsync(string assetPath)
+    private static async UniTask<(byte[]? Payload, PersistentAssetCacheEntryManifest Manifest)> ReadVerifiedAssetAsync(
+        string assetPath)
     {
-        if (!File.Exists(assetPath) || !TryReadManifest(assetPath, out PersistentAssetCacheEntryManifest manifest))
+        (bool manifestRead, PersistentAssetCacheEntryManifest manifest) =
+            await TryReadManifestAsync(assetPath);
+        if (!File.Exists(assetPath) || !manifestRead)
         {
             RemoveEntryFiles(assetPath);
-            return null;
+            return (null, default);
         }
 
         byte[] payload = await File.ReadAllBytesAsync(assetPath).AsUniTask();
         if (manifest.Matches(payload))
         {
-            return payload;
+            return (payload, manifest);
         }
 
         RemoveEntryFiles(assetPath);
-        return null;
+        return (null, default);
+    }
+
+    private static async UniTask<(bool Success, PersistentAssetCacheEntryManifest Manifest)> TryReadManifestAsync(
+        string assetPath)
+    {
+        string manifestPath = GetManifestPath(assetPath);
+        if (!File.Exists(manifestPath))
+        {
+            return (false, default);
+        }
+
+        string text = await File.ReadAllTextAsync(manifestPath).AsUniTask();
+        bool success = PersistentAssetCacheEntryManifest.TryParse(
+            text,
+            out PersistentAssetCacheEntryManifest manifest);
+        return (success, manifest);
     }
 
     private static bool TryReadManifest(

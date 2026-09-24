@@ -34,7 +34,7 @@ public sealed class PlayerLoopBreakdown : IDisposable
 
         foreach (FrameProbe probe in _systems)
         {
-            probe.Start();
+            probe.EnsureStarted();
         }
     }
 

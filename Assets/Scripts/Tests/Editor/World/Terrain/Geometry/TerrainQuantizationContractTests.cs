@@ -175,7 +175,10 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(CountOccurrences(terrain, "EvaluateTerrainCellCoverage("), Is.EqualTo(2));
         Assert.That(CountOccurrences(terrain, "clip(cellCoverage - 0.5);"), Is.EqualTo(2));
         Assert.That(CountOccurrences(contour, "TerrainGeometryCoverage("), Is.EqualTo(2));
-        Assert.That(CountOccurrences(contour, "QuantizeTerrainGeometryPoint("), Is.EqualTo(2));
+        // Объявление, прямое покрытие и органическое покрытие: обе формы
+        // контура квантуют точку одной и той же функцией.
+        Assert.That(CountOccurrences(contour, "QuantizeTerrainGeometryPoint("), Is.EqualTo(3));
+        Assert.That(contour, Does.Contain("float TerrainOrganicGeometryCoverage("));
         Assert.That(contour, Does.Contain("KERN_TERRAIN_FACE_GRID_SIZE = 32.0"));
         Assert.That(contour, Does.Contain("KERN_TERRAIN_GEOMETRY_EPSILON"));
         Assert.That(contour, Does.Contain("TerrainGeometryCoverage("));
@@ -191,10 +194,10 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(textures, Does.Contain("_geometryY.Data[index] = texels.GeometryY"));
         Assert.That(textures, Does.Contain("_geometryX.UploadAll()"));
         Assert.That(textures, Does.Contain("_geometryY.UploadAll()"));
-        Assert.That(textures, Does.Contain("_geometryX.StageStrip"));
-        Assert.That(textures, Does.Contain("_geometryY.StageStrip"));
-        Assert.That(textures, Does.Contain("_geometryX.CopyStagedStrip"));
-        Assert.That(textures, Does.Contain("_geometryY.CopyStagedStrip"));
+        Assert.That(textures, Does.Contain("_geometryX.Stage(slot"));
+        Assert.That(textures, Does.Contain("_geometryY.Stage(slot"));
+        Assert.That(textures, Does.Contain("_geometryX.CopyStaged(slot"));
+        Assert.That(textures, Does.Contain("_geometryY.CopyStaged(slot"));
         Assert.That(textures, Does.Contain("Shader.SetGlobalTexture(GeometryXID"));
         Assert.That(textures, Does.Contain("Shader.SetGlobalTexture(GeometryYID"));
         Assert.That(terrain, Does.Not.Contain("_TerrainGridOffsets"));

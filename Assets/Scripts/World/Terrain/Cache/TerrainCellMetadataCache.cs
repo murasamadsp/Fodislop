@@ -11,16 +11,6 @@ using UnityEngine;
 namespace Kern.World.Terrain;
 
 /// <summary>
-/// Читающая часть кэша метаданных: ровно то, что нужно сборке клетки.
-/// Реализация не аллоцирует, не трогает Unity-API и не меняет состояние,
-/// поэтому её можно звать из рабочих потоков <c>Parallel.For</c>.
-/// </summary>
-public interface ITerrainMetadataLookup
-{
-    bool TryGet(CellType type, out CellMetadata metadata);
-}
-
-/// <summary>
 /// Resolves, creates, and caches immutable CellMetadata and CachedCellData templates for cell types.
 /// </summary>
 ///
@@ -135,15 +125,9 @@ public sealed class TerrainCellMetadataCache : ITerrainMetadataLookup
         int frameCount = wtm.GetAnimationFrameCount(type);
         int frameSize = wtm.GetFrameSize(type);
 
-        CellConfigProperties properties = config.Properties;
-        if (MapCellConfigCatalog.IsBuildingOrArtificialBlock(type))
-        {
-            properties &= ~CellConfigProperties.Glowing;
-        }
-
         var meta = new CellMetadata
         {
-            Properties = properties,
+            Properties = config.Properties,
             ReliefGroup = config.ReliefGroup,
             Distortion = config.Distortion,
             HasTileGroup = mm.TryGetTileGroup(type, out int gid),

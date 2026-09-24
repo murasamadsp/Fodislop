@@ -1,6 +1,5 @@
 #nullable enable
 
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using MinesServer.Data;
 using UnityEngine;
@@ -10,17 +9,9 @@ namespace Kern.World;
 public static class MapBlockColors
 {
     private static readonly Color[] _colorTable = new Color[256];
-    private static readonly Color32[] _color32Table = new Color32[256];
-    private static readonly Color[] _aliveColorTable = new Color[256];
-    private static readonly Color32[] _aliveColor32Table = new Color32[256];
-    private static readonly Color[] _transparentTable = new Color[256];
-    private static readonly Color32[] _transparent32Table = new Color32[256];
-    private static readonly Color[] _customTable = new Color[256];
-    private static readonly Color32[] _custom32Table = new Color32[256];
 
     static MapBlockColors()
     {
-        InitializeCustomTable();
         InitializeTables();
     }
 
@@ -28,76 +19,25 @@ public static class MapBlockColors
     public static Color GetColor(CellType cellType) => _colorTable[(byte)cellType];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color32 GetColor32(CellType cellType) => _color32Table[(byte)cellType];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color GetAliveColor(CellType cellType) => _aliveColorTable[(byte)cellType];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color32 GetAliveColor32(CellType cellType) => _aliveColor32Table[(byte)cellType];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color GetTransparentColor(CellType cellType) => _transparentTable[(byte)cellType];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color32 GetTransparentColor32(CellType cellType) => _transparent32Table[(byte)cellType];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color GetCustomColor(CellType cellType) => _customTable[(byte)cellType];
+    public static int GetPackedColor(CellType cellType)
+    {
+        Color32 bytes = (Color32)_colorTable[(byte)cellType];
+        return unchecked((int)(((uint)bytes.a << 24) |
+            ((uint)bytes.r << 16) |
+            ((uint)bytes.g << 8) |
+            bytes.b));
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color RGBq(int r, int g, int b) =>
         new Color(r / 256f, g / 256f, b / 256f, 1f);
 
-    private static void InitializeCustomTable()
-    {
-        for (int i = 0; i < 256; i++)
-        {
-            int num = i + 50;
-            _customTable[i] = new Color(num / 312f, num / 312f, num / 312f, 1f);
-            if (i <= 39)
-            {
-                _customTable[i] = new Color(0.04f, 0.045f, 0.045f, 1f);
-            }
-        }
-    }
-
     private static void InitializeTables()
     {
-        var sandIndices = new HashSet<int>
-        {
-            82, 91, 97, 98, 99, 100, 86, 66, 67, 95, 96, 60, 61, 62, 63, 64, 65, 68, 69,
-        };
-
         for (int i = 0; i < 256; i++)
         {
             _colorTable[i] = new Color(i / 512f, i / 256f, 0.01f, 1f);
-            _aliveColorTable[i] = new Color(i / 512f, i / 256f, 0.01f, 1f);
-            _transparentTable[i] = new Color(0f, 0f, 0f, 1f);
-
-            if (i > 39)
-            {
-                _transparentTable[i] = new Color(0.4f, 0.45f, 0.45f, 1f);
-            }
-
-            if (i < 120 && sandIndices.Contains(i))
-            {
-                _transparentTable[i] = new Color(0.3f, 0.35f, 0.35f, 1f);
-            }
         }
-
-        // Transparent table overrides
-        _transparentTable[30] = new Color(1f, 1f, 0f, 1f);
-        _transparentTable[35] = new Color(0.4f, 0.01f, 0.1f, 1f);
-        _transparentTable[36] = new Color(0.4f, 0.1f, 0.01f, 1f);
-        _transparentTable[39] = new Color(0.4f, 0.01f, 0.01f, 1f);
-        _transparentTable[80] = new Color(0f, 1f, 1f, 1f);
-        _transparentTable[81] = new Color(0f, 0.7f, 0.7f, 1f);
-        _transparentTable[106] = new Color(1f, 1f, 1f, 1f);
-        _transparentTable[114] = new Color(0.6f, 0.6f, 0.6f, 1f);
-        _transparentTable[115] = new Color(0.6f, 0.6f, 0.6f, 1f);
-        _transparentTable[117] = new Color(1f, 1f, 1f, 1f);
-        _transparentTable[119] = new Color(0.8f, 1f, 1f, 1f);
 
         // Color table overrides
         _colorTable[0] = new Color(0f, 0f, 0f, 0.5f);
@@ -180,23 +120,5 @@ public static class MapBlockColors
         _colorTable[121] = RGBq(163, 136, 72);
         _colorTable[122] = RGBq(51, 153, 120);
 
-        // Alive color table overrides
-        _aliveColorTable[50] = RGBq(101, 255, 255);
-        _aliveColorTable[51] = RGBq(255, 51, 51);
-        _aliveColorTable[52] = RGBq(255, 101, 255);
-        _aliveColorTable[53] = RGBq(255, 138, 255);
-        _aliveColorTable[54] = RGBq(238, 254, 255);
-        _aliveColorTable[55] = RGBq(238, 254, 255);
-        _aliveColorTable[116] = RGBq(161, 162, 255);
-        _aliveColorTable[119] = RGBq(170, 255, 255);
-
-        // Fill Color32 lookup tables
-        for (int i = 0; i < 256; i++)
-        {
-            _color32Table[i] = (Color32)_colorTable[i];
-            _aliveColor32Table[i] = (Color32)_aliveColorTable[i];
-            _transparent32Table[i] = (Color32)_transparentTable[i];
-            _custom32Table[i] = (Color32)_customTable[i];
-        }
     }
 }

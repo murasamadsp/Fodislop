@@ -142,7 +142,7 @@ public class ChunkLruCacheTests
         Assert.That(cache.LoadedCount, Is.EqualTo(5), "Dirty chunks must not be evicted before they are written.");
 
         var snapshot = cache.DetachDirtySnapshot();
-        cache.CompleteDirtySnapshot(snapshot.ConvertAll(entry => entry.Index));
+        cache.CompleteDirtySnapshot(snapshot);
         cache.AddOrUpdate(5, [5]);
 
         Assert.That(cache.LoadedCount, Is.EqualTo(2), "The cache stayed at its dirty high-water mark after the write.");
@@ -202,9 +202,48 @@ public class ChunkLruCacheTests
         cache.AddOrUpdate(3, [3]);
         Assert.IsTrue(cache.Contains(1), "чанк вытеснен, пока его писали на диск");
 
-        cache.CompleteDirtySnapshot(snapshot.ConvertAll(entry => entry.Index));
+        cache.CompleteDirtySnapshot(snapshot);
         cache.AddOrUpdate(4, [4]);
 
         Assert.IsFalse(cache.Contains(1));
+    }
+
+    // Запись старого снимка не имеет права снять защиту с нового: чанк,
+    // переписанный после первого снимка и отданный во второй, обязан снова
+    // копироваться при записи, пока второй снимок не записан.
+    [Test]
+    public void CompletingAnOlderSnapshotKeepsTheNewerSnapshotDetached()
+    {
+        var cache = new ChunkLruCache<int>(maxCapacity: 4, allowDirtyEviction: false);
+        cache.AddOrUpdate(1, [1]);
+        cache.MarkDirty(1);
+        List<(int Index, int[] Chunk)> first = cache.DetachDirtySnapshot();
+
+        Assert.IsTrue(cache.TryGet(1, out int[]? original));
+        int[] rewritten = cache.PrepareForWrite(1, original!);
+        Assert.AreNotSame(original, rewritten, "запись в отданный чанк обязана копировать");
+        rewritten[0] = 2;
+        cache.MarkDirty(1);
+        List<(int Index, int[] Chunk)> second = cache.DetachDirtySnapshot();
+
+        cache.CompleteDirtySnapshot(first);
+
+        int[] again = cache.PrepareForWrite(1, rewritten);
+        Assert.AreNotSame(rewritten, again, "второй снимок остался без защиты copy-on-write");
+        Assert.AreEqual(2, second[0].Chunk[0]);
+    }
+
+    [Test]
+    public void RestoringAFailedSnapshotMarksTheChunkDirtyAgain()
+    {
+        var cache = new ChunkLruCache<int>(maxCapacity: 4, allowDirtyEviction: false);
+        cache.AddOrUpdate(1, [1]);
+        cache.MarkDirty(1);
+        List<(int Index, int[] Chunk)> snapshot = cache.DetachDirtySnapshot();
+        Assert.IsFalse(cache.IsDirty(1));
+
+        cache.RestoreDirtySnapshot(snapshot);
+
+        Assert.IsTrue(cache.IsDirty(1));
     }
 }

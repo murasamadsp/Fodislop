@@ -14,10 +14,11 @@ namespace Kern.Persistence;
 /// видит стабильное состояние, а изменения после снимка остаются отдельной
 /// dirty-версией.
 ///
-/// Если запись не удалась, отметки возвращаются: следующее сохранение
-/// повторит. Снимок и возврат — на главном потоке; сам WriteSnapshot можно
-/// звать из любого потока, снимок стабилен из-за copy-on-write, а файл — под
-/// замком ввода-вывода.
+/// Потоки разделены строго. <see cref="WriteSnapshot"/> трогает только файл
+/// (под замком ввода-вывода) и может идти в пуле. Учёт в кэше — завершение
+/// или возврат отметок — только на главном потоке, после того как запись
+/// дождались: кэш чанков не потокобезопасен, а главный поток меняет его каждый
+/// кадр. Отметка снимается лишь с той версии чанка, что реально записана.
 internal sealed class WorldLayerDirtyWriter<T>
     where T : unmanaged
 {
@@ -37,31 +38,19 @@ internal sealed class WorldLayerDirtyWriter<T>
 
     public List<(int Index, T[] Chunk)> TakeSnapshot() => _cache.DetachDirtySnapshot();
 
-    public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot)
-    {
-        _cache.RestoreDirtySnapshot(EnumerateSnapshotIndices(snapshot));
-    }
+    public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot) =>
+        _cache.RestoreDirtySnapshot(snapshot);
 
+    public void CompleteSnapshot(List<(int Index, T[] Chunk)> snapshot) =>
+        _cache.CompleteDirtySnapshot(snapshot);
+
+    /// <summary>Синхронный сброс на главном потоке: запись и учёт подряд.</summary>
     public void Flush(bool flushToDisk)
     {
         List<(int Index, T[] Chunk)> snapshot = TakeSnapshot();
-        WriteSnapshot(snapshot, flushToDisk);
-    }
-
-    public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk)
-    {
         try
         {
-            foreach ((int index, T[] chunk) in snapshot)
-            {
-                _file.Save(index, chunk, _chunkArea);
-            }
-
-            if (!_file.Flush(flushToDisk))
-            {
-                _cache.CompleteDirtySnapshot(EnumerateSnapshotIndices(snapshot));
-                return;
-            }
+            WriteSnapshot(snapshot, flushToDisk);
         }
         catch
         {
@@ -69,15 +58,22 @@ internal sealed class WorldLayerDirtyWriter<T>
             throw;
         }
 
-        _cache.CompleteDirtySnapshot(EnumerateSnapshotIndices(snapshot));
+        CompleteSnapshot(snapshot);
     }
 
-    private static IEnumerable<int> EnumerateSnapshotIndices(
-        IEnumerable<(int Index, T[] Chunk)> snapshot)
+    /// <summary>Только файл. Бросает, если снимок не сохранён целиком.</summary>
+    public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk)
     {
-        foreach ((int index, _) in snapshot)
+        foreach ((int index, T[] chunk) in snapshot)
         {
-            yield return index;
+            _file.Save(index, chunk, _chunkArea);
+        }
+
+        if (!_file.Flush(flushToDisk) && snapshot.Count > 0)
+        {
+            throw new System.ObjectDisposedException(
+                nameof(WorldLayerDirtyWriter<T>),
+                "World layer file closed before the dirty snapshot was flushed.");
         }
     }
 }

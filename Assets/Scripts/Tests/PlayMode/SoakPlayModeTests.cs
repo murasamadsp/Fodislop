@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using Kern;
 using Kern.Core;
+using Kern.Core.Interfaces.Diagnostics;
 using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
 using Kern.Game.Managers;
@@ -339,9 +340,7 @@ public sealed class SoakPlayModeTests
     // было сравнивать с предыдущими.
     private static void Report(string name, Snapshot baseline, Snapshot final, IReadOnlyList<List<double>> frames)
     {
-        string directory = Path.Combine(Application.persistentDataPath, "Soak");
-        Directory.CreateDirectory(directory);
-        string path = Path.Combine(directory, $"{name}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        string path = DiagnosticArtifactPaths.CreatePath("Soak", name, "json");
         string p95 = frames.Count > 0 && frames.Any(sample => sample.Count > 0)
             ? P95(frames.Where(sample => sample.Count > 0)).ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
             : "null";
@@ -353,7 +352,7 @@ public sealed class SoakPlayModeTests
             $"  \"final\": {final.ToJson()},\n" +
             $"  \"p95FrameMs\": {p95}\n" +
             "}\n");
-        Debug.Log($"[Soak] {name}: {path}");
+        DiagnosticReport.Announce($"Soak {name}", path);
     }
 
     private readonly struct Snapshot

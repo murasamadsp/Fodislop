@@ -4,35 +4,20 @@ using System.Collections.Generic;
 
 namespace Kern.UI;
 
-internal enum ChatChannel
-{
-    Global,
-    Local,
-}
-
 internal sealed class ChatMessageHistory
 {
     public const int MaxMessages = 20;
 
-    private readonly List<string> _globalMessages = new();
-    private readonly List<string> _localMessages = new();
+    private readonly List<string> _messages = new();
 
-    public void Add(ChatChannel channel, string formattedMessage)
+    public void Add(string formattedMessage)
     {
-        List<string> messages = channel == ChatChannel.Local
-            ? _localMessages
-            : _globalMessages;
-        messages.Add(formattedMessage);
-        while (messages.Count > MaxMessages)
+        _messages.Add(formattedMessage);
+        while (_messages.Count > MaxMessages)
         {
-            messages.RemoveAt(0);
+            _messages.RemoveAt(0);
         }
     }
 
-    public IReadOnlyList<string> GetMessages(ChatChannel channel)
-    {
-        return channel == ChatChannel.Local
-            ? _localMessages
-            : _globalMessages;
-    }
+    public IReadOnlyList<string> GetMessages() => _messages;
 }

@@ -3,9 +3,8 @@
 
 static const uint KERN_TERRAIN_SOLID_BOUNDARY_MASK = 0x0Fu;
 static const uint KERN_TERRAIN_EMISSIVE_FLAG = 0x10u;
-static const uint KERN_TERRAIN_ROUNDED_PHYSICAL_CONTOUR_FLAG = 0x20u;
-static const uint KERN_TERRAIN_PHYSICAL_MASS_FLAG = 0x40u;
-static const uint KERN_TERRAIN_ROUNDABLE_CONTOUR_FLAG = 0x02u;
+static const uint KERN_TERRAIN_PHYSICAL_MASS_FLAG = 0x20u;
+static const uint KERN_TERRAIN_ROUNDABLE_CONTOUR_FLAG = 0x01u;
 
 uint KernTerrainLightingFlags(float packedFlags)
 {
@@ -21,22 +20,17 @@ int KernTerrainSolidBoundary(uint lightingFlags)
 // Раскладка описана в TerrainLightingData.Pack.
 int KernTerrainReliefCode(float packedContour)
 {
-    return (int(round(packedContour)) >> 6) & 31;
+    return (int(round(packedContour)) >> 5) & 31;
 }
 
 int KernTerrainSolidDiagonal(float packedContour)
 {
-    return (int(round(packedContour)) >> 2) & int(KERN_TERRAIN_SOLID_BOUNDARY_MASK);
+    return (int(round(packedContour)) >> 1) & int(KERN_TERRAIN_SOLID_BOUNDARY_MASK);
 }
 
 bool KernTerrainIsEmissive(uint lightingFlags)
 {
     return (lightingFlags & KERN_TERRAIN_EMISSIVE_FLAG) != 0u;
-}
-
-bool KernTerrainHasRoundedPhysicalContour(uint lightingFlags)
-{
-    return (lightingFlags & KERN_TERRAIN_ROUNDED_PHYSICAL_CONTOUR_FLAG) != 0u;
 }
 
 bool KernTerrainIsPhysicalMass(uint lightingFlags)

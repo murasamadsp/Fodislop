@@ -60,6 +60,20 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
     float3 opticalDepth = 0.0;
     float distance = 0.0;
     _DynamicPolar[int2(angleIndex, rowOffset)] = float4(0.0, 0.0, 0.0, 0.0);
+
+    // Где свет по лучу перестаёт быть видимым. Значения луча не меняются:
+    // сбор смешивает соседние лучи, и любая подмена глубины за этой точкой
+    // гасила бы видимый свет на краях теней. Глубина вдоль луча только
+    // растёт, смешивание не опускает её ниже меньшей из двух, поэтому дальше
+    // самого дальнего такого радиуса по всем лучам фонаря пикселю не достаётся
+    // ничего видимого. Запас на глубину внутри клетки-источника (до полутора
+    // клеток сплошного) — сбор вычитает её как глубину входа. Правило то же,
+    // что у каскадов в DDA.hlsl.
+    DynamicLight reachLight = _DynamicLights[_DynamicLightIndex];
+    float3 reachSource = max(reachLight.colorIntensity.rgb * reachLight.colorIntensity.a, 0.0) * _EmissionScale;
+    float3 reachEntryDepth = SegmentExtinction(1.0) * 1.5;
+    float reach = float(radii);
+    bool reachFound = false;
     int nextRadius = 1;
 
     float2 inverseDirection = float2(
@@ -120,6 +134,13 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
                     _DynamicPolar[int2(angleIndex, rowOffset + nextRadius)] = float4(1e6, 1e6, 1e6, 0.0);
                     nextRadius++;
                 }
+
+                if (!reachFound)
+                {
+                    reach = distance;
+                    reachFound = true;
+                }
+
                 break;
             }
 
@@ -136,6 +157,13 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
 
             opticalDepth += extinction * distanceCells;
             distance = end;
+            if (!reachFound &&
+                Max3(exp(-max(opticalDepth - reachEntryDepth, 0.0)) * reachSource) * 1.5 < InvisibleDynamicRadiance)
+            {
+                reach = distance;
+                reachFound = true;
+            }
+
             if (distance >= exitDistance)
             {
                 break;
@@ -165,6 +193,30 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
             0.0);
         nextRadius++;
     }
+
+    // Свет не погас внутри прохода: дальше луч идёт воздухом, и записанная
+    // выше глубина растёт линейно. Точка невидимости на этой прямой
+    // считается формулой — те же значения, что прочтёт сбор.
+    if (!reachFound)
+    {
+        float3 depthRate = airExtinction * cellsPerDistance;
+        float3 depthNeeded = log(max(reachSource * 1.5 / InvisibleDynamicRadiance, 1.0)) +
+            reachEntryDepth - opticalDepth;
+        // Канал без затухания в воздухе с недобранной глубиной не гаснет
+        // никогда: тогда дальность остаётся полной.
+        bool bounded =
+            (depthNeeded.x <= 0.0 || depthRate.x > 0.0) &&
+            (depthNeeded.y <= 0.0 || depthRate.y > 0.0) &&
+            (depthNeeded.z <= 0.0 || depthRate.z > 0.0);
+        float extra = max(Max3(depthNeeded / max(depthRate, 1e-30)), 0.0);
+
+        if (bounded)
+        {
+            reach = min(reach, distance + extra);
+        }
+    }
+
+    InterlockedMax(_DynamicReach[_DynamicLightIndex], uint(ceil(reach)));
 }
 
 // Optical depth from emitter point `pointIndex` to `radius` texels along its

@@ -88,6 +88,16 @@ internal sealed class LightingUpdateCoordinator
             return;
         }
 
+        // Terrain content revisions are assigned when world packets arrive,
+        // while this pass runs after the terrain scheduler. Until cell-data,
+        // coordinates and doors have committed together, lighting must retain
+        // the last published geometry instead of solving against a future
+        // revision whose pixels are not on screen yet.
+        if (!terrainRenderer.HasPublishedTerrain)
+        {
+            return;
+        }
+
         if (!camera.orthographic)
         {
             return;
@@ -149,6 +159,7 @@ internal sealed class LightingUpdateCoordinator
             qualityMode);
         if (resourcesResized)
         {
+            FrameEventLog.Record($"свет: ресурсы пересозданы {gridWidth}×{gridHeight}");
             _state.ClearPendingRegionInvalidation();
             _state.FieldDirty = true;
             _state.HasRenderedLightState = false;
@@ -193,7 +204,7 @@ internal sealed class LightingUpdateCoordinator
         bool contributorGeometryChanged =
             _state.LastContributorGeometryRevision != contributorGeometryRevision;
         bool geometryChanged =
-            _state.LastTerrainContentRevision != terrainRenderer.TerrainContentRevision ||
+            _state.LastTerrainContentRevision != terrainRenderer.PublishedTerrainContentRevision ||
             contributorGeometryChanged;
         if (geometryChanged)
         {
@@ -321,7 +332,7 @@ internal sealed class LightingUpdateCoordinator
                 _state.SolveCount++;
                 _state.FieldDirty = false;
                 _state.CompositeDirty = false;
-                _state.LastTerrainContentRevision = terrainRenderer.TerrainContentRevision;
+                _state.LastTerrainContentRevision = terrainRenderer.PublishedTerrainContentRevision;
                 _state.LastContributorGeometryRevision = contributorGeometryRevision;
                 _state.CompleteActiveRegionInvalidation();
                 RememberDynamicLightState();

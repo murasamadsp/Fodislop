@@ -9,6 +9,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         _PrismaticFlowMap ("X Crystal Phase Vectors", 2D) = "black" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
         _TerrainDecalAtlas ("Terrain Decal Atlas", 2D) = "black" {}
+        _TerrainDecalStoneAtlas ("Terrain Decal Stone Atlas", 2D) = "black" {}
         _ShimmerColor ("Shimmer Color", Color) = (0,0,0,0)
         _FlowScale ("Flow Scale", Vector) = (0,0,0,0)
         _ShimmerSpeedScale ("Shimmer Speed Scale", Float) = 0
@@ -97,13 +98,21 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             half4 SampleAtlasColor(int slot, float2 uv)
             {
             #if defined(KERN_TERRAIN_CELLS)
-                return _PixelArtFiltering < 0.5
-                    ? TerrainSampleAtlas(slot, sampler_PointClamp, uv)
-                    : TerrainSampleAtlas(slot, sampler_LinearClamp, uv);
+                [branch]
+                if (_PixelArtFiltering < 0.5)
+                {
+                    return TerrainSampleAtlas(slot, sampler_PointClamp, uv);
+                }
+
+                return TerrainSampleAtlas(slot, sampler_LinearClamp, uv);
             #else
-                return _PixelArtFiltering < 0.5
-                    ? SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, uv, 0)
-                    : SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, uv, 0);
+                [branch]
+                if (_PixelArtFiltering < 0.5)
+                {
+                    return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, uv, 0);
+                }
+
+                return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, uv, 0);
             #endif
             }
 
@@ -192,6 +201,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     #ifdef KERN_WORLD_LIGHTING
                     debugOcclusion = KernTerrainAmbientOcclusionMultiplier(
                         input.glowData.y,
+                        input.glowData.z,
+                        input.packedData.yz,
                         input.worldPosition.xy,
                         _WorldLightRect);
                     #endif
@@ -251,12 +262,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float3 flowSample = TerrainResolveFlowSample(
                     animationProfile, animType, input.worldPos, input.packedData, _FlowScale);
 
-                float2 finalUV = AnimateTerrainSampleUV(
-                    tileUV.finalUV,
-                    input.subAtlasRect,
-                    input.tileSizeUV.xy,
-                    animationProfile,
-                    flowSample);
+                float2 finalUV = tileUV.finalUV;
                 finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
                 finalUV = ClampTerrainTileUV(finalUV, tileUV);
 
@@ -296,6 +302,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 #ifdef KERN_WORLD_LIGHTING
                 litRGB *= KernTerrainAmbientOcclusionMultiplier(
                     input.glowData.y,
+                    input.glowData.z,
+                    input.packedData.yz,
                     input.worldPosition.xy,
                     _WorldLightRect);
                 #endif
@@ -410,12 +418,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                float2 finalUV = AnimateTerrainSampleUV(
-                    tileUV.finalUV,
-                    subAtlasRect,
-                    tileSize.xy,
-                    animationProfile,
-                    flowSample);
+                float2 finalUV = tileUV.finalUV;
                 finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
                 finalUV = ClampTerrainTileUV(finalUV, tileUV);
 

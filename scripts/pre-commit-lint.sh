@@ -44,7 +44,7 @@ fi
 echo "--- Step 0.2: Validating lighting HLSL transport ---"
 if command -v dotnet >/dev/null 2>&1; then
     DOTNET_NOLOGO=1 dotnet run \
-        --project "$(dirname "$0")/../tools/lighting-tests/Kern.LightingTests.csproj" \
+        --project "$(dirname "$0")/../tools/Kern.LightingTests/Kern.LightingTests.csproj" \
         --no-restore \
         -- transport
 fi
@@ -90,7 +90,6 @@ DEPENDENCIES=(
     "UniTask.DOTween.csproj"
     "UniTask.Addressables.csproj"
     "UniTask.TextMeshPro.csproj"
-    "McpUnity.Editor.csproj"
 )
 
 echo "--- Step 1: Building sub-project dependencies ---"

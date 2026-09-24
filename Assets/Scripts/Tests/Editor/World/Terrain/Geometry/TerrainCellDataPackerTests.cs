@@ -11,6 +11,42 @@ namespace Kern.Tests.World;
 [TestFixture]
 public class TerrainCellDataPackerTests
 {
+    [Test]
+    public void CornerPackingMatchesFloatComparisonForEveryHalfEncoding()
+    {
+        var quad = new TerrainVertex[4];
+        for (int bits = 0; bits <= ushort.MaxValue; bits++)
+        {
+            for (int corner = 0; corner < 4; corner++)
+            {
+                quad[corner].UV0x = (ushort)bits;
+                quad[corner].UV0y = (ushort)bits;
+            }
+
+            byte expected = Mathf.HalfToFloat((ushort)bits) > 0.5f ? byte.MaxValue : (byte)0;
+            Assert.That(TerrainCellDataPacker.PackCornerUvs(quad), Is.EqualTo(expected), $"half 0x{bits:X4}");
+        }
+    }
+
+    [Test]
+    public void SurfaceCopyPreservesCornerDataAndPackedSurfaceBits()
+    {
+        TerrainVertex[] expected = Quad(_Identity);
+        TerrainVertex[] actual = Quad(_Identity);
+        TerrainVertex surface = expected[0];
+        for (int corner = 0; corner < 4; corner++)
+        {
+            actual[corner].Color = default;
+            actual[corner].UV1 = Vector4.zero;
+            actual[corner].UV2 = Vector4.zero;
+            actual[corner].UV3 = Vector4.zero;
+            actual[corner].UV4 = Vector4.zero;
+            actual[corner].UV6 = Vector4.zero;
+            actual[corner].CopySurfaceFrom(in surface);
+            Assert.That(actual[corner], Is.EqualTo(expected[corner]));
+        }
+    }
+
     private static TerrainVertex[] Quad(Vector2[] cornerUvs)
     {
         var quad = new TerrainVertex[4];

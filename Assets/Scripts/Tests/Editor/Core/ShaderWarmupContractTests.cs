@@ -43,7 +43,9 @@ public sealed class ShaderWarmupContractTests
         for (int i = 0; i < _RequiredShaders.Length; i++)
         {
             string shaderName = _RequiredShaders[i];
-            Shader? shader = Shader.Find(shaderName);
+            Shader? shader = shaderName == ProjectRuntimeContracts.ShaderNames.MissionVirtualRing
+                ? Resources.Load<Shader>(ProjectRuntimeContracts.ResourcePaths.MissionVirtualRingShader)
+                : Shader.Find(shaderName);
             Assert.That(shader, Is.Not.Null, $"Required shader '{shaderName}' was not found.");
             Assert.That(shader!.isSupported, Is.True, $"Shader '{shaderName}' is not supported on the active graphics device.");
         }

@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "mcp-unity": {
-      "command": "node",
-      "args": ["Packages/com.gamelovers.mcp-unity/Server~/build/index.js"]
-    }
-  }
-}

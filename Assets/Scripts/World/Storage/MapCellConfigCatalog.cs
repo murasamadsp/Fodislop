@@ -13,57 +13,23 @@ namespace Kern.World;
 
 public sealed class MapCellConfigCatalog
 {
-    private static readonly HashSet<CellType> _RoundableLooseTypes = new()
-    {
-        CellType.WhiteSand, CellType.DarkWhiteSand,
-        CellType.RustySand, CellType.DarkRustySand,
-        CellType.BlackSand, CellType.DarkBlackSand,
-        CellType.BlueSand, CellType.DarkBlueSand,
-        CellType.YellowSand, CellType.DarkYellowSand,
-        CellType.MilitaryBlockSand,
-        CellType.Lava,
-        CellType.GrayAcid, CellType.PurpleAcid,
-    };
-
     private CellConfigurationPacket[]? _cellConfigurations;
     private readonly Dictionary<CellType, int> _cellToTileGroup = new();
     private readonly Dictionary<CellType, ushort> _cellMoveSpeeds = new();
 
-    public static bool IsRoundableLoose(CellType type) => _RoundableLooseTypes.Contains(type);
+    public static CellVisualProperties GetVisualProperties(CellType type) =>
+        CellVisualProtocolRegistry.Current.Get(type);
+
+    // Совместимый фасад для старых статических потребителей. Новые системы
+    // должны получать профиль через MapCellConfigCatalog и не знать legacy-таблицу.
+    public static bool IsRoundableLoose(CellType type) =>
+        CellVisualProtocolRegistry.Current.Get(type).IsRoundableLoose;
 
     public static bool IsRoad(CellType type) =>
-        type is CellType.Road or CellType.GoldenRoad or CellType.BuildingRoad or CellType.PolymerRoad;
+        CellVisualProtocolRegistry.Current.Get(type).IsRoad;
 
-    // Authored object silhouettes must not inherit shared terrain-node offsets,
-    // even when a server configuration marks them as a distortion source.
-    public static bool HasFixedTerrainGeometry(CellType type) =>
-        type is CellType.BlackBoulder1 or CellType.BlackBoulder2 or CellType.BlackBoulder3 or
-            CellType.MetalBoulder1 or CellType.MetalBoulder2 or CellType.MetalBoulder3 or
-            CellType.Boulder1 or CellType.Boulder2 or CellType.Boulder3 or CellType.DeepMagmaBoulder or
-            CellType.AliveCyan or CellType.AliveRed or CellType.AliveViol or CellType.AliveNigger or
-            CellType.AliveWhite or CellType.AliveRainbow or CellType.AliveBlue or
-            CellType.QuadBlock or CellType.Support or CellType.MilitaryBlockFrame or CellType.MilitaryBlock or
-            CellType.GreenBlock or CellType.YellowBlock or CellType.FedBlock or CellType.RedBlock or
-            CellType.BuildingWall or CellType.BuildingDoor or CellType.BuildingCorner or
-            CellType.BuildingRoad or CellType.Gate or CellType.TeleportBlock or CellType.Box;
-
-    // Building and artificial blocks must never emit light/glow.
-    public static bool IsBuildingOrArtificialBlock(CellType type) =>
-        type is CellType.QuadBlock or
-            CellType.Support or
-            CellType.MilitaryBlockFrame or
-            CellType.MilitaryBlock or
-            CellType.GreenBlock or
-            CellType.YellowBlock or
-            CellType.FedBlock or
-            CellType.RedBlock or
-            CellType.BuildingWall or
-            CellType.BuildingDoor or
-            CellType.BuildingCorner or
-            CellType.BuildingRoad or
-            CellType.Gate or
-            CellType.TeleportBlock or
-            CellType.Box;
+    public static bool IsContinuousSheet(CellType type) =>
+        CellVisualProtocolRegistry.Current.Get(type).IsContinuousSheet;
 
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {

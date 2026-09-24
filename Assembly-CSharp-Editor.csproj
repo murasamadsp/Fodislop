@@ -707,10 +707,6 @@
       <HintPath>Assets/Plugins/Parlot.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="websocket-sharp">
-      <HintPath>Packages/com.gamelovers.mcp-unity/Editor/Lib/websocket-sharp.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>Library/PackageCache/com.unity.nuget.newtonsoft-json@4dfd81071c64/Runtime/Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
@@ -1511,7 +1507,6 @@
     <ProjectReference Include="UniTask.Addressables.csproj" />
     <ProjectReference Include="Effekseer.csproj" />
     <ProjectReference Include="Kern.Runtime.csproj" />
-    <ProjectReference Include="McpUnity.Editor.csproj" />
     <ProjectReference Include="UniTask.Linq.csproj" />
     <ProjectReference Include="UniTask.csproj" />
     <ProjectReference Include="Effekseer.URP.csproj" />

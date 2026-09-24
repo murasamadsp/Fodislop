@@ -104,7 +104,7 @@ public sealed class MarkerSearch : IDisposable
             if (_results.Count < MaxResults)
             {
                 var probe = new FrameProbe(info);
-                probe.Start();
+                probe.EnsureStarted();
                 _results.Add(probe);
             }
         }

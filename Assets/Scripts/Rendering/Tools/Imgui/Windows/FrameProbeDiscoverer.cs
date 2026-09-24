@@ -50,7 +50,7 @@ internal sealed class FrameProbeDiscoverer
             }
 
             var probe = new FrameProbe(info, "· " + info.Name.Substring(OwnMarkerPrefix.Length));
-            probe.Start();
+            probe.EnsureStarted();
             _discovered.Add(probe);
         }
     }

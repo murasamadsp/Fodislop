@@ -3,11 +3,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using Cysharp.Threading.Tasks;
 using Kern.Core;
+using Kern.Core.Interfaces.Diagnostics;
 using Kern.Core.Interfaces;
 using Kern.Networking;
 using Kern.Networking.Auth;
@@ -30,7 +30,7 @@ namespace Kern.Tests.PlayMode;
 // террейн и меряет одинаковые окна кадров в нескольких сценариях. Разница
 // между «всё» и «без отрисовки террейна» — цена террейна на экране; маркеры
 // Kern.Terrain.* — его цена на процессоре. Результат пишется в
-// Logs/benchmark_*.txt, чтобы сравнивать правки числами, а не на глаз.
+// Logs/Diagnostics/Performance/benchmark_*.txt.
 //
 // Explicit: в обычный прогон тестов не входит, запускается руками.
 [TestFixture]
@@ -171,11 +171,8 @@ public sealed class FrameBenchmarkPlayModeTests
         yield return Measure("всё включено (повтор)", results);
 
         string report = BuildReport(results);
-        string directory = Path.Combine(Application.dataPath, "..", "Logs");
-        Directory.CreateDirectory(directory);
-        string path = Path.GetFullPath(Path.Combine(directory, $"benchmark_{DateTime.Now:yyyyMMdd_HHmmss}.txt"));
-        File.WriteAllText(path, report, new UTF8Encoding(false));
-        Debug.Log($"[FrameBenchmark] {path}\n{report}");
+        DiagnosticReport.Write("Performance", "benchmark", "Бенчмарк кадра", report);
+        Debug.Log($"[FrameBenchmark]\n{report}");
 
         Assert.That(results.All(r => r.MeanMs > 0), Is.True, "Frames were not measured.");
     }

@@ -37,6 +37,7 @@ float4 TerrainAtlasTexelSize(
 
 half4 TerrainSampleAtlas(int slot, SamplerState atlasSampler, float2 uv)
 {
+    [branch]
     switch (slot)
     {
         case 1: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas1, atlasSampler, uv, 0);

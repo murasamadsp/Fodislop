@@ -12,6 +12,10 @@ public sealed class MapInteractionController
     private Vector2 _lastMousePos;
 
     public void HandleDrag(
+        Image? mapImage,
+        UIDocument? document,
+        int texWidth,
+        int texHeight,
         float cellsPerPixel,
         float dragSpeed,
         ref float viewCenterX,
@@ -25,11 +29,15 @@ public sealed class MapInteractionController
             return;
         }
 
+        Vector2 screenPosition = Mouse.current.position.ReadValue();
         if (Mouse.current.leftButton.wasPressedThisFrame)
         {
-            _isDragging = true;
-            followPlayer = false;
-            _lastMousePos = Mouse.current.position.ReadValue();
+            if (TryGetPanelPosition(mapImage, document, screenPosition, out Vector2 panelPosition) &&
+                mapImage!.worldBound.Contains(panelPosition))
+            {
+                _isDragging = true;
+                _lastMousePos = panelPosition;
+            }
         }
         else if (Mouse.current.leftButton.wasReleasedThisFrame)
         {
@@ -37,27 +45,57 @@ public sealed class MapInteractionController
         }
         else if (_isDragging && Mouse.current.leftButton.isPressed)
         {
-            Vector2 currentPos = Mouse.current.position.ReadValue();
-            Vector2 delta = currentPos - _lastMousePos;
-            _lastMousePos = currentPos;
+            if (!TryGetPanelPosition(mapImage, document, screenPosition, out Vector2 panelPosition) ||
+                mapImage == null || texWidth <= 0 || texHeight <= 0)
+            {
+                return;
+            }
+
+            Vector2 delta = panelPosition - _lastMousePos;
+            _lastMousePos = panelPosition;
 
             if (delta.sqrMagnitude > 1f)
             {
-                // Screen-space: +X right, +Y up. Server world: +X right, +Y down.
-                // Dragging right moves view left (decrease centerX).
-                // Dragging up moves view down towards deeper cells (increase centerY).
-                viewCenterX -= delta.x * cellsPerPixel * dragSpeed;
-                viewCenterY += delta.y * cellsPerPixel * dragSpeed;
+                followPlayer = false;
+                Rect mapRect = mapImage.worldBound;
+                if (mapRect.width <= 0f || mapRect.height <= 0f)
+                {
+                    return;
+                }
+
+                // Panel and server coordinates both increase downwards on Y.
+                // Dragging the map right/down moves its viewed world left/up.
+                viewCenterX -= delta.x * texWidth / mapRect.width * cellsPerPixel * dragSpeed;
+                viewCenterY -= delta.y * texHeight / mapRect.height * cellsPerPixel * dragSpeed;
                 clampViewCenter();
                 renderRequested = true;
             }
         }
     }
 
+    private static bool TryGetPanelPosition(
+        Image? mapImage,
+        UIDocument? document,
+        Vector2 screenPosition,
+        out Vector2 panelPosition)
+    {
+        panelPosition = default;
+        if (mapImage == null || document?.rootVisualElement.panel == null)
+        {
+            return false;
+        }
+
+        panelPosition = RuntimePanelUtils.ScreenToPanel(
+            document.rootVisualElement.panel,
+            screenPosition);
+        return true;
+    }
+
     public void HandleMouseScroll(
         VisualElement? mapOverlay,
         Image? mapImage,
-        UIDocument? document,
+        float delta,
+        Vector2 panelPoint,
         int texWidth,
         int texHeight,
         float maxCellsPerPixel,
@@ -69,12 +107,12 @@ public sealed class MapInteractionController
     {
         if (mapOverlay == null ||
             mapOverlay.resolvedStyle.display == DisplayStyle.None ||
-            Mouse.current == null)
+            mapImage == null ||
+            !mapImage.worldBound.Contains(panelPoint))
         {
             return;
         }
 
-        float delta = Mouse.current.scroll.ReadValue().y;
         if (Mathf.Abs(delta) < 0.01f)
         {
             return;
@@ -83,7 +121,7 @@ public sealed class MapInteractionController
         float oldCellsPerPixel = cellsPerPixel;
         bool hasCursorAnchor = TryGetCursorWorldPosition(
             mapImage,
-            document,
+            panelPoint,
             texWidth,
             texHeight,
             cellsPerPixel,
@@ -102,7 +140,7 @@ public sealed class MapInteractionController
         {
             ApplyCursorAnchor(
                 mapImage,
-                document,
+                panelPoint,
                 texWidth,
                 texHeight,
                 cellsPerPixel,
@@ -118,7 +156,7 @@ public sealed class MapInteractionController
 
     private static bool TryGetCursorWorldPosition(
         Image? mapImage,
-        UIDocument? document,
+        Vector2 panelPoint,
         int texWidth,
         int texHeight,
         float cellsPerPixel,
@@ -129,8 +167,7 @@ public sealed class MapInteractionController
     {
         worldX = 0f;
         worldY = 0f;
-        if (Mouse.current == null || mapImage == null || document?.rootVisualElement.panel == null ||
-            texWidth <= 0 || texHeight <= 0)
+        if (mapImage == null || texWidth <= 0 || texHeight <= 0)
         {
             return false;
         }
@@ -143,9 +180,6 @@ public sealed class MapInteractionController
             return false;
         }
 
-        Vector2 panelPoint = RuntimePanelUtils.ScreenToPanel(
-            document.rootVisualElement.panel,
-            Mouse.current.position.ReadValue());
         float pixelX = ((panelPoint.x - rect.xMin) / rect.width) * texWidth;
         float pixelY = ((panelPoint.y - rect.yMin) / rect.height) * texHeight;
         worldX = viewCenterX +
@@ -157,7 +191,7 @@ public sealed class MapInteractionController
 
     private static void ApplyCursorAnchor(
         Image? mapImage,
-        UIDocument? document,
+        Vector2 panelPoint,
         int texWidth,
         int texHeight,
         float cellsPerPixel,
@@ -166,8 +200,7 @@ public sealed class MapInteractionController
         ref float viewCenterX,
         ref float viewCenterY)
     {
-        if (Mouse.current == null || mapImage == null || document?.rootVisualElement.panel == null ||
-            texWidth <= 0 || texHeight <= 0)
+        if (mapImage == null || texWidth <= 0 || texHeight <= 0)
         {
             return;
         }
@@ -178,9 +211,6 @@ public sealed class MapInteractionController
             return;
         }
 
-        Vector2 panelPoint = RuntimePanelUtils.ScreenToPanel(
-            document.rootVisualElement.panel,
-            Mouse.current.position.ReadValue());
         float pixelX = ((panelPoint.x - rect.xMin) / rect.width) * texWidth;
         float pixelY = ((panelPoint.y - rect.yMin) / rect.height) * texHeight;
         viewCenterX = cursorWorldX -

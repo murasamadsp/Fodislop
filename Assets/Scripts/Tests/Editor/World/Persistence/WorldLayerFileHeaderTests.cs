@@ -166,4 +166,60 @@ public class WorldLayerFileHeaderTests
 
         Assert.IsNull(WorldLayerFileHeader.TryReadFormatVersion(memory));
     }
+
+    [Test]
+    public void MigrateLegacyFormat_V0Format_MigratesToV1AndBackupsOriginal()
+    {
+        string filePath = Path.Combine(_tempDir, "legacy.map");
+        const int width = 2;
+        const int height = 2;
+        const int chunkSize = 16;
+
+        using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+        using (var writer = new BinaryWriter(fs))
+        {
+            writer.Write(width);
+            writer.Write(height);
+            writer.Write(chunkSize);
+            writer.Write(0); // v0 format
+            writer.Write(-1L);
+            writer.Write(-1L);
+            writer.Write(-1L);
+            writer.Write(-1L);
+        }
+
+        WorldLayerFileHeader.MigrateLegacyFormatIfRequired(filePath, width, height, chunkSize);
+
+        // Verify that backup file was created
+        string backupPath = filePath + ".v0.backup";
+        Assert.IsTrue(File.Exists(backupPath));
+
+        // Verify migrated file has version 1
+        long[] offsets = new long[4];
+        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+        {
+            bool success = WorldLayerFileHeader.TryReadHeader(fs, width, height, chunkSize, offsets);
+            Assert.IsTrue(success);
+        }
+    }
+
+    [Test]
+    public void MigrateLegacyFormat_AlreadyV1_LeavesUntouched()
+    {
+        string filePath = Path.Combine(_tempDir, "v1.map");
+        const int width = 2;
+        const int height = 2;
+        const int chunkSize = 16;
+
+        using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+        {
+            long[] offsets = new long[4];
+            WorldLayerFileHeader.WriteHeader(fs, width, height, chunkSize, offsets);
+        }
+
+        WorldLayerFileHeader.MigrateLegacyFormatIfRequired(filePath, width, height, chunkSize);
+
+        string backupPath = filePath + ".v0.backup";
+        Assert.IsFalse(File.Exists(backupPath));
+    }
 }

@@ -137,9 +137,13 @@ public sealed class PacketTrafficWindow : ToolWindow
             $"сейчас {PacketTelemetry.IncomingPerSecond:F1} вход/с, " +
             $"{PacketTelemetry.OutgoingPerSecond:F1} исход/с";
         _queueSummary =
-            $"в очереди {PacketTelemetry.QueueDepth}, пик {PacketTelemetry.PeakQueueDepth}; " +
+            $"в очереди {PacketTelemetry.QueueDepth} ({PacketTelemetry.QueueBytes / 1024} КБ), " +
+            $"пик {PacketTelemetry.PeakQueueDepth} ({PacketTelemetry.PeakQueueBytes / 1024} КБ); " +
             $"разбор оборван бюджетом {PacketTelemetry.BudgetStopCount}, " +
-            $"потолком партии {PacketTelemetry.BatchCapStopCount}";
+            $"потолком партии {PacketTelemetry.BatchCapStopCount}; " +
+            $"давление на сервер {PacketTelemetry.BackpressureCount} раз, " +
+            $"{PacketTelemetry.BackpressureMilliseconds:F0} мс; " +
+            $"сверх лимита с главного потока {PacketTelemetry.AdmissionOverflowCount}";
 
         double perBatch = PacketTelemetry.BatchCount > 0
             ? PacketTelemetry.BatchedPacketCount / (double)PacketTelemetry.BatchCount

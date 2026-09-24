@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Kern.Core.Interfaces.Diagnostics;
 using Kern.Tools.Imgui.Profiling;
 using UnityEngine;
 
@@ -9,7 +10,7 @@ namespace Kern.Tools.Imgui.Windows;
 
 internal static class FrameBreakdownDiagnosticsBuilder
 {
-    private const double BudgetMilliseconds = 1000.0 / 60.0;
+    private const double BudgetMilliseconds = FrameBudget.TargetFrameMilliseconds;
 
     private static readonly List<KeyValuePair<string, int>> _subtreeSorted = [];
     private static readonly List<KeyValuePair<Texture, int>> _textureSorted = [];
@@ -143,7 +144,7 @@ internal static class FrameBreakdownDiagnosticsBuilder
             rows.Add(new FrameBreakdownRow(
                 FrameBreakdownRowKind.Text,
                 "Кнопка «Поймать всплески» записывает все маркеры покадрово пачками дольше секунды, " +
-                "находит просевшие кадры (в 1.5 раза и на 4 мс дольше медианы) и показывает, " +
+                $"находит провисы (не короче {FrameBudget.StallMinimumMilliseconds:F0} мс и в {FrameBudget.StallOverBaseline:F1} раза дольше медианы) и показывает, " +
                 "какие маркеры в них выросли сильнее всего. Проход идёт около полуминуты."));
             return;
         }

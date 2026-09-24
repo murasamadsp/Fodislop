@@ -132,6 +132,32 @@ public class InventoryProcessorTests
     }
 
     [Test]
+    public void Process_LateSelectItemPacket_UpdatesMatchingTypeWithoutChangingOtherItems()
+    {
+        _model.ApplyFullSnapshot(new Dictionary<ItemType, long>
+        {
+            { ItemType.Rem, 1 },
+            { ItemType.Battery, 1 },
+        });
+        _model.ApplyItemMetadata(ItemType.Battery, "Scanner", "Scans nearby objects");
+
+        _processor.Process(new SelectItemPacket(
+            ItemType.Rem,
+            "Super Pickaxe",
+            "Mines instantly",
+            0,
+            0,
+            0,
+            false,
+            new BitArray(8)));
+
+        Assert.AreEqual("Super Pickaxe", _model.GetItem(ItemType.Rem)!.Name);
+        Assert.AreEqual("Mines instantly", _model.GetItem(ItemType.Rem)!.Description);
+        Assert.AreEqual("Scanner", _model.GetItem(ItemType.Battery)!.Name);
+        Assert.IsNull(_model.SelectedItem);
+    }
+
+    [Test]
     public void Process_SelectItemPacket_IgnoresUnknownType()
     {
         var packet = new SelectItemPacket(

@@ -27,7 +27,7 @@ public sealed class TerrainCellMaskCalculator
         }
     }
 
-    public void PrecalculateFull(TerrainCellCache cellCache, int meshWidth, int meshHeight)
+    public void PrecalculateFull(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight)
     {
         EnsureCapacity(meshWidth, meshHeight);
 
@@ -40,7 +40,7 @@ public sealed class TerrainCellMaskCalculator
         });
     }
 
-    public void PrecalculateRegion(TerrainCellCache cellCache, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY)
+    public void PrecalculateRegion(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY)
     {
         int cxMin = Mathf.Clamp(startX, 0, meshWidth);
         int cxMax = Mathf.Clamp(startX + countX, 0, meshWidth);
@@ -56,7 +56,7 @@ public sealed class TerrainCellMaskCalculator
         }
     }
 
-    public void PrecalculateIncremental(TerrainCellCache cellCache, int meshWidth, int meshHeight, int dx, int dy)
+    public void PrecalculateIncremental(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int dx, int dy)
     {
         EnsureCapacity(meshWidth, meshHeight);
 
@@ -73,7 +73,7 @@ public sealed class TerrainCellMaskCalculator
         CalculateBand(cellCache, bands.RowBand);
     }
 
-    private void CalculateBand(TerrainCellCache cellCache, RectInt band)
+    private void CalculateBand(ITerrainCellDataSource cellCache, RectInt band)
     {
         for (int x = band.xMin; x < band.xMax; x++)
         {
@@ -84,7 +84,7 @@ public sealed class TerrainCellMaskCalculator
         }
     }
 
-    public void CalculateCellNode(TerrainCellCache cellCache, int x, int y)
+    public void CalculateCellNode(ITerrainCellDataSource cellCache, int x, int y)
     {
         int cx = x + 1;
         int cy = y + 1;

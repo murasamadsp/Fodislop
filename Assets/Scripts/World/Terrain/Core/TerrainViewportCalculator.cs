@@ -66,8 +66,13 @@ public sealed class TerrainViewportCalculator
         meshHeight = targetHeight;
     }
 
+    /// <param name="focusPosition">
+    /// Центр кадра, под который ставится окно: камера, а во время перехода
+    /// вида (телепорт) — место назначения, куда камера встанет.
+    /// </param>
     public Vector2Int ResolveGridPosition(
         Camera camera,
+        Vector3 focusPosition,
         float cellSize,
         int meshWidth,
         int meshHeight,
@@ -76,13 +81,16 @@ public sealed class TerrainViewportCalculator
         int effectivePadding,
         bool dimensionsChanged,
         Vector2Int lastGridPos,
+        float speedCellsPerSecond,
+        float preparationLatencySeconds,
+        bool centerOnFocus,
         out int viewportMinX,
         out int viewportMinY,
         out int viewportWidth,
         out int viewportHeight)
     {
         StreamingPolicy policy = _streamingGovernor.Policy;
-        Vector3 camPos = camera.transform.position;
+        Vector3 camPos = focusPosition;
         Vector2Int desiredGridPos = new(
             Mathf.FloorToInt(camPos.x / cellSize) - (meshWidth / 2),
             Mathf.FloorToInt(camPos.y / cellSize) - (meshHeight / 2));
@@ -99,15 +107,27 @@ public sealed class TerrainViewportCalculator
         viewportMinX = Mathf.FloorToInt(camPos.x / cellSize) - (viewportWidth / 2);
         viewportMinY = Mathf.FloorToInt(camPos.y / cellSize) - (viewportHeight / 2);
 
+        // Переход вида: окно встаёт сразу на место назначения, а не
+        // догоняет его по кванту за шаг, — но только если кадр назначения в
+        // окне не помещается: доезжающий робот не должен перезапускать сборку.
+        const int PresentationMarginCells = 4;
+        bool focusOutsideWindow = lastGridPos.x == int.MinValue ||
+            !policy.ContainsViewportWithMargin(
+                new Vector2Int(meshWidth, meshHeight),
+                new Vector2Int(viewportMinX, viewportMinY) - lastGridPos,
+                new Vector2Int(viewportWidth, viewportHeight),
+                PresentationMarginCells);
         Vector2Int targetOrigin = _streamingGovernor.SelectTargetOrigin(
             lastGridPos,
             desiredGridPos,
             new Vector2Int(viewportMinX, viewportMinY),
             new Vector2Int(viewportWidth, viewportHeight),
             new Vector2Int(meshWidth, meshHeight),
-            dimensionsChanged,
+            dimensionsChanged || (centerOnFocus && focusOutsideWindow),
             reanchorMarginCells: policy.ResolvePrefetchMarginCells(
-                Mathf.Min(meshWidth, meshHeight)));
+                new Vector2Int(meshWidth, meshHeight),
+                new Vector2Int(viewportWidth, viewportHeight),
+                policy.ResolveSpeedLeadCells(speedCellsPerSecond, preparationLatencySeconds)));
         var currentWindow = new StreamingWindow(
             lastGridPos,
             new Vector2Int(meshWidth, meshHeight));
@@ -148,12 +168,28 @@ public sealed class TerrainViewportCalculator
         bool isRequestedResident,
         bool hasAnyResidentData,
         bool requestedDimensionsChanged,
-        bool cellsCommitted)
+        bool cellsCommitted,
+        bool cpuBuildInFlight)
     {
         bool hadAnything = isRequestedResident || hasAnyResidentData;
         if (!hadAnything)
         {
-            if (!cellsCommitted || retainedLightingViewport.width <= 0 || retainedLightingViewport.height <= 0)
+            // The initial CPU build must be polled before there is a committed
+            // window. Otherwise ShouldProcess stays false forever and the
+            // completed task can never publish its result.
+            return new TerrainFramePlan(
+                requestedWindow,
+                committedWindow,
+                requestedWindow,
+                cameraViewport,
+                cameraViewport,
+                DimensionsChanged: requestedDimensionsChanged,
+                ShouldProcess: true);
+        }
+
+        if (!isRequestedResident || cpuBuildInFlight)
+        {
+            if (!cellsCommitted)
             {
                 return new TerrainFramePlan(
                     requestedWindow,
@@ -163,6 +199,17 @@ public sealed class TerrainViewportCalculator
                     retainedLightingViewport,
                     DimensionsChanged: false,
                     ShouldProcess: false);
+            }
+
+            // Окно опубликовано, а свет ещё ни разу не ставился: запрос
+            // (новый размер или начало) не приехал в кадре первой
+            // публикации. Отказ от обработки здесь не ждёт, а запирает:
+            // без обработки свет не ставится никогда, меш показа тоже, и
+            // экран остаётся чёрным, пока запрос не станет резидентным.
+            // Свет ставится по кадру камеры внутри опубликованного окна.
+            if (retainedLightingViewport.width <= 0 || retainedLightingViewport.height <= 0)
+            {
+                retainedLightingViewport = ClampInto(cameraViewport, committedWindow);
             }
 
             // Keep processing the committed window, including dirty terrain
@@ -186,5 +233,16 @@ public sealed class TerrainViewportCalculator
             cameraViewport,
             DimensionsChanged: requestedDimensionsChanged,
             ShouldProcess: true);
+    }
+
+    // Прямоугольник сдвигается (а если не влезает — обрезается) так, чтобы
+    // лежать внутри окна.
+    private static RectInt ClampInto(RectInt rect, StreamingWindow window)
+    {
+        int width = Mathf.Min(rect.width, window.Size.x);
+        int height = Mathf.Min(rect.height, window.Size.y);
+        int x = Mathf.Clamp(rect.x, window.Origin.x, window.Origin.x + window.Size.x - width);
+        int y = Mathf.Clamp(rect.y, window.Origin.y, window.Origin.y + window.Size.y - height);
+        return new RectInt(x, y, width, height);
     }
 }

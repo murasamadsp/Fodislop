@@ -295,6 +295,7 @@
     font-size: var(--size-base);
     -unity-font-style: bold;
     color: var(--text-primary);
+    margin-bottom: var(--space-1);
 }
 
 .inv-tooltip-desc {

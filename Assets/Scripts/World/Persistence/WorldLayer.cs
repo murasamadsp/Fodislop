@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using Kern;
 using Kern.Core;
 
@@ -13,7 +15,7 @@ using Kern.Core;
 [assembly: InternalsVisibleTo("Kern.World")]
 
 namespace Kern.Persistence;
-public sealed class WorldLayer<T> : IWorldLayer<T>
+public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
     where T : unmanaged
 {
     private readonly int _chunkSize;
@@ -123,6 +125,7 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
             _cache, _loader, CHUNK_SIZE, chunkArea, HEIGHT_CHUNKS);
         _dirtyWriter = new WorldLayerDirtyWriter<T>(_cache, _file, chunkArea);
 
+        WorldLayerFileHeader.MigrateLegacyFormatIfRequired(_filePath, _widthChunks, _heightChunks, _chunkSize);
         _file.Initialize();
     }
 
@@ -307,6 +310,48 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
     public ChunkReadResult<T> ReadChunk(int chunkIndex, bool touchLru = true) =>
         _loader.ReadChunk(chunkIndex, touchLru);
 
+    public UniTask VisitStoredChunkRunsAsync(
+        Action<int, T, int> runVisitor,
+        Action<int, int>? progress,
+        CancellationToken cancellationToken = default)
+    {
+        if (runVisitor == null)
+        {
+            throw new ArgumentNullException(nameof(runVisitor));
+        }
+
+        return UniTask.RunOnThreadPool(
+            () =>
+            {
+                const int batchCapacity = 512;
+                var chunkIndices = new int[batchCapacity];
+                int nextIndex = 0;
+
+                while (nextIndex < _file.ChunkCount)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int count = _file.CopyStoredChunkIndices(
+                        nextIndex,
+                        chunkIndices,
+                        out int batchEndIndex);
+
+                    for (int i = 0; i < count; i++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        int chunkIndex = chunkIndices[i];
+                        _file.VisitChunkRuns(
+                            chunkIndex,
+                            _chunkSize * _chunkSize,
+                            runVisitor);
+                    }
+
+                    nextIndex = batchEndIndex;
+                    progress?.Invoke(nextIndex, _file.ChunkCount);
+                }
+            },
+            cancellationToken: cancellationToken);
+    }
+
     public void Flush(bool flushToDisk = false) => _dirtyWriter.Flush(flushToDisk);
 
     public List<(int Index, T[] Chunk)> TakeDirtySnapshot() => _dirtyWriter.TakeSnapshot();
@@ -314,8 +359,13 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
     public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot) =>
         _dirtyWriter.RestoreDirty(snapshot);
 
+    /// <summary>Записать снимок в файл. Можно из пула; учёт — <see cref="CompleteDirty"/>.</summary>
     public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk) =>
         _dirtyWriter.WriteSnapshot(snapshot, flushToDisk);
+
+    /// <summary>Главный поток после успешной записи снимка.</summary>
+    public void CompleteDirty(List<(int Index, T[] Chunk)> snapshot) =>
+        _dirtyWriter.CompleteSnapshot(snapshot);
 
     public void CreateDurableBackup(string backupPath) =>
         _file.CreateDurableBackup(backupPath);
