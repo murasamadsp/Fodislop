@@ -131,6 +131,12 @@ public sealed class TerrainFramePlanner
             cameraViewport,
             retainedLightingViewport,
             isRequestedResident,
+            TerrainResidencyProbe.HasAnyResidentData(
+                storage,
+                mapData,
+                requestedWindow.Origin,
+                requestedWindow.Size.x,
+                requestedWindow.Size.y),
             dimensionsChanged,
             cellsCommitted,
             cpuBuildInFlight);

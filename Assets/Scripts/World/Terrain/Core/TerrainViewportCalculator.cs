@@ -166,11 +166,13 @@ public sealed class TerrainViewportCalculator
         RectInt cameraViewport,
         RectInt retainedLightingViewport,
         bool isRequestedResident,
+        bool hasAnyResidentData,
         bool requestedDimensionsChanged,
         bool cellsCommitted,
         bool cpuBuildInFlight)
     {
-        if (cpuBuildInFlight && !cellsCommitted)
+        bool hadAnything = isRequestedResident || hasAnyResidentData;
+        if (!hadAnything)
         {
             // The initial CPU build must be polled before there is a committed
             // window. Otherwise ShouldProcess stays false forever and the
