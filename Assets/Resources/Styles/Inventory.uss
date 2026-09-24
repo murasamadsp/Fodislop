@@ -285,7 +285,10 @@
 .inv-tooltip-meta {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-1);
+}
+
+.inv-tooltip-meta .sci-fi-badge-gold {
+    margin-top: var(--space-1);
 }
 
 .inv-tooltip-title {

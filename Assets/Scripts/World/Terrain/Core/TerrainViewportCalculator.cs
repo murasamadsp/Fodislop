@@ -146,10 +146,12 @@ public sealed class TerrainViewportCalculator
         RectInt cameraViewport,
         RectInt retainedLightingViewport,
         bool isRequestedResident,
+        bool hasAnyResidentData,
         bool requestedDimensionsChanged,
         bool cellsCommitted)
     {
-        if (!isRequestedResident)
+        bool hadAnything = isRequestedResident || hasAnyResidentData;
+        if (!hadAnything)
         {
             if (!cellsCommitted || retainedLightingViewport.width <= 0 || retainedLightingViewport.height <= 0)
             {
