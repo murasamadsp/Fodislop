@@ -26,6 +26,7 @@ public sealed class TerrainFramePlanSelectionTests
             camera,
             retainedLightingViewport: default,
             isRequestedResident: false,
+            hasAnyResidentData: true,
             requestedDimensionsChanged: true,
             cellsCommitted: true,
             cpuBuildInFlight: false);
@@ -49,6 +50,7 @@ public sealed class TerrainFramePlanSelectionTests
             camera,
             retainedLightingViewport: default,
             isRequestedResident: true,
+            hasAnyResidentData: true,
             requestedDimensionsChanged: false,
             cellsCommitted: true,
             cpuBuildInFlight: true);
@@ -69,6 +71,7 @@ public sealed class TerrainFramePlanSelectionTests
             new RectInt(10, 10, 20, 20),
             retainedLightingViewport: default,
             isRequestedResident: false,
+            hasAnyResidentData: false,
             requestedDimensionsChanged: false,
             cellsCommitted: false,
             cpuBuildInFlight: false);
