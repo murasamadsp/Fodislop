@@ -5,6 +5,7 @@ using System.Threading;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Kern;
+using Kern.Core;
 using Kern.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
@@ -82,7 +83,7 @@ internal sealed class DummyWorldStartupResponder(
             System.Drawing.Color.White,
             string.Empty);
         sendPacket(new ServerPacket(new ChatListPacket(
-            [("global", "Global", placeholder)])));
+            [(ProjectRuntimeContracts.Chat.GlobalChannelTag, "Global", placeholder)])));
         SendTestPacks();
         missionRunner.StartPersistentMission(playerState.X, playerState.Y);
         SendWorldMusic();

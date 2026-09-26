@@ -36,6 +36,15 @@ public interface IRobotService
     void RegisterRobot(IRobotView robot);
     void UnregisterRobot(uint botID);
     IRobotView GetOrCreateRobot(uint botID);
+
+    /// <summary>
+    /// Возвращает только уже существующего робота и никогда не создаёт нового.
+    /// Нужен там, где отсутствие сущности — штатная ситуация, а не повод
+    /// материализовать призрака: локальный чат сервера приходит игрокам из
+    /// чанков вокруг отправителя, которые могут быть вне клиентского вида.
+    /// </summary>
+    bool TryGetRobot(uint botID, out IRobotView? robot);
+
     void UpdateRobotMetadata(uint botID, RobotMetadata metadata);
     void UpdateRobotPosition(uint botID, ushort x, ushort y, byte rotation);
     void SetLocalPlayerBotID(uint botID);

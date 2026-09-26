@@ -10,24 +10,49 @@ namespace Kern.UI
     {
         private const float Lifetime = 3f;
         private const float FollowWeight = 0.3f;
-        private const float TargetOffsetX = -0.5f;
+
+        // Облако вешается нижним центром в верхнюю грань клетки робота:
+        // transform.position робота — центр его клетки (CoordinateUtils.
+        // ServerToUnityPos), а спрайт робота центрирован на этой точке. Минус
+        // половина клетки по X был подбором на глаз и центрировал только
+        // облако шириной ровно в клетку: узкое уезжало влево, широкое — вправо.
+        // Горизонтальное центрирование теперь измеряемое, в WorldLabels.Entry.
+        private const float CellTopOffset = 0.5f;
 
         [Inject]
         private IWorldLabels _labels = null!;
 
         private IWorldLabel? _label;
         private Transform? _target;
+        private Vector3? _anchor;
         private float _expiresAt;
 
         public int OwnerID { get; private set; }
 
         public void Init(int ownerID, string text, Transform target)
         {
-            OwnerID = ownerID;
             _target = target;
+            _anchor = null;
+            Show(ownerID, text);
+        }
+
+        /// <summary>
+        /// Якорь в мировых координатах для отправителя, чей робот клиенту неизвестен:
+        /// сервер кладёт в пакет свои X/Y на момент отправки именно для этого случая.
+        /// </summary>
+        public void Init(int ownerID, string text, Vector3 anchor)
+        {
+            _target = null;
+            _anchor = new Vector3(anchor.x, anchor.y + CellTopOffset, anchor.z);
+            Show(ownerID, text);
+        }
+
+        private void Show(int ownerID, string text)
+        {
+            OwnerID = ownerID;
             _expiresAt = Time.unscaledTime + Lifetime;
 
-            _label ??= _labels.Create(chatBubble: true);
+            _label ??= _labels.Create(WorldLabelKind.ChatBubble);
             _label.SetText(text);
             _label.SetOpacity(1f);
 
@@ -58,14 +83,21 @@ namespace Kern.UI
         {
             // Робот мог исчезнуть, пока облако живёт: тогда оно доживает свои
             // секунды там, где остановилось, а не прыгает в начало координат.
-            Vector3 position = _target != null ? _target.position : transform.position;
-            position.x += _target != null ? TargetOffsetX : 0f;
-            return position;
+            if (_target != null)
+            {
+                return new Vector3(
+                    _target.position.x,
+                    _target.position.y + CellTopOffset,
+                    _target.position.z);
+            }
+
+            return _anchor ?? transform.position;
         }
 
         protected void OnDisable()
         {
             _target = null;
+            _anchor = null;
             _label?.SetVisible(false);
         }
 

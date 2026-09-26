@@ -1,6 +1,9 @@
-@import url("../Resources/Styles/WorldLabels.uss");
 /* Kern Runtime Theme */
+/* Базовая тема идёт ПЕРВОЙ: при равной специфичности выигрывает правило,
+   объявленное позже, и .unity-label из unity-theme перебивал white-space у
+   .world-label-chat. Облако чата не переносило текст и не росло по высоте. */
 @import url("unity-theme://default");
+@import url("../Resources/Styles/WorldLabels.uss");
 @import url("../Resources/Styles/ThemeTokens.uss");
 @import url("../Resources/Styles/TokenUtilities.uss");
 @import url("../Resources/Styles/Animations.uss");

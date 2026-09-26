@@ -386,9 +386,14 @@ namespace Kern.Networking.Connection
                     Environment.OSVersion.Version.Major,
                     SystemInfo.deviceUniqueIdentifier,
                     token)));
-            Connection?.SendAsync(new ClientPacket(
-                (uint)DateTimeOffset.UtcNow.Ticks,
-                new OpenHelpClickPacket()));
+
+            // Здесь раньше безусловно уходил OpenHelpClickPacket, и сервер на
+            // каждый коннект и реконнект отвечал окном FAQ. Окно модальное:
+            // ServerWindowPresenter.Open кладёт его в стек модалок, и
+            // IInputBlocker.IsInputBlocked становится true — весь игровой ввод
+            // и T локального чата переставали работать, пока окно не закроют
+            // мышью. Кнопки помощи в интерфейсе нет, запрос был единственным
+            // источником этого окна, поэтому он убран вместе с окном.
         }
 
         private static string GetClientOperatingSystem() =>

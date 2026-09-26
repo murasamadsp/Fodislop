@@ -100,7 +100,7 @@ namespace Kern.UI
             {
                 try
                 {
-                    _networkService.Send(new QueryChatHistoryPacket("global", 0));
+                    _networkService.Send(new QueryChatHistoryPacket(ProjectRuntimeContracts.Chat.GlobalChannelTag, 0));
                 }
                 catch (Exception ex)
                 {
@@ -177,14 +177,11 @@ namespace Kern.UI
 
             bool inputBlocked = _inputBlocker != null && _inputBlocker.IsInputBlocked;
 
+            // T не открывает этот канал: он принадлежит локальному чату
+            // (FloatingChatManager → LocalChatInput). Глобальное окно открывает
+            // только кнопка чата в HUD.
             if (!_isOpen)
             {
-                if (Keyboard.current.tKey.wasPressedThisFrame && !inputBlocked)
-                {
-                    SelectGlobalChannel();
-                    Show();
-                }
-
                 return;
             }
 
@@ -258,7 +255,7 @@ namespace Kern.UI
                 return;
             }
 
-            if (!_hasGlobalChannel)
+            if (!CanSendToGlobalChannel)
             {
                 return;
             }
@@ -277,7 +274,9 @@ namespace Kern.UI
 
             try
             {
-                _networkService.Send(new SendChatMessagePacket("global", text));
+                _networkService.Send(new SendChatMessagePacket(
+                    ProjectRuntimeContracts.Chat.GlobalChannelTag,
+                    text));
             }
             catch (Exception ex)
             {
@@ -338,7 +337,10 @@ namespace Kern.UI
 
         private void AddHistory(ChatMessageListPacket packet)
         {
-            if (!string.Equals(packet.Tag, "global", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(
+                    packet.Tag,
+                    ProjectRuntimeContracts.Chat.GlobalChannelTag,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 Debug.LogWarning($"[GlobalChatUI] Ignoring history for unsupported channel '{packet.Tag}'.");
                 return;
@@ -392,13 +394,29 @@ namespace Kern.UI
             RenderActiveMessages();
         }
 
+        // Сервер штатно не шлёт ChatListPacket: пакет зарегистрирован в кодовой
+        // таблице (code 48) и покрыт тестами на стороне сервера, но ни один
+        // production-путь его не конструирует. Прежний гейт
+        // (_hasServerChatList && _hasGlobalChannel) из-за этого был навсегда
+        // закрыт: у реального сервера _hasServerChatList не становится true, и
+        // кнопка отправки не разблокировалась ни разу за сессию.
+        //
+        // Теперь отсутствие списка означает «сервер каналы не объявлял», а не
+        // «канала нет»: доверяем тегу из ProjectRuntimeContracts. Если список
+        // придёт — уважаем его, это единственный способ узнать о серверном
+        // канале, которого клиент не знает.
+        private bool CanSendToGlobalChannel => !_hasServerChatList || _hasGlobalChannel;
+
         private void ApplyChatList(ChatListPacket packet)
         {
             _hasServerChatList = true;
             _hasGlobalChannel = false;
             foreach (var (tag, _, _) in packet.Chats)
             {
-                if (string.Equals(tag, "global", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(
+                        tag,
+                        ProjectRuntimeContracts.Chat.GlobalChannelTag,
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     _hasGlobalChannel = true;
                     break;
@@ -473,7 +491,7 @@ namespace Kern.UI
                 return;
             }
 
-            bool globalAvailable = _hasServerChatList && _hasGlobalChannel;
+            bool globalAvailable = CanSendToGlobalChannel;
             bool activeChannelAvailable = globalAvailable;
             _view.InputField?.SetEnabled(!muted);
             _view.SendButton?.SetEnabled(!muted && activeChannelAvailable);

@@ -174,3 +174,42 @@
     font-size: var(--size-base);
     color: var(--light-solid);
 }
+
+/* ─── Локальный чат (LocalChatInput) ───
+   Одна строка по центру низа: глобальное окно живёт справа по центру
+   (.gchat-panel), дно по центру кадра HUD не занимает — джойстик прижат
+   влево, корзина с инвентарём вверх. */
+
+.lchat-panel {
+    position: absolute;
+    left: 50%;
+    bottom: var(--space-11);
+    translate: -50% 0;
+    width: 420px;
+    flex-direction: row;
+    align-items: center;
+    background-color: var(--surface-slate-dense);
+    border-width: 1px;
+    border-color: var(--accent-cyan-deep);
+    padding: var(--space-1) var(--space-2);
+}
+
+.lchat-input {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    background-color: transparent;
+    border-width: 0;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--size-sm);
+    color: var(--light-solid);
+}
+
+.lchat-internal-input {
+    background-color: transparent;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    font-size: var(--size-base);
+    color: var(--light-solid);
+}

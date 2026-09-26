@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Kern.Core;
 using Kern.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -15,7 +16,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
     private VisualElement? _root;
     private VisualElement? _container;
 
-    public IWorldLabel Create(bool chatBubble)
+    public IWorldLabel Create(WorldLabelKind kind)
     {
         if (_root == null)
         {
@@ -30,9 +31,11 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
 
         // Labels are a dynamic collection, not static screen structure.
         var label = new Label { pickingMode = PickingMode.Ignore, enableRichText = false };
-        label.AddToClassList(chatBubble ? "world-label-chat" : "world-label-name");
+        label.AddToClassList(kind == WorldLabelKind.ChatBubble
+            ? "world-label-chat"
+            : "world-label-name");
         _container!.Add(label);
-        var entry = new Entry(this, label);
+        var entry = new Entry(this, label, kind);
         _entries.Add(entry);
         return entry;
     }
@@ -79,9 +82,10 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         _container = null;
     }
 
-    private sealed class Entry(WorldLabels owner, Label label) : IWorldLabel
+    private sealed class Entry(WorldLabels owner, Label label, WorldLabelKind kind) : IWorldLabel
     {
         private const float PositionApplyEpsilonPx = 0.5f;
+        private const string OffscreenClass = "world-label-offscreen";
 
         public Label Label { get; } = label;
         public Vector3 Position { get; private set; }
@@ -113,15 +117,32 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
                 return;
             }
 
-            UIState.SetHidden(Label, false);
-            if (positionChanged)
+            // Показываем независимо от того, посчитан ли размер. Раньше здесь
+            // стоял выход по TryResolveSize, и это был дедлок: скрытие идёт
+            // через visibility, размер доступен всегда, но на первом кадре он
+            // ещё NaN, ранний выход оставлял метку скрытой, и снять скрытие
+            // мог только ApplyVisible — то есть уже никогда. С переиспользованным
+            // пузырём из пула сообщение переставало показываться навсегда.
+            SetOffscreen(false);
+            _lastAppliedVisible = true;
+            _hasApplied = true;
+
+            if (!TryResolveSize(out Vector2 size))
             {
-                Label.style.translate = new Translate(position.x, position.y);
+                // Смещение не пишем, но и позицию не запоминаем: флаг
+                // positionChanged останется поднятым, и следующий кадр повторит
+                // попытку, как только раскладка посчитает размер.
+                return;
             }
 
-            _lastAppliedVisible = true;
+            // translate двигает бокс целиком, поэтому угол привязки вычитается
+            // из его размера: облако висит нижним центром над роботом,
+            // никнейм — левым верхним углом от точки как есть.
+            Vector3 offset = kind == WorldLabelKind.ChatBubble
+                ? new Vector3(position.x - (size.x * 0.5f), position.y - size.y)
+                : position;
+            Label.style.translate = new Translate(offset.x, offset.y);
             _lastAppliedPosition = position;
-            _hasApplied = true;
         }
 
         public void ApplyHidden()
@@ -131,7 +152,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
                 return;
             }
 
-            UIState.SetHidden(Label, true);
+            SetOffscreen(true);
             _lastAppliedVisible = false;
             _hasApplied = true;
         }
@@ -140,6 +161,33 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         {
             owner._entries.Remove(this);
             Label.RemoveFromHierarchy();
+        }
+
+        // Скрытие через visibility, а не через UIState.SetHidden с display:none.
+        // display:none выводит элемент из раскладки, ширина и высота становятся
+        // NaN, и посчитать нижний центр больше нечем. visibility:hidden элемент
+        // раскладывается, поэтому повторный показ всегда знает свой размер.
+        private void SetOffscreen(bool offscreen) =>
+            Label.EnableInClassList(OffscreenClass, offscreen);
+
+        private bool TryResolveSize(out Vector2 size)
+        {
+            if (kind != WorldLabelKind.ChatBubble)
+            {
+                size = Vector2.zero;
+                return true;
+            }
+
+            IResolvedStyle style = Label.resolvedStyle;
+            if (float.IsNaN(style.width) || float.IsNaN(style.height) ||
+                style.width <= 0f || style.height <= 0f)
+            {
+                size = Vector2.zero;
+                return false;
+            }
+
+            size = new Vector2(style.width, style.height);
+            return true;
         }
     }
 }

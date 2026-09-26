@@ -97,6 +97,18 @@ public sealed class RobotManager(
         return robot;
     }
 
+    public bool TryGetRobot(uint botID, out IRobotView? robot)
+    {
+        if (_robots.TryGetValue(botID, out var existing))
+        {
+            robot = existing;
+            return true;
+        }
+
+        robot = null;
+        return false;
+    }
+
     public void UpdateRobotPosition(uint botID, ushort x, ushort y, byte rotation)
     {
         var robot = GetOrCreateRobot(botID);

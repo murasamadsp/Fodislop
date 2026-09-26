@@ -2,6 +2,7 @@
 
 using System;
 using System.Globalization;
+using Kern.Core;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -144,6 +145,8 @@ internal sealed class DummyAdminCommands(
             "Сервер",
             _ServerColor,
             text);
-        sendPacket(new ServerPacket(new ChatMessageListPacket("global", [message])));
+        sendPacket(new ServerPacket(new ChatMessageListPacket(
+            ProjectRuntimeContracts.Chat.GlobalChannelTag,
+            [message])));
     }
 }
