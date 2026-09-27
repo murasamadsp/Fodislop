@@ -258,7 +258,7 @@ namespace Kern.Game
 
             if (_movement.IsSettled(_visuals.TentaclesSettled))
             {
-                _visuals.UpdateMotion(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime, true);
+                _visuals.UpdateMotion(transform.position, 0f, Time.deltaTime, true);
                 _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
                 _lighting.Update(_movement.SmoothPosition, _lightingEngine);
                 return;
@@ -274,7 +274,7 @@ namespace Kern.Game
             transform.position = finalPosition;
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
 
-            _visuals.UpdateMotion(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime, false);
+            _visuals.UpdateMotion(finalPosition, movementFactor, Time.deltaTime, false);
             _nameplate.UpdatePosition(finalPosition, _visuals.SkinSprite, transform, _visuals.ClanTransform);
             _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }

@@ -6,71 +6,41 @@ namespace Kern.Game;
 
 public class Tentacle
 {
-    private const float MAX_SEGMENT_DIST = 0.2f;
-    private const float SMOOTH_TIME = 0.08f;
-    private const float START_WIDTH = 0.15f;
+    private const float START_WIDTH = 0.125f;
     private const float END_WIDTH = 0.02f;
 
     private readonly WorldEntityBatchRenderer _renderer;
     private readonly Texture2D _texture;
-    private readonly float _wiggleOffset;
     private readonly float _sliceOffsetV;
     private readonly float _sliceScaleV;
-    private readonly Vector3[] _positions;
-    private readonly Vector3[] _velocities;
-    private readonly Vector3[] _renderPoints;
-    private readonly float[] _segmentLengths;
+    private readonly TailChain _chain;
     private bool _isActive = true;
 
     public Tentacle(
         WorldEntityBatchRenderer renderer,
         Texture2D texture,
         Vector3 startPosition,
-        float wiggleOffset,
         int sliceIndex,
         int totalSlices)
     {
         _renderer = renderer;
         _texture = texture;
-        _wiggleOffset = wiggleOffset;
-
-        const int count = WorldEntityBatchRenderer.POINT_COUNT;
-        _positions = new Vector3[count];
-        _velocities = new Vector3[count];
-        _renderPoints = new Vector3[count];
-        _segmentLengths = new float[count];
+        _chain = new TailChain(sliceIndex, startPosition);
 
         _sliceScaleV = 1.0f / totalSlices;
         _sliceOffsetV = sliceIndex * _sliceScaleV;
 
-        for (int i = 0; i < count; i++)
-        {
-            _positions[i] = startPosition;
-            _renderPoints[i] = startPosition;
-        }
-
         _renderer.Register(this, _texture);
     }
+
     public bool IsActive => _isActive;
-    public Vector3 RootPosition => _positions.Length > 0 ? _positions[0] : Vector3.zero;
+
+    /// <summary>Used by <see cref="WorldEntityVisibility.IsTentacleInView" /> to cull off-screen tails.</summary>
+    public Vector3 RootPosition => _chain[0];
 
     internal Texture2D Texture => _texture;
 
-    public bool IsSettled
-    {
-        get
-        {
-            for (int i = 1; i < _positions.Length; i++)
-            {
-                if (_velocities[i].sqrMagnitude > 1e-6f)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-    }
+    public bool IsSettled => _chain.IsSettled;
 
     public void SetActive(bool active)
     {
@@ -85,69 +55,23 @@ public class Tentacle
 
     public void Snap(Vector3 position)
     {
-        for (int i = 0; i < _positions.Length; i++)
-        {
-            _positions[i] = position;
-            _velocities[i] = Vector3.zero;
-            _renderPoints[i] = position;
-        }
-
+        _chain.Snap(position);
         _renderer.MarkDirty(_texture);
     }
 
-    public void Update(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
+    /// <summary>
+    ///     No facing term: the chain hangs off the robot's rendered position and its direction
+    ///     is a consequence of movement, exactly as in the previous client. The strands therefore
+    ///     differ only in inertia, so a standing robot gathers them into a tuft instead of a fan.
+    /// </summary>
+    public void Update(Vector3 rootPosition, float movementFactor, float deltaTime)
     {
         if (!_isActive)
         {
             return;
         }
 
-        // This is the motion model from 54b48bd (2026-06-27, "Стабилизация FPS"),
-        // adapted to the current shared-mesh renderer. Unlike the later Verlet
-        // version it has no perpetual idle wave, so a stationary tail settles
-        // and stops invalidating the entity batch.
-        _positions[0] = rootPosition;
-        _renderPoints[0] = rootPosition;
-        _segmentLengths[0] = 0f;
-
-        float angleRad = rotationAngle * Mathf.Deg2Rad;
-        Vector3 backwardDirection = new(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0f);
-        Vector3 baseOffset = backwardDirection * (0.2f * movementFactor);
-        float spreadAngle = (rotationAngle + _wiggleOffset) * Mathf.Deg2Rad;
-        baseOffset += new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0f) *
-            (0.15f * movementFactor);
-
-        Vector3 lastPosition = rootPosition;
-        Vector3 targetPosition = rootPosition + baseOffset;
-        for (int i = 1; i < _positions.Length; i++)
-        {
-            _positions[i] = Vector3.SmoothDamp(
-                _positions[i],
-                targetPosition,
-                ref _velocities[i],
-                SMOOTH_TIME,
-                50f,
-                deltaTime);
-
-            float wiggle = Mathf.Sin((Time.time * 15f) + (i * 1.5f) + _wiggleOffset) *
-                (0.1f * movementFactor);
-            Vector3 direction = _positions[i] - lastPosition;
-            if (direction.sqrMagnitude < 1e-6f)
-            {
-                direction = backwardDirection;
-            }
-            else
-            {
-                direction.Normalize();
-            }
-
-            Vector3 perpendicular = new Vector3(-direction.y, direction.x, 0f);
-            _renderPoints[i] = _positions[i] + (perpendicular * wiggle);
-            _segmentLengths[i] = Vector3.Distance(_renderPoints[i], _renderPoints[i - 1]);
-            lastPosition = _positions[i];
-            targetPosition = _positions[i] + (direction * MAX_SEGMENT_DIST * movementFactor);
-        }
-
+        _chain.Step(rootPosition, movementFactor, deltaTime);
         _renderer.MarkDirty(_texture);
     }
 
@@ -157,13 +81,9 @@ public class Tentacle
         int vertBase,
         Rect atlasRect)
     {
-        const int count = WorldEntityBatchRenderer.POINT_COUNT;
+        const int count = TailChain.PointCount;
 
-        float totalLength = 0f;
-        for (int i = 1; i < count; i++)
-        {
-            totalLength += _segmentLengths[i];
-        }
+        float totalLength = _chain.TotalLength;
 
         float accumLength = 0f;
         for (int i = 0; i < count; i++)
@@ -171,15 +91,15 @@ public class Tentacle
             Vector3 direction;
             if (i == 0)
             {
-                direction = _renderPoints[1] - _renderPoints[0];
+                direction = _chain[1] - _chain[0];
             }
             else if (i == count - 1)
             {
-                direction = _renderPoints[count - 1] - _renderPoints[count - 2];
+                direction = _chain[count - 1] - _chain[count - 2];
             }
             else
             {
-                direction = _renderPoints[i + 1] - _renderPoints[i - 1];
+                direction = _chain[i + 1] - _chain[i - 1];
             }
 
             if (direction.sqrMagnitude < 1e-10f)
@@ -198,11 +118,11 @@ public class Tentacle
             float u = totalLength > 1e-6f ? accumLength / totalLength : t;
             if (i + 1 < count)
             {
-                accumLength += _segmentLengths[i + 1];
+                accumLength += _chain.SegmentLength(i + 1);
             }
 
             int vi = vertBase + (i * 2);
-            Vector3 p = _renderPoints[i];
+            Vector3 p = _chain[i];
             verts[vi] = p - (perpendicular * halfWidth);
             verts[vi + 1] = p + (perpendicular * halfWidth);
 
