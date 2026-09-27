@@ -11,8 +11,7 @@ namespace Kern.UI;
 
 internal sealed class MapViewportRenderer
 {
-    private static readonly Color32 _UnloadedColor = new(0, 0, 0, 255);
-    private readonly Color32 _defaultColor = _UnloadedColor;
+    private readonly Color32 _defaultColor = new(0, 0, 0, 255);
     private readonly Color32[] _cellColorTable = new Color32[256];
     private Color32[]? _pixelBuffer;
 
@@ -25,11 +24,8 @@ internal sealed class MapViewportRenderer
             throw new InvalidOperationException("[MapViewportRenderer] Cannot build color table: map manager is not initialized");
         }
 
-        for (int i = 0; i < 256; i++)
-        {
-            CellType type = (CellType)i;
-            _cellColorTable[i] = manager.GetCellMinimapColor32(type);
-        }
+        Color32[] colors = MapProjection.BuildCellColorTable(manager);
+        Array.Copy(colors, _cellColorTable, colors.Length);
     }
 
     public void Render(
@@ -53,16 +49,23 @@ internal sealed class MapViewportRenderer
         int texW = texWidth;
         int texH = texHeight;
 
+        if (texW <= 0 || texH <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(texWidth), "Map texture dimensions must be positive.");
+        }
+
+        if (cp <= 0f || float.IsNaN(cp) || float.IsInfinity(cp))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cellsPerPixel), "Map scale must be finite and positive.");
+        }
+
         Color32 defaultCol = _defaultColor;
         if (_pixelBuffer == null || _pixelBuffer.Length != texW * texH)
         {
             _pixelBuffer = new Color32[texW * texH];
         }
 
-        for (int i = 0; i < _pixelBuffer.Length; i++)
-        {
-            _pixelBuffer[i] = defaultCol;
-        }
+        float startWorldX = cx + (0.5f - texW * 0.5f) * cp;
 
         // Sample from screen pixels instead of iterating over every world
         // cell. When zoomed out, walking the whole world paints the same pixel many times.
@@ -73,32 +76,41 @@ internal sealed class MapViewportRenderer
             // Texture2D row zero is the bottom of the displayed map image.
             // Server coordinates use a top-left origin, so the bottom texture
             // row must sample the largest server Y in the viewport.
-            float screenRowFromTop = (texH - 1 - py) + 0.5f;
-            float worldY = cy + ((screenRowFromTop - (texH * 0.5f)) * cp);
+            float screenRowFromTop = texH - 0.5f - py;
+            float worldY = cy + (screenRowFromTop - texH * 0.5f) * cp;
             int serverY = Mathf.FloorToInt(worldY);
 
-            for (int px = 0; px < texW; px++)
+            if (serverY < 0 || serverY >= worldH)
             {
-                float worldX = cx + ((px + 0.5f - (texW * 0.5f)) * cp);
+                Array.Fill(_pixelBuffer, defaultCol, rowStart, texW);
+                continue;
+            }
+
+            float worldX = startWorldX;
+            for (int px = 0; px < texW; px++, worldX += cp)
+            {
                 int serverX = Mathf.FloorToInt(worldX);
-                Color32 color = _defaultColor;
+                Color32 color;
 
-                if (serverX >= 0 && serverX < worldW && serverY >= 0 && serverY < worldH)
+                if (serverX < 0 || serverX >= worldW)
                 {
-                    if (mipCache != null && cp >= mipCache.ChunkSize)
-                    {
-                        color = mipCache.Sample(worldX, worldY, cp);
-                    }
-                    else
-                    {
-                        CellType type = cellSampler.TryGetCell(serverX, serverY, out CellType sampled)
-                            ? sampled
-                            : CellType.Unloaded;
-
-                        color = type == CellType.Unloaded
-                            ? _UnloadedColor
-                            : _cellColorTable[(byte)type];
-                    }
+                    color = defaultCol;
+                }
+                else if (mipCache != null && cp >= mipCache.ChunkSize)
+                {
+                    color = mipCache.Sample(worldX, worldY, cp);
+                }
+                else
+                {
+                    color = MapProjection.SampleCellColor(
+                        cellSampler,
+                        _cellColorTable,
+                        serverX,
+                        serverY,
+                        worldW,
+                        worldH,
+                        defaultCol,
+                        out _);
                 }
 
                 _pixelBuffer[rowStart + px] = color;
@@ -119,8 +131,16 @@ internal sealed class MapViewportRenderer
             if (playerPos.x + 1f >= leftX && playerPos.x <= rightX &&
                 playerPos.y + 1f >= topServerY && playerPos.y <= bottomServerY)
             {
-                float pixelX = ((playerPos.x - cx) / cp) + (texW * 0.5f);
-                float pixelY = (texH * 0.5f) - 1f - ((playerPos.y - cy) / cp);
+                Vector2 playerPixel = MapProjection.ServerCellToTexturePixel(
+                    playerPos.x,
+                    playerPos.y,
+                    cx,
+                    cy,
+                    cp,
+                    texW,
+                    texH);
+                float pixelX = playerPixel.x;
+                float pixelY = playerPixel.y;
                 float markerSize = Mathf.Max(1f, 1f / cp);
 
                 int pxStart = Mathf.Clamp(Mathf.RoundToInt(pixelX), 0, texW - 1);

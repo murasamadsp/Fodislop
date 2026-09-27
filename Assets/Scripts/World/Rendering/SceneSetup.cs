@@ -88,12 +88,16 @@ namespace Kern.World
 
                 RuntimeTextureFactory.ApplySampling(
                     transitTexture,
-                    FilterMode.Bilinear,
-                    TextureWrapMode.Clamp);
+                    FilterMode.Point,
+                    TextureWrapMode.Repeat);
                 RuntimeTextureFactory.ApplySampling(
                     perspectiveTexture,
                     FilterMode.Bilinear,
-                    TextureWrapMode.Clamp);
+                    TextureWrapMode.Repeat);
+                transitTexture.wrapModeV = TextureWrapMode.Clamp;
+                perspectiveTexture.wrapModeV = TextureWrapMode.Repeat;
+                transitTexture.wrapModeU = TextureWrapMode.Repeat;
+                perspectiveTexture.wrapModeU = TextureWrapMode.Repeat;
                 RuntimeTextureFactory.ApplySampling(
                     redRockTexture,
                     FilterMode.Point,

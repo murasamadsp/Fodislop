@@ -36,7 +36,6 @@ namespace Kern.Rendering.PostProcessing
         private VignetteComponent? _vignette;
         private ColorGradingComponent? _colorGrading;
         private EigengrauComponent? _eigengrau;
-        private MotionBlurComponent? _motionBlur;
         private readonly GradingWorkbench _gradingWorkbench = new();
 
         [Inject]
@@ -59,6 +58,17 @@ namespace Kern.Rendering.PostProcessing
                 bloom.intensity.overrideState = true;
                 bloom.intensity.value = Mathf.Clamp(value, 0f, 5f);
                 bloom.active = bloom.intensity.value > 0f;
+            }
+        }
+
+        public BloomStyle BloomVariant
+        {
+            get => GetRequired(_bloom, nameof(_bloom)).style.value;
+            set
+            {
+                BloomComponent bloom = GetRequired(_bloom, nameof(_bloom));
+                bloom.style.overrideState = true;
+                bloom.style.value = value;
             }
         }
 
@@ -131,18 +141,6 @@ namespace Kern.Rendering.PostProcessing
                 eigengrau.intensity.overrideState = true;
                 eigengrau.intensity.value = Mathf.Clamp01(value);
                 eigengrau.active = eigengrau.intensity.value > 0f;
-            }
-        }
-
-        public float MotionBlurIntensity
-        {
-            get => GetRequired(_motionBlur, nameof(_motionBlur)).intensity.value;
-            set
-            {
-                MotionBlurComponent motionBlur = GetRequired(_motionBlur, nameof(_motionBlur));
-                motionBlur.intensity.overrideState = true;
-                motionBlur.intensity.value = Mathf.Clamp01(value);
-                motionBlur.active = motionBlur.intensity.value > 0f;
             }
         }
 
@@ -266,14 +264,13 @@ namespace Kern.Rendering.PostProcessing
                 throw new InvalidOperationException("PostProcessController requires a runtime VolumeProfile on its serialized Volume.");
             }
 
-            PostProcessDefaults.ValidateVolumeProfile(profile);
+            PostProcessVolumeUtilities.ValidateVolumeProfile(profile);
 
-            PostProcessDefaults.RequireVolumeComponent(ref _bloom, profile);
-            PostProcessDefaults.RequireVolumeComponent(ref _vignette, profile);
-            PostProcessDefaults.RequireVolumeComponent(ref _colorGrading, profile);
+            PostProcessVolumeUtilities.RequireVolumeComponent(ref _bloom, profile);
+            PostProcessVolumeUtilities.RequireVolumeComponent(ref _vignette, profile);
+            PostProcessVolumeUtilities.RequireVolumeComponent(ref _colorGrading, profile);
             _colorGrading.active = true;
-            PostProcessDefaults.RequireVolumeComponent(ref _eigengrau, profile);
-            PostProcessDefaults.RequireVolumeComponent(ref _motionBlur, profile);
+            PostProcessVolumeUtilities.RequireVolumeComponent(ref _eigengrau, profile);
             _volumeSetupCompleted = true;
             ApplyClientConfig();
         }
@@ -282,7 +279,7 @@ namespace Kern.Rendering.PostProcessing
         {
             if (_bloom == null || _vignette == null ||
                 _colorGrading == null ||
-                _eigengrau == null || _motionBlur == null)
+                _eigengrau == null)
             {
                 // Подготовка сама вызовет применение в конце, поэтому
                 // здесь возврат: иначе конфиг применился бы дважды за один
@@ -299,9 +296,7 @@ namespace Kern.Rendering.PostProcessing
 
             PostProcessRuntimeState.SetColorGrade(ColorGradeSnapshot.FromLook());
 
-            bool photosensitive = config.Accessibility.ReducePhotosensitivity;
-
-            Debug.Log($"[PostProcessController] ApplyClientConfig: Bloom={config.Effects.BloomEnabled}, Vignette={config.Effects.VignetteEnabled}, MotionBlur={config.Effects.MotionBlurEnabled}");
+            Debug.Log($"[PostProcessController] ApplyClientConfig: Bloom={config.Effects.BloomEnabled}, Vignette={config.Effects.VignetteEnabled}");
 
             BloomComponent bloom = GetRequired(_bloom, nameof(_bloom));
             bloom.threshold.overrideState = true;
@@ -314,6 +309,7 @@ namespace Kern.Rendering.PostProcessing
             bloom.scatter.value = PostProcessLook.Bloom.Scatter;
             bloom.tint.overrideState = true;
             bloom.tint.value = PostProcessLook.Bloom.Tint;
+            BloomVariant = config.Effects.BloomVariant;
             BloomIntensity = config.Effects.BloomEnabled ? PostProcessLook.Bloom.Intensity : 0f;
 
             VignetteComponent vignette = GetRequired(_vignette, nameof(_vignette));
@@ -338,18 +334,7 @@ namespace Kern.Rendering.PostProcessing
             eigengrau.darknessThreshold.value = PostProcessLook.FilmGrain.DarknessThreshold;
             eigengrau.noiseScale.overrideState = true;
             eigengrau.noiseScale.value = PostProcessLook.FilmGrain.NoiseScale;
-            eigengrau.animationSpeed.overrideState = true;
-            eigengrau.animationSpeed.value = PostProcessLook.FilmGrain.AnimationSpeed;
             EigengrauIntensity = config.Effects.EigengrauEnabled ? PostProcessLook.FilmGrain.Intensity : 0f;
-
-            MotionBlurComponent motionBlur = GetRequired(_motionBlur, nameof(_motionBlur));
-            motionBlur.intensity.overrideState = true;
-            MotionBlurIntensity =
-                config.Effects.MotionBlurEnabled && !photosensitive
-                    ? PostProcessLook.MotionBlur.Intensity
-                    : 0f;
-
-            PostProcessRuntimeState.InvalidateTemporalHistory();
         }
 
         private void ApplyColorGrading(
@@ -384,11 +369,6 @@ namespace Kern.Rendering.PostProcessing
                 _colorGrading,
                 nameof(_colorGrading));
             colorGrading.colorFilter.overrideState = true;
-            if (colorGrading.colorFilter.value != filter)
-            {
-                PostProcessRuntimeState.InvalidateTemporalHistory();
-            }
-
             colorGrading.colorFilter.value = filter;
             Contrast = contrast;
             Saturation = saturation;

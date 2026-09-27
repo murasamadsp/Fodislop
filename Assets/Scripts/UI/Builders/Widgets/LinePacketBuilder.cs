@@ -13,10 +13,11 @@ public class LinePacketBuilder : PacketUIBuilderBase<LinePacket>
         {
             Direction = packet.Direction,
         };
+        line.AddToClassList("packet-line-themed");
+        line.RegisterCallback<GeometryChangedEvent>(_ => line.LineColor = line.resolvedStyle.color);
 
         if (packet.Style.HasValue)
         {
-            line.LineColor = StyleApplicator.ConvertColor(packet.Style.Value.Background);
             if (packet.Style.Value.BorderWidth > 0)
             {
                 line.Thickness = packet.Style.Value.BorderWidth;

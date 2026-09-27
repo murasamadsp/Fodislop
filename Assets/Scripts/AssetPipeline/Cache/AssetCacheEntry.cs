@@ -101,13 +101,18 @@ internal sealed class AssetCacheEntry
     }
 
     private UniTask<T?> GetOrCreateAsync<T>(
-        T? cached,
+        Func<T?> getCached,
         ref TaskCompletionSource<T?>? promise,
         Func<UniTask<T?>> factory)
         where T : class
     {
         lock (_lock)
         {
+            // Read the cache while holding the same lock used by the decode
+            // completion path. Passing the field value into this method
+            // evaluates it before the lock and can observe a stale null,
+            // starting a second decode after the first one has completed.
+            T? cached = getCached();
             if (cached != null)
             {
                 return UniTask.FromResult<T?>(cached);
@@ -136,16 +141,16 @@ internal sealed class AssetCacheEntry
     }
 
     public UniTask<byte[]?> GetBytesAsync(Func<UniTask<byte[]?>> loader) =>
-        GetOrCreateAsync(_bytes, ref _bytesPromise, () => LoadBytes(loader));
+        GetOrCreateAsync(() => _bytes, ref _bytesPromise, () => LoadBytes(loader));
 
     public UniTask<Texture2D?> GetTextureAsync(Func<UniTask<byte[]?>> loader) =>
-        GetOrCreateAsync(_texture, ref _texturePromise, () => DecodeTexture(loader));
+        GetOrCreateAsync(() => _texture, ref _texturePromise, () => DecodeTexture(loader));
 
     public UniTask<AudioClip?> GetAudioAsync(Func<UniTask<byte[]?>> loader) =>
-        GetOrCreateAsync(_audio, ref _audioPromise, () => DecodeAudio(loader));
+        GetOrCreateAsync(() => _audio, ref _audioPromise, () => DecodeAudio(loader));
 
     public UniTask<Sprite[]?> GetSpritesAsync(Func<UniTask<byte[]?>> loader) =>
-        GetOrCreateAsync(_sprites, ref _spritePromise, () => DecodeSprites(loader));
+        GetOrCreateAsync(() => _sprites, ref _spritePromise, () => DecodeSprites(loader));
 
     public async UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(Func<UniTask<byte[]?>> loader)
     {

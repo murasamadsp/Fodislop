@@ -78,7 +78,7 @@ internal sealed class MapCellSampler
         CellType[]? chunk = null;
         bool hasCached = false;
 
-        if (chunkIndex == _lastChunkIndex && _lastChunk != null)
+        if (chunkIndex == _lastChunkIndex)
         {
             chunk = _lastChunk;
             hasCached = true;
@@ -90,19 +90,24 @@ internal sealed class MapCellSampler
 
         if (!hasCached)
         {
-            ChunkReadResult<CellType> result = _layer.ReadChunk(chunkIndex, touchLru: true);
+            ChunkReadResult<CellType> result = _layer.ReadChunk(chunkIndex, touchLru: false);
             if (result.Status == ChunkReadStatus.Available && result.Data != null)
             {
                 chunk = result.Data;
-                _chunks[chunkIndex] = chunk;
-                _chunkOrder.Enqueue(chunkIndex);
-                TrimCache();
-                hasCached = true;
             }
+            else
+            {
+                chunk = null;
+            }
+
+            _chunks[chunkIndex] = chunk;
+            _chunkOrder.Enqueue(chunkIndex);
+            TrimCache();
+            hasCached = true;
         }
 
         _lastChunkIndex = chunkIndex;
-        _lastChunk = hasCached ? chunk : null;
+        _lastChunk = chunk;
 
         if (chunk == null)
         {

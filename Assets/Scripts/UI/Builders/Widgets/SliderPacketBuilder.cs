@@ -11,8 +11,26 @@ public class SliderPacketBuilder : PacketUIBuilderBase<SliderPacket>
     {
         var slider = new Slider(packet.MinValue, packet.MaxValue)
         {
+            name = packet.Name,
             value = Mathf.Clamp(packet.DefaultValue, packet.MinValue, packet.MaxValue),
         };
+        slider.SetEnabled(packet.IsEnabled);
+
+        if (packet.Step > 0f)
+        {
+            slider.RegisterValueChangedCallback(change =>
+            {
+                float steps = Mathf.Round((change.newValue - packet.MinValue) / packet.Step);
+                float snapped = Mathf.Clamp(
+                    packet.MinValue + steps * packet.Step,
+                    packet.MinValue,
+                    packet.MaxValue);
+                if (!Mathf.Approximately(change.newValue, snapped))
+                {
+                    slider.SetValueWithoutNotify(snapped);
+                }
+            });
+        }
 
         // Вид гасится правилами .packet-slider в SciFi.uss: сервер прислал
         // свой ползунок, стандартную отрисовку Unity надо убрать из-под него.
@@ -27,7 +45,6 @@ public class SliderPacketBuilder : PacketUIBuilderBase<SliderPacket>
 
         dragger.Clear();
         dragger.Add(builder.Build(packet.Knob));
-        slider.SetEnabled(packet.IsEnabled);
         return slider;
     }
 }

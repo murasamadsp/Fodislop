@@ -1,6 +1,8 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine.UIElements;
@@ -10,6 +12,11 @@ public class GridPacketBuilder : PacketUIBuilderBase<GridPacket>
 {
     protected override VisualElement BuildTyped(GridPacket packet, PacketUIBuilder builder)
     {
+        if (packet.Columns.Length == 0 || packet.Rows.Length == 0)
+        {
+            throw new InvalidOperationException("GridPacket must define at least one row and column.");
+        }
+
         var gridRoot = new VisualElement();
         gridRoot.AddToClassList("rel");
         gridRoot.AddToClassList("grow");
@@ -20,15 +27,26 @@ public class GridPacketBuilder : PacketUIBuilderBase<GridPacket>
 
         foreach (IGUIComponentPacket childPacket in packet.Children)
         {
+            int row = Placement(childPacket, "Grid.Row", 0);
+            int column = Placement(childPacket, "Grid.Column", 0);
+            int rowSpan = Placement(childPacket, "Grid.RowSpan", 1);
+            int columnSpan = Placement(childPacket, "Grid.ColumnSpan", 1);
+            if (rowSpan == 0 || columnSpan == 0 ||
+                row >= packet.Rows.Length || column >= packet.Columns.Length ||
+                rowSpan > packet.Rows.Length - row ||
+                columnSpan > packet.Columns.Length - column)
+            {
+                throw new InvalidOperationException(
+                    $"GridPacket child {childPacket.GetType().Name} has invalid placement " +
+                    $"row={row}, column={column}, rowSpan={rowSpan}, columnSpan={columnSpan} " +
+                    $"for {packet.Rows.Length} rows and {packet.Columns.Length} columns.");
+            }
+
             VisualElement child = builder.Build(childPacket);
             child.AddToClassList("as-start");
             gridRoot.Add(child);
             elements.Add(child);
-            placements.Add((
-                Row: Placement(childPacket, "Grid.Row", 0),
-                Column: Placement(childPacket, "Grid.Column", 0),
-                RowSpan: Placement(childPacket, "Grid.RowSpan", 1),
-                ColumnSpan: Placement(childPacket, "Grid.ColumnSpan", 1)));
+            placements.Add((row, column, rowSpan, columnSpan));
         }
 
         // Расставлять можно только после того, как элементы измерены: размер
@@ -103,6 +121,19 @@ public class GridPacketBuilder : PacketUIBuilderBase<GridPacket>
 
     private static int Placement(IGUIComponentPacket packet, string key, int fallback)
     {
-        return AttachedProperties.TryGetInt(packet, key, out int value) ? value : fallback;
+        string? raw = AttachedProperties.Find(packet, key);
+        if (raw == null)
+        {
+            return fallback;
+        }
+
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ||
+            value < 0)
+        {
+            throw new InvalidOperationException(
+                $"Invalid {key}='{raw}' on {packet.GetType().Name}.");
+        }
+
+        return value;
     }
 }

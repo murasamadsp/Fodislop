@@ -84,7 +84,7 @@ public static class PacketGridLayout
             return tracks;
         }
 
-        float remaining = available - used;
+        float remaining = Math.Max(0f, available - used);
         for (int track = 0; track < tracks.Length; track++)
         {
             if (definitions[track] > 0)

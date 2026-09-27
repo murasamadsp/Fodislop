@@ -39,12 +39,11 @@ public static class MapViewportBounds
     {
         if (texWidth <= 0 || texHeight <= 0 || worldWidth <= 0 || worldHeight <= 0)
         {
-            return 1f;
+            return 16f;
         }
 
-        return Mathf.Max(
-            0.25f,
-            Mathf.Max((float)worldWidth / texWidth, (float)worldHeight / texHeight));
+        float fitWorld = Mathf.Max((float)worldWidth / texWidth, (float)worldHeight / texHeight);
+        return Mathf.Clamp(fitWorld * 1.5f, 4f, 32f);
     }
 
     public static void ClampViewCenter(
@@ -69,12 +68,13 @@ public static class MapViewportBounds
 
     public static float ClampCenter(float center, float halfViewport, int worldSize)
     {
-        float worldCenter = worldSize * 0.5f;
-        if (halfViewport * 2f >= worldSize)
+        if (worldSize <= 0)
         {
-            return worldCenter;
+            return center;
         }
 
-        return Mathf.Clamp(center, halfViewport, worldSize - halfViewport);
+        float min = -halfViewport;
+        float max = worldSize + halfViewport;
+        return Mathf.Clamp(center, min, max);
     }
 }
