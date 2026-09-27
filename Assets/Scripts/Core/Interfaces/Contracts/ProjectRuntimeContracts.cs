@@ -18,6 +18,13 @@ public static class ProjectRuntimeContracts
         // не менял сетку каскадов и не перекрашивал сцену.
         public const float MinimumOrthographicSize = 5f;
         public const float MaximumOrthographicSize = 30f;
+
+        // Опорный зум мировых меток: при нём ник и облако локального чата
+        // имеют 100% масштаба, то есть ровно тот кегль, который задан в USS.
+        // Равен середине [Minimum, Maximum] — с неё камера стартует, — и не
+        // зависит от сериализованного диапазона зума: сдвиг диапазона в
+        // инспекторе меняет стартовый зум, но не размер текста в мире.
+        public const float ReferenceOrthographicSize = 17.5f;
     }
 
     public static class Gameplay
