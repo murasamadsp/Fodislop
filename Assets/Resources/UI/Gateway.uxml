@@ -23,12 +23,23 @@
          device-flow) и «Офлайн режим (Dummy)».
          ═══════════════════════════════════════════════════════ -->
     <ui:VisualElement name="AuthOverlay" class="auth-overlay">
+     <!-- Тень — отдельный элемент, а не filter. Любой filter заставляет
+          движок растеризовать элемент вместе со всем поддеревом в
+          промежуточную текстуру в панельных точках, а не в пикселях панели;
+          блит этой текстуры на нецелом panel.scale мылил всю карточку.
+          Размер обёртки задаёт карточка, а тень распирается за её пределы
+          отрицательными отступами и рисуется под ней порядком объявления. -->
+     <ui:VisualElement class="auth-card-wrap">
+        <ui:VisualElement class="auth-card-shadow" />
         <ui:VisualElement name="AuthCard" class="auth-card">
             <ui:VisualElement class="auth-brace auth-brace--tl" />
             <ui:VisualElement class="auth-brace auth-brace--br" />
 
             <ui:VisualElement class="auth-brand">
-                <ui:VisualElement name="AuthBrandLogo" class="auth-brand-logo" />
+                <ui:VisualElement class="auth-brand-logo-wrap">
+                    <ui:VisualElement class="auth-brand-logo-glow" />
+                    <ui:VisualElement name="AuthBrandLogo" class="auth-brand-logo" />
+                </ui:VisualElement>
                 <ui:Label class="auth-brand-title" text="KERN" />
                 <ui:Label class="auth-brand-subtitle" text="DEEP SUBSURFACE EXPEDITION // MINES PROTOCOL v7" />
                 <ui:VisualElement class="auth-systems">
@@ -105,6 +116,7 @@
 
             <ui:Label name="AuthHint" class="auth-hint" />
         </ui:VisualElement>
+     </ui:VisualElement>
     </ui:VisualElement>
 
     <!-- ═══════════════════════════════════════════════════════

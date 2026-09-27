@@ -6,11 +6,13 @@
 
      radial-gradient  → плотная заливка (в USS радиальных градиентов нет)
      backdrop-filter  → она же (единственная настоящая потеря при переносе)
-     box-shadow       → filter: drop-shadow() (Unity 6.3+)
+     box-shadow       → отдельный слой с mm_shade.png
      ::before/::after → реальные элементы .auth-brace
      gap              → margin на детях
      transform        → translate
-     filter:drop-shadow → переносится как есть
+     filter:drop-shadow → отдельный слой: фильтр растеризует поддерево
+                       в промежуточную текстуру и мылит его на нецелом
+                       panel.scale (подробно у .auth-card-shadow)
    ═══════════════════════════════════════════════════════════ */
 
 .auth-overlay {
@@ -43,20 +45,66 @@
     flex-direction: column;
 }
 
-/* Фильтры — только в видимом состоянии ворот. Объявленные на самих
-   .auth-card и .auth-brand-logo, они висели и на скрытом слое
-   (display: none): фильтр рендерит элемент в текстуру, у скрытого размер
-   нулевой, и движок сыпал «Assertion failed» каждый кадр, пока ворота
-   показывали другой слой.
+/* Тени — отдельными элементами .auth-card-shadow и .auth-brand-logo-glow,
+   а не filter.
 
-   Макет: box-shadow 0 25px 60px void-dense, 0 0 30px cyan-tint. Второй
-   слой в USS лёг бы тенью на первую тень, поэтому перенесена основная. */
-.gateway--auth .auth-card {
-    filter: drop-shadow(0 25px 60px var(--surface-void-dense));
+   filter в USS заставляет движок растеризовать элемент вместе со всем
+   поддеревом в промежуточную RenderTexture. Размер этой текстуры берётся
+   в панельных точках, а не в пикселях панели, поэтому её блит на нецелом
+   panel.scale (1.35 на Retina) мылил всю карточку: рамку, угловые скобки,
+   текст полей и логотип. У калибровочной карточки .onb-card фильтра нет,
+   и она оставалась резкой — снимки обоих окон это показывали.
+
+   Отключить это «низким разрешением» нельзя: в PanelSettings такого режима
+   нет, это побочный эффект фильтра, а не настройка. Лечится только снятием
+   самого фильтра. В USS box-shadow нет, поэтому мягкая тена — это готовая
+   радиальная текстура mm_shade.png, выложенная отдельным слоем.
+
+   Макет: box-shadow 0 25px 60px void-dense и 0 0 30px cyan-tint. Второй
+   слой в USS лёг бы тенью на первую тень, поэтому перенесена основная.
+   Смещение вниз задано асимметрией отступов: top короче bottom.
+
+   background-size: 100% 100%, а не contain: спрайт квадратный, и contain
+   вложил бы его в бокс карточки по меньшей стороне, оставив сверху и снизу
+   пустые поля — тень не покрыла бы углы карточки по высоте. */
+
+/* Обертка держит карточку в потоке ворот и отдаёт тени её размер.
+   align-items: center нужен, чтобы карточка не растягивалась по поперечи
+   оси: её ширина задана фиксированными 440px. */
+.auth-card-wrap {
+    position: relative;
+    flex-direction: column;
+    align-items: center;
 }
 
-.gateway--auth .auth-brand-logo {
-    filter: drop-shadow(0 0 var(--space-5) var(--accent-gold-glow));
+.auth-card-shadow {
+    position: absolute;
+    left: -44px;
+    right: -44px;
+    top: -20px;
+    bottom: -72px;
+    background-image: url("project://database/Assets/Textures/UI/mm_shade.png");
+    background-size: 100% 100%;
+    -unity-background-image-tint-color: var(--surface-void-dense);
+    opacity: 0.85;
+}
+
+.auth-brand-logo-wrap {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    margin-bottom: var(--space-3);
+}
+
+.auth-brand-logo-glow {
+    position: absolute;
+    left: -26px;
+    right: -26px;
+    top: -26px;
+    bottom: -26px;
+    background-image: url("project://database/Assets/Textures/UI/mm_shade.png");
+    background-size: 100% 100%;
+    -unity-background-image-tint-color: var(--accent-gold-glow);
 }
 
 /* Угловые скобки. В макете это ::before/::after, псевдоэлементов в USS нет. */
@@ -97,7 +145,6 @@
 .auth-brand-logo {
     width: 38px;
     height: 38px;
-    margin-bottom: var(--space-3);
     /* Ссылка на ассет прямо из USS — не нужен ни Image.image, ни поиск файла
        по путям файловой системы, как в MainMenu.LoadDirectTexture. */
     background-image: url("project://database/Assets/Textures/UI/mm_logo.png");
