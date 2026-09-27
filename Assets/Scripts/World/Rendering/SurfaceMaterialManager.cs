@@ -9,10 +9,14 @@ namespace Kern.World;
 
 public sealed class SurfaceMaterialManager
 {
+    public static Color HorizonSkyColor => new(0.35f, 0.55f, 0.75f, 1f);
+
     private const string SurfaceShaderName = ProjectRuntimeContracts.ShaderNames.WorldSurface;
     private const string RedRockKeyword = "KERN_SURFACE_REDROCK";
     private const string TransitKeyword = "KERN_SURFACE_TRANSIT";
     private const string PerspectiveKeyword = "KERN_SURFACE_PERSPECTIVE";
+    private const string HorizonKeyword = "KERN_SURFACE_HORIZON";
+    private const float PerspectiveReferencePixelsPerCell = 30f;
 
     private static readonly int _BaseMapID = Shader.PropertyToID("_BaseMap");
     private static readonly int _EmissionColorID = Shader.PropertyToID("_EmissionColor");
@@ -20,6 +24,8 @@ public sealed class SurfaceMaterialManager
     private static readonly int _OccupancyID = Shader.PropertyToID("_Occupancy");
     private static readonly int _BaseMapTileCountID = Shader.PropertyToID("_BaseMapTileCount");
     private static readonly int _WorldSizeID = Shader.PropertyToID("_WorldSize");
+    private static readonly int _SurfaceProjectionID = Shader.PropertyToID("_SurfaceProjection");
+    private static readonly int _SkyColorID = Shader.PropertyToID("_SkyColor");
     private static readonly int _SurfaceFieldThresholdID = Shader.PropertyToID("_SurfaceFieldThreshold");
 
     private static bool _surfaceFieldThresholdApplied;
@@ -29,6 +35,7 @@ public sealed class SurfaceMaterialManager
         RedRock,
         Transit,
         Perspective,
+        Horizon,
     }
 
     public Material CreateSurfaceMaterial(
@@ -70,10 +77,22 @@ public sealed class SurfaceMaterialManager
             SurfaceKind.RedRock => RedRockKeyword,
             SurfaceKind.Transit => TransitKeyword,
             SurfaceKind.Perspective => PerspectiveKeyword,
+            SurfaceKind.Horizon => HorizonKeyword,
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown surface kind."),
         });
         return material;
     }
+
+    public void SetPerspectiveProjection(Material material, Camera camera)
+    {
+        float width = Mathf.Max(1f, camera.pixelWidth * (2f / PerspectiveReferencePixelsPerCell));
+        material.SetVector(
+            _SurfaceProjectionID,
+            new Vector4(camera.transform.position.x, 1f / width, 0f, 0f));
+    }
+
+    public void SetHorizonSkyColor(Material material, Color skyColor) =>
+        material.SetColor(_SkyColorID, skyColor);
 
     public void ApplyMaterialConfig(
         Material material,
@@ -129,6 +148,8 @@ public sealed class SurfaceMaterialManager
             "_Occupancy",
             "_BaseMapTileCount",
             "_WorldSize",
+            "_SurfaceProjection",
+            "_SkyColor",
         ];
         foreach (string propertyName in requiredProperties)
         {

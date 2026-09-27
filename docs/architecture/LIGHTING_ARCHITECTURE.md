@@ -261,8 +261,16 @@ AO draw, while world surfaces use a dedicated alpha-only occupancy pass. World
 surface lighting meshes are rebuilt when the field rect or world dimensions
 change and reused by the material and AO draws; the
 `Kern.Surface.RebuildLightingMeshes` marker shows this rebuild. The field
-is sized from the lighting cell grid and AO texture-dimension limit; there is no
-scratch target, compute kernel, dispatch, or mip generation. The target is
+includes redrock and the transition strip. The camera-dependent perspective
+strip and horizon are visible-only, unlit meshes; camera motion changes their
+UV projection without invalidating the static material or AO fields. Their
+texture uses explicit horizontal UV repetition and a repeating U sampler; the
+perspective projection follows the active camera every frame. The horizon
+uses the source client's separate procedural ridge and sky shader; it samples
+the perspective texture only below the computed ridge and exponentially fades
+the sky with altitude. The field is sized from the lighting cell grid and AO
+texture-dimension limit; there is no scratch target, compute kernel, dispatch,
+or mip generation. The target is
 cleared to transparent before the full mesh draw. `GeometryLightingSolver` owns
 the field; terrain geometry revision or lighting-region/resource change triggers
 its rebuild, and a stable frame reuses the published field. `LightingPresentation`

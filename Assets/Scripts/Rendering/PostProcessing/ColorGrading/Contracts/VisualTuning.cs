@@ -394,11 +394,11 @@ namespace Kern.Rendering.PostProcessing
             public const float Radius = 1.5f;
             public const float Scatter = 0.35f;
 
-            // Cyberpunk bloom uses a wider, more connected neon halo; the
-            // reconstruction pass normalizes its energy for the larger scatter.
+            // Общие параметры обоих стилей для прямого сравнения цвета ореола.
             public const float CyberpunkThresholdScale = 0.8f;
             public const float CyberpunkRadiusScale = 1.3f;
             public const float CyberpunkScatter = 0.58f;
+            public const float CyberpunkIntensityScale = 2f;
 
             public static Color Tint => Color.white;
         }
@@ -486,9 +486,9 @@ namespace Kern.Rendering.PostProcessing
         public static class FilmGrain
         {
             public const float Intensity = 1f;
-            public const float DarknessThreshold = 0.22f;
+            public const float DarknessThreshold = 0.08f;
             public const float NoiseScale = 0.75f;
-            public const float EigengrauNoiseAmplitude = 0.35f;
+            public const float EigengrauNoiseAmplitude = 0.85f;
             public static Color Color => new(0.0863f, 0.0863f, 0.1137f, 1f);
         }
 

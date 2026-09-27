@@ -19,6 +19,11 @@ float2 KernResolveRedRockUv(
         0.0);
 }
 
+float KernWrapSurfaceU(float u)
+{
+    return frac(u);
+}
+
 float2 KernResolveSurfaceUv(
     float2 uv,
     float2 worldPosition,
@@ -31,11 +36,7 @@ float2 KernResolveSurfaceUv(
         baseMapTileCount,
         worldHeight);
 #elif defined(KERN_SURFACE_TRANSIT)
-    return float2(frac(uv.x), saturate(uv.y));
-#elif defined(KERN_SURFACE_PERSPECTIVE)
-    // Perspective is a finite authored band: repeat along the world horizon,
-    // but sample its vertical profile exactly once.
-    return float2(frac(uv.x), saturate(uv.y));
+    return float2(KernWrapSurfaceU(uv.x), saturate(uv.y));
 #else
     return uv;
 #endif

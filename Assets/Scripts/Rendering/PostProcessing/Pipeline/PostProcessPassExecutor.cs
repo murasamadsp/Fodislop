@@ -98,20 +98,19 @@ internal static class PostProcessPassExecutor
     {
         int levels = data.BloomLevels;
         bool cyberpunk = data.BloomVariant == BloomStyle.Cyberpunk;
-        float threshold = data.BloomThreshold *
-            (cyberpunk ? PostProcessLook.Bloom.CyberpunkThresholdScale : 1f);
-        float radius = data.BloomRadius *
-            (cyberpunk ? PostProcessLook.Bloom.CyberpunkRadiusScale : 1f);
-        float scatter = cyberpunk
-            ? PostProcessLook.Bloom.CyberpunkScatter
-            : data.BloomScatter;
+        // Оба стиля используют одну пирамиду и одинаковую энергию.
+        // Переключатель стиля меняет только цвет пикселей в BloomPrefilter.
+        float threshold = data.BloomThreshold * PostProcessLook.Bloom.CyberpunkThresholdScale;
+        float radius = data.BloomRadius * PostProcessLook.Bloom.CyberpunkRadiusScale;
+        float scatter = data.BloomScatter *
+            (PostProcessLook.Bloom.CyberpunkScatter / PostProcessLook.Bloom.Scatter);
 
         cmd.SetComputeFloatParam(data.PostProcessCS, BloomThresholdID, threshold);
         cmd.SetComputeFloatParam(data.PostProcessCS, BloomSoftKneeID, data.BloomSoftKnee);
         cmd.SetComputeFloatParam(data.PostProcessCS, BloomRadiusID, radius);
         cmd.SetComputeFloatParam(data.PostProcessCS, BloomScatterID, scatter);
         cmd.SetComputeVectorParam(data.PostProcessCS, BloomTintID, data.BloomTint);
-        cmd.SetComputeIntParam(data.PostProcessCS, BloomStyleID, (int)data.BloomVariant);
+        cmd.SetComputeIntParam(data.PostProcessCS, BloomStyleID, cyberpunk ? 1 : 0);
 
         // Яркость подъёма нормируется по глубине пирамиды.
         //
@@ -131,7 +130,8 @@ internal static class PostProcessPassExecutor
         cmd.SetComputeFloatParam(
             data.PostProcessCS,
             BloomIntensityID,
-            data.BloomIntensity / Mathf.Max(energy, 1e-4f));
+            data.BloomIntensity * PostProcessLook.Bloom.CyberpunkIntensityScale /
+            Mathf.Max(energy, 1e-4f));
 
         int prefilterWidth = Mathf.Max(1, width / 2);
         int prefilterHeight = Mathf.Max(1, height / 2);

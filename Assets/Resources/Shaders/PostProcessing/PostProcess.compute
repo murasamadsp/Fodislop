@@ -98,7 +98,7 @@ float _EigengrauIntensity;
 float4 _EigengrauColor;
 float _EigengrauDarknessThreshold;
 float _EigengrauNoiseScale;
-// Громкость зерна поверх пола: размах, на который шум качает поднятую точку.
+// Амплитуда зерна в самых тёмных участках кадра.
 float _EigengrauNoiseAmplitude;
 float _Time;
 float _FrameIndex;
@@ -364,15 +364,34 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
     // Отбирается только чистое превышение яркости с сохранением сочного цвета и силы эмиссии
     float3 brightColor = sourceColor.rgb * saturate(weight) * saturate(emissionSample.a);
 
-    // Киберпанк-стиль переводит красную эмиссию в магенту, а зелёную и синюю
-    // в циан. Сумма каналов каждой исходной компоненты сохраняется, поэтому
-    // стилизация не добавляет энергию и не обрезает HDR-радианс.
+    // Цветные источники дают магентовый или циановый ореол. Нейтральный
+    // источник остаётся белым; яркость в линейном HDR сохраняется.
     if (_BloomStyle == 1)
     {
-        brightColor = float3(
-            brightColor.r * 0.72,
-            brightColor.g * 0.65 + brightColor.b * 0.15,
-            brightColor.r * 0.28 + brightColor.g * 0.35 + brightColor.b * 0.85);
+        float strongest = max(brightColor.r, max(brightColor.g, brightColor.b));
+        float weakest = min(brightColor.r, min(brightColor.g, brightColor.b));
+        float chroma = (strongest - weakest) / max(strongest, 1e-4);
+        float redDominance = saturate(
+            (brightColor.r - max(brightColor.g, brightColor.b)) / max(strongest, 1e-4));
+        float3 neonTint = lerp(
+            float3(0.05, 0.85, 1.0),
+            float3(1.0, 0.05, 0.8),
+            redDominance);
+        float magentaDominance = saturate(
+            (min(brightColor.r, brightColor.b) - brightColor.g) /
+            max(strongest * 0.2, 1e-4));
+        neonTint = lerp(neonTint, float3(1.0, 0.05, 0.8), magentaDominance);
+        float3 neonColor = neonTint *
+            (Luminance(brightColor) / max(Luminance(neonTint), 1e-4));
+        // Лава и другие тёплые источники сохраняют исходный оттенок.
+        // Сдвиг цвета нужен лишь там, где зелёный или синий уже преобладает.
+        float coolDominance = saturate(
+            (max(brightColor.g, brightColor.b) - brightColor.r) /
+            max(strongest * 0.2, 1e-4));
+        brightColor = lerp(
+            brightColor,
+            neonColor,
+            chroma * max(coolDominance, magentaDominance) * 0.85);
     }
 
     // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
@@ -564,53 +583,23 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         color = lerp(color, _VignetteColor.rgb, saturate(edgeMask * _VignetteIntensity));
     }
 
-    // 6. Eigengrau — «собственный серый»: то, что видит глаз в полной
-    // темноте. Это не зерно поверх картинки, а пол зрения: сетчатка не
-    // отдаёт чёрного, её тепловой шум держит восприятие на уровне около
-    // #16161D, и этот уровень обновляется каждый кадр.
-    //
-    // ПРОСТРАНСТВО. Кадр здесь прошёл ApplyDisplayTransform и кривые, то есть
-    // он линейный относительно белого экрана (кодирование в sRGB/PQ делает
-    // URP после нас). Отсюда два разных перевода, и путать их нельзя:
-    //   * цвет пола и порог заданы уровнями кодирования (#16161D — это то,
-    //     что показывает пипетка), поэтому на вход им нужен PerceptualToLinear
-    //     и LinearToPerceptual соответственно;
-    //   * сама прибавка света считается в линейном, потому что свет
-    //     складывается линейно, а не в гамме.
+    // 6. Eigengrau — шум зрения в почти полной темноте. Порог задан
+    // в perceptual/sRGB, но шум добавляется к display-linear цвету.
+    // Постоянный серый пол здесь выглядел как цветокоррекция всего кадра.
     if (_EigengrauIntensity > 0.001)
     {
-        // Пол переводится из уровня кодирования в линейный один раз и здесь.
-        // Держать в VisualTuning уже пересчитанные числа нельзя: там перестало
-        // бы читаться, что это #16161D, и любой правке цвета пришлось бы
-        // повторять этот перевод на глаз.
-        float3 floorColor = float3(
+        float3 referenceGrey = float3(
             PerceptualToLinear(_EigengrauColor.r),
             PerceptualToLinear(_EigengrauColor.g),
-            PerceptualToLinear(_EigengrauColor.b)) * saturate(_EigengrauIntensity);
-
-        // Тепловой шум сетчатки модулирует сам пол, а не кадр: где сцена
-        // светит, подниматься нечему — значит и шевелиться нечему. Узор
-        // обновляется каждый кадр, см. FilmGrain.
+            PerceptualToLinear(_EigengrauColor.b));
+        float sceneLuma = LinearToPerceptual(Luminance(max(color, 0.0)));
+        float darknessThreshold = max(_EigengrauDarknessThreshold, 1e-4);
+        float darkness = step(1e-4, _EigengrauDarknessThreshold) *
+            (1.0 - smoothstep(darknessThreshold * 0.5, darknessThreshold, sceneLuma));
+        float amplitude = Luminance(referenceGrey) *
+            saturate(_EigengrauIntensity) * _EigengrauNoiseAmplitude;
         float grain = FilmGrain(id.xy + 0.5);
-        floorColor *= 1.0 + grain * _EigengrauNoiseAmplitude;
-
-        // Darkness Threshold задан уровнем кодирования, значит и сравнивать
-        // его надо с закодированной яркостью, а не с линейной. Нижняя граница
-        // спада — яркость самого пола: гаснуть прибавка обязана относительно
-        // того, что поднимаем, а не относительно доли порога.
-        float floorLuma = LinearToPerceptual(Luminance(floorColor));
-        float sceneLuma = LinearToPerceptual(Luminance(color));
-        float reach = max(_EigengrauDarknessThreshold, floorLuma * 2.0);
-        floorColor *= 1.0 - smoothstep(floorLuma, reach, sceneLuma);
-
-        // Мягкий пол, а не подъём чёрной точки. Подъём (floor + c * (1 - floor))
-        // сдвигал всю тёмную зону целиком и съедал в ней контраст: полтона ниже
-        // пола становились одной плашкой на весь экран. Здесь прибавка гаснет
-        // экспоненциально по мере того, как сцена выходит из-под собственного
-        // шума глаза: сигнал слабее шума не виден, сигнал сильнее виден как
-        // есть. На чёрном прибавка равна полу, на уровне пола — треть от него,
-        // втрое выше пола её нет.
-        color += floorColor * exp(-color / max(floorColor, 1e-6));
+        color = max(color + grain * amplitude * darkness, 0.0);
     }
 
     // Калибровочный узор. Рисуется здесь и только здесь: это единственная

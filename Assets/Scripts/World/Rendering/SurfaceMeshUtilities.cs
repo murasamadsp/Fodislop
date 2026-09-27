@@ -2,6 +2,7 @@
 
 using System;
 using Kern.Core;
+using Kern.Core.Lifecycle;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -37,6 +38,39 @@ internal static class SurfaceMeshUtilities
         }
 
         return component;
+    }
+
+    public static MeshRenderer BindBandObject(
+        ISceneObjectFactory sceneObjects,
+        Transform owner,
+        int layer,
+        string objectName,
+        Mesh mesh,
+        Material material,
+        int sortingOrder)
+    {
+        Transform? existing = owner.Find(objectName);
+        GameObject bandObject;
+        if (existing == null)
+        {
+            bandObject = sceneObjects.Create(objectName, RuntimeOwner.General);
+            bandObject.transform.SetParent(owner, worldPositionStays: false);
+        }
+        else
+        {
+            bandObject = existing.gameObject;
+        }
+
+        bandObject.layer = layer;
+        bandObject.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+        bandObject.transform.localScale = Vector3.one;
+        MeshFilter meshFilter = GetOrAddComponent<MeshFilter>(bandObject);
+        MeshRenderer meshRenderer = GetOrAddComponent<MeshRenderer>(bandObject);
+        meshFilter.sharedMesh = mesh;
+        meshRenderer.sharedMaterial = material;
+        meshRenderer.sortingOrder = sortingOrder;
+        bandObject.SetActive(true);
+        return meshRenderer;
     }
 
     public static void DrawLightingField(
@@ -79,6 +113,15 @@ internal static class SurfaceMeshUtilities
         else
         {
             UnityEngine.Object.DestroyImmediate(ownedObject);
+        }
+    }
+
+    public static void DestroyOwnedChild(Transform owner, string objectName)
+    {
+        Transform? ownedChild = owner.Find(objectName);
+        if (ownedChild != null)
+        {
+            DestroyOwned(ownedChild.gameObject);
         }
     }
 }
