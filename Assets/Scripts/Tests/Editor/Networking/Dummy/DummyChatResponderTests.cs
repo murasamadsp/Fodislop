@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Kern.Core;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
@@ -25,11 +26,11 @@ public sealed class DummyChatResponderTests
     [Test]
     public void SendHistory_PreservesRequestedTagAndReturnsSeedHistory()
     {
-        _responder.SendHistory(new QueryChatHistoryPacket("global"));
+        _responder.SendHistory(new QueryChatHistoryPacket(ProjectRuntimeContracts.Chat.GlobalChannelTag));
 
         Assert.That(_sent, Has.Count.EqualTo(1));
         var payload = (ChatMessageListPacket)_sent[0].Payload;
-        Assert.That(payload.Tag, Is.EqualTo("global"));
+        Assert.That(payload.Tag, Is.EqualTo(ProjectRuntimeContracts.Chat.GlobalChannelTag));
         Assert.That(payload.Messages, Has.Length.EqualTo(10));
     }
 
@@ -39,13 +40,27 @@ public sealed class DummyChatResponderTests
         var color = System.Drawing.Color.FromArgb(255, 10, 20, 30);
         _responder.ChangeColor(new ChangeChatColorPacket(color));
 
-        _responder.SendGlobal(new SendChatMessagePacket("global", "hello"));
+        _responder.SendGlobal(new SendChatMessagePacket(
+            ProjectRuntimeContracts.Chat.GlobalChannelTag,
+            "hello"));
 
         var payload = (ChatMessageListPacket)_sent[0].Payload;
         ChatMessagePacket message = payload.Messages[0];
         Assert.That(message.Message, Is.EqualTo("hello"));
         Assert.That(message.NicknameColor, Is.EqualTo(color));
         Assert.That(message.MessageColor, Is.EqualTo(color));
+    }
+
+    // Заглушка отвечает тегом из контракта, а не присланным в пакете: клиент
+    // отбрасывает ChatMessageListPacket с незнакомым Tag, и ответ под другим
+    // тегом оставил бы окно глобального чата пустым.
+    [Test]
+    public void SendGlobal_StampsContractChannelTagRegardlessOfPacketTag()
+    {
+        _responder.SendGlobal(new SendChatMessagePacket("some-other-channel", "hello"));
+
+        var payload = (ChatMessageListPacket)_sent[0].Payload;
+        Assert.That(payload.Tag, Is.EqualTo(ProjectRuntimeContracts.Chat.GlobalChannelTag));
     }
 
     [Test]

@@ -18,6 +18,7 @@ using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer.Unity;
 
 namespace Kern.UI;
 
@@ -50,7 +51,7 @@ public sealed class ServerWindowPresenter : IDisposable
         _networkService = networkService;
         _document = document;
         _commands = commands;
-        _modalWindowHandler = new ModalWindowHandler(document);
+        _modalWindowHandler = new ModalWindowHandler(document, uiInputManager);
         _commands.OpenRequested += Open;
         _commands.CloseRequested += Close;
         _commands.ModalRequested += ShowModal;
@@ -62,12 +63,24 @@ public sealed class ServerWindowPresenter : IDisposable
 
     public bool IsModalShowing => _modalWindowHandler.IsShowing;
 
+    /// <summary>
+    /// Закрыть серверное окно. Вызывается из PauseMenu: он владеет Escape в
+    /// фазе Update, и модалка должна гаситься там же — иначе нажатие
+    /// открывало паузу поверх заблокированного ввода, а окно оставалось.
+    /// </summary>
+    public void DismissModal() => _modalWindowHandler.Hide();
+
     public void Dispose()
     {
         _commands.OpenRequested -= Open;
         _commands.CloseRequested -= Close;
         _commands.ModalRequested -= ShowModal;
-        _modalWindowHandler.Hide();
+
+        // Оверлей тоже убирается. Панель документа переживает сцену, и оставшийся
+        // элемент копился между входами в игру: новый обработчик создавал второй,
+        // а поиск по классу отдавал старый, скрытый. Плюс Dispose снимает
+        // подписку на планировщик.
+        _modalWindowHandler.Dispose();
         foreach ((_, VisualElement root, WindowBinding binding) in _openWindows)
         {
             binding.Dispose();

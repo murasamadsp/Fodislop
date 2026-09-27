@@ -7,9 +7,11 @@ using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
 using Kern.Game.Managers;
 using Kern.Networking;
+using Kern.World;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
+using UnityEngine.UIElements;
 using VContainer;
 
 namespace Kern.UI
@@ -18,6 +20,9 @@ namespace Kern.UI
     {
         [Inject]
         private RobotManager _robotManager = null!;
+
+        [Inject]
+        private IMapDataProvider _mapData = null!;
 
         private Camera? _camera;
         private readonly List<FloatingChatBubble> _activeBubbles = new();
@@ -28,11 +33,33 @@ namespace Kern.UI
         private ChatEventGateway _chatEvents = null!;
         [Inject]
         private IGameplayCamera _gameplayCamera = null!;
+        [Inject]
+        private UIDocument _uiDocument = null!;
+        [Inject]
+        private INetworkService _networkService = null!;
+        [Inject]
+        private IInputBlocker _inputBlocker = null!;
+        [Inject]
+        private UIInputManager _uiInput = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
+
+        private LocalChatInput? _localInput;
 
         protected void Start()
         {
             _chatEvents.LocalMessageReceived += ShowLocalChat;
             TryInitialize();
+
+            // Школа (одна дорога): [Inject]-методы и панель UIDocument создаются
+            // до Start, один вызов без ретраев из Update.
+            _localInput = new LocalChatInput(
+                _uiDocument,
+                _networkService,
+                _inputBlocker,
+                _uiInput,
+                _operations,
+                destroyCancellationToken);
         }
 
         private void TryInitialize()
@@ -64,6 +91,8 @@ namespace Kern.UI
 
         protected void Update()
         {
+            _localInput?.Tick();
+
             if (_activeBubbles.Count == 0)
             {
                 return;
@@ -85,6 +114,9 @@ namespace Kern.UI
             {
                 _chatEvents.LocalMessageReceived -= ShowLocalChat;
             }
+
+            _localInput?.Dispose();
+            _localInput = null;
 
             _activeBubbles.Clear();
             while (_pool.Count > 0)
@@ -113,15 +145,36 @@ namespace Kern.UI
                 return;
             }
 
-            var robot = _robotManager?.GetOrCreateRobot(packet.BotId);
-            if (robot == null)
+            // GetOrCreateRobot здесь материализовал бы призрака: сервер шлёт
+            // локальный чат игрокам из чанков вокруг отправителя, а клиент
+            // видит не весь квадрат. Сообщение от незнакомого botId создавало
+            // робота в нулевой координате без метаданных, и тот висел до
+            // prune. Поэтому ищем только существующего, а координаты от
+            // отправителя используем как якорь.
+            if (_robotManager != null && _robotManager.TryGetRobot(packet.BotId, out var robot) && robot != null)
             {
-                ReturnToPool(bubble);
-                return;
+                bubble.Init((int)packet.BotId, packet.Text, robot.transform);
+            }
+            else
+            {
+                bubble.Init((int)packet.BotId, packet.Text, ResolveFallbackPosition(packet));
             }
 
-            bubble.Init((int)packet.BotId, packet.Text, robot.transform);
             _activeBubbles.Add(bubble);
+        }
+
+        private Vector3 ResolveFallbackPosition(LocalChatMessagePacket packet)
+        {
+            int worldHeight = _mapData != null ? _mapData.WorldHeight : 0;
+            if (worldHeight <= 0)
+            {
+                // Мир ещё не отдал размеры: лучше пустой якорь, чем облако
+                // в начале координат. ResolveTargetPosition вернёт текущую
+                // позицию пузыря, а он откатится в пул по окончании жизни.
+                return Vector3.zero;
+            }
+
+            return CoordinateUtils.ServerToUnityPos(packet.FallbackX, packet.FallbackY, worldHeight);
         }
 
         private void ExpireBubbleOf(int ownerID)

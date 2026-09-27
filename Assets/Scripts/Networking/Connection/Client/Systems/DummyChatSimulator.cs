@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Cysharp.Threading.Tasks;
 using Kern;
+using Kern.Core;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -78,6 +79,8 @@ internal sealed class DummyChatSimulator(
             clock.Random.Next(100, 999), (byte)clock.Random.Next(0, 3),
             nickColor, name,
             System.Drawing.Color.White, message);
-        onReceived.Invoke(new ServerPacket(new ChatMessageListPacket("global", [chatMsg])));
+        onReceived.Invoke(new ServerPacket(new ChatMessageListPacket(
+            ProjectRuntimeContracts.Chat.GlobalChannelTag,
+            [chatMsg])));
     }
 }

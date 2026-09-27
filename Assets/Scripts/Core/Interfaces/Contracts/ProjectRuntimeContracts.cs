@@ -16,8 +16,15 @@ public static class ProjectRuntimeContracts
         // Половина видимой высоты в клетках. Максимум задаёт и размер области
         // освещения: свет считается на кадр максимального отдаления, чтобы зум
         // не менял сетку каскадов и не перекрашивал сцену.
-        public const float MinimumOrthographicSize = 10f;
-        public const float MaximumOrthographicSize = 20f;
+        public const float MinimumOrthographicSize = 5f;
+        public const float MaximumOrthographicSize = 30f;
+
+        // Опорный зум мировых меток: при нём ник и облако локального чата
+        // имеют 100% масштаба, то есть ровно тот кегль, который задан в USS.
+        // Равен середине [Minimum, Maximum] — с неё камера стартует, — и не
+        // зависит от сериализованного диапазона зума: сдвиг диапазона в
+        // инспекторе меняет стартовый зум, но не размер текста в мире.
+        public const float ReferenceOrthographicSize = 17.5f;
     }
 
     public static class Gameplay
@@ -58,6 +65,14 @@ public static class ProjectRuntimeContracts
     {
         public const int MaximumGlobalChatLength = 256;
         public const int MaximumLocalChatLength = 256;
+
+        // Тег глобального канала обязан совпадать с тем, который сервер отдаёт
+        // в ChatMessageListPacket.Tag и ищет в QueryChatHistoryPacket.Tag.
+        // Сервер засевает единственный глобальный канал с Tag = "FED"
+        // (World.CheckGlobalChats) и шлёт ответы с этим же тегом, поэтому
+        // клиент, запрашивающий историю под другим тегом, получает отказ по
+        // фильтру и остаётся с пустым окном чата.
+        public const string GlobalChannelTag = "FED";
     }
 
     public static class Movement
@@ -98,6 +113,7 @@ public static class ProjectRuntimeContracts
         public const string MainMenuUxml = "UI/Menus/MainMenu";
         public const string AssetLoadingIndicatorUxml = "UI/Menus/AssetLoadingIndicator";
         public const string GlobalChatUxml = "UI/Gameplay/GlobalChat";
+        public const string LocalChatUxml = "UI/Gameplay/LocalChat";
         public const string PlayerHudUxml = "UI/Gameplay/PlayerHUD";
         public const string ReconnectUxml = "UI/Menus/Reconnect";
         public const string InventoryUxml = "UI/Gameplay/Inventory";

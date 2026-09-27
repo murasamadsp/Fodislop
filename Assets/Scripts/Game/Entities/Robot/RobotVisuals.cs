@@ -22,7 +22,6 @@ public sealed class RobotVisuals
     private Tentacle[]? _tentacles;
     private bool _tentaclesSettled;
     private Vector3 _lastTentacleRootPosition;
-    private float _lastTentacleRotation;
 
     public Sprite? SkinSprite => _skinSprite;
     public Transform? ClanTransform => _clanTransform;
@@ -110,14 +109,12 @@ public sealed class RobotVisuals
 
         _tentacles = new Tentacle[4];
         _tentaclesSettled = false;
-        float[] offsets = { -45f, -15f, 15f, 45f };
         for (int i = 0; i < 4; i++)
         {
             _tentacles[i] = new Tentacle(
                 _entityBatchRenderer,
                 tailTexture,
                 position,
-                offsets[i],
                 i,
                 4);
         }
@@ -179,7 +176,7 @@ public sealed class RobotVisuals
         return true;
     }
 
-    public void UpdateTentacles(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
+    public void UpdateTentacles(Vector3 rootPosition, float movementFactor, float deltaTime)
     {
         if (_tentacles == null)
         {
@@ -188,11 +185,11 @@ public sealed class RobotVisuals
 
         foreach (var tentacle in _tentacles)
         {
-            tentacle?.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
+            tentacle?.Update(rootPosition, movementFactor, deltaTime);
         }
     }
 
-    public void UpdateMotion(Vector3 position, float rotationAngle, float movementFactor, float deltaTime, bool bodySettled)
+    public void UpdateMotion(Vector3 position, float movementFactor, float deltaTime, bool bodySettled)
     {
         if (_tentacles == null)
         {
@@ -207,7 +204,7 @@ public sealed class RobotVisuals
 
         if (bodySettled)
         {
-            UpdateTentacles(position, rotationAngle, 0f, deltaTime);
+            UpdateTentacles(position, 0f, deltaTime);
             _tentaclesSettled = AreTentaclesSettled();
             return;
         }
@@ -215,15 +212,13 @@ public sealed class RobotVisuals
         bool tentacleStateChanged =
             !_tentaclesSettled ||
             (position - _lastTentacleRootPosition).sqrMagnitude > 1e-8f ||
-            Mathf.Abs(Mathf.DeltaAngle(_lastTentacleRotation, rotationAngle)) > 0.001f ||
             movementFactor > 0.0001f;
 
         if (tentacleStateChanged)
         {
-            UpdateTentacles(position, rotationAngle, movementFactor, deltaTime);
+            UpdateTentacles(position, movementFactor, deltaTime);
             _tentaclesSettled = AreTentaclesSettled();
             _lastTentacleRootPosition = position;
-            _lastTentacleRotation = rotationAngle;
         }
     }
 

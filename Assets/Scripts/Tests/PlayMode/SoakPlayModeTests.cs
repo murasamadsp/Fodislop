@@ -223,7 +223,9 @@ public sealed class SoakPlayModeTests
     {
         foreach ((int x, int y) in stops)
         {
-            _connection.Send(new ClientPacket(0, new SendChatMessagePacket("global", $"/tp {x} {y}")));
+            _connection.Send(new ClientPacket(
+                0,
+                new SendChatMessagePacket(ProjectRuntimeContracts.Chat.GlobalChannelTag, $"/tp {x} {y}")));
             yield return PlayModeHarness.WaitUntil(
                 () => storage.TryGetCell(x, y, out _),
                 PlayModeHarness.WorldTimeoutSeconds,

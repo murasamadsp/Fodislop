@@ -40,7 +40,7 @@ public sealed class RobotNameplate
             existingNickname.gameObject.SetActive(false);
         }
 
-        _nicknameText ??= labels.Create(chatBubble: false);
+        _nicknameText ??= labels.Create(WorldLabelKind.Nickname);
         InvalidatePosition();
         _nicknameText.SetVisible(true);
         _nicknameText.SetText(nickname ?? string.Empty);

@@ -2,6 +2,7 @@
 
 using System;
 using System.Linq;
+using Kern.Core;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -46,7 +47,12 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummy
             "You",
             _chatColor,
             packet.Message);
-        sendPacket(new ServerPacket(new ChatMessageListPacket("global", [message])));
+        // Заглушка обязана отвечать тем же тегом, каким сервер помечает
+        // глобальный канал: клиент отбрасывает ChatMessageListPacket с
+        // незнакомым Tag, и под "global" окно осталось бы пустым.
+        sendPacket(new ServerPacket(new ChatMessageListPacket(
+            ProjectRuntimeContracts.Chat.GlobalChannelTag,
+            [message])));
     }
 
     private static ChatMessagePacket[] CreateSeedMessages(long now)

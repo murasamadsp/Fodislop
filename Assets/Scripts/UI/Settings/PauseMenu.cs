@@ -27,6 +27,8 @@ namespace Kern.UI
         [Inject]
         private UIDocument _doc = null!;
         [Inject]
+        private ServerWindowPresenter _windows = null!;
+        [Inject]
         private IClientConfigManager _clientConfig = null!;
         [Inject]
         private LightingEngine _lightingEngine = null!;
@@ -86,8 +88,34 @@ namespace Kern.UI
                     return;
                 }
 
+                // Показанное серверное окно — верхний владелец Escape: оно
+                // модальное и держит IInputBlocker.IsInputBlocked, а закрыть его
+                // больше нечем. Escape в паузе не открывает меню поверх
+                // заблокированного ввода, а гасит окно.
+                if (TryDismissServerModal())
+                {
+                    return;
+                }
+
                 ToggleMenu();
             }
+        }
+
+        private bool TryDismissServerModal()
+        {
+            if (_windows == null || !_windows.IsModalShowing)
+            {
+                return false;
+            }
+
+            if (_uiInput.IsChatFocused)
+            {
+                return false;
+            }
+
+            _windows.DismissModal();
+            _uiInput.ConsumeEscape();
+            return true;
         }
 
         private void TryInitialize()

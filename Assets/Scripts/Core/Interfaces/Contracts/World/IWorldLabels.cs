@@ -5,9 +5,26 @@ using UnityEngine;
 
 namespace Kern.Core.Interfaces;
 
+/// <summary>
+/// Тип мировой метки. Определяет и оформление, и то, какой угол бокса
+/// садится в мировую точку: style.translate двигает бокс целиком, и без
+/// указания угла метка уезжает вниз от точки, а не над ней.
+/// </summary>
+public enum WorldLabelKind
+{
+    /// <summary>Никнейм над роботом. Верхний левый угол в правом верхнем углу клетки.</summary>
+    Nickname,
+
+    /// <summary>
+    /// Облако локального чата. Нижний центр в верхней грани клетки робота:
+    /// хвост из нижнего поля рамки упирается в робота, тело облака стоит над ним.
+    /// </summary>
+    ChatBubble,
+}
+
 public interface IWorldLabels
 {
-    IWorldLabel Create(bool chatBubble);
+    IWorldLabel Create(WorldLabelKind kind);
 }
 
 public interface IWorldLabel : IDisposable
