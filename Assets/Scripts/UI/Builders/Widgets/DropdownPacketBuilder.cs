@@ -37,6 +37,7 @@ public abstract class DropdownPacketBuilder<TPacket, TValue> : PacketUIBuilderBa
 
         var dropdown = new DropdownField(options, 0)
         {
+            name = packet.Name,
             value = defaultValue,
         };
         dropdown.SetEnabled(packet.IsEnabled);

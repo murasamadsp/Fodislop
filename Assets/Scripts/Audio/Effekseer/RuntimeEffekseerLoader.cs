@@ -80,7 +80,9 @@ public static class RuntimeEffekseerLoader
             foreach (var rawPath in resourcePath.TexturePathList)
             {
                 // Apply optional path remapping
-                var serverPath = texturePathMapper?.Invoke(rawPath) ?? rawPath;
+                string? serverPath = texturePathMapper == null
+                    ? rawPath
+                    : texturePathMapper(rawPath);
                 if (serverPath == null)
                 {
                     Debug.LogWarning($"[RuntimeEffekseerLoader] Texture '{rawPath}' skipped by mapper");

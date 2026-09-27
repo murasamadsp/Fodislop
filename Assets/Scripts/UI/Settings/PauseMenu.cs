@@ -15,7 +15,6 @@ using Kern.UI.Programmator;
 using Kern.World.Lighting;
 using Kern.World.Terrain;
 using MinesServer.Networking.Client.Packets.GUI;
-using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
@@ -310,7 +309,7 @@ namespace Kern.UI
                 var topTag = _inputBlocker.TopWindowTag;
                 if (topTag != null)
                 {
-                    _networkService.Send(new ElementClickPacket(topTag, 0, System.Array.Empty<StringPairPacket>()));
+                    _networkService.Send(new ElementClickPacket(topTag, 0, []));
                     return;
                 }
             }

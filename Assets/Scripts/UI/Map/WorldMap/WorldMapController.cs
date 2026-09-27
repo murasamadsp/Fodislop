@@ -21,8 +21,6 @@ namespace Kern.UI
         [Inject]
         private Kern.UI.Inventory.InventoryView _inventory = null!;
         [Inject]
-        private FPSCounter _fps = null!;
-        [Inject]
         private WorldMapRenderer _mapRenderer = null!;
         [Inject]
         private MapStorage _mapStorage = null!;
@@ -201,8 +199,6 @@ namespace Kern.UI
         {
             _playerHud.enabled = visible;
             _inventory.enabled = visible;
-            _fps.enabled = visible;
-
         }
     }
 }

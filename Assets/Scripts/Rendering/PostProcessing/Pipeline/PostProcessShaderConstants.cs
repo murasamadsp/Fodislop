@@ -23,6 +23,7 @@ internal static class PostProcessShaderConstants
     public static readonly int BloomScatterID = Shader.PropertyToID("_BloomScatter");
     public static readonly int BloomTintID = Shader.PropertyToID("_BloomTint");
     public static readonly int BloomIntensityID = Shader.PropertyToID("_BloomIntensity");
+    public static readonly int BloomStyleID = Shader.PropertyToID("_BloomStyle");
     public static readonly int EmissionTexID = Shader.PropertyToID("_EmissionTex");
     public static readonly int ScreenToEmissionID = Shader.PropertyToID("_ScreenToEmission");
     public static readonly int WorldEmissionTextureID = Shader.PropertyToID("_WorldEmissionTexture");

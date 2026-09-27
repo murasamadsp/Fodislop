@@ -20,7 +20,6 @@ namespace Kern.Player
     {
         [Inject]
         private Camera _mainCamera = null!;
-        private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
         private UIDocument _injectedUIDoc = null!;
         [Inject]
@@ -31,14 +30,6 @@ namespace Kern.Player
         private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
         private Kern.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
-
-        protected void Awake()
-        {
-            if (Keyboard.current != null)
-            {
-                _cachedAllKeys = Keyboard.current.allKeys;
-            }
-        }
 
         protected void Update()
         {
@@ -173,7 +164,8 @@ namespace Kern.Player
 
         private void HandleKeyboardInput()
         {
-            if (Keyboard.current == null)
+            Keyboard? keyboard = Keyboard.current;
+            if (keyboard == null)
             {
                 return;
             }
@@ -183,15 +175,16 @@ namespace Kern.Player
                 return;
             }
 
-            if (!Keyboard.current.anyKey.wasPressedThisFrame)
+            if (!keyboard.anyKey.wasPressedThisFrame)
             {
                 return;
             }
 
             // Send unmapped keys to the server, excluding locally handled gameplay and UI hotkeys.
-            for (int i = 0; i < _cachedAllKeys.Count; i++)
+            var allKeys = keyboard.allKeys;
+            for (int i = 0; i < allKeys.Count; i++)
             {
-                var keyControl = _cachedAllKeys[i];
+                KeyControl keyControl = allKeys[i];
                 if (keyControl.wasPressedThisFrame)
                 {
                     Key key = keyControl.keyCode;
@@ -203,9 +196,9 @@ namespace Kern.Player
                     byte code = MapKeyToByte(key);
                     if (code != 0)
                     {
-                        bool ctrl = Keyboard.current.ctrlKey.isPressed;
-                        bool alt = Keyboard.current.altKey.isPressed;
-                        bool shift = Keyboard.current.shiftKey.isPressed;
+                        bool ctrl = keyboard.ctrlKey.isPressed;
+                        bool alt = keyboard.altKey.isPressed;
+                        bool shift = keyboard.shiftKey.isPressed;
 
                         _networkService.SendAction(new UnmappedKeyPacket(code, ctrl, alt, shift));
                     }

@@ -36,6 +36,7 @@ float _BloomRadius;
 float _BloomScatter;
 float4 _BloomTint;
 float _BloomIntensity;
+int _BloomStyle; // 0 = standard, 1 = cyberpunk spectral split
 float4 _ScreenToEmission; // xy = scale, zw = offset from screen UV to emission field UV
 
 float _VignetteIntensity;
@@ -362,6 +363,17 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
 
     // Отбирается только чистое превышение яркости с сохранением сочного цвета и силы эмиссии
     float3 brightColor = sourceColor.rgb * saturate(weight) * saturate(emissionSample.a);
+
+    // Киберпанк-стиль переводит красную эмиссию в магенту, а зелёную и синюю
+    // в циан. Сумма каналов каждой исходной компоненты сохраняется, поэтому
+    // стилизация не добавляет энергию и не обрезает HDR-радианс.
+    if (_BloomStyle == 1)
+    {
+        brightColor = float3(
+            brightColor.r * 0.72,
+            brightColor.g * 0.65 + brightColor.b * 0.15,
+            brightColor.r * 0.28 + brightColor.g * 0.35 + brightColor.b * 0.85);
+    }
 
     // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
     // целиком: один такой пиксель на входе даёт серое полотно на выходе.

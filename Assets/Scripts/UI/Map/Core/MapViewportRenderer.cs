@@ -65,10 +65,7 @@ internal sealed class MapViewportRenderer
             _pixelBuffer = new Color32[texW * texH];
         }
 
-        for (int i = 0; i < _pixelBuffer.Length; i++)
-        {
-            _pixelBuffer[i] = defaultCol;
-        }
+        float startWorldX = cx + (0.5f - texW * 0.5f) * cp;
 
         // Sample from screen pixels instead of iterating over every world
         // cell. When zoomed out, walking the whole world paints the same pixel many times.
@@ -80,25 +77,26 @@ internal sealed class MapViewportRenderer
             // Server coordinates use a top-left origin, so the bottom texture
             // row must sample the largest server Y in the viewport.
             float screenRowFromTop = texH - 0.5f - py;
-            float worldY = MapProjection.MapPixelYToServer(
-                screenRowFromTop,
-                cy,
-                cp,
-                texH);
+            float worldY = cy + (screenRowFromTop - texH * 0.5f) * cp;
             int serverY = Mathf.FloorToInt(worldY);
 
-            for (int px = 0; px < texW; px++)
+            if (serverY < 0 || serverY >= worldH)
             {
-                float worldX = MapProjection.MapPixelXToServer(
-                    px + 0.5f,
-                    cx,
-                    cp,
-                    texW);
-                int serverX = Mathf.FloorToInt(worldX);
-                Color32 color = _defaultColor;
+                Array.Fill(_pixelBuffer, defaultCol, rowStart, texW);
+                continue;
+            }
 
-                if (mipCache != null && cp >= mipCache.ChunkSize &&
-                    serverX >= 0 && serverX < worldW && serverY >= 0 && serverY < worldH)
+            float worldX = startWorldX;
+            for (int px = 0; px < texW; px++, worldX += cp)
+            {
+                int serverX = Mathf.FloorToInt(worldX);
+                Color32 color;
+
+                if (serverX < 0 || serverX >= worldW)
+                {
+                    color = defaultCol;
+                }
+                else if (mipCache != null && cp >= mipCache.ChunkSize)
                 {
                     color = mipCache.Sample(worldX, worldY, cp);
                 }
@@ -111,7 +109,7 @@ internal sealed class MapViewportRenderer
                         serverY,
                         worldW,
                         worldH,
-                        _defaultColor,
+                        defaultCol,
                         out _);
                 }
 

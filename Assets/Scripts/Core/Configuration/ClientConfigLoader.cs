@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
 using UnityEngine;
 
 namespace Kern.Core;
@@ -23,6 +24,7 @@ internal sealed class ClientConfigLoader
     private const int ReliefRimSchemaVersion = 32;
     private const int DistortionStyleSchemaVersion = 33;
     private const int PresetPairSchemaVersion = 34;
+    private const int BloomStyleSchemaVersion = 35;
 
     private readonly ClientConfigRepository _repository;
     private readonly ClientConfigValidator _validator;
@@ -128,6 +130,12 @@ internal sealed class ClientConfigLoader
         config.SchemaVersion = PresetPairSchemaVersion;
     }
 
+    private static void MigrateSchema34To35(ClientConfig config)
+    {
+        config.Effects.BloomVariant = BloomStyle.Standard;
+        config.SchemaVersion = BloomStyleSchemaVersion;
+    }
+
     private static void ApplyMigrations(ClientConfig config, string sourceJson, int sourceSchemaVersion)
     {
         int schema = sourceSchemaVersion;
@@ -199,6 +207,12 @@ internal sealed class ClientConfigLoader
         {
             MigrateSchema33To34(config);
             schema = PresetPairSchemaVersion;
+        }
+
+        if (schema == PresetPairSchemaVersion)
+        {
+            MigrateSchema34To35(config);
+            schema = BloomStyleSchemaVersion;
         }
 
         config.SchemaVersion = schema;

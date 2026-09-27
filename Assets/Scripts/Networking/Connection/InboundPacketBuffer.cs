@@ -23,7 +23,16 @@ internal sealed class InboundPacketBuffer
     private int _mainThreadId;
     private bool _tearingDown;
 
-    public bool IsTearingDown => _tearingDown;
+    public bool IsTearingDown
+    {
+        get
+        {
+            lock (_admissionGate)
+            {
+                return _tearingDown;
+            }
+        }
+    }
 
     public bool IsEmpty => _queue.IsEmpty;
 
@@ -33,26 +42,37 @@ internal sealed class InboundPacketBuffer
 
     public void CaptureMainThread() => _mainThreadId = Environment.CurrentManagedThreadId;
 
-    public void BeginTeardown() => _tearingDown = true;
+    public void BeginTeardown()
+    {
+        lock (_admissionGate)
+        {
+            _tearingDown = true;
+        }
+    }
 
-    public void EndTeardown() => _tearingDown = false;
+    public void EndTeardown()
+    {
+        lock (_admissionGate)
+        {
+            _tearingDown = false;
+        }
+    }
 
     public bool TryTake(out ServerPacket packet)
     {
-        if (!_queue.TryDequeue(out ServerPacket queuedPacket))
-        {
-            packet = default;
-            return false;
-        }
-
-        packet = queuedPacket;
         lock (_admissionGate)
         {
+            if (!_queue.TryDequeue(out ServerPacket queuedPacket))
+            {
+                packet = default;
+                return false;
+            }
+
+            packet = queuedPacket;
             _admission.Release(packet.Size);
             Monitor.PulseAll(_admissionGate);
+            return true;
         }
-
-        return true;
     }
 
     public int Clear()

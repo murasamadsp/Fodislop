@@ -91,6 +91,7 @@ public class WorldLayerFileHeaderTests
 
         WorldLayerFileHeader.WriteChunkOffset(memory, 1, 1024L);
         WorldLayerFileHeader.WriteChunkOffset(memory, 3, 2048L);
+        memory.SetLength(2049L);
 
         long[] readOffsets = new long[width * height];
         bool success = WorldLayerFileHeader.TryReadHeader(memory, width, height, chunkSize, readOffsets);

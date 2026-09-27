@@ -61,9 +61,14 @@ public sealed class ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths) : IItemCa
         }
         catch (Exception exception)
         {
-            Debug.LogWarning(
-                $"{TAG} Local icon '{path}' for item type '{type}' is corrupt; " +
-                $"will use the server texture if available. {exception.Message}");
+            _iconCache[type] = null;
+            if (_missingIconWarned.Add(type))
+            {
+                Debug.LogWarning(
+                    $"{TAG} Local icon '{path}' for item type '{type}' is corrupt; " +
+                    $"will use the server texture if available. {exception.Message}");
+            }
+
             return null;
         }
 

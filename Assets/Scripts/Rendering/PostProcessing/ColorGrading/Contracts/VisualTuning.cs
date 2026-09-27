@@ -1,5 +1,6 @@
 #nullable enable
 
+using Kern.Core;
 using UnityEngine;
 
 namespace Kern.Game
@@ -365,6 +366,15 @@ namespace Kern.World.Lighting
 
 namespace Kern.Rendering.PostProcessing
 {
+    public enum BloomStyle
+    {
+        [SettingLabel("settings.effects.bloom_variant.standard")]
+        Standard = 0,
+
+        [SettingLabel("settings.effects.bloom_variant.cyberpunk")]
+        Cyberpunk = 1,
+    }
+
     public static class PostProcessLook
     {
         // Переключатели включают соответствующие этапы графа.
@@ -383,6 +393,12 @@ namespace Kern.Rendering.PostProcessing
             public const float SoftKnee = 0.5f;
             public const float Radius = 1.5f;
             public const float Scatter = 0.35f;
+
+            // Cyberpunk bloom uses a wider, more connected neon halo; the
+            // reconstruction pass normalizes its energy for the larger scatter.
+            public const float CyberpunkThresholdScale = 0.8f;
+            public const float CyberpunkRadiusScale = 1.3f;
+            public const float CyberpunkScatter = 0.58f;
 
             public static Color Tint => Color.white;
         }

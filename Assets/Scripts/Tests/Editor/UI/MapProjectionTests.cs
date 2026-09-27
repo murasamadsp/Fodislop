@@ -96,4 +96,36 @@ public sealed class MapProjectionTests
         Assert.That(outOfBounds, Is.EqualTo((Color32)Color.black));
         Assert.That(outOfBoundsWasLoaded, Is.False);
     }
+
+    [Test]
+    public void ClampCenter_AllowsPanningIntoNegativeCoordinatesAndBorders()
+    {
+        // Viewport half-width is 480, world width is 1000
+        float clampedNegative = MapViewportBounds.ClampCenter(-100f, 480f, 1000);
+        float clampedZero = MapViewportBounds.ClampCenter(0f, 480f, 1000);
+        float clampedFarRight = MapViewportBounds.ClampCenter(1200f, 480f, 1000);
+
+        Assert.That(clampedNegative, Is.EqualTo(-100f));
+        Assert.That(clampedZero, Is.EqualTo(0f));
+        Assert.That(clampedFarRight, Is.EqualTo(1200f));
+    }
+
+    [Test]
+    public void ClampCenter_WhenViewportLargerThanWorld_DoesNotForceWorldCenter()
+    {
+        // Zoomed out: half-width 600 > world width 500 / 2
+        float clamped = MapViewportBounds.ClampCenter(100f, 600f, 500);
+
+        Assert.That(clamped, Is.EqualTo(100f));
+    }
+
+    [Test]
+    public void ComputeMaxZoomOut_AllowsReasonableZoomOnSmallAndLargeWorlds()
+    {
+        float smallWorldZoom = MapViewportBounds.ComputeMaxZoomOut(960, 540, 100, 100);
+        float largeWorldZoom = MapViewportBounds.ComputeMaxZoomOut(960, 540, 5000, 5000);
+
+        Assert.That(smallWorldZoom, Is.GreaterThanOrEqualTo(4f));
+        Assert.That(largeWorldZoom, Is.GreaterThanOrEqualTo(4f));
+    }
 }

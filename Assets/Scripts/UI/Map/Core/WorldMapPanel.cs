@@ -49,6 +49,7 @@ internal sealed class WorldMapPanel : IDisposable
 
         if (_document.rootVisualElement.panel == null)
         {
+            // Панель ещё не привязана к UI Toolkit; WorldMapRenderer подписывается на AttachToPanelEvent и повторит привязку.
             return false;
         }
 

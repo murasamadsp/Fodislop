@@ -21,7 +21,8 @@ public sealed class MapInteractionController
         }
 
         Vector2 localPosition = new(evt.localPosition.x, evt.localPosition.y);
-        if (!mapImage.localBound.Contains(localPosition))
+        Rect contentRect = mapImage.contentRect;
+        if (contentRect.width > 0f && contentRect.height > 0f && !contentRect.Contains(localPosition))
         {
             return;
         }
@@ -107,10 +108,14 @@ public sealed class MapInteractionController
         }
 
         followPlayer = false;
-        Rect mapRect = mapImage.localBound;
+        Rect mapRect = mapImage.contentRect;
         if (mapRect.width <= 0f || mapRect.height <= 0f)
         {
-            return;
+            mapRect = mapImage.localBound;
+            if (mapRect.width <= 0f || mapRect.height <= 0f)
+            {
+                return;
+            }
         }
 
         if (texWidth <= 0 || texHeight <= 0)

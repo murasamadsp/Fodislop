@@ -11,7 +11,7 @@ public class ClientConfig
     // 33: TerrainSettings.DistortionStyle.
     // 34: две ступени качества (Стандарт/Overdrive) вместо шести, без Custom.
     // Схемы 31–33 мигрируются штатным загрузчиком с созданием backup.
-    public const int CurrentSchemaVersion = 34;
+    public const int CurrentSchemaVersion = 35;
 
     public int SchemaVersion;
     public AudioSettings Audio = new();

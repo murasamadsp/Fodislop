@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
 using UnityEngine;
 
 namespace Kern.Core;
@@ -48,6 +49,12 @@ internal sealed class ClientConfigValidator(GraphicsQualityProfile graphicsQuali
         {
             throw new InvalidDataException(
                 $"Unknown terrain distortion style '{config.Terrain.DistortionStyle}'.");
+        }
+
+        if (!Enum.IsDefined(typeof(BloomStyle), config.Effects.BloomVariant))
+        {
+            throw new InvalidDataException(
+                $"Unknown bloom style '{config.Effects.BloomVariant}'.");
         }
 
         if (interfaceSettings.Language is not ("ru" or "en" or "zh" or "zh-hant"))

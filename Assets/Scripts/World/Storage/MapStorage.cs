@@ -161,6 +161,13 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             throw new InvalidOperationException("[MapStorage] GetCell called before world initialization");
         }
 
+        if (!IsInsideWorld(x, y))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(x),
+                $"Cell coordinate ({x}, {y}) is outside the world bounds {_worldWidth}x{_worldHeight}.");
+        }
+
         return _cellLayer.GetCell(x, y, touchLru: true);
     }
 
@@ -169,6 +176,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         cellType = CellType.Unloaded;
         return _isInitialized &&
             _cellLayer != null &&
+            IsInsideWorld(x, y) &&
             _cellLayer.TryGetCell(x, y, out cellType);
     }
 
@@ -178,6 +186,13 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         {
             throw new InvalidOperationException(
                 $"[MapStorage] SetCell called before world initialization: ({x},{y}).");
+        }
+
+        if (!IsInsideWorld(x, y))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(x),
+                $"Cell coordinate ({x}, {y}) is outside the world bounds {_worldWidth}x{_worldHeight}.");
         }
 
         if (_cellLayer.TryGetCell(x, y, out CellType current) && current == type)
@@ -241,12 +256,26 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         // to issue ~2048 LRU/Dictionary operations through GetCellSync+SetCell,
         // costing several milliseconds per region and stretching the initial
         // world burst across dozens of frames under the packet-drain budget).
+        ReadOnlySpan<CellType> appliedCells = cells;
+        CellType[]? clippedCells = null;
+        if (appliedWidth != width || appliedHeight != height)
+        {
+            clippedCells = new CellType[checked(appliedWidth * appliedHeight)];
+            for (int row = 0; row < appliedHeight; row++)
+            {
+                cells.Slice(row * width, appliedWidth).CopyTo(
+                    clippedCells.AsSpan(row * appliedWidth, appliedWidth));
+            }
+
+            appliedCells = clippedCells;
+        }
+
         int changedCells = _cellLayer.SetRegion(
             startX,
             startY,
-            width,
-            height,
-            cells,
+            appliedWidth,
+            appliedHeight,
+            appliedCells,
             0);
 
         if (changedCells > 0)
@@ -260,7 +289,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             }
             else if (!onlyMaterializedNewChunks)
             {
-                RegionChanged?.Invoke(startX, startY, width, height);
+                RegionChanged?.Invoke(startX, startY, appliedWidth, appliedHeight);
             }
         }
 
@@ -465,4 +494,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 disposeFailure);
         }
     }
+
+    private bool IsInsideWorld(int x, int y) =>
+        x >= 0 && y >= 0 && x < _worldWidth && y < _worldHeight;
 }

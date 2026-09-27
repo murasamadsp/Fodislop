@@ -16,7 +16,7 @@ namespace Kern.UI
     {
         [Header("Rendering")]
         [SerializeField]
-        private float _renderInterval = 0.1f;
+        private float _renderInterval = 0.02f;
         [SerializeField]
         private float _dragSpeed = 1f;
 

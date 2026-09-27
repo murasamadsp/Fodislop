@@ -61,6 +61,17 @@ namespace Kern.Rendering.PostProcessing
             }
         }
 
+        public BloomStyle BloomVariant
+        {
+            get => GetRequired(_bloom, nameof(_bloom)).style.value;
+            set
+            {
+                BloomComponent bloom = GetRequired(_bloom, nameof(_bloom));
+                bloom.style.overrideState = true;
+                bloom.style.value = value;
+            }
+        }
+
         public float VignetteIntensity
         {
             get => GetRequired(_vignette, nameof(_vignette)).intensity.value;
@@ -298,6 +309,7 @@ namespace Kern.Rendering.PostProcessing
             bloom.scatter.value = PostProcessLook.Bloom.Scatter;
             bloom.tint.overrideState = true;
             bloom.tint.value = PostProcessLook.Bloom.Tint;
+            BloomVariant = config.Effects.BloomVariant;
             BloomIntensity = config.Effects.BloomEnabled ? PostProcessLook.Bloom.Intensity : 0f;
 
             VignetteComponent vignette = GetRequired(_vignette, nameof(_vignette));

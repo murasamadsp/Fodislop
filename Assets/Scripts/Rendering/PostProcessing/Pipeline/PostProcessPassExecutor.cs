@@ -97,11 +97,21 @@ internal static class PostProcessPassExecutor
     private static void ExecuteBloom(PostProcessPassData data, CommandBuffer cmd, int width, int height)
     {
         int levels = data.BloomLevels;
-        cmd.SetComputeFloatParam(data.PostProcessCS, BloomThresholdID, data.BloomThreshold);
+        bool cyberpunk = data.BloomVariant == BloomStyle.Cyberpunk;
+        float threshold = data.BloomThreshold *
+            (cyberpunk ? PostProcessLook.Bloom.CyberpunkThresholdScale : 1f);
+        float radius = data.BloomRadius *
+            (cyberpunk ? PostProcessLook.Bloom.CyberpunkRadiusScale : 1f);
+        float scatter = cyberpunk
+            ? PostProcessLook.Bloom.CyberpunkScatter
+            : data.BloomScatter;
+
+        cmd.SetComputeFloatParam(data.PostProcessCS, BloomThresholdID, threshold);
         cmd.SetComputeFloatParam(data.PostProcessCS, BloomSoftKneeID, data.BloomSoftKnee);
-        cmd.SetComputeFloatParam(data.PostProcessCS, BloomRadiusID, data.BloomRadius);
-        cmd.SetComputeFloatParam(data.PostProcessCS, BloomScatterID, data.BloomScatter);
+        cmd.SetComputeFloatParam(data.PostProcessCS, BloomRadiusID, radius);
+        cmd.SetComputeFloatParam(data.PostProcessCS, BloomScatterID, scatter);
         cmd.SetComputeVectorParam(data.PostProcessCS, BloomTintID, data.BloomTint);
+        cmd.SetComputeIntParam(data.PostProcessCS, BloomStyleID, (int)data.BloomVariant);
 
         // Яркость подъёма нормируется по глубине пирамиды.
         //
@@ -115,7 +125,7 @@ internal static class PostProcessPassExecutor
         for (int i = 0; i <= levels; i++)
         {
             energy += term;
-            term *= Mathf.Max(data.BloomScatter, 0f);
+            term *= Mathf.Max(scatter, 0f);
         }
 
         cmd.SetComputeFloatParam(

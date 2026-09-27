@@ -139,6 +139,7 @@ namespace Kern.Rendering.PostProcessing
             passData.BloomScatter = bloom.scatter.value;
             passData.BloomTint = bloom.tint.value;
             passData.BloomIntensity = bloom.intensity.value;
+            passData.BloomVariant = bloom.style.value;
 
             passData.VignetteActive = vignetteActive;
             passData.VignetteIntensity = vignette.intensity.value;

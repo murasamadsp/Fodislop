@@ -170,6 +170,7 @@ namespace Kern.Core
             // Keep it loaded while the ticketed replacement reaches presentation.
             _currentSceneName = null;
             Scene candidateScene = default;
+            bool candidateLoadStarted = false;
             var ticket = new SceneTransitionTicket(sceneName);
             ticket.Changed += PublishTransitionStatus;
             PublishTransitionStatus(new SceneTransitionStatus(sceneName, SceneTransitionPhase.Created));
@@ -193,6 +194,7 @@ namespace Kern.Core
                 using (LifetimeScope.EnqueueParent(this))
                 using (LifetimeScope.Enqueue(builder => builder.RegisterInstance(ticket)))
                 {
+                    candidateLoadStarted = true;
                     await SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive).ToUniTask();
                     // Yield one frame so Unity finishes Awake/OnEnable on the new
                     // scene's root objects before we touch them. Without this the
@@ -239,6 +241,16 @@ namespace Kern.Core
             {
                 ticket.Fail(ex);
                 _currentSceneName = previousScene?.name;
+                // LoadSceneAsync can finish loading the scene and then a later
+                // step (scene lookup, ticket attach, activation, or readiness)
+                // can fail before candidateScene is assigned. Recover the
+                // additive scene by name so failed transitions do not strand a
+                // second scene in the hierarchy.
+                if (candidateLoadStarted && (!candidateScene.IsValid() || !candidateScene.isLoaded))
+                {
+                    candidateScene = SceneTransitionSceneLookup.FindFirstLoaded(sceneName);
+                }
+
                 if (candidateScene.IsValid() && candidateScene.isLoaded &&
                     !string.Equals(candidateScene.name, _currentSceneName, StringComparison.Ordinal))
                 {

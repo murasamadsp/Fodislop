@@ -89,6 +89,34 @@ internal sealed class PauseMenuEffectsTabBuilder
             () => Cfg().Effects.BloomEnabled,
             (config, value) => config.Effects.BloomEnabled = value));
 
+        var bloomStyleRow = new VisualElement();
+        bloomStyleRow.AddToClassList("pause-slider-container");
+        var bloomStyleLabel = new Label(_loc.Get(SettingSchema.LabelOf<EffectSettings>(
+            nameof(EffectSettings.BloomVariant))));
+        bloomStyleLabel.AddToClassList("pause-slider-label");
+        var bloomStyleDropdown = new DropdownField
+        {
+            choices = new List<string>
+            {
+                _loc.Get(SettingSchema.LabelOf(BloomStyle.Standard)),
+                _loc.Get(SettingSchema.LabelOf(BloomStyle.Cyberpunk)),
+            },
+        };
+        bloomStyleDropdown.index = (int)Cfg().Effects.BloomVariant;
+        bloomStyleDropdown.RegisterValueChangedCallback(_ =>
+        {
+            BloomStyle style = (BloomStyle)bloomStyleDropdown.index;
+            _graphicsSettings.UpdatePostProcessSettings(
+                config => config.Effects.BloomVariant = style);
+        });
+        _refreshers.Add(() =>
+        {
+            bloomStyleDropdown.index = (int)Cfg().Effects.BloomVariant;
+        });
+        bloomStyleRow.Add(bloomStyleLabel);
+        bloomStyleRow.Add(bloomStyleDropdown);
+        bloomGroup.Add(bloomStyleRow);
+
         cameraGroup.Add(Switch(
             nameof(EffectSettings.VignetteEnabled),
             () => Cfg().Effects.VignetteEnabled,

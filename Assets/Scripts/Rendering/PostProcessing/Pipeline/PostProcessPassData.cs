@@ -48,6 +48,7 @@ internal sealed class PostProcessPassData
     public float BloomScatter;
     public Vector4 BloomTint;
     public float BloomIntensity;
+    public BloomStyle BloomVariant;
     public Vector4 ScreenToEmission;
 
     public bool VignetteActive;
