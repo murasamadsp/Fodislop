@@ -81,13 +81,6 @@ internal static class PostProcessPassExecutor
             Blitter.BlitCameraTexture(cmd, data.IntermediateTexture, data.ColorTexture);
             cmd.EndSample("Kern.PostProcess.BlitBack");
         }
-
-        if (data.TemporalActive)
-        {
-            cmd.BeginSample("Kern.PostProcess.HistoryCopy");
-            cmd.CopyTexture(data.IntermediateTexture, data.HistoryTexture);
-            cmd.EndSample("Kern.PostProcess.HistoryCopy");
-        }
     }
 
     private static void SetDiagnosticsKeyword(PostProcessPassData data, CommandBuffer cmd)
@@ -104,11 +97,20 @@ internal static class PostProcessPassExecutor
     private static void ExecuteBloom(PostProcessPassData data, CommandBuffer cmd, int width, int height)
     {
         int levels = data.BloomLevels;
-        cmd.SetComputeFloatParam(data.PostProcessCS, BloomThresholdID, data.BloomThreshold);
+        bool cyberpunk = data.BloomVariant == BloomStyle.Cyberpunk;
+        // Оба стиля используют одну пирамиду и одинаковую энергию.
+        // Переключатель стиля меняет только цвет пикселей в BloomPrefilter.
+        float threshold = data.BloomThreshold * PostProcessLook.Bloom.CyberpunkThresholdScale;
+        float radius = data.BloomRadius * PostProcessLook.Bloom.CyberpunkRadiusScale;
+        float scatter = data.BloomScatter *
+            (PostProcessLook.Bloom.CyberpunkScatter / PostProcessLook.Bloom.Scatter);
+
+        cmd.SetComputeFloatParam(data.PostProcessCS, BloomThresholdID, threshold);
         cmd.SetComputeFloatParam(data.PostProcessCS, BloomSoftKneeID, data.BloomSoftKnee);
-        cmd.SetComputeFloatParam(data.PostProcessCS, BloomRadiusID, data.BloomRadius);
-        cmd.SetComputeFloatParam(data.PostProcessCS, BloomScatterID, data.BloomScatter);
+        cmd.SetComputeFloatParam(data.PostProcessCS, BloomRadiusID, radius);
+        cmd.SetComputeFloatParam(data.PostProcessCS, BloomScatterID, scatter);
         cmd.SetComputeVectorParam(data.PostProcessCS, BloomTintID, data.BloomTint);
+        cmd.SetComputeIntParam(data.PostProcessCS, BloomStyleID, cyberpunk ? 1 : 0);
 
         // Яркость подъёма нормируется по глубине пирамиды.
         //
@@ -122,13 +124,14 @@ internal static class PostProcessPassExecutor
         for (int i = 0; i <= levels; i++)
         {
             energy += term;
-            term *= Mathf.Max(data.BloomScatter, 0f);
+            term *= Mathf.Max(scatter, 0f);
         }
 
         cmd.SetComputeFloatParam(
             data.PostProcessCS,
             BloomIntensityID,
-            data.BloomIntensity / Mathf.Max(energy, 1e-4f));
+            data.BloomIntensity * PostProcessLook.Bloom.CyberpunkIntensityScale /
+            Mathf.Max(energy, 1e-4f));
 
         int prefilterWidth = Mathf.Max(1, width / 2);
         int prefilterHeight = Mathf.Max(1, height / 2);
@@ -319,7 +322,7 @@ internal static class PostProcessPassExecutor
     }
 
     // Точечные операции вывода: кривая дисплея, куб-LUT, виньетка, зерно,
-    // калибровка и временной смаз.
+    // калибровка.
     private static void BindDisplayParameters(PostProcessPassData data, CommandBuffer cmd)
     {
         cmd.SetComputeFloatParam(data.PostProcessCS, VignetteIntensityID, data.VignetteActive ? data.VignetteIntensity : 0f);
@@ -381,34 +384,13 @@ internal static class PostProcessPassExecutor
             cmd.SetComputeVectorParam(data.PostProcessCS, EigengrauColorID, data.EigengrauColor);
             cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauDarknessThresholdID, data.EigengrauDarknessThreshold);
             cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauNoiseScaleID, data.EigengrauNoiseScale);
-            cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauAnimationSpeedID, data.EigengrauAnimationSpeed);
+            cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauNoiseAmplitudeID, data.EigengrauNoiseAmplitude);
         }
 
         cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
         cmd.SetComputeFloatParam(data.PostProcessCS, FrameIndexID, data.FrameIndex);
         cmd.SetComputeFloatParam(data.PostProcessCS, CalibrationPatternID, data.CalibrationPattern);
         cmd.SetComputeFloatParam(data.PostProcessCS, CalibrationValueID, data.CalibrationValue);
-        cmd.SetComputeFloatParam(data.PostProcessCS, MotionBlurHistoryID, data.MotionBlurHistory);
-        cmd.SetComputeMatrixParam(
-            data.PostProcessCS,
-            HistoryReprojectionID,
-            data.HistoryReprojection);
-        if (data.TemporalActive && data.HistoryValid)
-        {
-            cmd.SetComputeTextureParam(
-                data.PostProcessCS,
-                data.KernelComposite,
-                HistoryTexID,
-                data.HistoryTexture);
-        }
-        else
-        {
-            cmd.SetComputeTextureParam(
-                data.PostProcessCS,
-                data.KernelComposite,
-                HistoryTexID,
-                Texture2D.blackTexture);
-        }
     }
 
     private static Texture2D GetIdentityLut1D()

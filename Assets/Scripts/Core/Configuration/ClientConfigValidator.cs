@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using Kern.Rendering;
+using Kern.Rendering.PostProcessing;
 using UnityEngine;
 
 namespace Kern.Core;
@@ -48,6 +49,12 @@ internal sealed class ClientConfigValidator(GraphicsQualityProfile graphicsQuali
         {
             throw new InvalidDataException(
                 $"Unknown terrain distortion style '{config.Terrain.DistortionStyle}'.");
+        }
+
+        if (!Enum.IsDefined(typeof(BloomStyle), config.Effects.BloomVariant))
+        {
+            throw new InvalidDataException(
+                $"Unknown bloom style '{config.Effects.BloomVariant}'.");
         }
 
         if (interfaceSettings.Language is not ("ru" or "en" or "zh" or "zh-hant"))
@@ -109,28 +116,15 @@ internal sealed class ClientConfigValidator(GraphicsQualityProfile graphicsQuali
                 ex);
         }
 
-        if (!GraphicsQualityProfile.IsStandard(config.GraphicsPreset))
-        {
-            return;
-        }
-
+        // Ступени неизменяемы, поэтому снимок настроек обязан совпадать с
+        // авторским: разойтись он может только от правки конфига руками.
+        // Раньше здесь стояла ещё и проверка «секции вида совпадают с
+        // авторскими» с требованием перевести ступень в Custom — вместе с
+        // Custom ушла и она.
         if (config.GraphicsQualitySettings != _graphicsQualityProfile.Get(config.GraphicsPreset))
         {
             throw new InvalidDataException(
-                $"Standard graphics preset '{config.GraphicsPreset}' was mutated in client config.");
-        }
-
-        // Стандартный пресет обязан совпадать с авторскими значениями во всех
-        // секциях вида. Раньше это была цепочка из сорока сравнений, которую
-        // забывали дополнять; теперь список полей берётся из объявления секции,
-        // поэтому новое поле попадает под инвариант само.
-        if (!SettingSchema.MatchesDefaults(config.Terrain) ||
-            !SettingSchema.MatchesDefaults(config.Effects) ||
-            !SettingSchema.MatchesDefaults(config.PostProcess))
-        {
-            throw new InvalidDataException(
-                $"Standard graphics preset '{config.GraphicsPreset}' contains customized visual values. " +
-                "Mark the preset as Custom before changing graphics settings.");
+                $"Graphics preset '{config.GraphicsPreset}' was mutated in client config.");
         }
     }
 }

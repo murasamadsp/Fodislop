@@ -14,6 +14,11 @@ public sealed class EffectSettings
     [SettingConsumer(SettingConsumerTarget.PostProcessController, "PostProcessController.BloomIntensity")]
     public bool BloomEnabled = PostProcessLook.Effects.Bloom;
 
+    [SettingUnbounded("Выбор цветовой обработки свечения.")]
+    [SettingLabel("settings.effects.bloom_variant")]
+    [SettingConsumer(SettingConsumerTarget.PostProcessController, "PostProcessController.BloomVariant")]
+    public BloomStyle BloomVariant = BloomStyle.Standard;
+
     [SettingUnbounded("Тумблер затемнения к краям кадра.")]
     [SettingLabel("settings.effects.vignette")]
     [SettingConsumer(SettingConsumerTarget.PostProcessController, "PostProcessController.VignetteIntensity")]
@@ -25,9 +30,4 @@ public sealed class EffectSettings
     [SettingLabel("settings.effects.eigengrau")]
     [SettingConsumer(SettingConsumerTarget.PostProcessController, "PostProcessController.EigengrauIntensity")]
     public bool EigengrauEnabled = PostProcessLook.Effects.Eigengrau;
-
-    [SettingUnbounded("Тумблер смаза движения.")]
-    [SettingLabel("settings.effects.motion_blur")]
-    [SettingConsumer(SettingConsumerTarget.PostProcessController, "PostProcessController.MotionBlurIntensity")]
-    public bool MotionBlurEnabled = PostProcessLook.Effects.MotionBlur;
 }

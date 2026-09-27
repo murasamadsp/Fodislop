@@ -49,12 +49,22 @@ public static class WorldLayerFileHeader
             int s = reader.ReadInt32();
             int formatVersion = reader.ReadInt32();
 
+            long offsetTableEnd = HeaderSize + offsetTableBytes;
             if (w == expectedWidth && h == expectedHeight && s == expectedChunkSize &&
                 formatVersion == CurrentFormatVersion &&
-                stream.Length >= HeaderSize + offsetTableBytes)
+                stream.Length >= offsetTableEnd)
             {
                 var byteSpan = MemoryMarshal.AsBytes(chunkOffsets.AsSpan());
                 ReadExactly(stream, byteSpan);
+                foreach (long chunkOffset in chunkOffsets)
+                {
+                    if (chunkOffset != -1 &&
+                        (chunkOffset < offsetTableEnd || chunkOffset >= stream.Length))
+                    {
+                        return false;
+                    }
+                }
+
                 return true;
             }
         }

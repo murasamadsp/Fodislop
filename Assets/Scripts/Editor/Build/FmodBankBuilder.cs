@@ -2,6 +2,7 @@
 
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -136,19 +137,25 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
                 CreateNoWindow = true,
             };
 
-            using var process = System.Diagnostics.Process.Start(psi);
+            using var process = System.Diagnostics.Process.Start(psi) ??
+                throw new BuildFailedException("FMOD Studio CLI could not be started.");
+            Task<string> standardOutputTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> standardErrorTask = process.StandardError.ReadToEndAsync();
 
             // Компиляция крупного проекта может занять заметно больше 30 с —
             // таймаут сделан щедрым, а не минимальным.
             if (!process.WaitForExit(5 * 60 * 1000))
             {
                 process.Kill();
+                process.WaitForExit();
+                Task.WhenAll(standardOutputTask, standardErrorTask).GetAwaiter().GetResult();
                 throw new BuildFailedException("FMOD Studio CLI build timed out after 5 minutes. Banks were not synced.");
             }
 
+            Task.WhenAll(standardOutputTask, standardErrorTask).GetAwaiter().GetResult();
             if (process.ExitCode != 0)
             {
-                string error = process.StandardError.ReadToEnd();
+                string error = standardErrorTask.Result;
                 throw new BuildFailedException(
                     $"FMOD Studio CLI build failed with exit code {process.ExitCode}: {error}");
             }

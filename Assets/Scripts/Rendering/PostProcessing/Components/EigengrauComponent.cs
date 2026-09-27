@@ -13,20 +13,17 @@ namespace Kern.Rendering.PostProcessing
     public class EigengrauComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter names stable for existing profiles.
-        [Tooltip("How far the black point is lifted toward the eigengrau color. 1 means black sits exactly at the eye's own grey.")]
-        public ClampedFloatParameter intensity = PostProcessDefaults.EigengrauIntensity();
+        [Tooltip("Strength of the noise visible in nearly black areas. Does not raise the scene's black point.")]
+        public FloatParameter intensity = new(PostProcessLook.FilmGrain.Intensity);
 
-        [Tooltip("The eigengrau itself: the colour black is lifted to. Default is #16161D, the grey the eye reports in full darkness.")]
-        public ColorParameter color = PostProcessDefaults.EigengrauColor();
+        [Tooltip("Reference level for the noise amplitude. Default is #16161D; it does not tint the scene.")]
+        public ColorParameter color = new(PostProcessLook.FilmGrain.Color);
 
-        [Tooltip("Maximum perceptual (sRGB) luminance affected by Eigengrau. Lit pixels keep their own black point.")]
-        public ClampedFloatParameter darknessThreshold = PostProcessDefaults.EigengrauDarknessThreshold();
+        [Tooltip("Maximum perceptual (sRGB) luminance with visible noise. Brighter pixels are unchanged.")]
+        public FloatParameter darknessThreshold = new(PostProcessLook.FilmGrain.DarknessThreshold);
 
         [Tooltip("Size of the retinal noise cells, in physical screen pixels.")]
-        public ClampedFloatParameter noiseScale = PostProcessDefaults.EigengrauNoiseScale();
-
-        [Tooltip("How fast the lifted floor shimmers, in independent noise patterns per second.")]
-        public ClampedFloatParameter animationSpeed = PostProcessDefaults.EigengrauAnimationSpeed();
+        public FloatParameter noiseScale = new(PostProcessLook.FilmGrain.NoiseScale);
 
         public bool IsActive() => intensity.value > 0f;
         public bool IsTileCompatible() => true;

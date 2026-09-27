@@ -14,6 +14,7 @@ public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDispo
     private readonly Dictionary<long, string> _activeOperations = [];
     private readonly object _gate = new();
     private long _nextOperationID;
+    private bool _stopping;
     private bool _disposed;
 
     public int ActiveCount
@@ -56,25 +57,32 @@ public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDispo
             throw new ArgumentNullException(nameof(operation));
         }
 
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(AsyncOperationSupervisor));
-        }
-
-        long operationID = Interlocked.Increment(ref _nextOperationID);
+        long operationID;
+        CancellationToken lifetimeToken;
         lock (_gate)
         {
+            if (_stopping || _disposed)
+            {
+                throw new ObjectDisposedException(nameof(AsyncOperationSupervisor));
+            }
+
+            operationID = Interlocked.Increment(ref _nextOperationID);
+            lifetimeToken = _lifetime.Token;
             _activeOperations.Add(operationID, operationName);
         }
 
-        ExecuteAsync(operationID, operationName, operation).Forget();
+        ExecuteAsync(operationID, operationName, operation, lifetimeToken).Forget();
     }
 
     public async UniTask StopAsync(CancellationToken cancellationToken = default)
     {
-        if (!_lifetime.IsCancellationRequested)
+        lock (_gate)
         {
-            _lifetime.Cancel();
+            if (!_stopping && !_disposed)
+            {
+                _stopping = true;
+                _lifetime.Cancel();
+            }
         }
 
         while (ActiveCount > 0)
@@ -86,26 +94,31 @@ public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDispo
 
     public void Dispose()
     {
-        if (_disposed)
+        lock (_gate)
         {
-            return;
-        }
+            if (_disposed)
+            {
+                return;
+            }
 
-        _disposed = true;
-        _lifetime.Cancel();
-        _lifetime.Dispose();
+            _stopping = true;
+            _disposed = true;
+            _lifetime.Cancel();
+            _lifetime.Dispose();
+        }
     }
 
     private async UniTaskVoid ExecuteAsync(
         long operationID,
         string operationName,
-        Func<CancellationToken, UniTask> operation)
+        Func<CancellationToken, UniTask> operation,
+        CancellationToken lifetimeToken)
     {
         try
         {
-            await operation(_lifetime.Token);
+            await operation(lifetimeToken);
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (lifetimeToken.IsCancellationRequested)
         {
         }
         catch (Exception exception)

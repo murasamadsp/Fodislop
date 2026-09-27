@@ -11,6 +11,7 @@ using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Compression;
+using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using VContainer;
@@ -337,6 +338,14 @@ namespace Kern.Networking
                 }
                 catch (Exception ex)
                 {
+                    if (packetType == typeof(OpenWindowPacket))
+                    {
+                        Debug.LogException(new InvalidOperationException(
+                            "[NetworkService] OpenWindowPacket handler failed; GUI packet processing stopped.",
+                            ex));
+                        throw;
+                    }
+
                     bool firstFailure;
                     lock (_subscribersLock)
                     {

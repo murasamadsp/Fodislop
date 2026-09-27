@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kern.Core;
@@ -44,48 +45,59 @@ internal sealed class ServerAudioVisualLoader
     public async UniTask<ServerAudioVisual> LoadAsync(string visualEffectName, CancellationToken token)
     {
         string filename = $"VFX/{visualEffectName.ToLowerInvariant()}";
-
-        var animData = await _assetLoader.GetAnimatedSpritesAsync(filename, token);
-        if (token.IsCancellationRequested)
+        byte[]? bytes = await _assetLoader.GetAssetBytesAsync(filename, token);
+        if (token.IsCancellationRequested || bytes == null || bytes.Length == 0)
         {
             return default;
         }
 
-        if (animData.Frames != null && animData.Frames.Length > 0)
+        AnimationContainerDecoder.ContainerType containerType =
+            AnimationContainerDecoder.DetectType(bytes);
+        if (containerType is AnimationContainerDecoder.ContainerType.GIF or
+            AnimationContainerDecoder.ContainerType.WebP)
         {
-            return new ServerAudioVisual
+            AnimatedSpriteData animData = await _assetLoader.GetAnimatedSpritesAsync(filename, token);
+            if (token.IsCancellationRequested)
             {
-                Frames = animData.Frames,
-                FrameDuration = animData.FrameDuration,
-            };
-        }
+                return default;
+            }
 
-        var texture = await _assetLoader.GetTextureAsync(filename, token);
-        if (token.IsCancellationRequested)
-        {
-            return default;
-        }
-
-        if (texture != null)
-        {
-            return new ServerAudioVisual
+            if (animData.Frames != null && animData.Frames.Length > 0)
             {
-                StaticSprite = Sprite.Create(
-                    texture,
-                    new Rect(0, 0, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f),
-                    RenderingConstants.PIXELS_PER_UNIT),
-            };
+                return new ServerAudioVisual
+                {
+                    Frames = animData.Frames,
+                    FrameDuration = animData.FrameDuration,
+                };
+            }
         }
 
-        var bytes = await _assetLoader.GetAssetBytesAsync(filename, token, timeoutSeconds: 10);
-        if (token.IsCancellationRequested)
+        try
         {
-            return default;
+            Texture2D? texture = await _assetLoader.GetTextureAsync(filename, token);
+            if (token.IsCancellationRequested)
+            {
+                return default;
+            }
+
+            if (texture != null)
+            {
+                return new ServerAudioVisual
+                {
+                    StaticSprite = Sprite.Create(
+                        texture,
+                        new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f),
+                        RenderingConstants.PIXELS_PER_UNIT),
+                };
+            }
+        }
+        catch (Exception exception) when (
+            exception is FileNotFoundException or InvalidOperationException)
+        {
+            // Non-image VFX payloads are passed to the Effekseer loader below.
         }
 
-        return bytes != null && bytes.Length > 0
-            ? new ServerAudioVisual { EffectBytes = bytes }
-            : default;
+        return new ServerAudioVisual { EffectBytes = bytes };
     }
 }

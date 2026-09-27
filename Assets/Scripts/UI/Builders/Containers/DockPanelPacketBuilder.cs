@@ -82,7 +82,18 @@ public class DockPanelPacketBuilder : PacketUIBuilderBase<DockPanelPacket>
         // ребёнок, у которого есть любые другие свойства, но нет Dock,
         // молча прибивался влево вместо того, чтобы просто встать в столбец.
         string? raw = AttachedProperties.Find(packet, DockKey);
-        return raw != null && Enum.TryParse(raw, true, out Dock dock) ? dock : Dock.Left;
+        if (raw == null)
+        {
+            throw new InvalidOperationException(
+                $"DockPanel child {packet.GetType().Name} has no {DockKey} property.");
+        }
+
+        if (!Enum.TryParse(raw, true, out Dock dock) || !Enum.IsDefined(typeof(Dock), dock))
+        {
+            throw new InvalidOperationException($"Invalid {DockKey}='{raw}'.");
+        }
+
+        return dock;
     }
 
     private static IGUIComponentPacket? LastUndocked(IReadOnlyList<IGUIComponentPacket> children)

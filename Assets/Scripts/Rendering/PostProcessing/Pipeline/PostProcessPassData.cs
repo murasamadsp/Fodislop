@@ -28,7 +28,6 @@ internal sealed class PostProcessPassData
     public TextureHandle BloomPrefilterTexture;
     public TextureHandle[] BloomDownTextures = null!;
     public TextureHandle[] BloomUpTextures = null!;
-    public TextureHandle HistoryTexture;
     public int Width;
     public int Height;
 
@@ -49,6 +48,7 @@ internal sealed class PostProcessPassData
     public float BloomScatter;
     public Vector4 BloomTint;
     public float BloomIntensity;
+    public BloomStyle BloomVariant;
     public Vector4 ScreenToEmission;
 
     public bool VignetteActive;
@@ -128,14 +128,7 @@ internal sealed class PostProcessPassData
     public Vector4 EigengrauColor;
     public float EigengrauDarknessThreshold;
     public float EigengrauNoiseScale;
-    public float EigengrauAnimationSpeed;
-
-    public float MotionBlurHistory;
-    public bool HistoryValid;
-    public bool TemporalActive;
-
-    // clip прошлого кадра из clip текущего: VP_prev * inverse(VP_cur).
-    public Matrix4x4 HistoryReprojection;
+    public float EigengrauNoiseAmplitude;
 
     // Промежуточная текстура становится цветом камеры вместо копирования обратно.
     public bool SwapColor;

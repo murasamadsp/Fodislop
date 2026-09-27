@@ -2,8 +2,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Globalization;
 using Kern.UI.Controls;
+using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine.UIElements;
 
@@ -22,8 +23,7 @@ public static class ClickContextResolver
             return clickedElement;
         }
 
-        // Determine starting element
-        VisualElement current;
+        VisualElement? current;
         if (clickContext[0] == '/')
         {
             current = windowRoot;
@@ -39,31 +39,91 @@ public static class ClickContextResolver
             return current;
         }
 
-        var segments = clickContext.Split('/');
-        foreach (var segment in segments)
+        string[] segments = clickContext.Split('/');
+        foreach (string segment in segments)
         {
-            if (string.IsNullOrEmpty(segment) || segment == "." || segment == "./")
+            if (string.IsNullOrEmpty(segment) || segment == ".")
             {
                 continue;
             }
 
-            if ((segment == ".." || segment == "../") && current != null)
+            if (current == null)
             {
-                current = current.parent;
+                return null;
+            }
+
+            if (segment == "..")
+            {
+                current = PacketParent(current, windowRoot);
                 continue;
             }
 
-            if (current != null && int.TryParse(segment, out int index))
+            if (!int.TryParse(segment, out int index) ||
+                current.userData is not IContainerComponentPacket container ||
+                index < 0 || index >= container.Children.Count)
             {
-                var children = current.Children().ToList();
-                if (index >= 0 && index < children.Count)
-                {
-                    current = children[index];
-                }
+                return null;
             }
+
+            current = FindDirectPacketChild(current, container.Children[index]);
         }
 
         return current;
+    }
+
+    private static VisualElement? PacketParent(VisualElement element, VisualElement windowRoot)
+    {
+        for (VisualElement? parent = element.parent; parent != null; parent = parent.parent)
+        {
+            if (parent.userData is IGUIComponentPacket)
+            {
+                return parent;
+            }
+
+            if (ReferenceEquals(parent, windowRoot))
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static VisualElement? FindDirectPacketChild(
+        VisualElement parent,
+        IGUIComponentPacket target)
+    {
+        foreach (VisualElement child in parent.Children())
+        {
+            VisualElement? found = FindThroughLayout(child, target);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static VisualElement? FindThroughLayout(
+        VisualElement element,
+        IGUIComponentPacket target)
+    {
+        if (element.userData is IGUIComponentPacket packet)
+        {
+            return ReferenceEquals(packet, target) ? element : null;
+        }
+
+        foreach (VisualElement child in element.Children())
+        {
+            VisualElement? found = FindThroughLayout(child, target);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     /// <param name="root">The root element to traverse.</param>
@@ -104,7 +164,7 @@ public static class ClickContextResolver
     {
         TextField tf => tf.value,
         DropdownField dd => dd.value,
-        Slider sl => sl.value.ToString(),
+        Slider sl => sl.value.ToString(CultureInfo.InvariantCulture),
         Toggle tg => tg.value.ToString(),
         Selectable sel => sel.value.ToString(),
         _ => string.Empty,

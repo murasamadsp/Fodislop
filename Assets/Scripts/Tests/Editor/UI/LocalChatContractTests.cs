@@ -27,8 +27,8 @@ public sealed class LocalChatContractTests
     [Test]
     public void GlobalChatWindow_DoesNotSelectOrSendLocalChannel()
     {
-        string uxml = ReadAsset("Resources/UI/GlobalChat.uxml");
-        string controller = ReadAsset("Scripts/UI/Chat/GlobalChatUI.cs");
+        string uxml = ReadAsset("Resources/UI/Gameplay/GlobalChat.uxml");
+        string controller = ReadAsset("Scripts/UI/Chat/Presentation/GlobalChatUI.cs");
         string floatingChat = ReadAsset("Scripts/UI/Chat/Floating/FloatingChatManager.cs");
 
         Assert.That(uxml, Does.Not.Contain("LocalChannelButton"));
@@ -52,7 +52,7 @@ public sealed class LocalChatContractTests
     [Test]
     public void TKey_BelongsToLocalChatOnly()
     {
-        string globalController = ReadAsset("Scripts/UI/Chat/GlobalChatUI.cs");
+        string globalController = ReadAsset("Scripts/UI/Chat/Presentation/GlobalChatUI.cs");
         string localInput = ReadAsset("Scripts/UI/Chat/LocalChatInput.cs");
 
         Assert.That(globalController, Does.Not.Contain("tKey"));
@@ -65,7 +65,7 @@ public sealed class LocalChatContractTests
     [Test]
     public void GlobalChannelTag_MatchesServerSeededChannel()
     {
-        string globalController = ReadAsset("Scripts/UI/Chat/GlobalChatUI.cs");
+        string globalController = ReadAsset("Scripts/UI/Chat/Presentation/GlobalChatUI.cs");
 
         Assert.That(
             ProjectRuntimeContracts.Chat.GlobalChannelTag,
@@ -88,7 +88,7 @@ public sealed class LocalChatContractTests
     [Test]
     public void LocalChat_UxmlAndStylesArePresent()
     {
-        string uxml = ReadAsset("Resources/UI/LocalChat.uxml");
+        string uxml = ReadAsset("Resources/UI/Gameplay/LocalChat.uxml");
         string uss = ReadAsset("Resources/Styles/Chat.uss");
 
         Assert.That(uxml, Does.Contain("LocalChatPanel"));

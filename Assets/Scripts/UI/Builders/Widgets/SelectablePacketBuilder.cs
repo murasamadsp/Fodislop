@@ -11,6 +11,7 @@ public class SelectablePacketBuilder : PacketUIBuilderBase<SelectablePacket>
     {
         var selectable = new Selectable
         {
+            name = packet.Name,
             Group = packet.Name,
             value = packet.DefaultValue,
         };

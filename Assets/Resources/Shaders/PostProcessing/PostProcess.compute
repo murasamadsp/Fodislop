@@ -19,8 +19,6 @@ Texture2D<float4> _SourceTex;
 Texture2D<float4> _BaseTex;
 Texture2D<float4> _BloomTex;
 Texture2D<float4> _EmissionTex;
-Texture2D<float4> _HistoryTex;
-
 RWTexture2D<float4> _DestTex;
 RWTexture2D<float4> _OutputTex;
 // Запечённый творческий грейд: 33^3 в лог-шкале входа и выхода.
@@ -38,6 +36,7 @@ float _BloomRadius;
 float _BloomScatter;
 float4 _BloomTint;
 float _BloomIntensity;
+int _BloomStyle; // 0 = standard, 1 = cyberpunk spectral split
 float4 _ScreenToEmission; // xy = scale, zw = offset from screen UV to emission field UV
 
 float _VignetteIntensity;
@@ -99,7 +98,8 @@ float _EigengrauIntensity;
 float4 _EigengrauColor;
 float _EigengrauDarknessThreshold;
 float _EigengrauNoiseScale;
-float _EigengrauAnimationSpeed;
+// Амплитуда зерна в самых тёмных участках кадра.
+float _EigengrauNoiseAmplitude;
 float _Time;
 float _FrameIndex;
 
@@ -108,16 +108,6 @@ float _FrameIndex;
 // в нитах: белую точку для режима 1, пик для режима 2.
 float _CalibrationPattern;
 float _CalibrationValue;
-
-float _MotionBlurHistory; // доля истории в смазе движения
-
-// Репроекция истории: clip прошлого кадра из clip текущего, то есть
-// VP_prev * inverse(VP_cur). Камера проекта ортографическая, и при ортографии
-// x и y результата не зависят от глубины — поэтому одной матрицы хватает,
-// чтобы точно найти пиксель прошлого кадра для всей статичной геометрии, без
-// буфера векторов движения. Раньше история просто объявлялась негодной при
-// любом сдвиге камеры, то есть смаз не работал ровно во время движения.
-float4x4 _HistoryReprojection;
 
 // Color grading functions must see the complete parameter block above. Keeping
 // this include after the declarations also makes Metal compile every kernel
@@ -220,19 +210,9 @@ float FilmGrain(float2 pixel)
     // scale values are clamped here so they can never create giant cells.
     float grainSize = clamp(_EigengrauNoiseScale, 0.75, 2.0);
     float2 grainPixel = floor(pixel / grainSize);
-    // Эпоха считается по номеру кадра, а не по времени: шум зрения обновляется
-    // каждый кадр, и привязка к секундам этого не даёт — при частоте кадров выше
-    // заданной один узор держался бы по нескольку кадров, что читается как
-    // подрагивание картинки, а не как зерно.
-    //
-    // Animation Speed задаёт удержание: 60 (штатное) — новый узор каждый кадр,
-    // меньшие значения держат узор по нескольку кадров для тех, кому нужно
-    // спокойнее. Межкадровое смешивание убрано — усреднять белый шум значит
-    // делать его серым.
-    float holdFrames = max(1.0, round(60.0 / clamp(_EigengrauAnimationSpeed, 1.0, 60.0)));
-    float epoch = floor(_FrameIndex / holdFrames);
-
-    return Hash31(float3(grainPixel, epoch * 1.618 + 17.0)) * 2.0 - 1.0;
+    // Один новый узор на отрисованный кадр, независимо от частоты дисплея.
+    // Межкадровое смешивание усредняло белый шум в серый.
+    return Hash31(float3(grainPixel, _FrameIndex * 1.618 + 17.0)) * 2.0 - 1.0;
 }
 
 float3 ApplyCreativeGrade(float3 color)
@@ -383,6 +363,36 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
 
     // Отбирается только чистое превышение яркости с сохранением сочного цвета и силы эмиссии
     float3 brightColor = sourceColor.rgb * saturate(weight) * saturate(emissionSample.a);
+
+    // Цветные источники дают магентовый или циановый ореол. Нейтральный
+    // источник остаётся белым; яркость в линейном HDR сохраняется.
+    if (_BloomStyle == 1)
+    {
+        float strongest = max(brightColor.r, max(brightColor.g, brightColor.b));
+        float weakest = min(brightColor.r, min(brightColor.g, brightColor.b));
+        float chroma = (strongest - weakest) / max(strongest, 1e-4);
+        float redDominance = saturate(
+            (brightColor.r - max(brightColor.g, brightColor.b)) / max(strongest, 1e-4));
+        float3 neonTint = lerp(
+            float3(0.05, 0.85, 1.0),
+            float3(1.0, 0.05, 0.8),
+            redDominance);
+        float magentaDominance = saturate(
+            (min(brightColor.r, brightColor.b) - brightColor.g) /
+            max(strongest * 0.2, 1e-4));
+        neonTint = lerp(neonTint, float3(1.0, 0.05, 0.8), magentaDominance);
+        float3 neonColor = neonTint *
+            (Luminance(brightColor) / max(Luminance(neonTint), 1e-4));
+        // Лава и другие тёплые источники сохраняют исходный оттенок.
+        // Сдвиг цвета нужен лишь там, где зелёный или синий уже преобладает.
+        float coolDominance = saturate(
+            (max(brightColor.g, brightColor.b) - brightColor.r) /
+            max(strongest * 0.2, 1e-4));
+        brightColor = lerp(
+            brightColor,
+            neonColor,
+            chroma * max(coolDominance, magentaDominance) * 0.85);
+    }
 
     // Нечисловые значения в блуме расходятся по всей пирамиде и гасят кадр
     // целиком: один такой пиксель на входе даёт серое полотно на выходе.
@@ -573,62 +583,29 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         color = lerp(color, _VignetteColor.rgb, saturate(edgeMask * _VignetteIntensity));
     }
 
-    // 6. Eigengrau — «собственный серый»: то, что видит глаз в полной
-    // темноте. Это не зерно поверх картинки, а пол зрения: сетчатка не
-    // отдаёт чёрного, её тепловой шум держит восприятие на уровне около
-    // #16161D, и этот уровень обновляется каждый кадр.
-    //
-    // ПРОСТРАНСТВО. Кадр здесь прошёл ApplyDisplayTransform и кривые, то есть
-    // он линейный относительно белого экрана (кодирование в sRGB/PQ делает
-    // URP после нас). Отсюда два разных перевода, и путать их нельзя:
-    //   * цвет пола и порог заданы уровнями кодирования (#16161D — это то,
-    //     что показывает пипетка), поэтому на вход им нужен PerceptualToLinear
-    //     и LinearToPerceptual соответственно;
-    //   * сама прибавка света считается в линейном, потому что свет
-    //     складывается линейно, а не в гамме.
+    // 6. Eigengrau — шум зрения в почти полной темноте. Порог задан
+    // в perceptual/sRGB, но шум добавляется к display-linear цвету.
+    // Постоянный серый пол здесь выглядел как цветокоррекция всего кадра.
     if (_EigengrauIntensity > 0.001)
     {
-        // Пол переводится из уровня кодирования в линейный один раз и здесь.
-        // Держать в VisualTuning уже пересчитанные числа нельзя: там перестало
-        // бы читаться, что это #16161D, и любой правке цвета пришлось бы
-        // повторять этот перевод на глаз.
-        float3 floorColor = float3(
+        float3 referenceGrey = float3(
             PerceptualToLinear(_EigengrauColor.r),
             PerceptualToLinear(_EigengrauColor.g),
-            PerceptualToLinear(_EigengrauColor.b)) * saturate(_EigengrauIntensity);
-
-        // Тепловой шум сетчатки модулирует сам пол, а не кадр: где сцена
-        // светит, подниматься нечему — значит и шевелиться нечему. Узор
-        // обновляется каждый кадр, см. FilmGrain.
+            PerceptualToLinear(_EigengrauColor.b));
+        float sceneLuma = LinearToPerceptual(Luminance(max(color, 0.0)));
+        float darknessThreshold = max(_EigengrauDarknessThreshold, 1e-4);
+        float darkness = step(1e-4, _EigengrauDarknessThreshold) *
+            (1.0 - smoothstep(darknessThreshold * 0.5, darknessThreshold, sceneLuma));
+        float amplitude = Luminance(referenceGrey) *
+            saturate(_EigengrauIntensity) * _EigengrauNoiseAmplitude;
         float grain = FilmGrain(id.xy + 0.5);
-        floorColor *= 1.0 + grain * 0.35;
-
-        // Darkness Threshold задан уровнем кодирования, значит и сравнивать
-        // его надо с закодированной яркостью, а не с линейной. Нижняя граница
-        // спада — яркость самого пола: гаснуть прибавка обязана относительно
-        // того, что поднимаем, а не относительно доли порога.
-        float floorLuma = LinearToPerceptual(Luminance(floorColor));
-        float sceneLuma = LinearToPerceptual(Luminance(color));
-        float reach = max(_EigengrauDarknessThreshold, floorLuma * 2.0);
-        floorColor *= 1.0 - smoothstep(floorLuma, reach, sceneLuma);
-
-        // Мягкий пол, а не подъём чёрной точки. Подъём (floor + c * (1 - floor))
-        // сдвигал всю тёмную зону целиком и съедал в ней контраст: полтона ниже
-        // пола становились одной плашкой на весь экран. Здесь прибавка гаснет
-        // экспоненциально по мере того, как сцена выходит из-под собственного
-        // шума глаза: сигнал слабее шума не виден, сигнал сильнее виден как
-        // есть. На чёрном прибавка равна полу, на уровне пола — треть от него,
-        // втрое выше пола её нет.
-        color += floorColor * exp(-color / max(floorColor, 1e-6));
+        color = max(color + grain * amplitude * darkness, 0.0);
     }
 
     // Калибровочный узор. Рисуется здесь и только здесь: это единственная
     // точка кадра, где величина задаётся в долях paper white и не будет потом
     // переделана ни кривой вывода, ни грейдом. Узор заменяет кадр целиком —
     // сравнивать яркость можно только с чёрным, а не с игрой за ним.
-    //
-    // Дальше идёт временной смаз: он мешал бы ступени проявиться сразу, и
-    // ниже узор выходит из функции, не доходя до него.
     if (_CalibrationPattern > 0.5)
     {
         float paperWhite = max(_DisplayPaperWhiteNits, 1.0);
@@ -682,44 +659,6 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
 
         _OutputTex[id.xy] = float4(ToDisplayOutput(patternColor), srcAlpha);
         return;
-    }
-
-    // ------------------------------------------------------------------
-    // Временной смаз. Стоит последним: история — это готовый кадр прошлого
-    // раза, и сравнивать с ней можно только готовый кадр этого, иначе обе
-    // величины живут в разных пространствах.
-    //
-    // История читается с репроекцией. Прежний код вместо этого объявлял её
-    // негодной при любом сдвиге камеры (PostProcessRenderPass сбрасывал
-    // _historyValid по смене view-projection), то есть смаз выключался ровно
-    // на время движения — единственное время, когда он имеет смысл. При этом
-    // полноэкранная текстура истории и её копия оплачивались каждый кадр.
-    //
-    // Соседского окна больше нет. Оно стояло вместо репроекции: гасило
-    // расхождение, вызванное сдвигом камеры, ценой девяти чтений полного
-    // кадра на пиксель. Когда сдвиг камеры снят точно, остаточная разница —
-    // это движение самих объектов, то есть ровно то, что смаз обязан
-    // размазывать, а не подавлять.
-    if (_MotionBlurHistory > 0.001)
-    {
-        float2 ndc = screenUv * 2.0 - 1.0;
-        float4 previousClip = mul(_HistoryReprojection, float4(ndc, 0.0, 1.0));
-        float2 previousUv =
-            (previousClip.xy / max(abs(previousClip.w), 1e-6)) * 0.5 + 0.5;
-
-        // За краем прошлого кадра истории нет: там раскрытие, а не движение.
-        float2 inside = step(0.0, previousUv) * step(previousUv, 1.0);
-        float valid = inside.x * inside.y;
-
-        float3 history =
-            _HistoryTex.SampleLevel(sampler_LinearClamp, previousUv, 0).rgb / paperWhite;
-#if defined(HDR_COLORSPACE_CONVERSION)
-        history = RotateOutputSpaceToRec709(history);
-#endif
-        float temporalDifference = Luminance(abs(color - history));
-        float motionWeight = saturate(temporalDifference * 4.0) *
-            saturate(_MotionBlurHistory) * 0.5 * valid;
-        color = lerp(color, history, motionWeight);
     }
 
     // ------------------------------------------------------------------

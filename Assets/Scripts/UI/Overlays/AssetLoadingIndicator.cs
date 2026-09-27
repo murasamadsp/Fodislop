@@ -80,14 +80,21 @@ namespace Kern.UI
                     "The Game scope must register it before AssetLoadingIndicator.Start runs.");
             }
 
-            _initialized = true;
             // The throw above guards these required injections; the compiler
             // cannot narrow fields through the string? 'missing' pattern, so the
             // dereferences are null-forgiven here.
             GameManager gameManager = _gameManager!;
             ILocalizationService loc = _loc!;
-            gameManager.OnWorldLoaded += OnWorldLoaded;
             CreateUI();
+
+            if (_root == null)
+            {
+                throw new InvalidOperationException(
+                    "[AssetLoadingIndicator] UI root was not created during Start.");
+            }
+
+            _initialized = true;
+            gameManager.OnWorldLoaded += OnWorldLoaded;
 
             // Реестр применяет текст сразу и на каждой смене языка — подписка
             // вручную не нужна и запрещена линтером.
@@ -121,6 +128,11 @@ namespace Kern.UI
 
         private void Update()
         {
+            if (!_initialized)
+            {
+                return;
+            }
+
             if (Time.unscaledTime < _nextRefreshTime)
             {
                 return;
@@ -190,7 +202,7 @@ namespace Kern.UI
                 return;
             }
 
-            _loadingOverlay.style.display = DisplayStyle.Flex;
+            UIState.Show(_loadingOverlay);
             _loadingOverlay.pickingMode = PickingMode.Position;
             _loadingOverlayVisible = true;
             _spinnerSchedule?.Resume();
@@ -203,7 +215,7 @@ namespace Kern.UI
                 return;
             }
 
-            _loadingOverlay.style.display = DisplayStyle.None;
+            UIState.Hide(_loadingOverlay);
             _loadingOverlay.pickingMode = PickingMode.Ignore;
             _loadingOverlayVisible = false;
             _spinnerSchedule?.Pause();
@@ -213,17 +225,14 @@ namespace Kern.UI
         {
             if (_document?.rootVisualElement == null)
             {
-                // Тихий возврат ожидаем: CreateUI вызывается из TryInitialize,
-                // который ретраится из Update, пока панель не будет готова.
-                return;
+                throw new InvalidOperationException(
+                    "[AssetLoadingIndicator] UIDocument has no root visual element during Start.");
             }
 
-            var uiUxml = Resources.Load<VisualTreeAsset>(
-                ProjectRuntimeContracts.ResourcePaths.AssetLoadingIndicatorUxml);
-            if (uiUxml == null)
-            {
-                return;
-            }
+            VisualTreeAsset uiUxml = Resources.Load<VisualTreeAsset>(
+                ProjectRuntimeContracts.ResourcePaths.AssetLoadingIndicatorUxml) ??
+                throw new InvalidOperationException(
+                    "Required UI asset 'Resources/UI/Menus/AssetLoadingIndicator.uxml' was not found.");
 
             VisualElement tree = uiUxml.CloneTree();
             tree.AddToClassList("ui-fullscreen");
@@ -234,6 +243,12 @@ namespace Kern.UI
             _loadingSpinnerLabel = tree.Q<Label>("SpinnerLabel");
             _loadingStatusLabel = tree.Q<Label>("StatusLabel");
             _loadingProgressLabel = tree.Q<Label>("ProgressLabel");
+            if (_loadingOverlay == null || _loadingSpinnerLabel == null ||
+                _loadingStatusLabel == null || _loadingProgressLabel == null)
+            {
+                throw new InvalidOperationException(
+                    "AssetLoadingIndicator.uxml is missing one or more required controls.");
+            }
 
             UILocalizer.Apply(tree, _loc);
 

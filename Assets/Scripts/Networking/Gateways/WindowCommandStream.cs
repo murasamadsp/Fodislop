@@ -2,6 +2,7 @@
 
 using System;
 using MinesServer.Networking.Server.Packets.GUI;
+using UnityEngine;
 
 namespace Kern.Networking;
 
@@ -17,7 +18,19 @@ public sealed class WindowCommandStream
 
     public bool HasOpenWindows { get; private set; }
 
-    public void PublishOpenWindow(OpenWindowPacket packet) => OpenRequested?.Invoke(packet);
+    public void PublishOpenWindow(OpenWindowPacket packet)
+    {
+        Action<OpenWindowPacket>? handler = OpenRequested;
+        if (handler == null)
+        {
+            string message = $"[PacketUI] OpenWindowPacket '{packet.WindowTag}' arrived " +
+                "without a subscribed window presenter.";
+            Debug.LogError(message);
+            throw new InvalidOperationException(message);
+        }
+
+        handler(packet);
+    }
 
     public void PublishCloseWindow(CloseWindowPacket packet) => CloseRequested?.Invoke(packet);
 

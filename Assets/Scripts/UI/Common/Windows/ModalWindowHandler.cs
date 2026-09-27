@@ -148,7 +148,7 @@ public class ModalWindowHandler : IDisposable
         VisualTreeAsset template = Resources.Load<VisualTreeAsset>(
             ProjectRuntimeContracts.ResourcePaths.ModalWindowUxml) ??
             throw new InvalidOperationException(
-                "[ModalWindowHandler] Resources/UI/ModalWindow.uxml is required.");
+                "[ModalWindowHandler] Resources/UI/Overlays/ModalWindow.uxml is required.");
         TemplateContainer tree = template.Instantiate();
 
         _overlay = tree.Q<VisualElement>("ModalOverlay") ??

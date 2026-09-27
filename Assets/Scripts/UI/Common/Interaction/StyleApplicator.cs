@@ -18,24 +18,10 @@ public static class StyleApplicator
 
         var style = packet.Style.Value;
 
-        if (style.Background.A > 0)
-        {
-            element.style.backgroundColor = ConvertColor(style.Background);
-        }
-
-        if (style.BorderWidth > 0)
-        {
-            Color border = ConvertColor(style.Border);
-            element.style.borderTopColor = border;
-            element.style.borderBottomColor = border;
-            element.style.borderLeftColor = border;
-            element.style.borderRightColor = border;
-
-            element.style.borderTopWidth = style.BorderWidth;
-            element.style.borderBottomWidth = style.BorderWidth;
-            element.style.borderLeftWidth = style.BorderWidth;
-            element.style.borderRightWidth = style.BorderWidth;
-        }
+        element.style.borderTopWidth = style.BorderWidth;
+        element.style.borderBottomWidth = style.BorderWidth;
+        element.style.borderLeftWidth = style.BorderWidth;
+        element.style.borderRightWidth = style.BorderWidth;
 
         ApplyMargins(style.Margin,
             left => element.style.marginLeft = left,
@@ -57,25 +43,10 @@ public static class StyleApplicator
         System.Action<int> right,
         System.Action<int> bottom)
     {
-        if (margins.Left > 0)
-        {
-            left(margins.Left);
-        }
-
-        if (margins.Top > 0)
-        {
-            top(margins.Top);
-        }
-
-        if (margins.Right > 0)
-        {
-            right(margins.Right);
-        }
-
-        if (margins.Bottom > 0)
-        {
-            bottom(margins.Bottom);
-        }
+        left(margins.Left);
+        top(margins.Top);
+        right(margins.Right);
+        bottom(margins.Bottom);
     }
 
     public static Color ConvertColor(System.Drawing.Color color) =>
