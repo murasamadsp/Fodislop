@@ -16,8 +16,6 @@ namespace Kern.UI
     {
         [Header("Rendering")]
         [SerializeField]
-        private float _renderInterval = 0.02f;
-        [SerializeField]
         private float _dragSpeed = 1f;
 
         private readonly WorldMapPanel _panel = new();
@@ -45,7 +43,6 @@ namespace Kern.UI
         [Inject]
         private ILocalPlayerState _localPlayer = null!;
 
-        private float _lastRenderTime;
         private bool _renderRequested;
         private long _lastRenderedStorageRevision = -1;
         private bool _followPlayer = true;
@@ -69,7 +66,11 @@ namespace Kern.UI
             }
 
             _mipScan.SetRequestRenderCallback(RequestRender);
-            _layerBinding = new WorldMapLayerBinding(_cellSampler, _mipScan, RequestRender);
+            _layerBinding = new WorldMapLayerBinding(
+                _cellSampler,
+                _mipScan,
+                RequestRender,
+                RequestFullRender);
             _playerTracker = new MapPlayerTracker(_localPlayer);
             _playerTracker.OnPlayerSpawned += () => _renderRequested = true;
             _playerTracker.OnPlayerMoved += pos =>
@@ -200,6 +201,12 @@ namespace Kern.UI
 
         private void RequestRender() => _renderRequested = true;
 
+        private void RequestFullRender()
+        {
+            _viewportRenderer.InvalidateViewState();
+            _renderRequested = true;
+        }
+
         private void OnWorldMapWheel(WheelEvent evt)
         {
             _interaction.HandleMouseScroll(
@@ -255,6 +262,7 @@ namespace Kern.UI
         {
             BindWorldDimensions(_manager.WorldWidth, _manager.WorldHeight);
             _viewportRenderer.InitColorTable(_manager);
+            _viewportRenderer.InvalidateViewState();
             _layerBinding.BindCellLayer(storage.CellLayer);
             _layerBinding.BindMipScan(_viewportRenderer.CellColorTable);
             _cellsPerPixel = 1f;
@@ -420,7 +428,6 @@ namespace Kern.UI
             _panel.Show();
 
             enabled = true;
-            _lastRenderTime = -1f;
             _renderRequested = true;
             _lastRenderedStorageRevision = -1;
             _followPlayer = true;
@@ -451,6 +458,7 @@ namespace Kern.UI
         {
             Image viewport = _panel.Image ?? throw new InvalidOperationException(
                 "[WorldMapRenderer] UI must be bound before the map texture.");
+            _viewportRenderer.InvalidateViewState();
             _textureController.InitTexture(viewport, viewport);
         }
 
@@ -491,14 +499,6 @@ namespace Kern.UI
                 return;
             }
 
-            // The render interval applies to every render, including the first one
-            // after Show(). _lastRenderTime starts at -1f so the first render is
-            // never throttled; subsequent renders respect the interval.
-            if (Time.time - _lastRenderTime < _renderInterval)
-            {
-                return;
-            }
-
             if (_manager == null || _storage == null)
             {
                 return;
@@ -520,7 +520,6 @@ namespace Kern.UI
             _panel.Image?.MarkDirtyRepaint();
             _renderRequested = false;
             _lastRenderedStorageRevision = _storage.Revision;
-            _lastRenderTime = Time.time;
         }
 
         private float ComputeMaxZoomOut(int worldW, int worldH) =>
