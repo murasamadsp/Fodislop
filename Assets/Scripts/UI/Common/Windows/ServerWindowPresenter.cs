@@ -30,6 +30,7 @@ public sealed class ServerWindowPresenter : IDisposable
 
     private readonly IAssetLoader _assetLoader;
     private readonly IAsyncOperationSupervisor _operations;
+    private readonly IWebAssetLoader _webAssetLoader;
     private readonly UIInputManager _uiInputManager;
     private readonly INetworkService _networkService;
     private readonly UIDocument _document;
@@ -43,10 +44,12 @@ public sealed class ServerWindowPresenter : IDisposable
         INetworkService networkService,
         UIDocument document,
         WindowCommandStream commands,
-        IAsyncOperationSupervisor operations)
+        IAsyncOperationSupervisor operations,
+        IWebAssetLoader webAssetLoader)
     {
         _assetLoader = assetLoader;
         _operations = operations;
+        _webAssetLoader = webAssetLoader;
         _uiInputManager = uiInputManager;
         _networkService = networkService;
         _document = document;
@@ -128,7 +131,7 @@ public sealed class ServerWindowPresenter : IDisposable
         frame.AddToClassList("packet-window-frame");
         frame.style.width = packet.Width;
         frame.style.height = packet.Height;
-        VisualElement packetRoot = new PacketUIBuilder(_assetLoader, _operations).Build(packet.Content);
+        VisualElement packetRoot = new PacketUIBuilder(_assetLoader, _operations, _webAssetLoader).Build(packet.Content);
         packetRoot.AddToClassList("packet-window-content");
         frame.Add(packetRoot);
         element.Add(frame);
