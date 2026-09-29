@@ -23,7 +23,7 @@ public sealed class WebAssetLoaderTests
         {
             if (texture != null)
             {
-                Object.DestroyImmediate(texture, true);
+                UnityEngine.Object.DestroyImmediate(texture, true);
             }
         }
 
