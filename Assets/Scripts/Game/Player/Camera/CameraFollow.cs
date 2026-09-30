@@ -29,13 +29,27 @@ namespace Kern.Player
         [SerializeField]
         private float _zoomSpeed = 300f;
         [SerializeField]
-        private float _minZoom = 5f;
+        private float _minZoom = 3f;
         [SerializeField]
         private float _maxZoom = 30f;
         [SerializeField]
         private float _zoomSmoothness = 8f;
 
         private const float ZoomSettleEpsilon = 0.001f;
+
+        // Порог "цель телепортировалась": прыжок цели дальше этого расстояния
+        // за один кадр - камера щёлкается на место мгновенно (респаун, ТП).
+        private const float TeleportSnapDistance = 20f;
+        private const float TeleportSnapDistanceSquared = TeleportSnapDistance * TeleportSnapDistance;
+
+        // Прыжок серверных координат (в клетках), который считается телепортом:
+        // респаун/ТП переносят робота на сотни клеток, обычное движение - на 1-3.
+        private const float TeleportJumpCellsSquared = 400f; // 20×20 клеток
+
+        // Шаг зума за один "щелчок" колеса: доля от _zoomSpeed.
+        // ВАЖНО: реальное значение _zoomSpeed запечено в сцене (10) и в коде
+        // не меняется - это [SerializeField]. 10 × 0.2 = 2 юнита за щелчок.
+        private const float ZoomTickScale = 0.175f;
 
         // Сериализованные пределы не выходят за контракт: освещение рассчитано
         // на кадр ProjectRuntimeContracts.Camera.MaximumOrthographicSize.
@@ -149,6 +163,7 @@ namespace Kern.Player
             if (_subscribedPlayer != null)
             {
                 _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+                _subscribedPlayer.OnPlayerTeleported -= HandlePlayerTeleported;
                 _subscribedPlayer = null;
             }
 
@@ -178,7 +193,18 @@ namespace Kern.Player
 
         private void HandlePlayerMoved(Vector2Int oldPosition, Vector2Int newPosition)
         {
-            if (_hasSnappedToServerPosition || oldPosition == newPosition)
+            if (oldPosition == newPosition)
+            {
+                return;
+            }
+
+            // Респаун/телепорт - прыжок серверных координат через полкарты:
+            // снапим камеру сразу (SnapToTarget), не ждём SmoothDamp.
+            // Мелкие шаги (обычное движение, 1 клетка за тик) - как раньше.
+            int dx = newPosition.x - oldPosition.x;
+            int dy = newPosition.y - oldPosition.y;
+            bool teleport = (dx * dx) + (dy * dy) > TeleportJumpCellsSquared;
+            if (_hasSnappedToServerPosition && !teleport)
             {
                 return;
             }
@@ -214,11 +240,21 @@ namespace Kern.Player
             if (_subscribedPlayer != null)
             {
                 _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+                _subscribedPlayer.OnPlayerTeleported -= HandlePlayerTeleported;
             }
 
             _subscribedPlayer = player;
             _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+            _subscribedPlayer.OnPlayerTeleported -= HandlePlayerTeleported;
             _subscribedPlayer.OnPlayerMoved += HandlePlayerMoved;
+            _subscribedPlayer.OnPlayerTeleported += HandlePlayerTeleported;
+        }
+
+        // Телепорт игрока (респаун, ТП-свиток, админ-перенос): камера щёлкает
+        // на новое место мгновенно, без плавного догоняния через полкарты.
+        private void HandlePlayerTeleported()
+        {
+            SnapToTarget();
         }
 
         protected void LateUpdate()
@@ -282,10 +318,15 @@ namespace Kern.Player
                 return;
             }
 
+            // Колесо/трекпад шлют дельту-СОБЫТИЕ ("щелчок"), а не скорость:
+            // умножение на deltaTime делало зум зависимым от FPS и платформы
+            // (Mac-трекпад - много мелких дельт, Windows-колесо - редкие крупные).
+            // Ограничиваем выброс за кадр и копим в _targetZoom; сглаживание
+            // Lerp ниже доводит размер плавно и одинаково на любой платформе.
             if (Mathf.Abs(scrollInput) > 0.01f)
             {
-                _targetZoom -= scrollInput * _zoomSpeed * Time.deltaTime;
-                _targetZoom = Mathf.Clamp(_targetZoom, MinimumZoom, MaximumZoom);
+                float tick = Mathf.Clamp(scrollInput, -3f, 3f) * _zoomSpeed * ZoomTickScale;
+                _targetZoom = Mathf.Clamp(_targetZoom - tick, MinimumZoom, MaximumZoom);
             }
 
             float nextZoom = Mathf.Lerp(

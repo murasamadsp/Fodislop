@@ -33,7 +33,7 @@ internal sealed class MinimapView : IDisposable
     public static MinimapView Create(
         UIDocument document,
         Texture2D texture,
-        Action openMap)
+        Action<int, int> moveRequested)
     {
         VisualTreeAsset template = Resources.Load<VisualTreeAsset>(
             ProjectRuntimeContracts.ResourcePaths.MinimapUxml) ??
@@ -49,9 +49,39 @@ internal sealed class MinimapView : IDisposable
         Image image = tree.Q<Image>("MinimapImage") ??
             throw new InvalidOperationException("[Minimap] MinimapImage is missing from Minimap.uxml.");
         image.image = texture;
+
+        // Клик по блоку миникарты — движение к этому блоку (та же логика, что
+        // у ЛКМ по миру). Здесь вычисляется только пиксель текстуры; конвертацию
+        // в серверную клетку относительно центра (робота) делает контроллер.
+        image.RegisterCallback<ClickEvent>(evt =>
+        {
+            Rect bound = image.worldBound;
+            if (bound.width <= 0f || bound.height <= 0f)
+            {
+                return;
+            }
+
+            // localPosition — позиция указателя в системе координат картинки;
+            // evt.position при этом приходит в координатах панели, поэтому
+            // прямое деление на размер картинки давало неверный тайл.
+            Vector2 local = evt.localPosition;
+            float relX = local.x / bound.width;
+            float relY = local.y / bound.height;
+            if (relX < 0f || relX >= 1f || relY < 0f || relY >= 1f)
+            {
+                return;
+            }
+
+            // Строка 0 текстуры рисуется внизу элемента, поэтому экранная ось Y
+            // инвертируется: верх элемента — последняя строка текстуры.
+            int texX = Mathf.Clamp(Mathf.FloorToInt(relX * texture.width), 0, texture.width - 1);
+            int texY = Mathf.Clamp(Mathf.FloorToInt((1f - relY) * texture.height), 0, texture.height - 1);
+
+            moveRequested(texX, texY);
+            evt.StopPropagation();
+        });
         root.RegisterCallback<ClickEvent>(evt =>
         {
-            openMap();
             evt.StopPropagation();
         });
         document.rootVisualElement.Add(tree);
