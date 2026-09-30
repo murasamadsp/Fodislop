@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.World;
@@ -53,6 +54,10 @@ namespace Kern.UI
         private bool _mapDataRefreshPending;
 
         private bool _uiCreated;
+
+        // Остаток клик-маршрута для отрисовки нитью на миникарте (null - нет).
+        private IReadOnlyList<Vector2Int>? _clickPath;
+        private IClickPathWalker? _pathWalker;
 
         protected void Start()
         {
@@ -138,6 +143,7 @@ namespace Kern.UI
                     _playerMoveSubscribed = false;
                 }
 
+                UnbindPathWalker();
                 _player = null;
                 return;
             }
@@ -347,7 +353,7 @@ namespace Kern.UI
             _view = MinimapView.Create(
                 _doc,
                 _minimapTexture ?? throw new InvalidOperationException("Minimap texture is required."),
-                RequestOpenMap);
+                RequestMinimapMove);
 
             _uiCreated = true;
             if (_ready)
@@ -356,12 +362,34 @@ namespace Kern.UI
             }
         }
 
-        private void RequestOpenMap()
+        // Клик по блоку миникарты: пиксель текстуры -> серверная клетка
+        // относительно центра (робота) -> клик-маршрут, та же логика, что
+        // у ЛКМ по миру (PlayerInteractionController.HandleMouseClick).
+        private void RequestMinimapMove(int texX, int texY)
         {
-            if (!_inputBlocker.IsInputBlockedExcludingMapMode)
+            if (_inputBlocker.IsInputBlockedExcludingMapMode)
             {
-                _mapModeState.SetOpen(true);
+                return;
             }
+
+            if (_player is not { HasServerPosition: true })
+            {
+                return;
+            }
+
+            Vector2Int server = MapProjection.MinimapPixelToServerCell(
+                texX,
+                texY,
+                _player.Position.x,
+                _player.Position.y,
+                _uiSize);
+            if (server.x < 0 || server.y < 0 ||
+                server.x >= _worldWidth || server.y >= _worldHeight)
+            {
+                return;
+            }
+
+            (_localPlayer.Current as IClickPathWalker)?.TryStartPath(server);
         }
 
         protected void OnEnable()
@@ -419,10 +447,50 @@ namespace Kern.UI
                 _player.OnPlayerMoved -= OnPlayerMoved;
             }
 
+            UnbindPathWalker();
+
             _player = player;
             _player.OnPlayerMoved -= OnPlayerMoved;
             _player.OnPlayerMoved += OnPlayerMoved;
             _playerMoveSubscribed = true;
+
+            // Клик-маршрут: подписка на изменения и первичный остаток пути
+            // (если маршрут уже активен к моменту привязки игрока).
+            if (player is IClickPathWalker walker)
+            {
+                _pathWalker = walker;
+                walker.OnPathChanged += OnWalkerPathChanged;
+                _clickPath = walker.Path;
+            }
+        }
+
+        private void UnbindPathWalker()
+        {
+            if (_pathWalker != null)
+            {
+                _pathWalker.OnPathChanged -= OnWalkerPathChanged;
+                _pathWalker = null;
+            }
+
+            _clickPath = null;
+        }
+
+        // Маршрут стартовал или снят: мгновенная перерисовка миникарты, чтобы
+        // нить пути появилась/исчезла без ожидания троттлинга политики.
+        private void OnWalkerPathChanged(IReadOnlyList<Vector2Int>? path)
+        {
+            _clickPath = path;
+
+            if (!isActiveAndEnabled || !_ready || _mapModeState.IsOpen)
+            {
+                return;
+            }
+
+            if (_player is { HasServerPosition: true })
+            {
+                RefreshTexture(_player.Position.x, _player.Position.y);
+                _refreshPolicy.RecordRefresh(Time.time, _mapStorage?.Revision ?? -1, _lastRefreshHadLoadedCells);
+            }
         }
 
         private void RebindRuntimeSources()
@@ -549,6 +617,20 @@ namespace Kern.UI
                 return;
             }
 
+            // Путь рисуется от текущего индекса: пройденная часть не отображается.
+            IReadOnlyList<Vector2Int>? path;
+            int pathStart;
+            if (_pathWalker != null)
+            {
+                path = _pathWalker.Path;
+                pathStart = _pathWalker.PathIndex;
+            }
+            else
+            {
+                path = _clickPath;
+                pathStart = 0;
+            }
+
             _lastRefreshHadLoadedCells = _textureRenderer.Render(
                 _minimapTexture,
                 playerX,
@@ -556,6 +638,8 @@ namespace Kern.UI
                 _worldWidth,
                 _worldHeight,
                 _cellSampler,
+                path,
+                pathStart,
                 drawPlayerMarker);
 
             _view?.MarkDirty();
@@ -596,6 +680,8 @@ namespace Kern.UI
 
             _view?.Dispose();
             _view = null;
+
+            UnbindPathWalker();
 
             if (_minimapTexture != null)
             {

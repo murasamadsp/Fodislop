@@ -10,8 +10,9 @@ namespace Kern.UI;
 internal sealed class MinimapTextureRenderer
 {
     private static readonly Color32 _OutOfBoundsColor = new(0, 0, 0, 255);
-    private static readonly Color32 _MarkerColor = Color.white;
     private static readonly Color32 _CenterColor = Color.red;
+    private static readonly Color32 _PathColor = new(255, 214, 0, 255);
+    private static readonly Color32 _PathTargetColor = new(255, 255, 255, 255);
 
     private Color32[] _cellColors = new Color32[256];
     private Color32[]? _pixelColors;
@@ -33,6 +34,8 @@ internal sealed class MinimapTextureRenderer
         int worldWidth,
         int worldHeight,
         MapCellSampler cellSampler,
+        IReadOnlyList<Vector2Int>? clickPath,
+        int pathStartIndex,
         bool drawPlayerMarker = true)
     {
         int texSize = _uiSize;
@@ -82,6 +85,30 @@ internal sealed class MinimapTextureRenderer
             }
         }
 
+        // Нить клик-маршрута поверх клеток — сплошная, от следующего шага до
+        // цели: жёлтые клетки остатка пути, цель — белая. Рисуется до маркера
+        // игрока, чтобы робот был виден.
+        if (clickPath != null)
+        {
+            for (int i = pathStartIndex; i < clickPath.Count; i++)
+            {
+                Vector2Int cell = clickPath[i];
+                Vector2Int pixel = MapProjection.ServerCellToMinimapPixel(
+                    cell.x,
+                    cell.y,
+                    playerX,
+                    playerY,
+                    texSize);
+                if (pixel.x < 0 || pixel.y < 0 || pixel.x >= texSize || pixel.y >= texSize)
+                {
+                    continue;
+                }
+
+                colors[(pixel.y * texSize) + pixel.x] =
+                    i == clickPath.Count - 1 ? _PathTargetColor : _PathColor;
+            }
+        }
+
         if (drawPlayerMarker)
         {
             Vector2Int marker = MapProjection.ServerCellToMinimapPixel(
@@ -90,13 +117,11 @@ internal sealed class MinimapTextureRenderer
                 playerX,
                 playerY,
                 texSize);
-            int cx = marker.x;
-            int cy = marker.y;
-            colors[(cy * texSize) + cx - 1] = _MarkerColor;
-            colors[(cy * texSize) + cx] = _CenterColor;
-            colors[(cy * texSize) + cx + 1] = _MarkerColor;
-            colors[((cy - 1) * texSize) + cx] = _MarkerColor;
-            colors[((cy + 1) * texSize) + cx] = _MarkerColor;
+            if (marker.x >= 0 && marker.y >= 0 && marker.x < texSize && marker.y < texSize)
+            {
+                // Маркер — ровно один пиксель, размером с блок миникарты.
+                colors[(marker.y * texSize) + marker.x] = _CenterColor;
+            }
         }
 
         if (texture != null)

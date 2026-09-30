@@ -7,6 +7,7 @@ using Cysharp.Threading.Tasks;
 using Kern.Audio.Core;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.Core.Lifecycle;
 using Kern.Game;
 using Kern.World;
 using Kern.World.Terrain;
@@ -21,7 +22,7 @@ namespace Kern.Game.Managers
         private const string TAG = "[ServerAudioEventManager]";
 
         private const string MusicEventName = "music/evil_huge";
-        private readonly List<ServerAudioEvent> _activeEffects = new();
+        private readonly List<IServerWorldEffect> _activeEffects = new();
 
         [Inject]
         private IVfxService _vfxService = null!;
@@ -42,6 +43,10 @@ namespace Kern.Game.Managers
         private VfxPool _vfxPool = null!;
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
+        [Inject]
+        private WorldEntityBatchRenderer _entityBatchRenderer = null!;
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         public void PlayEffect(AudioPacket packet)
         {
@@ -76,24 +81,35 @@ namespace Kern.Game.Managers
 
         public void PlayEffect(VFXPacket packet)
         {
-            VfxType vfxType = packet.EffectType switch
+            var vfxType = MapVfxToPool(packet.EffectType);
+            IVfxSlot? slot = _vfxService.Acquire(vfxType);
+
+            Debug.Log($"{TAG} VFX '{packet.EffectType}' at {packet.X}:{packet.Y} (bot {packet.TargetBotId}).");
+
+            var effect = new ServerVfxEvent(
+                packet,
+                slot,
+                _robotService,
+                _assetLoader,
+                _mapManager,
+                _vfxPool,
+                _operations,
+                _entityBatchRenderer,
+                _sceneObjects);
+            _activeEffects.Add(effect);
+        }
+
+        private static VfxType MapVfxToPool(global::MinesServer.Data.VFX vfx)
+        {
+            // VFX-пакет — чистая визуальность. Из переиспользуемых пулов есть
+            // только Bz и Death; остальное идёт через Custom (слот без авторского
+            // ассета), визуал рисует ServerVfxEvent.
+            return vfx switch
             {
                 global::MinesServer.Data.VFX.Bz => VfxType.Bz,
                 global::MinesServer.Data.VFX.Death => VfxType.Death,
                 _ => VfxType.Custom,
             };
-            IVfxSlot? slot = _vfxService.Acquire(vfxType);
-
-            var effect = new ServerAudioEvent(
-                packet,
-                slot,
-                _robotService,
-                _audioSystem,
-                _assetLoader,
-                _mapManager,
-                _vfxPool,
-                _operations);
-            _activeEffects.Add(effect);
         }
 
         private async UniTask PlayMusicWhenAudioReadyAsync(CancellationToken cancellationToken)

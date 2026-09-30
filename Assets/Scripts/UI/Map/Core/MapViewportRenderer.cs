@@ -290,20 +290,29 @@ internal sealed class MapViewportRenderer
             return MarkerRect.None;
         }
 
-        Vector2 playerPixel = MapProjection.ServerCellToTexturePixel(
-            playerPos.x,
-            playerPos.y,
-            context.CenterX,
-            context.CenterY,
-            cp,
-            context.TexWidth,
-            context.TexHeight);
-        float markerSize = Mathf.Max(1f, 1f / cp);
+        // Маркер занимает ровно клетку робота: те же границы, что у нити
+        // маршрута (обратная проекция RenderRegion), а не блок от проекции
+        // центра со сдвигом вправо-вниз — иначе маркер вылезал на соседние
+        // блоки при близком зуме.
+        float pxLo = (playerPos.x - context.CenterX) / cp + context.TexWidth * 0.5f - 0.5f;
+        float pxHi = (playerPos.x + 1f - context.CenterX) / cp + context.TexWidth * 0.5f - 0.5f;
+        float pyHi = context.TexHeight * 0.5f - 0.5f - (playerPos.y - context.CenterY) / cp;
+        float pyLo = context.TexHeight * 0.5f - 0.5f - (playerPos.y + 1f - context.CenterY) / cp;
 
-        int x0 = Mathf.Clamp(Mathf.RoundToInt(playerPixel.x), 0, context.TexWidth - 1);
-        int x1 = Mathf.Clamp(Mathf.RoundToInt(playerPixel.x + markerSize), 0, context.TexWidth - 1);
-        int y0 = Mathf.Clamp(Mathf.RoundToInt(playerPixel.y), 0, context.TexHeight - 1);
-        int y1 = Mathf.Clamp(Mathf.RoundToInt(playerPixel.y + markerSize), 0, context.TexHeight - 1);
+        int x0 = Mathf.CeilToInt(pxLo);
+        int x1 = Mathf.FloorToInt(pxHi);
+        int y0 = Mathf.CeilToInt(pyLo);
+        int y1 = Mathf.FloorToInt(pyHi);
+
+        if (x1 < x0)
+        {
+            x0 = x1 = Mathf.RoundToInt((pxLo + pxHi) * 0.5f);
+        }
+
+        if (y1 < y0)
+        {
+            y0 = y1 = Mathf.RoundToInt((pyLo + pyHi) * 0.5f);
+        }
 
         return new MarkerRect(x0, y0, x1, y1);
     }
