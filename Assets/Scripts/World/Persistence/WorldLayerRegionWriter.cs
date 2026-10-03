@@ -47,8 +47,8 @@ internal sealed class WorldLayerRegionWriter<T>
         int worldWidth,
         int worldHeight)
     {
-        int endX = Math.Min(startX + width, worldWidth);
-        int endY = Math.Min(startY + height, worldHeight);
+        int endX = (int)Math.Min((long)startX + width, worldWidth);
+        int endY = (int)Math.Min((long)startY + height, worldHeight);
         int firstChunkX = startX / _chunkSize;
         int lastChunkX = (endX - 1) / _chunkSize;
         int firstChunkY = startY / _chunkSize;

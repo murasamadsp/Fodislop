@@ -69,22 +69,14 @@ internal static class MapProjection
         int pixelY,
         int centerX,
         int centerY,
-        int size)
-    {
-        int halfSize = size / 2;
-        return new Vector2Int(centerX - halfSize + pixelX, centerY + halfSize - pixelY);
-    }
+        int size) => MinimapCellProjection.PixelToServerCell(pixelX, pixelY, centerX, centerY, size);
 
     public static Vector2Int ServerCellToMinimapPixel(
         int serverX,
         int serverY,
         int centerX,
         int centerY,
-        int size)
-    {
-        int halfSize = size / 2;
-        return new Vector2Int(serverX - centerX + halfSize, centerY + halfSize - serverY);
-    }
+        int size) => MinimapCellProjection.ServerCellToPixel(serverX, serverY, centerX, centerY, size);
 
     public static Color32 UnknownCellColor(int serverX, int serverY, float cellsPerPixel = 1f)
     {

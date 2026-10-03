@@ -76,6 +76,17 @@ public class WorldChunkRLECodecTests
     }
 
     [Test]
+    public void Encode_ShortChunkBuffer_ThrowsBeforeWriting()
+    {
+        using var memory = new MemoryStream();
+        using var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        Assert.Throws<ArgumentException>(() =>
+            WorldChunkRLECodec.EncodeChunk(writer, new byte[] { 7 }, chunkArea: 2));
+        Assert.That(memory.Length, Is.Zero);
+    }
+
+    [Test]
     public void Decode_IncompleteStream_ThrowsInvalidDataException()
     {
         const int area = 1024;
@@ -92,6 +103,39 @@ public class WorldChunkRLECodecTests
         {
             WorldChunkRLECodec.DecodeChunk<ushort>(reader, area);
         });
+    }
+
+    [Test]
+    public void Decode_RunThatExceedsChunkArea_ThrowsInvalidDataException()
+    {
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write((ushort)5);
+            writer.Write((ushort)9);
+        }
+
+        memory.Position = 0;
+        using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+        Assert.Throws<InvalidDataException>(() => WorldChunkRLECodec.DecodeChunk<ushort>(reader, 4));
+    }
+
+    [Test]
+    public void VisitChunkRuns_RunThatExceedsChunkArea_ThrowsBeforeVisitingIt()
+    {
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write((ushort)5);
+            writer.Write((byte)9);
+        }
+
+        memory.Position = 0;
+        using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+        int visitorCalls = 0;
+        Assert.Throws<InvalidDataException>(() =>
+            WorldChunkRLECodec.VisitChunkRuns<byte>(reader, 4, 3, (_, _, _) => visitorCalls++));
+        Assert.That(visitorCalls, Is.Zero);
     }
 
     [Test]

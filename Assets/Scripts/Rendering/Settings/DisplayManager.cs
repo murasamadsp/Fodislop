@@ -291,6 +291,7 @@ namespace Kern.Rendering
             {
                 display.PaperWhiteNits = paperWhite;
                 display.PeakBrightnessNits = sanitizedPeak;
+                display.PeakBrightnessFromDisplay = false;
             });
             PostProcessRuntimeState.SetDisplayCalibration(
                 paperWhite,

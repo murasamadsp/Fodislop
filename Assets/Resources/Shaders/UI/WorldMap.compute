@@ -3,7 +3,7 @@
 RWTexture2D<float4> _Result;
 
 Texture2D<float4> _MipTexture;
-SamplerState sampler_LinearClamp;
+SamplerState sampler_PointClamp;
 
 StructuredBuffer<float4> _Palette;
 StructuredBuffer<uint> _ChunkData;
@@ -17,6 +17,8 @@ cbuffer MapParams
     int _WorldWidth;
     int _WorldHeight;
     int _UseMip;
+    int _MipLevelCount;
+    int _MipBlockSize;
     int _GridMinChunkX;
     int _GridMinChunkY;
     int _GridWidth;
@@ -62,10 +64,27 @@ void CSWorldMapRender(uint3 id : SV_DispatchThreadID)
 
     if (_UseMip == 1)
     {
+        float mipWorldWidth = ceil((float)_WorldWidth / (float)_MipBlockSize) * (float)_MipBlockSize;
+        float mipWorldHeight = ceil((float)_WorldHeight / (float)_MipBlockSize) * (float)_MipBlockSize;
         float2 uv = float2(
-            (worldX + 0.5f) / (float)_WorldWidth,
-            (worldY + 0.5f) / (float)_WorldHeight);
-        _Result[id.xy] = _MipTexture.SampleLevel(sampler_LinearClamp, uv, 0);
+            worldX / mipWorldWidth,
+            worldY / mipWorldHeight);
+        float mipLevel = clamp(
+            log2(max(_CellsPerPixel / (float)_MipBlockSize, 1.0f)),
+            0.0f,
+            (float)(_MipLevelCount - 1));
+        float lowerLevel = floor(mipLevel);
+        float upperLevel = min(lowerLevel + 1.0f, (float)(_MipLevelCount - 1));
+        float4 lowerColor = _MipTexture.SampleLevel(sampler_PointClamp, uv, lowerLevel);
+        float t = frac(mipLevel);
+        if (t <= 0.001f || upperLevel <= lowerLevel)
+        {
+            _Result[id.xy] = lowerColor;
+            return;
+        }
+
+        float4 upperColor = _MipTexture.SampleLevel(sampler_PointClamp, uv, upperLevel);
+        _Result[id.xy] = lerp(lowerColor, upperColor, t);
         return;
     }
 

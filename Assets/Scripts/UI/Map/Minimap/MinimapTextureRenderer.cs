@@ -39,18 +39,11 @@ internal sealed class MinimapTextureRenderer : IDisposable
     public void CacheCellColors(MapManager mapManager) =>
         _viewportRenderer.InitColorTable(mapManager);
 
-    // Pixel <-> server cell exactly as WorldMap.compute samples the minimap
-    // (centre = player, one cell per pixel, row 0 at the bottom):
-    //   serverX = floor(playerX + 0.5 - size/2 + px), serverY = floor(playerY + size/2 - 0.5 - py).
-    private int OffsetX => Mathf.FloorToInt(0.5f - (_uiSize * 0.5f));
-
-    private int OffsetY => Mathf.FloorToInt((_uiSize * 0.5f) - 0.5f);
-
     public Vector2Int PixelToServerCell(int pixelX, int pixelY, int playerX, int playerY) =>
-        new(playerX + OffsetX + pixelX, playerY + OffsetY - pixelY);
+        MapProjection.MinimapPixelToServerCell(pixelX, pixelY, playerX, playerY, _uiSize);
 
     public Vector2Int ServerCellToPixel(int serverX, int serverY, int playerX, int playerY) =>
-        new(serverX - playerX - OffsetX, playerY + OffsetY - serverY);
+        MapProjection.ServerCellToMinimapPixel(serverX, serverY, playerX, playerY, _uiSize);
 
     public bool Render(
         RenderTexture? texture,

@@ -148,6 +148,58 @@ public sealed class InstallUpgradeTests
     }
 
     [Test]
+    public void Schema37WithoutHdrSwitchPending_MigratesAndKeepsBackup()
+    {
+        ClientConfig legacy = ClientConfigDefaults.Create(_profile);
+        legacy.SchemaVersion = 37;
+        legacy.Display.HDRSwitchPending = true;
+        string sourceJson = JsonUtility.ToJson(legacy, prettyPrint: true);
+        string legacyJson = Regex.Replace(
+            sourceJson,
+            @"^[ \t]*""HDRSwitchPending""[ \t]*:[ \t]*(?:true|false),?\r?\n",
+            string.Empty,
+            RegexOptions.Multiline);
+        Assert.That(legacyJson, Does.Not.Contain("HDRSwitchPending"));
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, legacyJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.SourceSchemaVersion, Is.EqualTo(37));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Display.HDRSwitchPending, Is.False);
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
+        Assert.That(
+            new ClientConfigRepository(ConfigPath).Load().Config.Display.HDRSwitchPending,
+            Is.False);
+    }
+
+    [Test]
+    public void Schema38WithoutPeakBrightnessFromDisplay_MigratesToDisplayPeak()
+    {
+        ClientConfig legacy = ClientConfigDefaults.Create(_profile);
+        legacy.SchemaVersion = 38;
+        legacy.Display.PeakBrightnessFromDisplay = false;
+        string sourceJson = JsonUtility.ToJson(legacy, prettyPrint: true);
+        string legacyJson = Regex.Replace(
+            sourceJson,
+            @",?\r?\n[ \t]*""PeakBrightnessFromDisplay""[ \t]*:[ \t]*(?:true|false)",
+            string.Empty);
+        Assert.That(legacyJson, Does.Not.Contain("PeakBrightnessFromDisplay"));
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, legacyJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.SourceSchemaVersion, Is.EqualTo(38));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Display.PeakBrightnessFromDisplay, Is.True);
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
+    }
+
+    [Test]
     public void OldMapVersion_DropsAndRegenerates()
     {
         WriteMap(formatVersion: 0);

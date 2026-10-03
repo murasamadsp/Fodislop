@@ -6,7 +6,7 @@ using System.IO;
 namespace Kern.Persistence;
 
 /// <summary>
-/// Файл слоя мира: заголовок, таблица смещений и framed v2-чанки.
+/// Файл слоя мира: заголовок, таблица смещений и framed-чанки текущего формата.
 /// </summary>
 ///
 /// У потока, читателя и таблицы смещений здесь ровно один хозяин. Замок взят
@@ -124,7 +124,7 @@ internal sealed class WorldLayerFile<T>
             _reader ??= new BinaryReader(_fileStream, System.Text.Encoding.UTF8, leaveOpen: true);
             try
             {
-                return WorldChunkV2Codec.DecodeChunk<T>(_reader, chunkArea);
+                return WorldChunkV2Codec.DecodeChunk<T>(_reader, chunkArea, index);
             }
             catch (InvalidDataException)
             {
@@ -165,6 +165,10 @@ internal sealed class WorldLayerFile<T>
             try
             {
                 WorldChunkV2Codec.VisitChunkRuns(_reader, chunkArea, index, visitor);
+            }
+            catch (WorldChunkV2Codec.VisitorCallbackException exception)
+            {
+                exception.Rethrow();
             }
             catch (InvalidDataException)
             {
@@ -218,7 +222,7 @@ internal sealed class WorldLayerFile<T>
         if (_fileStream == null)
         {
             throw new ObjectDisposedException(
-                nameof(WorldLayer<T>),
+                nameof(WorldLayerFile<T>),
                 $"World layer '{_filePath}' has no open file stream.");
         }
 
@@ -226,14 +230,14 @@ internal sealed class WorldLayerFile<T>
         {
             if (_lifetime.Disposed)
             {
-                throw new ObjectDisposedException(nameof(WorldLayer<T>));
+                throw new ObjectDisposedException(nameof(WorldLayerFile<T>));
             }
 
             _fileStream.Seek(0, SeekOrigin.End);
             long newOffset = _fileStream.Position;
 
             using var writer = new BinaryWriter(_fileStream, System.Text.Encoding.UTF8, true);
-            WorldChunkV2Codec.EncodeChunk(writer, chunk, chunkArea);
+            WorldChunkV2Codec.EncodeChunk(writer, chunk, chunkArea, index);
 
             _chunkOffsets[index] = newOffset;
             WorldLayerFileHeader.WriteChunkOffset(_fileStream, index, newOffset);
@@ -274,7 +278,7 @@ internal sealed class WorldLayerFile<T>
         {
             if (_fileStream == null || _lifetime.Disposed)
             {
-                throw new ObjectDisposedException(nameof(WorldLayer<T>));
+                throw new ObjectDisposedException(nameof(WorldLayerFile<T>));
             }
 
             string? directory = Path.GetDirectoryName(backupPath);

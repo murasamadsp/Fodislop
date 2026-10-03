@@ -130,6 +130,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 nointerpolation float4 geometryCornersX : TEXCOORD10;
                 nointerpolation float4 geometryCornersY : TEXCOORD11;
                 nointerpolation float uvBits : TEXCOORD12;
+                // Мировая клетка квада — целые числа, точные в float32.
+                nointerpolation float2 cellWorldOrigin : TEXCOORD13;
             };
 
             half4 SampleAtlasColor(int slot, float2 uv)
@@ -177,6 +179,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #if defined(KERN_TERRAIN_CELLS)
                 TERRAIN_RESOLVE_CELL_VERTEX(input, output)
                 output.worldPosition = TransformObjectToWorld(cell.positionOS);
+                output.cellWorldOrigin = TransformObjectToWorld(float3(
+                    cell.positionOS.xy - (cell.packedData.yz * _TerrainCellGridSize.z),
+                    0.0)).xy;
                 float3 rasterWorldPosition = KernWorldGridVertex(output.worldPosition);
                 if (output.atlasIndex >= 0.0)
                 {
@@ -205,6 +210,17 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.5, 0.5, 0.5, 1.0);
                 }
 
+            #if defined(KERN_TERRAIN_CELLS)
+                // Мировая позиция фрагмента нужна только свету и AO. Интерполянт
+                // около y≈40000 держит 1/256 клетки (1/8 арт-пикселя): у границы
+                // текселя AO (32 на клетку, точечный) до 17% строк пикселей брали
+                // соседний тексель, и какие именно — менялось с зумом и сдвигом
+                // камеры. Точка выборки собирается из целой клетки и центра
+                // арт-пикселя внутри неё — оба числа float32 хранит точно.
+                // Текстура и силуэт считаются по packedData, как прежде.
+                input.worldPosition.xy = input.cellWorldOrigin +
+                    (QuantizeTerrainPixelCenter(input.packedData.yz) * _TerrainCellGridSize.z);
+            #endif
                 TerrainSurfaceInputs surface = BuildTerrainSurfaceInputs(
                     input.packedData,
                     input.uv,

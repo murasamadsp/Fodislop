@@ -45,7 +45,7 @@ public class WorldLayerRLETests
         DeleteIfPresent(_tempFilePath + ".v1.backup");
         DeleteIfPresent(_tempFilePath + ".v1.backup.tmp");
         DeleteIfPresent(_tempFilePath + ".migrate.tmp");
-        DeleteIfPresent(_tempFilePath + ".v2.migrate.tmp");
+        DeleteIfPresent(_tempFilePath + ".v3.migrate.tmp");
     }
 
     [Test]
@@ -138,6 +138,19 @@ public class WorldLayerRLETests
 
         Assert.That(reopenedLayer.GetCellSync(0, 0), Is.EqualTo(persistedValue));
         Assert.That(reopenedLayer.GetCellSync(1, 1), Is.EqualTo(streamedValue));
+    }
+
+    [Test]
+    public void SetRegion_RejectsNegativePayloadOffset()
+    {
+        using var layer = new WorldLayer<ushort>(
+            _tempFilePath,
+            WIDTH_CHUNKS: 1,
+            HEIGHT_CHUNKS: 1,
+            operations: _operations,
+            CHUNK_SIZE: 32);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => layer.SetRegion(0, 0, 1, 1, [42], cellsOffset: -1));
     }
 
     [Test]
@@ -365,7 +378,7 @@ public class WorldLayerRLETests
             using var reader = new BinaryReader(migrated, System.Text.Encoding.UTF8, leaveOpen: true);
             CollectionAssert.AreEqual(
                 expected,
-                WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length));
+                WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length, chunkIndex: 0));
         }
         finally
         {
@@ -373,7 +386,7 @@ public class WorldLayerRLETests
             DeleteIfPresent(_tempFilePath + ".v1.backup");
             DeleteIfPresent(_tempFilePath + ".v1.backup.tmp");
             DeleteIfPresent(_tempFilePath + ".migrate.tmp");
-            DeleteIfPresent(_tempFilePath + ".v2.migrate.tmp");
+            DeleteIfPresent(_tempFilePath + ".v3.migrate.tmp");
             DeleteIfPresent(_tempFilePath);
         }
     }
@@ -427,6 +440,46 @@ public class WorldLayerRLETests
         Assert.That(visitedRuns, Is.EqualTo(1));
         Assert.That(visitedValue, Is.Zero);
         Assert.That(visitedCellCount, Is.EqualTo(chunkArea));
+    }
+
+    [Test]
+    public void OffsetPointingToAnotherValidChunk_LoadsAsZeroes()
+    {
+        const int chunkSize = 32;
+        const ushort firstChunkValue = 123;
+        const ushort secondChunkValue = 456;
+        long secondChunkOffset;
+        using (var layer = new WorldLayer<ushort>(
+                   _tempFilePath,
+                   WIDTH_CHUNKS: 2,
+                   HEIGHT_CHUNKS: 1,
+                   operations: _operations,
+                   CHUNK_SIZE: chunkSize))
+        {
+            layer.SetCell(0, 0, firstChunkValue);
+            layer.SetCell(chunkSize, 0, secondChunkValue);
+            layer.Flush(flushToDisk: true);
+            secondChunkOffset = layer.GetChunkOffsets()[1];
+        }
+
+        using (var stream = new FileStream(_tempFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            stream.Position = WorldLayerFileHeader.HeaderSize;
+            using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+            writer.Write(secondChunkOffset);
+            writer.Flush();
+            stream.Flush(true);
+        }
+
+        using var reopenedLayer = new WorldLayer<ushort>(
+            _tempFilePath,
+            WIDTH_CHUNKS: 2,
+            HEIGHT_CHUNKS: 1,
+            operations: _operations,
+            CHUNK_SIZE: chunkSize);
+
+        Assert.That(reopenedLayer.GetCellSync(0, 0), Is.Zero);
+        Assert.That(reopenedLayer.GetCellSync(chunkSize, 0), Is.EqualTo(secondChunkValue));
     }
 
     private static void DeleteIfPresent(string path)

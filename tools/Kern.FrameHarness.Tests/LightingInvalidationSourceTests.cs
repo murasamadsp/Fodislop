@@ -150,7 +150,7 @@ public sealed class LightingInvalidationSourceTests
         namespace UnityEngine
         {
             public class Object { }
-            public class Camera { public bool orthographic = true; }
+            public class Camera { public bool orthographic = true; public float orthographicSize = 1; public float aspect = 1; }
             public class RenderTexture { }
             public class ComputeBuffer { }
             public readonly record struct Vector2(float x, float y)
@@ -195,7 +195,7 @@ public sealed class LightingInvalidationSourceTests
             { public string Name => name; public Kern.Core.Interfaces.Diagnostics.Scope Auto() => new(); }
         }
         namespace Kern.Core
-        { public static class ProjectRuntimeContracts { public static class World { public const float CellSize = 1; } } }
+        { public static class ProjectRuntimeContracts { public static class World { public const float CellSize = 1; } public static class Camera { public const float MaximumOrthographicSize = 30; } } }
         namespace Kern.Core
         { public sealed class SettingLabelAttribute(string label) : Attribute { public string Label => label; } }
         namespace Kern.Core.Interfaces.Diagnostics
@@ -206,7 +206,10 @@ public sealed class LightingInvalidationSourceTests
             public static class FrameEventLog { public static void Record(string s) { } }
         }
         namespace Kern.Core.Interfaces.WorldLighting
-        { public interface ILightingGeometryContributor { ulong LightingGeometryRevision { get; } } }
+        {
+            public interface ILightingGeometryContributor { ulong LightingGeometryRevision { get; } }
+            public static class LightingFieldOrientation { public static bool RowsTopDown => true; }
+        }
         namespace Kern.Rendering { public struct GraphicsQualitySettings { public int LightingMinimumPixelsPerCell; } }
         namespace Kern.World.Lighting.Diagnostics
         { internal sealed class LightingInvalidationJournal { public void Record(ulong count, LightingInvalidationFlags flags, string reason, List<string> stages, string[] extra) { } } }
@@ -287,7 +290,8 @@ public sealed class LightingInvalidationSourceTests
             internal static class LightingRegionCalculator
             {
                 // All fixtures hold the field fixed; this spy deliberately cannot prove reanchor behavior.
-                public static Vector4 GetStableLightingRegion(int x, int y, int w, int h, Vector4 previous) => previous;
+                public static Vector4 GetStableLightingRegion(int x, int y, int w, int h, Vector4 previous, Vector2Int sizing) => previous;
+                public static Vector2Int ResolveSizingViewport(float orthographicSize, float aspect, float maximum, float cell) => default;
             }
             internal static class LightingRegionInvalidationPolicy
             { public static void OnRegionChanged(LightingRuntimeState state, bool changed, bool reuse, Vector4 region) { if (changed) { throw new InvalidOperationException(); } } }
@@ -296,7 +300,7 @@ public sealed class LightingInvalidationSourceTests
                 public LightingAmbientOcclusionUpdater(LightingResourceManager r, LightingRuntimeState s, LightingFrameExecutor e,
                     LightingPresentation p, LightingGeometryRegistry g, IFrameTelemetry t,
                     Diagnostics.LightingInvalidationJournal j, List<string> stages) { }
-                public void Update(int x, int y, int w, int h, Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor g,
+                public void Update(int x, int y, int w, int h, Vector2Int sizing, Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor g,
                     Kern.Rendering.GraphicsQualitySettings s) => throw new InvalidOperationException("AO is outside this fixture.");
             }
             internal sealed class LightingFrameExecutor(DynamicLightManager lights)

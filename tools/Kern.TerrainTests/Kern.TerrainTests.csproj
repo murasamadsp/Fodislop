@@ -45,6 +45,7 @@
 
     <!-- Код игры. -->
     <Compile Include="$(Game)/Core/Interfaces/Contracts/ProjectRuntimeContracts.cs" Link="Game/ProjectRuntimeContracts.cs" />
+    <Compile Include="$(Game)/Core/Interfaces/Contracts/World/IWorldLayer.cs" Link="Game/IWorldLayer.cs" />
     <Compile Include="$(Game)/Core/Configuration/Contracts/SettingAttributes.cs" Link="Game/SettingAttributes.cs" />
     <Compile Include="$(Game)/Core/Interfaces/Contracts/Settings/TerrainSettings.cs" Link="Game/TerrainSettings.cs" />
     <Compile Include="$(Game)/Rendering/PostProcessing/ColorGrading/Contracts/VisualTuning.cs" Link="Game/VisualTuning.cs" />
@@ -95,10 +96,19 @@
     <Compile Include="$(Game)/World/Lighting/Core/LightingRegionCalculator.cs" Link="Game/LightingRegionCalculator.cs" />
     <Compile Include="$(Game)/World/Lighting/Core/LightingRuntimeState.cs" Link="Game/LightingRuntimeState.cs" />
     <Compile Include="$(Game)/UI/Map/Minimap/MinimapRefreshPolicy.cs" Link="Game/MinimapRefreshPolicy.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/MapGpuChunkPacker.cs" Link="Game/MapGpuChunkPacker.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/MapChunkGrid.cs" Link="Game/MapChunkGrid.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/MapViewportChunkBudget.cs" Link="Game/MapViewportChunkBudget.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/MinimapCellProjection.cs" Link="Game/MinimapCellProjection.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/WorldMapMipPyramid.cs" Link="Game/WorldMapMipPyramid.cs" />
     <!-- Кодек чанков: чистый BCL, ни Unity, ни UniTask. -->
     <Compile Include="$(Game)/World/Persistence/WorldChunkRLECodec.cs" Link="Game/WorldChunkRLECodec.cs" />
     <Compile Include="$(Game)/World/Persistence/WorldLayerFileHeader.cs" Link="Game/WorldLayerFileHeader.cs" />
+    <Compile Include="$(Game)/World/Persistence/WorldLayerLifetime.cs" Link="Game/WorldLayerLifetime.cs" />
+    <Compile Include="$(Game)/World/Persistence/WorldLayerFile.cs" Link="Game/WorldLayerFile.cs" />
+    <Compile Include="$(Game)/World/Persistence/ChunkLRUCache.cs" Link="Game/ChunkLRUCache.cs" />
     <Compile Include="$(Game)/World/Persistence/WorldChunkV2Codec.cs" Link="Game/WorldChunkV2Codec.cs" />
+    <Compile Include="$(Game)/World/Persistence/WorldLayerFileMigrator.cs" Link="Game/WorldLayerFileMigrator.cs" />
 
     <!-- Тесты из Assets: те же, что гоняет Unity. -->
     <Compile Include="$(Game)/Tests/Editor/World/BackgroundFloodFill*.cs" LinkBase="Tests" />
@@ -119,5 +129,18 @@
          здесь за секунды и без редактора. -->
     <Compile Include="$(Game)/Tests/Editor/World/Persistence/WorldChunkRleCodec*.cs" LinkBase="Tests/Persistence" />
     <Compile Include="$(Game)/Tests/Editor/World/Persistence/WorldChunkV2CodecTests.cs" Link="Tests/Persistence/WorldChunkV2CodecTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/World/Persistence/WorldLayerFileHeaderTests.cs" Link="Tests/Persistence/WorldLayerFileHeaderTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/World/Persistence/ChunkLRUCacheTests.cs" Link="Tests/Persistence/ChunkLRUCacheTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/World/Persistence/WorldLayerFileVisitorTests.cs" Link="Tests/Persistence/WorldLayerFileVisitorTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/UI/MapGpuChunkPackerTests.cs" Link="Tests/UI/MapGpuChunkPackerTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/UI/MapChunkGridTests.cs" Link="Tests/UI/MapChunkGridTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/UI/MapViewportChunkBudgetTests.cs" Link="Tests/UI/MapViewportChunkBudgetTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/UI/MinimapCellProjectionTests.cs" Link="Tests/UI/MinimapCellProjectionTests.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/MapCellSampler.cs" Link="Game/MapCellSampler.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/MapProjection.cs" Link="Game/MapProjection.cs" />
+    <Compile Include="$(Game)/UI/Map/Core/MapViewportBounds.cs" Link="Game/MapViewportBounds.cs" />
+    <Compile Include="$(Game)/Tests/Editor/UI/MapCellSamplerTests.cs" Link="Tests/UI/MapCellSamplerTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/UI/WorldMapMipPyramidTests.cs" Link="Tests/UI/WorldMapMipPyramidTests.cs" />
+    <Compile Include="$(Game)/Tests/Editor/UI/MapProjectionTests.cs" Link="Tests/UI/MapProjectionTests.cs" />
   </ItemGroup>
 </Project>

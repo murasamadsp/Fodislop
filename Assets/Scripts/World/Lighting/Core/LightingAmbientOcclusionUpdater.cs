@@ -51,6 +51,7 @@ internal sealed class LightingAmbientOcclusionUpdater
         int visibleMinY,
         int visibleWidth,
         int visibleHeight,
+        Vector2Int sizingViewport,
         Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor terrainGeometry,
         GraphicsQualitySettings qualitySettings)
     {
@@ -62,7 +63,8 @@ internal sealed class LightingAmbientOcclusionUpdater
             visibleMinY,
             visibleWidth,
             visibleHeight,
-            previousRegion);
+            previousRegion,
+            sizingViewport);
         bool regionChanged = region != previousRegion;
         _state.LastVisibleRegion = region;
         if (regionChanged)
@@ -125,7 +127,8 @@ internal sealed class LightingAmbientOcclusionUpdater
                 _state.ActiveRegionInvalidations,
                 new RectInt(Mathf.RoundToInt(region.x), Mathf.RoundToInt(region.y),
                     Mathf.RoundToInt(region.z), Mathf.RoundToInt(region.w)),
-                LightingConfigHolder.AmbientOcclusionPixelsPerCell)
+                LightingConfigHolder.AmbientOcclusionPixelsPerCell,
+                Kern.Core.Interfaces.WorldLighting.LightingFieldOrientation.RowsTopDown)
             : null;
         _state.FieldDirty = true;
         FrameEventLog.Record(

@@ -1,8 +1,8 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using System.IO;
+using Kern.Core;
 using UnityEditor;
 using UnityEngine;
 
@@ -18,7 +18,7 @@ namespace Kern.Editor
 
         private string _serverMapPath = string.Empty;
         private string _serverWorldName = "pallada";
-        private int _chunksW = 157;  // 5000 / 32 = 156.25 -> 157
+        private int _chunksW = 313;  // 10016 / 32 = 313 (current Pallada width)
         private int _chunksH = 1250; // 40000 / 32 = 1250
         private int _chunkSize = 32;
         private string _outputFolder = "Assets/StreamingAssets/WorldMaps";
@@ -48,7 +48,11 @@ namespace Kern.Editor
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Expected Files", EditorStyles.boldLabel);
             EditorGUILayout.LabelField($"  Cells: {_serverWorldName}.mapb");
-            EditorGUILayout.LabelField($"  Road:  {_serverWorldName}_road.mapb");
+            if (_includeRoadLayer)
+            {
+                EditorGUILayout.LabelField($"  Road:  {_serverWorldName}_road.mapb");
+            }
+
             EditorGUILayout.LabelField($"  Durability: {_serverWorldName}_durability.mapb (ignored)");
 
             EditorGUILayout.Space();
@@ -56,7 +60,7 @@ namespace Kern.Editor
             bool canConvert = !string.IsNullOrEmpty(_serverMapPath)
                            && Directory.Exists(_serverMapPath)
                            && FileExists(_serverWorldName + ".mapb")
-                           && FileExists(_serverWorldName + "_road.mapb");
+                           && (!_includeRoadLayer || FileExists(_serverWorldName + "_road.mapb"));
 
             using (new EditorGUI.DisabledScope(!canConvert))
             {
@@ -76,7 +80,9 @@ namespace Kern.Editor
             EditorGUILayout.HelpBox(
                 "Server format: raw byte arrays (no header, no offset table, no RLE)\n" +
                 "Client format: header (16 bytes) + offset table (int64[]) + RLE compressed chunks\n" +
-                "Merge logic: cells[x,y] == 0 (Unloaded) ? road[x,y] : cells[x,y]\n" +
+                (_includeRoadLayer
+                    ? "Merge logic: cells[x,y] == 0 (Unloaded) ? road[x,y] : cells[x,y]\n"
+                    : "Road layer is disabled; only cells data is converted\n") +
                 "Durability layer is ignored (client doesn't use it).",
                 MessageType.Info);
 
@@ -90,19 +96,40 @@ namespace Kern.Editor
 
         private void Convert()
         {
-            string cellsPath = Path.Combine(_serverMapPath, _serverWorldName + ".mapb");
-            string roadPath = Path.Combine(_serverMapPath, _serverWorldName + "_road.mapb");
-            string outputPath = Path.Combine(_outputFolder, _serverWorldName + "_cells.mapb");
-
-            if (!File.Exists(cellsPath))
+            long worldWidth = (long)_chunksW * _chunkSize;
+            long worldHeight = (long)_chunksH * _chunkSize;
+            if (_chunksW <= 0 || _chunksH <= 0 ||
+                _chunkSize != ProjectRuntimeContracts.World.ChunkSize ||
+                worldWidth > ushort.MaxValue || worldHeight > ushort.MaxValue)
             {
-                EditorUtility.DisplayDialog("Error", $"Cells file not found: {cellsPath}", "OK");
+                EditorUtility.DisplayDialog(
+                    "Invalid World Dimensions",
+                    $"Client maps require positive chunk counts, chunk size " +
+                    $"{ProjectRuntimeContracts.World.ChunkSize}, and world dimensions no larger than " +
+                    $"{ushort.MaxValue} cells. Current dimensions: {worldWidth}x{worldHeight} " +
+                    $"with chunk size {_chunkSize}.",
+                    "OK");
                 return;
             }
 
-            if (!File.Exists(roadPath))
+            string cellsPath = Path.Combine(_serverMapPath, _serverWorldName + ".mapb");
+            string roadPath = Path.Combine(_serverMapPath, _serverWorldName + "_road.mapb");
+            string outputPath = Path.Combine(_outputFolder, _serverWorldName + "_cells.mapb");
+            string temporaryOutputPath = outputPath + ".convert.tmp";
+            string? missingRequiredPath = null;
+
+            if (!File.Exists(cellsPath))
             {
-                EditorUtility.DisplayDialog("Error", $"Road file not found: {roadPath}", "OK");
+                missingRequiredPath = cellsPath;
+            }
+            else if (_includeRoadLayer && !File.Exists(roadPath))
+            {
+                missingRequiredPath = roadPath;
+            }
+
+            if (missingRequiredPath != null)
+            {
+                EditorUtility.DisplayDialog("Error", $"Required input file not found: {missingRequiredPath}", "OK");
                 return;
             }
 
@@ -125,8 +152,8 @@ namespace Kern.Editor
                 }
 
                 using (FileStream cellsFs = File.OpenRead(cellsPath))
-                using (FileStream roadFs = File.OpenRead(roadPath))
-                using (FileStream outFs = File.Create(outputPath))
+                using (FileStream? roadFs = _includeRoadLayer ? File.OpenRead(roadPath) : null)
+                using (FileStream outFs = File.Create(temporaryOutputPath))
                 using (BinaryWriter writer = new BinaryWriter(outFs))
                 {
                     // Write header: widthChunks, heightChunks, chunkSize, reserved
@@ -144,7 +171,7 @@ namespace Kern.Editor
                     }
 
                     byte[] cellChunk = new byte[chunkArea];
-                    byte[] roadChunk = new byte[chunkArea];
+                    byte[]? roadChunk = _includeRoadLayer ? new byte[chunkArea] : null;
                     byte[] mergedChunk = new byte[chunkArea];
 
                     // Process chunks
@@ -166,39 +193,40 @@ namespace Kern.Editor
                             // Read cell chunk
                             long cellOffset = chunkIndex * chunkArea;
                             cellsFs.Seek(cellOffset, SeekOrigin.Begin);
-                            int readCells = cellsFs.Read(cellChunk, 0, chunkArea);
+                            int readCells = ReadChunk(cellsFs, cellChunk);
                             if (readCells < chunkArea)
                             {
                                 Array.Clear(cellChunk, readCells, chunkArea - readCells);
                             }
 
                             // Read road chunk
-                            long roadOffset = chunkIndex * chunkArea;
-                            roadFs.Seek(roadOffset, SeekOrigin.Begin);
-                            int readRoad = roadFs.Read(roadChunk, 0, chunkArea);
-                            if (readRoad < chunkArea)
+                            if (_includeRoadLayer)
                             {
-                                Array.Clear(roadChunk, readRoad, chunkArea - readRoad);
+                                FileStream roadStream = roadFs ??
+                                    throw new InvalidOperationException("Road stream was not opened.");
+                                byte[] roadData = roadChunk ??
+                                    throw new InvalidOperationException("Road buffer was not allocated.");
+                                long roadOffset = chunkIndex * chunkArea;
+                                roadStream.Seek(roadOffset, SeekOrigin.Begin);
+                                int readRoad = ReadChunk(roadStream, roadData);
+                                if (readRoad < chunkArea)
+                                {
+                                    Array.Clear(roadData, readRoad, chunkArea - readRoad);
+                                }
                             }
 
                             // Merge: cells == 0 (Unloaded) ? road : cells
                             for (int i = 0; i < chunkArea; i++)
                             {
-                                mergedChunk[i] = cellChunk[i] == 0 ? roadChunk[i] : cellChunk[i];
+                                mergedChunk[i] = _includeRoadLayer && cellChunk[i] == 0
+                                    ? roadChunk![i]
+                                    : cellChunk[i];
                             }
-
-                            // RLE encode
-                            var rle = EncodeRLE(mergedChunk);
 
                             // Record offset BEFORE writing chunk data
                             chunkOffsets[chunkIndex] = outFs.Position;
 
-                            // Write RLE data: (ushort count, byte value) pairs
-                            foreach (var (count, value) in rle)
-                            {
-                                writer.Write(count);
-                                writer.Write(value);
-                            }
+                            WriteRLE(writer, mergedChunk);
                         }
                     }
 
@@ -209,7 +237,17 @@ namespace Kern.Editor
                         writer.Write(offset);
                     }
 
-                    outFs.Flush();
+                    writer.Flush();
+                    outFs.Flush(flushToDisk: true);
+                }
+
+                if (File.Exists(outputPath))
+                {
+                    File.Replace(temporaryOutputPath, outputPath, destinationBackupFileName: null);
+                }
+                else
+                {
+                    File.Move(temporaryOutputPath, outputPath);
                 }
 
                 EditorUtility.ClearProgressBar();
@@ -226,11 +264,49 @@ namespace Kern.Editor
                 Debug.LogError($"[MapbConverter] Conversion failed: {ex}");
                 EditorUtility.DisplayDialog("Error", $"Conversion failed:\n{ex.Message}", "OK");
             }
+            finally
+            {
+                if (File.Exists(temporaryOutputPath))
+                {
+                    try
+                    {
+                        File.Delete(temporaryOutputPath);
+                    }
+                    catch (IOException cleanupException)
+                    {
+                        Debug.LogWarning(
+                            $"[MapbConverter] Could not remove temporary output '{temporaryOutputPath}': " +
+                            cleanupException.Message);
+                    }
+                    catch (UnauthorizedAccessException cleanupException)
+                    {
+                        Debug.LogWarning(
+                            $"[MapbConverter] Could not remove temporary output '{temporaryOutputPath}': " +
+                            cleanupException.Message);
+                    }
+                }
+            }
         }
 
-        private static List<(ushort count, byte value)> EncodeRLE(byte[] data)
+        private static int ReadChunk(FileStream stream, byte[] buffer)
         {
-            var result = new List<(ushort, byte)>();
+            int totalRead = 0;
+            while (totalRead < buffer.Length)
+            {
+                int read = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                totalRead += read;
+            }
+
+            return totalRead;
+        }
+
+        private static void WriteRLE(BinaryWriter writer, byte[] data)
+        {
             int i = 0;
             int len = data.Length;
 
@@ -245,11 +321,10 @@ namespace Kern.Editor
                     run++;
                 }
 
-                result.Add(((ushort)run, val));
+                writer.Write((ushort)run);
+                writer.Write(val);
                 i += run;
             }
-
-            return result;
         }
 
         private static string FormatBytes(long bytes)

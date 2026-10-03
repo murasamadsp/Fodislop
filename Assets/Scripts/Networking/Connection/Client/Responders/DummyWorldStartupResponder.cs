@@ -33,8 +33,10 @@ internal sealed class DummyWorldStartupResponder(
     DummyMissionRunner missionRunner,
     List<(ushort X, ushort Y)> teleportPositions,
     Action<ServerPacket> sendPacket,
-    Func<int, bool> loopAlive)
+    Func<int, bool> loopAlive,
+    DummyBlockSpawner blockSpawner)
 {
+
     public async UniTask InitializeAsync(
         string worldCodeName,
         int lifecycleVersion,
@@ -59,6 +61,7 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
         sendPacket(new ServerPacket(new LevelPacket(level)));
         await worldState.SendChunksAroundAsync(playerState.X, playerState.Y, sendPacket);
+        blockSpawner.Start(lifecycleVersion, world);
 
         SendSkillProgress();
         chatSimulator.SendChatMock(lifecycleVersion);

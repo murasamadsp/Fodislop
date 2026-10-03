@@ -5,6 +5,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kern.Core;
+using Kern.Persistence;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -144,11 +146,42 @@ internal static class DummyWorldMapArchive
             int widthChunks = reader.ReadInt32();
             int heightChunks = reader.ReadInt32();
             int chunkSize = reader.ReadInt32();
-            reader.ReadInt32();
+            int formatVersion = reader.ReadInt32();
 
-            if (widthChunks > 0 && heightChunks > 0 && chunkSize > 0 && chunkSize <= 1024)
+            if (widthChunks > 0 && heightChunks > 0 && chunkSize == ProjectRuntimeContracts.World.ChunkSize)
             {
-                return (widthChunks * chunkSize, heightChunks * chunkSize);
+                long worldWidth = (long)widthChunks * chunkSize;
+                long worldHeight = (long)heightChunks * chunkSize;
+                if (worldWidth <= ushort.MaxValue && worldHeight <= ushort.MaxValue)
+                {
+                    if (formatVersion < 0 || formatVersion > WorldLayerFileHeader.CurrentFormatVersion)
+                    {
+                        throw new InvalidDataException(
+                            $"Dummy map '{path}' uses unsupported format version {formatVersion}.");
+                    }
+
+                    long chunkCount = (long)widthChunks * heightChunks;
+                    long offsetTableEnd = checked(
+                        WorldLayerFileHeader.HeaderSize + (chunkCount * sizeof(long)));
+                    if (stream.Length < offsetTableEnd)
+                    {
+                        throw new InvalidDataException(
+                            $"Dummy map '{path}' has a truncated chunk offset table.");
+                    }
+
+                    stream.Seek(WorldLayerFileHeader.HeaderSize, SeekOrigin.Begin);
+                    for (long index = 0; index < chunkCount; index++)
+                    {
+                        long offset = reader.ReadInt64();
+                        if (offset != -1 && (offset < offsetTableEnd || offset >= stream.Length))
+                        {
+                            throw new InvalidDataException(
+                                $"Dummy map '{path}' has an invalid chunk offset at index {index}.");
+                        }
+                    }
+
+                    return ((int)worldWidth, (int)worldHeight);
+                }
             }
 
             throw new InvalidDataException(
@@ -187,7 +220,7 @@ internal static class DummyWorldMapArchive
         if (File.Exists(projectMapPath))
         {
             ReadDimensions(projectMapPath);
-            return projectMapPath;
+            return CopyLocalMapToCache(projectMapPath, cacheDirectory, worldCodeName);
         }
 
         string archivePath = Path.Combine(streamingDirectory, ArchiveFileName(worldCodeName));
@@ -204,6 +237,78 @@ internal static class DummyWorldMapArchive
         var archive = new FileInfo(archivePath);
         string sourceStamp = $"file:{archive.Length}:{archive.LastWriteTimeUtc.Ticks}";
         return ExtractValidated(archivePath, cacheDirectory, worldCodeName, sourceStamp);
+    }
+
+    internal static string CopyLocalMapToCache(
+        string sourcePath,
+        string cacheDirectory,
+        string worldCodeName)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            throw new ArgumentException("Source map path is required.", nameof(sourcePath));
+        }
+
+        if (string.IsNullOrWhiteSpace(cacheDirectory))
+        {
+            throw new ArgumentException("Map cache directory is required.", nameof(cacheDirectory));
+        }
+
+        if (string.IsNullOrWhiteSpace(worldCodeName))
+        {
+            throw new ArgumentException("World code name is required.", nameof(worldCodeName));
+        }
+
+        ReadDimensions(sourcePath);
+        Directory.CreateDirectory(cacheDirectory);
+        DeleteAbandonedTempFiles(cacheDirectory);
+
+        var sourceInfo = new FileInfo(sourcePath);
+        long sourceLength = sourceInfo.Length;
+        long sourceLastWriteTicks = sourceInfo.LastWriteTimeUtc.Ticks;
+        string sourceStamp = $"local:{sourceInfo.FullName}:{sourceLength}:{sourceLastWriteTicks}";
+        string mapPath = Path.Combine(cacheDirectory, MapFileName(worldCodeName));
+        if (IsCacheCurrent(mapPath, sourceStamp) && HasValidHeader(mapPath))
+        {
+            return mapPath;
+        }
+
+        EnsureFreeSpace(cacheDirectory, sourceLength);
+        string tempPath = NewTempPath(mapPath);
+        try
+        {
+            using (var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var destination = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                source.CopyTo(destination);
+                destination.Flush(flushToDisk: true);
+            }
+
+            var copiedInfo = new FileInfo(tempPath);
+            sourceInfo.Refresh();
+            if (copiedInfo.Length != sourceLength ||
+                sourceInfo.Length != sourceLength ||
+                sourceInfo.LastWriteTimeUtc.Ticks != sourceLastWriteTicks)
+            {
+                throw new IOException($"Source map '{sourcePath}' changed while it was being copied.");
+            }
+
+            ReadDimensions(tempPath);
+            ReplaceFile(tempPath, mapPath);
+            WriteStamp(mapPath, sourceStamp);
+        }
+        catch (IOException exception)
+        {
+            throw new IOException(
+                $"Could not copy local dummy map '{sourcePath}' to '{cacheDirectory}': {exception.Message}",
+                exception);
+        }
+        finally
+        {
+            DeleteFileQuietly(tempPath);
+        }
+
+        return mapPath;
     }
 
     private static async UniTask<string> ResolveFromPackagedStreamingAssetsAsync(
@@ -360,17 +465,20 @@ internal static class DummyWorldMapArchive
 
     private static void ReplaceFile(string sourcePath, string destinationPath)
     {
-        // В netstandard2.1 нет File.Move(..., overwrite); rename в пределах тома атомарен.
+        // Keep the previous cache visible until the complete replacement is ready.
         for (int attempt = 0; ; attempt++)
         {
             try
             {
                 if (File.Exists(destinationPath))
                 {
-                    File.Delete(destinationPath);
+                    File.Replace(sourcePath, destinationPath, destinationBackupFileName: null);
+                }
+                else
+                {
+                    File.Move(sourcePath, destinationPath);
                 }
 
-                File.Move(sourcePath, destinationPath);
                 return;
             }
             catch (IOException) when (attempt < 2)

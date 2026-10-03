@@ -10,7 +10,7 @@ using VContainer.Unity;
 
 namespace Kern.UI;
 
-public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : IWorldLabels, ILateTickable, IDisposable
+public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : IWorldLabels, IPostLateTickable, IDisposable
 {
     private const string TAG = "[WorldLabels]";
 
@@ -43,7 +43,12 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         return entry;
     }
 
-    public void LateTick()
+    // После всех LateUpdate, а не в LateTick: VContainer ставит LateTick перед
+    // ScriptRunBehaviourLateUpdate, а камера (CameraFollow) двигается и меняет
+    // зум именно там. Метка, посчитанная раньше камеры, бралась по кадру
+    // прошлого кадра: при движении отставала от робота, при зуме кегль
+    // запаздывал на кадр — ники «плавали» и меняли размер.
+    public void PostLateTick()
     {
         if (!document.enabled || _root?.panel == null)
         {

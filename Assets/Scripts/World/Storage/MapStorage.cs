@@ -54,12 +54,13 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     private string DataRoot => _dataRoot ?? Application.persistentDataPath;
 
     private bool _isInitialized;
+    private bool _disposeAsyncInProgress;
     private string _worldCodeName = string.Empty;
     private int _worldWidth;
     private int _worldHeight;
     private readonly MapStorageRegionBatcher _regionBatcher = new();
 
-    public IWorldLayer<CellType>? CellLayer => _cellLayer;
+    public IWorldLayer<CellType>? CellLayer => _isInitialized ? _cellLayer : null;
 
     public string MapFilePath => _mapFilePath ?? throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
 
@@ -441,14 +442,22 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
 
     public void Dispose()
     {
-        _persistenceGate.Run(DisposeCore);
+        _persistenceGate.Run(() =>
+        {
+            if (_disposeAsyncInProgress)
+            {
+                throw new InvalidOperationException(
+                    "[MapStorage] Synchronous dispose cannot run while asynchronous dispose is in progress.");
+            }
+
+            DisposeCore();
+        });
     }
 
     public async UniTask DisposeAsync(CancellationToken cancellationToken = default)
     {
         WorldLayer<CellType>? writtenLayer = null;
         List<(int Index, CellType[] Chunk)>? writtenSnapshot = null;
-        bool disposed = false;
         try
         {
             await _persistenceGate.RunAsync(
@@ -456,14 +465,24 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 {
                     // Тот же снимок, что во FlushAsync: WorldLayer.Dispose иначе
                     // перебирал бы грязные чанки в пуле потоков. Снимок снимается
-                    // на главном потоке, в пул уходят только его запись и закрытие
-                    // файла.
-                    WorldLayer<CellType>? layer = _isInitialized && !IsDisposed ? _cellLayer : null;
-                    var snapshot = layer?.TakeDirtySnapshot();
+                    // на главном потоке, в пул уходит только запись снимка; кэш
+                    // очищается после возврата сюда.
+                    WorldLayer<CellType>? layer =
+                        _isInitialized && !IsDisposed && !_disposeAsyncInProgress ? _cellLayer : null;
+                    var snapshot = layer?.TakeDirtySnapshot(includeDetachedSnapshots: true);
                     writtenLayer = layer;
                     writtenSnapshot = snapshot;
                     string? mapFilePath = layer != null ? MapFilePath : null;
                     string? backupMapFilePath = layer != null ? BackupMapFilePath : null;
+                    if (layer != null)
+                    {
+                        _disposeAsyncInProgress = true;
+                        _cellLayer = null;
+                        _isInitialized = false;
+                        IsDisposed = true;
+                        Revision++;
+                    }
+
                     return () =>
                     {
                         if (layer != null && snapshot != null)
@@ -475,23 +494,44 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                                 mapFilePath: mapFilePath!,
                                 backupMapFilePath: backupMapFilePath!);
                         }
-
-                        disposed = true;
-                        DisposeCore();
                     };
                 },
                 cancellationToken);
         }
         catch
         {
-            // Запись не дошла до закрытия: слой жив, и его чанки обязаны
-            // остаться грязными, чтобы синхронный Dispose на выходе их записал.
-            if (!disposed && writtenLayer != null && writtenSnapshot != null)
+            if (writtenLayer != null && writtenSnapshot != null)
             {
                 writtenLayer.RestoreDirty(writtenSnapshot);
+                _cellLayer = writtenLayer;
+                _isInitialized = true;
+                IsDisposed = false;
+                _disposeAsyncInProgress = false;
+                Revision++;
             }
 
             throw;
+        }
+
+        if (writtenLayer != null && writtenSnapshot != null)
+        {
+            writtenLayer.CompleteDirty(writtenSnapshot);
+            try
+            {
+                writtenLayer.DisposeAfterDurableSnapshot();
+            }
+            finally
+            {
+                _cellLayer = null;
+                _isInitialized = false;
+                _worldCodeName = string.Empty;
+                _worldWidth = 0;
+                _worldHeight = 0;
+                _mapFilePath = null;
+                IsDisposed = true;
+                _disposeAsyncInProgress = false;
+                Revision++;
+            }
         }
     }
 

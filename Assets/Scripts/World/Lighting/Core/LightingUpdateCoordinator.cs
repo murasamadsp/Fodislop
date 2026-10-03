@@ -103,6 +103,11 @@ internal sealed class LightingUpdateCoordinator
             return;
         }
 
+        Vector2Int sizingViewport = LightingRegionCalculator.ResolveSizingViewport(
+            camera.orthographicSize,
+            camera.aspect,
+            ProjectRuntimeContracts.Camera.MaximumOrthographicSize,
+            ProjectRuntimeContracts.World.CellSize);
 
         if (bypassLightingCompute || qualityMode == LightingQualityMode.Off)
         {
@@ -113,6 +118,7 @@ internal sealed class LightingUpdateCoordinator
                     visibleMinY,
                     visibleWidth,
                     visibleHeight,
+                    sizingViewport,
                     terrainGeometry,
                     qualitySettings);
                 return;
@@ -144,7 +150,8 @@ internal sealed class LightingUpdateCoordinator
             visibleMinY,
             visibleWidth,
             visibleHeight,
-            _state.LastVisibleRegion);
+            _state.LastVisibleRegion,
+            sizingViewport);
         bool regionChanged = lightingRegion != _state.LastVisibleRegion;
         if (regionChanged)
         {
@@ -248,7 +255,16 @@ internal sealed class LightingUpdateCoordinator
         int dynamicLightCount;
         bool dynamicLightsChanged;
         bool rebuildFields = _state.FieldDirty || regionChanged || geometryChanged;
+        // Маска пересчитывает только пробы у правок, остальной атлас берётся
+        // как есть. Это верно, лишь если атлас — решение для текущего поля:
+        // после полного сброса (текстура, конфигурация, правка без границ)
+        // FieldDirty стоит ещё до активации правок, а HasStaticRadianceState
+        // снят. Правка в том же кадре включала маску поверх такого атласа:
+        // свет пересчитывался только вокруг правок, а всё дальше оставалось
+        // прежним или пустым, пока ресайз не давал полный расчёт.
         bool allowStaticDependencyMask = !resourcesResized &&
+            !fieldWasDirty &&
+            _state.HasStaticRadianceState &&
             (!regionChanged || canReuseStaticAtlas) &&
             !contributorGeometryChanged &&
             _state.ActiveRegionInvalidations.Count > 0;

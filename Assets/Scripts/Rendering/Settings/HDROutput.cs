@@ -23,11 +23,28 @@ public static class HDROutput
     public static bool Active => s_controller.Current.RenderingHDR;
     public static HDROutputController.Phase Status => s_controller.Status;
     public static bool RuntimeSwitchable => s_controller.Current.Switchable;
-    public static bool CanSwitch => s_controller.Current.CanSwitch &&
+    public static bool CanSwitch => (s_controller.Current.CanSwitch || AppliesAtNextStart) &&
         s_controller.Status is not HDROutputController.Phase.Pending and not HDROutputController.Phase.Uninitialized &&
         !s_controller.HasReadFailure;
 
     public static bool CanRetryRead => s_controller.HasReadFailure;
+
+    /// <summary>Выбор действует со следующего входа в Play, а не сейчас.</summary>
+    ///
+    /// Редактор связывает доступность HDR со стартовым режимом: при
+    /// useHDRDisplay=false Game view сообщает вывод недоступным, хотя дисплей
+    /// и конвейер HDR умеют. Выбор принимается и пишется в стартовый режим
+    /// (SetEnabled); переключателю нельзя гаснуть, иначе вернуть HDR из меню
+    /// было бы нечем. Но только когда сам дисплей умеет HDR: на SDR-дисплее
+    /// переключатель не работает (DisplayHDRProbe спрашивает систему).
+#if UNITY_EDITOR
+    public static bool AppliesAtNextStart =>
+        !s_controller.HasReadFailure &&
+        s_controller.Current is { Supported: true, PipelineSupported: true, Switchable: true, Available: false } &&
+        DisplayHDRProbe.CurrentDisplaySupportsHDR();
+#else
+    public static bool AppliesAtNextStart => false;
+#endif
 
     // Ключ дедупликации строится по решениям, а не по снимку целиком.
     // Снимок несёт paperWhiteNits дробным числом от системы: оно дрожит в
@@ -86,10 +103,26 @@ public static class HDROutput
 
         Retrying,
         Failed,
+
+        // Принято в стартовый режим, экран сейчас не меняется.
+        AppliesAtNextStart,
     }
 
     public static void AutoDetectDisplayCapabilities(DisplaySettings display)
     {
+        // Пик от системы точнее, чем от Unity: тот отдаёт то 200, то 10000 нит
+        // (метаданные HDR10 по умолчанию), а не возможности панели.
+        if (display.PeakBrightnessFromDisplay &&
+            DisplayHDRProbe.TryReadPeakBrightnessNits(out float displayPeakNits))
+        {
+            display.PeakBrightnessNits = Mathf.Max(
+                display.PaperWhiteNits,
+                Mathf.Clamp(
+                    displayPeakNits,
+                    DisplaySettings.PeakBrightnessMin,
+                    DisplaySettings.PeakBrightnessMax));
+        }
+
         HDROutputController.Snapshot output = s_controller.Current;
         if (output.Available)
         {
@@ -115,6 +148,20 @@ public static class HDROutput
 
     public static ApplyRequestResult SetEnabled(bool enabled)
     {
+#if UNITY_EDITOR
+        // Стартовый режим вывода у Unity один — useHDRDisplay. С ним Unity
+        // входит в Play и его же заново применяет при каждом пересоздании
+        // вывода. Расходясь с выбором игрока, он включал HDR на старте и после
+        // любого пересоздания, а сверка тут же выключала его обратно: два
+        // переключения режима дисплея подряд, около секунды стоящего кадра.
+        // Флаг держит выбор игрока — Unity сам стартует и восстанавливается в
+        // нужном режиме, переключать нечего. Сборка запекает значение по
+        // умолчанию (BuildScript), а не выбор разработчика.
+        if (UnityEditor.PlayerSettings.useHDRDisplay != enabled)
+        {
+            UnityEditor.PlayerSettings.useHDRDisplay = enabled;
+        }
+#endif
         s_controller.SetPreference(enabled);
 
         return ApplyPreference();
@@ -142,6 +189,11 @@ public static class HDROutput
         int attempts = s_controller.Attempts;
         s_controller.Update(Time.realtimeSinceStartupAsDouble);
         LogDiagnostics();
+        if (AppliesAtNextStart)
+        {
+            return ApplyRequestResult.AppliesAtNextStart;
+        }
+
         return s_controller.Status switch
         {
             HDROutputController.Phase.HDR or HDROutputController.Phase.SDR => ApplyRequestResult.Applied,

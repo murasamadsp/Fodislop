@@ -12,7 +12,7 @@ namespace Kern.UI;
 internal sealed class WorldMapLayerBinding : IDisposable
 {
     private readonly MapCellSampler _cellSampler;
-    private readonly WorldMapMipScan _mipScan;
+    private readonly WorldMapMipSource _mipSource;
     private readonly Action _requestRender;
     private readonly Action _requestFullRender;
     private IWorldDataStorage? _storage;
@@ -21,12 +21,12 @@ internal sealed class WorldMapLayerBinding : IDisposable
 
     public WorldMapLayerBinding(
         MapCellSampler cellSampler,
-        WorldMapMipScan mipScan,
+        WorldMapMipSource mipSource,
         Action requestRender,
         Action requestFullRender)
     {
         _cellSampler = cellSampler ?? throw new ArgumentNullException(nameof(cellSampler));
-        _mipScan = mipScan ?? throw new ArgumentNullException(nameof(mipScan));
+        _mipSource = mipSource ?? throw new ArgumentNullException(nameof(mipSource));
         _requestRender = requestRender ?? throw new ArgumentNullException(nameof(requestRender));
         _requestFullRender = requestFullRender ?? throw new ArgumentNullException(nameof(requestFullRender));
     }
@@ -79,8 +79,8 @@ internal sealed class WorldMapLayerBinding : IDisposable
         return true;
     }
 
-    public void BindMipScan(Color32[] cellColorTable) =>
-        _mipScan.Bind(_subscribedCellLayer, _chunkSize, cellColorTable);
+    public void BindMipScan(int worldWidth, int worldHeight, Color32[] cellColorTable) =>
+        _mipSource.Bind(_subscribedCellLayer, _chunkSize, worldWidth, worldHeight, cellColorTable);
 
     public void RebindCellEvents()
     {
@@ -114,14 +114,14 @@ internal sealed class WorldMapLayerBinding : IDisposable
         int chunkX = serverX / _chunkSize;
         int chunkY = serverY / _chunkSize;
         _cellSampler.InvalidateChunk(chunkX * _chunkSize, chunkY * _chunkSize);
-        _mipScan.QueueChunk(chunkX, chunkY);
+        _mipSource.QueueChunk(chunkX, chunkY);
         _requestFullRender();
     }
 
     private void OnChunkLoaded(int serverX, int serverY, int width, int height)
     {
         _cellSampler.InvalidateChunk(serverX, serverY);
-        _mipScan.QueueChunk(serverX / Mathf.Max(1, _chunkSize), serverY / Mathf.Max(1, _chunkSize));
+        _mipSource.QueueChunk(serverX / Mathf.Max(1, _chunkSize), serverY / Mathf.Max(1, _chunkSize));
         _requestFullRender();
     }
 
@@ -138,8 +138,8 @@ internal sealed class WorldMapLayerBinding : IDisposable
         {
             for (int chunkY = Mathf.Max(0, startY / _chunkSize); chunkY <= endY / _chunkSize; chunkY++)
             {
-                _mipScan.QueueChunk(chunkX, chunkY);
                 _cellSampler.InvalidateChunk(chunkX * _chunkSize, chunkY * _chunkSize);
+                _mipSource.QueueChunk(chunkX, chunkY);
             }
         }
 

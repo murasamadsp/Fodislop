@@ -129,10 +129,12 @@ internal static class MapStorageDiskWriter
             return;
         }
 
-        if (primaryFormatVersion == 0)
+        if (primaryFormatVersion == 0 &&
+            HasRecoverableHeader(mapPath, widthChunks, heightChunks, chunkSize))
         {
             // Version zero has an explicit migration path. Let that migration
-            // preserve the source instead of replacing it from an older backup.
+            // preserve a structurally valid source instead of replacing it
+            // from an older backup.
             return;
         }
 
@@ -141,6 +143,14 @@ internal static class MapStorageDiskWriter
         {
             // A valid v1 header has an explicit payload converter. Keep its
             // data as the migration source instead of replacing it with backup.
+            return;
+        }
+
+        if (primaryFormatVersion == WorldLayerFileHeader.LegacyFramedFormatVersion &&
+            HasRecoverableHeader(mapPath, widthChunks, heightChunks, chunkSize))
+        {
+            // V2 framed chunks have an explicit v2-to-current converter. Keep
+            // the compatible source so migration can add chunk-index binding.
             return;
         }
 
@@ -190,12 +200,12 @@ internal static class MapStorageDiskWriter
             int height = reader.ReadInt32();
             int storedChunkSize = reader.ReadInt32();
             int formatVersion = reader.ReadInt32();
-            long tableLength = (long)widthChunks * heightChunks * sizeof(long);
-
             return width == widthChunks && height == heightChunks &&
                 storedChunkSize == chunkSize &&
                 formatVersion == WorldLayerFileHeader.CurrentFormatVersion &&
-                stream.Length >= WorldLayerFileHeader.HeaderSize + tableLength;
+                WorldLayerFileHeader.TryValidateOffsetTable(
+                    stream,
+                    checked(widthChunks * heightChunks));
         }
         catch (IOException)
         {
@@ -227,15 +237,13 @@ internal static class MapStorageDiskWriter
                 return false;
             }
 
-            if (formatVersion == 0)
-            {
-                return true;
-            }
-
-            long tableLength = (long)widthChunks * heightChunks * sizeof(long);
-            return (formatVersion == WorldLayerFileHeader.LegacyRLEFormatVersion ||
-                formatVersion == WorldLayerFileHeader.CurrentFormatVersion) &&
-                stream.Length >= WorldLayerFileHeader.HeaderSize + tableLength;
+            return (formatVersion == 0 ||
+                    formatVersion == WorldLayerFileHeader.LegacyRLEFormatVersion ||
+                    formatVersion == WorldLayerFileHeader.LegacyFramedFormatVersion ||
+                    formatVersion == WorldLayerFileHeader.CurrentFormatVersion) &&
+                WorldLayerFileHeader.TryValidateOffsetTable(
+                    stream,
+                    checked(widthChunks * heightChunks));
         }
         catch (IOException)
         {
