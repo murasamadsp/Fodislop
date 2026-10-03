@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Kern.Core.Interfaces;
 using Kern.World.Lighting;
 using UnityEngine;
 
@@ -9,18 +10,28 @@ namespace Kern.Tools.Imgui.Windows;
 public sealed class ToolbarWindow : ToolWindow
 {
     private readonly LightingEngine? _lighting;
+    private readonly IRuntimeDebugSettings? _debugSettings;
     private readonly Dictionary<ToolWindow, string> _labels = [];
     private int _labelSignature;
     private Vector2 _scroll;
     private float _labelScale = -1f;
     private string _scaleLabel = string.Empty;
 
-    public ToolbarWindow(LightingEngine? lighting = null)
+    public ToolbarWindow(LightingEngine? lighting = null, IRuntimeDebugSettings? debugSettings = null)
         : base("Инструменты  ·  F1", new Rect(16f, 16f, 260f, 350f))
     {
         _lighting = lighting;
+        _debugSettings = debugSettings;
         Visible = true;
     }
+
+    private static string DescribeTailMotion(TailMotionDebugMode mode) => mode switch
+    {
+        TailMotionDebugMode.Minimal => "минимальная",
+        TailMotionDebugMode.Medium => "средняя",
+        TailMotionDebugMode.Maximum => "максимальная",
+        _ => "обычный",
+    };
 
     public override bool WantsSampling => false;
 
@@ -115,6 +126,8 @@ public sealed class ToolbarWindow : ToolWindow
 
             ToolChrome.SectionHeader("КЛАВИШИ");
             GUILayout.Label("F1  —  скрыть или показать все инструменты", MutedLabelStyle);
+            GUILayout.Label("F2  —  скорость хвоста: " + DescribeTailMotion(
+                _debugSettings?.TailMotionDebugMode ?? TailMotionDebugMode.Normal), MutedLabelStyle);
             GUILayout.Label("Esc  —  вернуть управление игре из поля ввода", MutedLabelStyle);
             GUILayout.Label("−  —  свернуть окно в полосу заголовка", MutedLabelStyle);
             ToolTheme.Separator();

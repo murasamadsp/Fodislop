@@ -122,8 +122,20 @@ public sealed class RobotMovement
         }
         else
         {
-            float maxVisualSpeed = Mathf.Max(_moveSpeed * 1.25f, 5f);
-            _smoothPosition = Vector3.SmoothDamp(_smoothPosition, _targetPosition, ref _currentVelocity, smoothTime, maxVisualSpeed, deltaTime);
+            // No visual speed ceiling. The legacy client had none either: it drove the render
+            // position straight at the server position with a proportional correction and no
+            // limit, so a large sub-snap correction snapped the body forward and whipped the
+            // tail out until the anti-stretch clamps in TailChain yanked it back. Capping the
+            // speed made that whip impossible. It only ever bound on big corrections — with
+            // smoothTime 0.11 the spring peaks near 13 units/s for a 2-unit local step and
+            // near 10 units/s for a 1.5-unit remote packet, both far below the old 18.75.
+            _smoothPosition = Vector3.SmoothDamp(
+                _smoothPosition,
+                _targetPosition,
+                ref _currentVelocity,
+                smoothTime,
+                Mathf.Infinity,
+                deltaTime);
         }
 
         Vector3 finalPosition = _smoothPosition;

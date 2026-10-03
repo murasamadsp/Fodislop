@@ -99,6 +99,7 @@ namespace Kern.Game
         {
             _lighting ??= new RobotLighting();
             _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
+            _visuals.SetDebugSettings(_debugSettings);
             _entityBatchRenderer = entityBatchRenderer;
             InitializeVisualElements();
             _visuals.Initialize(entityBatchRenderer, _visuals.ClanTransform);

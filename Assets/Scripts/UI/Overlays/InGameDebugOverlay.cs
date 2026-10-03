@@ -128,7 +128,7 @@ namespace Kern.UI
                 return;
             }
 
-            var toolbar = new ToolbarWindow(_lighting);
+            var toolbar = new ToolbarWindow(_lighting, _debugSettings);
             var stats = new FrameStatsWindow(_telemetry, _lighting);
             var world = new WorldInfoWindow(
                 _telemetry,
@@ -187,6 +187,16 @@ namespace Kern.UI
                 UpdateTelemetryState();
             }
 
+            // Polled before the early return below so the tail modes work with the tool suite
+            // closed, same as F1.
+            if (keyboard != null &&
+                !ToolWindows.HasKeyboardCapture &&
+                keyboard.f2Key.wasPressedThisFrame)
+            {
+                _debugSettings.TailMotionDebugMode = NextTailMotionDebugMode(
+                    _debugSettings.TailMotionDebugMode);
+            }
+
             // Включить инструменты может не только F1 (F5 открывает грейдинг
             // напрямую), поэтому раскладка сверяется с реестром каждый кадр.
             useGUILayout = ToolWindows.Enabled;
@@ -200,6 +210,18 @@ namespace Kern.UI
             _telemetry.BeginFrame();
             ToolWindows.Tick();
         }
+
+        /// <summary>
+        ///     Cycles the tail motion debug modes. Kept as an explicit successor rather than an
+        ///     unchecked increment so an out-of-range cast can never fall out of the cycle.
+        /// </summary>
+        private static TailMotionDebugMode NextTailMotionDebugMode(TailMotionDebugMode mode) => mode switch
+        {
+            TailMotionDebugMode.Normal => TailMotionDebugMode.Minimal,
+            TailMotionDebugMode.Minimal => TailMotionDebugMode.Medium,
+            TailMotionDebugMode.Medium => TailMotionDebugMode.Maximum,
+            _ => TailMotionDebugMode.Normal,
+        };
 
         private static void ReleaseCaptureOnEscape(Keyboard? keyboard)
         {

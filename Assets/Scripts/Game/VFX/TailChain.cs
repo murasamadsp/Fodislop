@@ -1,20 +1,28 @@
 #nullable enable
 
+using System;
 using UnityEngine;
 
 namespace Kern.Game;
 
 /// <summary>
-///     Ported from the previous client's tail: Mines Original / Assets/Scripts/RobotScript.cs
-///     (TailUpdate, UpdateTailVertices).
+///     Follow-the-leader chain for one strand of a robot's tail, ported from the previous
+///     client: Mines Original / Assets/Scripts/RobotScript.cs (TailUpdate).
 /// </summary>
 /// <remarks>
-///     The old tail was a follow-the-leader chain, not a trail: no history buffer, no target
-///     distance between nodes. Each node is pulled toward its predecessor with a fixed inertia,
-///     and the chain length is an emergent property of that inertia versus movement speed.
-///     That is what keeps the tail at roughly 0.6-0.7 cells at full speed; the previous
-///     SmoothDamp chase had no such bound and stretched to about 2.4 cells, because every node
-///     lagged its target by <c>e = v * smoothTime</c> on top of the target spacing.
+///     <para>
+///         No history buffer and no target distance between nodes: each node is pulled toward its
+///         predecessor with a fixed inertia, and the chain length is an emergent property of that
+///         inertia against the root's speed.
+///     </para>
+///     <para>
+///         Four deliberate departures from the legacy client, none of which should be "fixed":
+///         a continuous alpha instead of a 60 Hz gated step, so the tail does not depend on frame
+///         rate; a wobble that is not gated by movement, so a standing tail keeps shivering; eight
+///         strands instead of four; and the geometry in <see cref="TentacleGeometry" />, which
+///         shares vertices where the legacy layout did not. Consequences and measurements are in
+///         docs/architecture/TAIL_RENDERING.md.
+///     </para>
 /// </remarks>
 public sealed class TailChain
 {
@@ -28,11 +36,9 @@ public sealed class TailChain
     private const int NodeCount = PointCount - 1;
 
     /// <summary>
-    ///     The old step was exponential smoothing applied once per 1/60 s. The continuous
-    ///     equivalent over <c>deltaTime</c> is <c>alpha = 1 - inertia^(60 * deltaTime)</c>:
-    ///     a tick that keeps a fraction <c>inertia</c> of the old value, repeated over the
-    ///     elapsed time. Deriving the alpha this way is what makes the motion frame-rate
-    ///     independent; a plain <c>lerp</c> toward the predecessor per frame would not be.
+    ///     The old step was exponential smoothing applied once per 1/60 s, so the continuous
+    ///     equivalent over <c>deltaTime</c> is <c>alpha = 1 - inertia^(60 * deltaTime)</c>. This
+    ///     is what makes the motion frame-rate independent.
     /// </summary>
     private const float ReferenceStepsPerSecond = 60f;
 
@@ -43,40 +49,47 @@ public sealed class TailChain
     private const float InertiaDenominator = 2000f;
 
     /// <summary>
-    ///     Per-strand inertia falls off as the strand index rises, so strand 0 trails the
-    ///     furthest behind and strand 3 snaps back hardest. Sign matters: inverting this term
-    ///     reverses which strand is long.
+    ///     Per-strand inertia falls off as the strand index rises, so strand 0 trails the furthest
+    ///     behind. Sign matters: inverting this term reverses which strand is long.
     /// </summary>
     private const float StrandInertiaBase = 16f;
     private const float StrandInertiaStep = 2f;
 
     /// <summary>
-    ///     Anti-stretch: the further the tip is from the robot, the harder the chain is
-    ///     yanked back. Two separate thresholds, not an else-if chain — the old code applied
-    ///     them in order, so past the far threshold the nearer value was already overwritten.
+    ///     Anti-stretch: the further the tip is from the robot, the harder the chain is yanked
+    ///     back. Two separate thresholds, not an else-if chain — the old code applied them in
+    ///     order, so past the far threshold the nearer value was already overwritten.
     /// </summary>
     private const float StretchDistance = 10f;
     private const float StretchInertia = 0.2f;
     private const float StretchDistanceFar = 20f;
     private const float StretchInertiaFar = 0.1f;
 
-    private const float RootWobbleAmplitude = 2.5f;
-    private const float SegmentWobbleAmplitude = 3.5f;
+    /// <summary>
+    ///     Wobble amplitude per node, as in the legacy client. Raising or lowering this does not
+    ///     change the outline: the wobble is white noise and the render layer low-passes it, so the
+    ///     drawn centre line turns only about 1.7 degrees per node at any amplitude. It controls
+    ///     shimmer, not curvature.
+    /// </summary>
+    internal const float RootWobbleAmplitude = 2.5f;
+    internal const float SegmentWobbleAmplitude = 3.5f;
+
     private const float SegmentWobbleBias = 0.15f;
 
     private const float SettleEpsilonSquared = 1e-8f;
     private const float MovementEpsilon = 1e-4f;
 
     private readonly float _strandInertia;
+    private readonly Func<float> _unitRandom;
     private readonly Vector3[] _chain = new Vector3[NodeCount];
     private readonly Vector3[] _smoothed = new Vector3[NodeCount];
-    private readonly float[] _segmentLengths = new float[PointCount];
     private Vector3 _rootPosition;
     private bool _settled;
 
-    public TailChain(int strandIndex, Vector3 startPosition)
+    public TailChain(int strandIndex, Vector3 startPosition, Func<float>? unitRandom = null)
     {
         _strandInertia = StrandInertiaBase + (StrandInertiaStep * strandIndex);
+        _unitRandom = unitRandom ?? DefaultUnitRandom;
         _rootPosition = startPosition;
         for (int i = 0; i < NodeCount; i++)
         {
@@ -85,27 +98,18 @@ public sealed class TailChain
         }
     }
 
-    /// <summary>Stretched length of the rendered strip, root to tip.</summary>
-    public float TotalLength
-    {
-        get
-        {
-            float total = 0f;
-            for (int i = 1; i < PointCount; i++)
-            {
-                total += _segmentLengths[i];
-            }
-
-            return total;
-        }
-    }
+    private static float DefaultUnitRandom() => UnityEngine.Random.value;
 
     public bool IsSettled => _settled;
 
     /// <summary>Rendered strip point; index 0 is the robot itself, as in the old client.</summary>
     public Vector3 this[int index] => index == 0 ? _rootPosition : _smoothed[index - 1];
 
-    public float SegmentLength(int index) => _segmentLengths[index];
+    /// <summary>
+    ///     Distance from this strand's tip to <paramref name="root" />. The owner reads it off
+    ///     strand zero and passes the same value to every strand, as the legacy client did.
+    /// </summary>
+    public float TipDistanceTo(Vector3 root) => Vector3.Distance(_smoothed[NodeCount - 1], root);
 
     public void Snap(Vector3 position)
     {
@@ -119,11 +123,11 @@ public sealed class TailChain
         _settled = true;
     }
 
-    public void Step(Vector3 rootPosition, float movementFactor, float deltaTime)
+    /// <param name="stretch">Anti-stretch distance shared by every strand.</param>
+    public void Step(Vector3 rootPosition, float movementFactor, float deltaTime, float stretch)
     {
         _rootPosition = rootPosition;
 
-        float stretch = Vector3.Distance(_smoothed[NodeCount - 1], rootPosition);
         float inertia = BaseInertia +
             (InertiaFalloff / (InertiaDenominator + (_strandInertia * stretch * stretch)));
         if (stretch > StretchDistance)
@@ -145,9 +149,9 @@ public sealed class TailChain
         float rootAlpha = 1f - Mathf.Pow(rootInertia, steps);
 
         // Wobble is the only source of life in the old model — no sine, no phase, no idle
-        // animation. Scaled by elapsed ticks and by movement so a standing tail is
-        // completely still and the robot's settled fast path stays reachable.
-        float wobbleScale = steps * movementFactor;
+        // animation. The legacy client left the amplitude untouched by movement, so a
+        // standing tail keeps shivering; only the elapsed time scales it here.
+        float wobbleScale = steps;
         float pull = 1f - inertia;
 
         _chain[0] += (rootAlpha * (rootPosition - _chain[0]));
@@ -164,11 +168,6 @@ public sealed class TailChain
             _smoothed[i] += nodeAlpha * (_chain[i] - _smoothed[i]);
         }
 
-        for (int i = 1; i < PointCount; i++)
-        {
-            _segmentLengths[i] = Vector3.Distance(this[i], this[i - 1]);
-        }
-
         _settled = movementFactor <= MovementEpsilon;
         if (_settled)
         {
@@ -183,7 +182,7 @@ public sealed class TailChain
         }
     }
 
-    private static Vector3 Wobble(float amplitude)
+    private Vector3 Wobble(float amplitude)
     {
         if (amplitude == 0f)
         {
@@ -191,8 +190,8 @@ public sealed class TailChain
         }
 
         return new Vector3(
-            amplitude * (UnityEngine.Random.value - 0.5f),
-            amplitude * (UnityEngine.Random.value - 0.5f),
+            amplitude * (_unitRandom() - 0.5f),
+            amplitude * (_unitRandom() - 0.5f),
             0f);
     }
 }

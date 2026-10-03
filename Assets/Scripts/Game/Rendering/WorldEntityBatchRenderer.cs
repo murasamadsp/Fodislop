@@ -18,10 +18,12 @@ namespace Kern.Game
 {
     public class WorldEntityBatchRenderer : MonoBehaviour, Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor
     {
-        // Matches the five-point tail used by the stable June implementation.
+        // Matches the five-point tail used by the stable June implementation:
+        // the robot plus four chain nodes, laid out as the legacy client's four
+        // four-vertex sectors.
         public const int POINT_COUNT = 5;
-        private const int VERTS_PER_TENTACLE = POINT_COUNT * 2;
-        private const int TRIS_PER_TENTACLE = (POINT_COUNT - 1) * 6;
+        private const int VERTS_PER_TENTACLE = TentacleGeometry.VerticesPerTentacle;
+        private const int INDICES_PER_TENTACLE = TentacleGeometry.IndicesPerTentacle;
         private const int INITIAL_CAPACITY = 64;
         private const int BATCH_SORTING_ORDER = -1;
         private const int OVERLAY_BATCH_SORTING_ORDER = 600;
@@ -33,7 +35,7 @@ namespace Kern.Game
             new("Kern.WorldEntities.LateUpdate");
 
         private static readonly AllocationLedger.Entry _AllocationEntry =
-            AllocationLedger.Register("Сущности мира — LateUpdate");
+            AllocationLedger.Register("РЎСѓС‰РЅРѕСЃС‚Рё РјРёСЂР° вЂ” LateUpdate");
 
         private static readonly int _SpriteAlphaCullID =
             Shader.PropertyToID("_SpriteAlphaCull");
@@ -51,7 +53,7 @@ namespace Kern.Game
         private Vector3[] _verts = new Vector3[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Vector2[] _uvs = new Vector2[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Color32[] _colors = new Color32[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
-        private int[] _tris = new int[TRIS_PER_TENTACLE * INITIAL_CAPACITY];
+        private int[] _tris = new int[INDICES_PER_TENTACLE * INITIAL_CAPACITY];
         private Mesh? _mesh;
         private WorldEntityOverlayBatch? _overlayBatch;
         private WorldEntityTextureAtlas? _atlas;
@@ -70,7 +72,7 @@ namespace Kern.Game
 
         // Light-emitting sprites are drawn into the lighting fields from their
         // own mesh; see WorldEntityLightingEmitter. The revision follows only
-        // their state — camera motion may rebuild the visible batch when it
+        // their state вЂ” camera motion may rebuild the visible batch when it
         // leaves the cached coverage and must not re-solve light.
         private Material? _batchMaterial;
         private bool _lightingContributorRegistered;
@@ -258,8 +260,8 @@ namespace Kern.Game
                 OVERLAY_BATCH_SORTING_ORDER);
         }
 
-        // Пороги отсечения одинаковы для всех материалов мира сущностей, поэтому
-        // уходят глобальными юниформами, а не в каждый материал по отдельности.
+        // РџРѕСЂРѕРіРё РѕС‚СЃРµС‡РµРЅРёСЏ РѕРґРёРЅР°РєРѕРІС‹ РґР»СЏ РІСЃРµС… РјР°С‚РµСЂРёР°Р»РѕРІ РјРёСЂР° СЃСѓС‰РЅРѕСЃС‚РµР№, РїРѕСЌС‚РѕРјСѓ
+        // СѓС…РѕРґСЏС‚ РіР»РѕР±Р°Р»СЊРЅС‹РјРё СЋРЅРёС„РѕСЂРјР°РјРё, Р° РЅРµ РІ РєР°Р¶РґС‹Р№ РјР°С‚РµСЂРёР°Р» РїРѕ РѕС‚РґРµР»СЊРЅРѕСЃС‚Рё.
         private static void ApplyTuningGlobals()
         {
             if (_tuningGlobalsApplied)
@@ -297,7 +299,7 @@ namespace Kern.Game
 
             int activeSpriteCount = _visibility.UnderTentacles.Count + _visibility.OverTentacles.Count;
             int vertexCount = (activeCount * VERTS_PER_TENTACLE) + (activeSpriteCount * 4);
-            int indexCount = (activeCount * TRIS_PER_TENTACLE) + (activeSpriteCount * 6);
+            int indexCount = (activeCount * INDICES_PER_TENTACLE) + (activeSpriteCount * 6);
             EnsureGeometryCapacity(vertexCount, indexCount);
 
             int vertexCursor = 0;
@@ -324,20 +326,10 @@ namespace Kern.Game
                 }
 
                 int indexOffset = indexCursor;
-                for (int segment = 0; segment < POINT_COUNT - 1; segment++)
-                {
-                    int baseVertex = vertexOffset + (segment * 2);
-                    int triangle = indexOffset + (segment * 6);
-                    _tris[triangle] = baseVertex;
-                    _tris[triangle + 1] = baseVertex + 1;
-                    _tris[triangle + 2] = baseVertex + 2;
-                    _tris[triangle + 3] = baseVertex + 2;
-                    _tris[triangle + 4] = baseVertex + 1;
-                    _tris[triangle + 5] = baseVertex + 3;
-                }
+                TentacleGeometry.WriteIndices(_tris, indexOffset, vertexOffset);
 
                 vertexCursor += VERTS_PER_TENTACLE;
-                indexCursor += TRIS_PER_TENTACLE;
+                indexCursor += INDICES_PER_TENTACLE;
             }
 
             WriteSprites(_visibility.OverTentacles, ref vertexCursor, ref indexCursor);

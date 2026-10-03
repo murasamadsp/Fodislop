@@ -100,6 +100,7 @@ public sealed class RuntimeAssetPathsTests
         Assert.That(settings.BypassCpuMeshRebuild, Is.False);
         Assert.That(settings.ShowRobotDebugVisuals, Is.False);
         Assert.That(settings.BypassGameUI, Is.False);
+        Assert.That(settings.TailMotionDebugMode, Is.EqualTo(TailMotionDebugMode.Normal));
     }
 
     [Test]
