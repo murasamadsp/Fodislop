@@ -79,6 +79,22 @@ public class WorldLayerFileHeaderTests
     }
 
     [Test]
+    public void TryValidateOffsetTable_RejectsOffsetsOutsideTheChunkDataRegion()
+    {
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(1);
+            writer.Write(1);
+            writer.Write(16);
+            writer.Write(WorldLayerFileHeader.CurrentFormatVersion);
+            writer.Write(1024L);
+        }
+
+        Assert.IsFalse(WorldLayerFileHeader.TryValidateOffsetTable(memory, 1));
+    }
+
+    [Test]
     public void WriteChunkOffset_UpdatesSpecifiedEntry()
     {
         const int width = 2;
@@ -129,7 +145,7 @@ public class WorldLayerFileHeaderTests
             Assert.AreEqual(0, WorldLayerFileHeader.TryReadFormatVersion(fs));
         }
 
-        // The v2 reader does not accept a v0 header before explicit migration.
+        // The current reader does not accept a v0 header before explicit migration.
         long[] offsets = new long[4];
         using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
         {
@@ -196,7 +212,7 @@ public class WorldLayerFileHeaderTests
         Assert.IsTrue(File.Exists(backupPath));
 
         // Header-only legacy migration preserves the RLE payload as v1; the
-        // WorldLayer constructor performs the full v1-to-v2 conversion.
+        // WorldLayer constructor performs the full v1-to-current conversion.
         using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
         {
             Assert.AreEqual(WorldLayerFileHeader.LegacyRLEFormatVersion, WorldLayerFileHeader.TryReadFormatVersion(fs));
@@ -212,14 +228,25 @@ public class WorldLayerFileHeaderTests
         const int chunkSize = 16;
 
         using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+        using (var writer = new BinaryWriter(fs))
         {
-            long[] offsets = new long[4];
-            WorldLayerFileHeader.WriteHeader(fs, width, height, chunkSize, offsets);
+            writer.Write(width);
+            writer.Write(height);
+            writer.Write(chunkSize);
+            writer.Write(WorldLayerFileHeader.LegacyFramedFormatVersion);
+            writer.Write(-1L);
+            writer.Write(-1L);
+            writer.Write(-1L);
+            writer.Write(-1L);
         }
 
         WorldLayerFileHeader.MigrateLegacyFormatIfRequired(filePath, width, height, chunkSize);
 
         string backupPath = filePath + ".v0.backup";
         Assert.IsFalse(File.Exists(backupPath));
+        using var migrated = File.OpenRead(filePath);
+        Assert.AreEqual(
+            WorldLayerFileHeader.LegacyFramedFormatVersion,
+            WorldLayerFileHeader.TryReadFormatVersion(migrated));
     }
 }

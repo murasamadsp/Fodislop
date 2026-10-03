@@ -8,16 +8,32 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using K4os.Compression.LZ4;
 
-/// <summary>Version 2 framed chunk codec: raw, RLE, LZ4 block, and byte palette.</summary>
+/// <summary>Current framed chunk codec: raw, RLE, LZ4 block, and byte palette.</summary>
 internal static class WorldChunkV2Codec
 {
     internal const int FrameHeaderSize = 20;
+    private const byte Crc32CFlag = 1;
+    private const byte ChunkIndexBoundFlag = 2;
     private const uint Crc32CPolynomial = 0x82F63B78;
     private const uint SchemaHashSeed = 2166136261;
     private static readonly uint[] s_crc32CTable = CreateCrc32CTable();
+
+    internal sealed class VisitorCallbackException : Exception
+    {
+        private readonly ExceptionDispatchInfo _exceptionDispatchInfo;
+
+        internal VisitorCallbackException(Exception exception)
+            : base("A world chunk visitor callback failed.", exception)
+        {
+            _exceptionDispatchInfo = ExceptionDispatchInfo.Capture(exception);
+        }
+
+        internal void Rethrow() => _exceptionDispatchInfo.Throw();
+    }
 
     private enum Codec : byte
     {
@@ -32,7 +48,24 @@ internal static class WorldChunkV2Codec
         return SchemaIdCache<T>.Value;
     }
 
-    internal static void EncodeChunk<T>(BinaryWriter writer, T[] chunk, int chunkArea)
+    internal static void EncodeLegacyV2Chunk<T>(BinaryWriter writer, T[] chunk, int chunkArea)
+        where T : unmanaged
+    {
+        EncodeChunkCore(writer, chunk, chunkArea, null);
+    }
+
+    internal static void EncodeChunk<T>(BinaryWriter writer, T[] chunk, int chunkArea, int chunkIndex)
+        where T : unmanaged
+    {
+        if (chunkIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(chunkIndex));
+        }
+
+        EncodeChunkCore(writer, chunk, chunkArea, chunkIndex);
+    }
+
+    private static void EncodeChunkCore<T>(BinaryWriter writer, T[] chunk, int chunkArea, int? chunkIndex)
         where T : unmanaged
     {
         if (writer == null)
@@ -49,14 +82,19 @@ internal static class WorldChunkV2Codec
         int elementSize = Unsafe.SizeOf<T>();
         int rawLength = checked(chunkArea * elementSize);
         int rleCapacity = checked(chunkArea * (sizeof(ushort) + elementSize));
-        byte[] rleBuffer = ArrayPool<byte>.Shared.Rent(rleCapacity);
-        byte[] lz4Buffer = ArrayPool<byte>.Shared.Rent(LZ4Codec.MaximumOutputSize(rawLength));
-        byte[]? paletteBuffer = elementSize == 1
-            ? ArrayPool<byte>.Shared.Rent(checked(chunkArea + 260))
-            : null;
+        byte[]? rleBuffer = null;
+        byte[]? lz4Buffer = null;
+        byte[]? paletteBuffer = null;
 
         try
         {
+            rleBuffer = ArrayPool<byte>.Shared.Rent(rleCapacity);
+            lz4Buffer = ArrayPool<byte>.Shared.Rent(LZ4Codec.MaximumOutputSize(rawLength));
+            if (elementSize == 1)
+            {
+                paletteBuffer = ArrayPool<byte>.Shared.Rent(checked(chunkArea + 260));
+            }
+
             ReadOnlySpan<byte> raw = MemoryMarshal.AsBytes(chunk.AsSpan(0, chunkArea));
 
             Codec selectedCodec = Codec.Raw;
@@ -97,11 +135,20 @@ internal static class WorldChunkV2Codec
             header[2] = (byte)'H';
             header[3] = (byte)'2';
             header[4] = (byte)selectedCodec;
-            header[5] = 1; // CRC32C is mandatory in v2.
+            header[5] = chunkIndex.HasValue
+                ? (byte)(Crc32CFlag | ChunkIndexBoundFlag)
+                : Crc32CFlag;
             BinaryPrimitives.WriteUInt16LittleEndian(header[6..], checked((ushort)elementSize));
             BinaryPrimitives.WriteUInt32LittleEndian(header[8..], checked((uint)selectedLength));
             BinaryPrimitives.WriteUInt32LittleEndian(header[12..], SchemaId<T>());
             uint crc = UpdateCrc32C(uint.MaxValue, header[..16]);
+            if (chunkIndex.HasValue)
+            {
+                Span<byte> chunkIndexBytes = stackalloc byte[sizeof(int)];
+                BinaryPrimitives.WriteInt32LittleEndian(chunkIndexBytes, chunkIndex.Value);
+                crc = UpdateCrc32C(crc, chunkIndexBytes);
+            }
+
             crc = UpdateCrc32C(crc, selectedPayload);
             BinaryPrimitives.WriteUInt32LittleEndian(header[16..], ~crc);
 
@@ -110,8 +157,16 @@ internal static class WorldChunkV2Codec
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(rleBuffer);
-            ArrayPool<byte>.Shared.Return(lz4Buffer);
+            if (rleBuffer != null)
+            {
+                ArrayPool<byte>.Shared.Return(rleBuffer);
+            }
+
+            if (lz4Buffer != null)
+            {
+                ArrayPool<byte>.Shared.Return(lz4Buffer);
+            }
+
             if (paletteBuffer != null)
             {
                 ArrayPool<byte>.Shared.Return(paletteBuffer);
@@ -122,12 +177,56 @@ internal static class WorldChunkV2Codec
     internal static T[] DecodeChunk<T>(BinaryReader reader, int chunkArea)
         where T : unmanaged
     {
+        return DecodeChunk<T>(reader, chunkArea, (int?)null);
+    }
+
+    internal static T[] DecodeChunk<T>(BinaryReader reader, int chunkArea, int chunkIndex)
+        where T : unmanaged
+    {
+        if (chunkIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(chunkIndex));
+        }
+
+        return DecodeChunk<T>(reader, chunkArea, (int?)chunkIndex);
+    }
+
+    private static T[] DecodeChunk<T>(BinaryReader reader, int chunkArea, int? chunkIndex)
+        where T : unmanaged
+    {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        if (chunkArea <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(chunkArea));
+        }
+
         var chunk = new T[chunkArea];
-        DecodeChunk(reader, chunkArea, chunk);
+        DecodeChunk(reader, chunkArea, chunk, chunkIndex);
         return chunk;
     }
 
     internal static void DecodeChunk<T>(BinaryReader reader, int chunkArea, T[] destination)
+        where T : unmanaged
+    {
+        DecodeChunk(reader, chunkArea, destination, null);
+    }
+
+    internal static void DecodeChunk<T>(BinaryReader reader, int chunkArea, T[] destination, int chunkIndex)
+        where T : unmanaged
+    {
+        if (chunkIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(chunkIndex));
+        }
+
+        DecodeChunk(reader, chunkArea, destination, (int?)chunkIndex);
+    }
+
+    private static void DecodeChunk<T>(BinaryReader reader, int chunkArea, T[] destination, int? chunkIndex)
         where T : unmanaged
     {
         if (reader == null)
@@ -150,7 +249,7 @@ internal static class WorldChunkV2Codec
         {
             Span<byte> payload = payloadBuffer.AsSpan(0, payloadLength);
             ReadExactly(reader, payload);
-            VerifyChecksum(header, payload);
+            VerifyChecksum(header, payload, chunkIndex);
             DecodePayload<T>(header[4], payload, destination.AsSpan(0, chunkArea), rawLength);
         }
         finally
@@ -179,6 +278,10 @@ internal static class WorldChunkV2Codec
         {
             throw new ArgumentOutOfRangeException(nameof(chunkArea));
         }
+        if (chunkIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(chunkIndex));
+        }
 
         int elementSize = Unsafe.SizeOf<T>();
         int rawLength = checked(chunkArea * elementSize);
@@ -191,7 +294,7 @@ internal static class WorldChunkV2Codec
         {
             Span<byte> payload = payloadBuffer.AsSpan(0, payloadLength);
             ReadExactly(reader, payload);
-            VerifyChecksum(headerBuffer, payload);
+            VerifyChecksum(headerBuffer, payload, chunkIndex);
             byte codec = headerBuffer[4];
             if (codec == (byte)Codec.RLE)
             {
@@ -230,145 +333,13 @@ internal static class WorldChunkV2Codec
         }
     }
 
-    internal static int MigrateV1ToV2<T>(
-        string filePath,
-        int expectedWidth,
-        int expectedHeight,
-        int chunkSize)
-        where T : unmanaged
-    {
-        string tempPath = filePath + ".v2.migrate.tmp";
-        string backupPath = filePath + ".v1.backup";
-        int migratedChunks = 0;
-        try
-        {
-            using (var source = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
-            using (var reader = new BinaryReader(source, System.Text.Encoding.UTF8, leaveOpen: true))
-            {
-                if (source.Length < WorldLayerFileHeader.HeaderSize)
-                {
-                    throw new InvalidDataException($"Map file '{filePath}' is not a compatible v1 map.");
-                }
-
-                int width = reader.ReadInt32();
-                int height = reader.ReadInt32();
-                int storedChunkSize = reader.ReadInt32();
-                int version = reader.ReadInt32();
-                if (version != WorldLayerFileHeader.LegacyRLEFormatVersion)
-                {
-                    throw new InvalidDataException($"Map file '{filePath}' is not a v1 RLE map.");
-                }
-
-                if (width != expectedWidth || height != expectedHeight || storedChunkSize != chunkSize)
-                {
-                    return -1;
-                }
-
-                int chunkCount = checked(expectedWidth * expectedHeight);
-                long tableEnd = checked(WorldLayerFileHeader.HeaderSize + (long)chunkCount * sizeof(long));
-                if (source.Length < tableEnd)
-                {
-                    throw new InvalidDataException($"Map file '{filePath}' has a truncated offset table.");
-                }
-
-                long[] oldOffsets = new long[chunkCount];
-                WorldLayerFileHeader.ReadExactly(source, MemoryMarshal.AsBytes(oldOffsets.AsSpan()));
-                foreach (long oldOffset in oldOffsets)
-                {
-                    if (oldOffset != -1 && (oldOffset < tableEnd || oldOffset >= source.Length))
-                    {
-                        throw new InvalidDataException($"Map file '{filePath}' contains an invalid chunk offset.");
-                    }
-                }
-
-                using var destination = new FileStream(tempPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
-                long[] newOffsets = new long[chunkCount];
-                WorldLayerFileHeader.WriteHeader(destination, expectedWidth, expectedHeight, chunkSize, newOffsets);
-                int chunkArea = checked(chunkSize * chunkSize);
-                T[] decoded = new T[chunkArea];
-                T[] verified = new T[chunkArea];
-                using var destinationWriter = new BinaryWriter(destination, System.Text.Encoding.UTF8, leaveOpen: true);
-                using var destinationReader = new BinaryReader(destination, System.Text.Encoding.UTF8, leaveOpen: true);
-                var comparer = EqualityComparer<T>.Default;
-                for (int index = 0; index < oldOffsets.Length; index++)
-                {
-                    long oldOffset = oldOffsets[index];
-                    if (oldOffset < 0)
-                    {
-                        continue;
-                    }
-
-                    source.Seek(oldOffset, SeekOrigin.Begin);
-                    try
-                    {
-                        WorldChunkRLECodec.DecodeChunk(reader, chunkArea, decoded);
-                    }
-                    catch (InvalidDataException)
-                    {
-                        Array.Clear(decoded, 0, decoded.Length);
-                    }
-
-                    destination.Seek(0, SeekOrigin.End);
-                    long newOffset = destination.Position;
-                    WorldChunkV2Codec.EncodeChunk(destinationWriter, decoded, chunkArea);
-                    newOffsets[index] = newOffset;
-                    WorldLayerFileHeader.WriteChunkOffset(destination, index, newOffset);
-                    destination.Seek(newOffset, SeekOrigin.Begin);
-                    WorldChunkV2Codec.DecodeChunk(destinationReader, chunkArea, verified);
-                    for (int cell = 0; cell < chunkArea; cell++)
-                    {
-                        if (!comparer.Equals(decoded[cell], verified[cell]))
-                        {
-                            throw new InvalidDataException($"Map chunk {index} failed v2 migration verification.");
-                        }
-                    }
-
-                    migratedChunks++;
-                }
-
-                destination.Flush(true);
-            }
-
-            if (!File.Exists(backupPath))
-            {
-                string backupTempPath = backupPath + ".tmp";
-                try
-                {
-                    using (var backupSource = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    using (var backup = new FileStream(backupTempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        backupSource.CopyTo(backup);
-                        backup.Flush(true);
-                    }
-
-                    File.Move(backupTempPath, backupPath);
-                }
-                finally
-                {
-                    if (File.Exists(backupTempPath))
-                    {
-                        File.Delete(backupTempPath);
-                    }
-                }
-            }
-
-            File.Replace(tempPath, filePath, destinationBackupFileName: null);
-            return migratedChunks;
-        }
-        finally
-        {
-            if (File.Exists(tempPath))
-            {
-                File.Delete(tempPath);
-            }
-        }
-    }
-
     private static int ValidateHeader<T>(ReadOnlySpan<byte> header, int rawLength)
         where T : unmanaged
     {
+        byte flags = header.Length > 5 ? header[5] : (byte)0;
         if (header.Length != FrameHeaderSize || header[0] != 'K' || header[1] != 'C' ||
-            header[2] != 'H' || header[3] != '2' || header[5] != 1 ||
+            header[2] != 'H' || header[3] != '2' ||
+            (flags & Crc32CFlag) == 0 || (flags & ~(Crc32CFlag | ChunkIndexBoundFlag)) != 0 ||
             BinaryPrimitives.ReadUInt16LittleEndian(header[6..]) != Unsafe.SizeOf<T>() ||
             BinaryPrimitives.ReadUInt32LittleEndian(header[12..]) != SchemaId<T>())
         {
@@ -583,7 +554,7 @@ internal static class WorldChunkV2Codec
             int count = BinaryPrimitives.ReadUInt16LittleEndian(payload[offset..]);
             offset += sizeof(ushort);
             T value = MemoryMarshal.Read<T>(payload.Slice(offset, elementSize));
-            visitor(chunkIndex, value, count);
+            InvokeVisitor(visitor, chunkIndex, value, count);
             offset += elementSize;
         }
     }
@@ -665,7 +636,7 @@ internal static class WorldChunkV2Codec
         Span<byte> valueBytes = stackalloc byte[1];
         valueBytes[0] = value;
         T typed = MemoryMarshal.Read<T>(valueBytes);
-        visitor(chunkIndex, typed, count);
+        InvokeVisitor(visitor, chunkIndex, typed, count);
     }
 
     private static void VisitRawRuns<T>(ReadOnlySpan<byte> raw, int chunkArea, int chunkIndex, Action<int, T, int> visitor)
@@ -683,8 +654,20 @@ internal static class WorldChunkV2Codec
                 end++;
             }
 
-            visitor(chunkIndex, value, end - start);
+            InvokeVisitor(visitor, chunkIndex, value, end - start);
             start = end;
+        }
+    }
+
+    private static void InvokeVisitor<T>(Action<int, T, int> visitor, int chunkIndex, T value, int count)
+    {
+        try
+        {
+            visitor(chunkIndex, value, count);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new VisitorCallbackException(exception);
         }
     }
 
@@ -695,14 +678,15 @@ internal static class WorldChunkV2Codec
             return 0;
         }
 
-        int value = 0;
-        for (int bit = 0; bit < bitCount; bit++)
+        int byteIndex = bitPosition >> 3;
+        int bitOffset = bitPosition & 7;
+        uint window = source[byteIndex];
+        if (byteIndex + 1 < source.Length)
         {
-            int position = bitPosition + bit;
-            value |= ((source[position >> 3] >> (position & 7)) & 1) << bit;
+            window |= (uint)source[byteIndex + 1] << 8;
         }
 
-        return value;
+        return (int)((window >> bitOffset) & ((1u << bitCount) - 1));
     }
 
     private static int BitsRequired(int value)
@@ -717,10 +701,28 @@ internal static class WorldChunkV2Codec
         return bits;
     }
 
-    private static void VerifyChecksum(ReadOnlySpan<byte> header, ReadOnlySpan<byte> payload)
+    private static void VerifyChecksum(ReadOnlySpan<byte> header, ReadOnlySpan<byte> payload, int? chunkIndex)
     {
         uint expected = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
         uint crc = UpdateCrc32C(uint.MaxValue, header[..16]);
+        bool isChunkIndexBound = (header[5] & ChunkIndexBoundFlag) != 0;
+        if (chunkIndex.HasValue && !isChunkIndexBound)
+        {
+            throw new InvalidDataException("Current world chunk frame is not bound to its chunk index.");
+        }
+
+        if (isChunkIndexBound)
+        {
+            if (!chunkIndex.HasValue)
+            {
+                throw new InvalidDataException("World chunk checksum requires its chunk index.");
+            }
+
+            Span<byte> chunkIndexBytes = stackalloc byte[sizeof(int)];
+            BinaryPrimitives.WriteInt32LittleEndian(chunkIndexBytes, chunkIndex.Value);
+            crc = UpdateCrc32C(crc, chunkIndexBytes);
+        }
+
         crc = UpdateCrc32C(crc, payload);
         if (~crc != expected)
         {

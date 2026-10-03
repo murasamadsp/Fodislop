@@ -27,6 +27,8 @@ internal sealed class ClientConfigLoader
     private const int BloomStyleSchemaVersion = 35;
     private const int KeyBindingsSchemaVersion = 36;
     private const int AggressionKeySchemaVersion = 37;
+    private const int HdrSwitchPendingSchemaVersion = 38;
+    private const int PeakBrightnessFromDisplaySchemaVersion = 39;
 
     private readonly ClientConfigRepository _repository;
     private readonly ClientConfigValidator _validator;
@@ -231,6 +233,22 @@ internal sealed class ClientConfigLoader
         if (schema == KeyBindingsSchemaVersion)
         {
             schema = AggressionKeySchemaVersion;
+        }
+
+        // 37 -> 38: DisplaySettings.HDRSwitchPending. Existing schema-37
+        // files predate the safe-start marker; FromJsonOverwrite leaves the
+        // default false when the field is absent and preserves it when present.
+        if (schema == AggressionKeySchemaVersion)
+        {
+            schema = HdrSwitchPendingSchemaVersion;
+        }
+
+        // 38 -> 39: DisplaySettings.PeakBrightnessFromDisplay. Поле аддитивное:
+        // FromJsonOverwrite оставляет дефолт true, и сохранённый пик заменяется
+        // пиком дисплея — до этой схемы автоопределения не было вовсе.
+        if (schema == HdrSwitchPendingSchemaVersion)
+        {
+            schema = PeakBrightnessFromDisplaySchemaVersion;
         }
 
         config.SchemaVersion = schema;

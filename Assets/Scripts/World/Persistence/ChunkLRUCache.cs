@@ -137,20 +137,33 @@ public sealed class ChunkLRUCache<T>
     /// write to a detached chunk must go through <see cref="PrepareForWrite"/>
     /// so the writer keeps a stable array without cloning every chunk here.
     /// </summary>
-    public List<(int Index, T[] Chunk)> DetachDirtySnapshot()
+    public List<(int Index, T[] Chunk)> DetachDirtySnapshot(bool includeDetachedSnapshots = false)
     {
-        if (_dirtyChunks.Count == 0)
+        if (_dirtyChunks.Count == 0 && (!includeDetachedSnapshots || _detachedDirtyChunks.Count == 0))
         {
             return s_emptySnapshot;
         }
 
-        var snapshot = new List<(int Index, T[] Chunk)>(_dirtyChunks.Count);
+        int capacity = _dirtyChunks.Count +
+                       (includeDetachedSnapshots ? _detachedDirtyChunks.Count : 0);
+        var snapshot = new List<(int Index, T[] Chunk)>(capacity);
         foreach (int index in _dirtyChunks)
         {
             if (_loadedChunks.TryGetValue(index, out T[]? chunk) && chunk != null)
             {
                 snapshot.Add((index, chunk));
                 _detachedDirtyChunks[index] = chunk;
+            }
+        }
+
+        if (includeDetachedSnapshots)
+        {
+            foreach (KeyValuePair<int, T[]> detachedChunk in _detachedDirtyChunks)
+            {
+                if (!_dirtyChunks.Contains(detachedChunk.Key))
+                {
+                    snapshot.Add((detachedChunk.Key, detachedChunk.Value));
+                }
             }
         }
 

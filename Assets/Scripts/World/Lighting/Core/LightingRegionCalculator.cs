@@ -49,12 +49,32 @@ public static class LightingRegionCalculator
             worldY <= stableRegion.y + stableRegion.w;
     }
 
+    /// <summary>Кадр максимального отдаления в клетках — по нему меряется регион.</summary>
+    ///
+    /// Террейн уже держит окно на этот кадр (TerrainViewportCalculator). Регион
+    /// света от текущего зума рос рекордами отдаления, и каждый рост пересоздавал
+    /// все ресурсы и запускал полный статический расчёт с AO целиком — провис
+    /// около секунды на колесе мыши. Зум внутри контракта камеры размер не
+    /// меняет; меняет только соотношение сторон окна.
+    public static Vector2Int ResolveSizingViewport(
+        float orthographicSize,
+        float aspect,
+        float maximumOrthographicSize,
+        float cellSize)
+    {
+        float sizingOrthographicSize = Mathf.Max(orthographicSize, maximumOrthographicSize);
+        return new Vector2Int(
+            Mathf.CeilToInt(sizingOrthographicSize * 2f * aspect / cellSize),
+            Mathf.CeilToInt(sizingOrthographicSize * 2f / cellSize));
+    }
+
     public static Vector4 GetStableLightingRegion(
         int visibleMinX,
         int visibleMinY,
         int visibleWidth,
         int visibleHeight,
-        Vector4 lastVisibleRegion)
+        Vector4 lastVisibleRegion,
+        Vector2Int sizingViewport = default)
     {
         if (!float.IsNaN(lastVisibleRegion.x))
         {
@@ -73,17 +93,22 @@ public static class LightingRegionCalculator
             }
         }
 
+        // Размер зависит только от кадра максимального отдаления (или от
+        // текущего, если он больше) и padding. Регион встаёт по центру этого
+        // кадра вокруг текущего: отдаление от центра остаётся внутри и не
+        // перепривязывает поле. Origin не привязан к искусственной сетке:
+        // перепривязка происходит только когда viewport действительно вышел
+        // за текущее стабильное окно.
+        int sizingWidth = Mathf.Max(visibleWidth, sizingViewport.x);
+        int sizingHeight = Mathf.Max(visibleHeight, sizingViewport.y);
         int paddedMinX = s_regionPolicy.AlignOrigin(
-            visibleMinX - LightingRegionPaddingCells);
+            visibleMinX - ((sizingWidth - visibleWidth) / 2) - LightingRegionPaddingCells);
         int paddedMinY = s_regionPolicy.AlignOrigin(
-            visibleMinY - LightingRegionPaddingCells);
+            visibleMinY - ((sizingHeight - visibleHeight) / 2) - LightingRegionPaddingCells);
 
-        // Размер зависит только от viewport и padding. Origin не привязан к
-        // искусственной сетке: перепривязка происходит только когда viewport
-        // действительно вышел за текущее стабильное окно.
         int alignmentSlack = Mathf.Max(0, s_regionPolicy.AllocationQuantumCells - 1);
-        int requiredWidth = visibleWidth + (LightingRegionPaddingCells * 2) + alignmentSlack;
-        int requiredHeight = visibleHeight + (LightingRegionPaddingCells * 2) + alignmentSlack;
+        int requiredWidth = sizingWidth + (LightingRegionPaddingCells * 2) + alignmentSlack;
+        int requiredHeight = sizingHeight + (LightingRegionPaddingCells * 2) + alignmentSlack;
         // Lighting pays for the whole field on every static solve. The
         // viewport padding already provides a stable window; adding another
         // allocation quantum here increases a single solve quadratically.

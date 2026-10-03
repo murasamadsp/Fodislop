@@ -6,6 +6,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kern.Persistence;
+using MinesServer.Data;
 using MinesServer.Networking.Connection.Client;
 using NUnit.Framework;
 using UnityEngine.TestTools;
@@ -69,6 +71,25 @@ public sealed class DummyWorldMapArchiveTests
 
         Assert.That(File.ReadAllBytes(map), Is.EqualTo(ValidMap()));
         Assert.That(DummyWorldMapArchive.IsCacheCurrent(map, "v1"), Is.False);
+    }
+
+    [Test]
+    public void LocalStreamingMap_IsCopiedBeforeMigrationAndMigratedCacheIsReused()
+    {
+        string source = Path.Combine(_root, "StreamingAssets", $"{World}_cells.mapb");
+        byte[] sourceBytes = ValidMap();
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        File.WriteAllBytes(source, sourceBytes);
+
+        string cache = DummyWorldMapArchive.CopyLocalMapToCache(source, CacheDirectory, World);
+        WorldLayer<CellType>.MigrateLegacyFileIfRequired(cache, 2, 3, 32);
+        string reusedCache = DummyWorldMapArchive.CopyLocalMapToCache(source, CacheDirectory, World);
+
+        Assert.That(cache, Is.Not.EqualTo(source));
+        Assert.That(reusedCache, Is.EqualTo(cache));
+        Assert.That(File.ReadAllBytes(source), Is.EqualTo(sourceBytes));
+        Assert.That(ReadFormatVersion(source), Is.EqualTo(WorldLayerFileHeader.LegacyRLEFormatVersion));
+        Assert.That(ReadFormatVersion(cache), Is.EqualTo(WorldLayerFileHeader.CurrentFormatVersion));
     }
 
     [Test]
@@ -139,6 +160,82 @@ public sealed class DummyWorldMapArchiveTests
         Assert.That(DummyWorldMapArchive.HasValidHeader(truncated), Is.False);
     }
 
+    [Test]
+    public void ReadDimensions_RejectsChunkSizeDifferentFromRuntimeFormat()
+    {
+        string map = Path.Combine(_root, "wrong_chunk_size.mapb");
+        using (var stream = File.Create(map))
+        using (var writer = new BinaryWriter(stream))
+        {
+            writer.Write(2);
+            writer.Write(3);
+            writer.Write(16);
+            writer.Write(WorldLayerFileHeader.LegacyRLEFormatVersion);
+            for (int index = 0; index < 6; index++)
+            {
+                writer.Write(-1L);
+            }
+        }
+
+        Assert.Throws<InvalidDataException>(() => DummyWorldMapArchive.ReadDimensions(map));
+    }
+
+    [Test]
+    public void ReadDimensions_RejectsTruncatedOrInvalidOffsetTable()
+    {
+        string truncated = Path.Combine(_root, "truncated_offsets.mapb");
+        using (var stream = File.Create(truncated))
+        using (var writer = new BinaryWriter(stream))
+        {
+            writer.Write(2);
+            writer.Write(3);
+            writer.Write(32);
+            writer.Write(WorldLayerFileHeader.CurrentFormatVersion);
+            for (int index = 0; index < 5; index++)
+            {
+                writer.Write(-1L);
+            }
+        }
+
+        string invalid = Path.Combine(_root, "invalid_offset.mapb");
+        using (var stream = File.Create(invalid))
+        using (var writer = new BinaryWriter(stream))
+        {
+            writer.Write(2);
+            writer.Write(3);
+            writer.Write(32);
+            writer.Write(WorldLayerFileHeader.CurrentFormatVersion);
+            writer.Write(0L);
+            for (int index = 1; index < 6; index++)
+            {
+                writer.Write(-1L);
+            }
+        }
+
+        Assert.Throws<InvalidDataException>(() => DummyWorldMapArchive.ReadDimensions(truncated));
+        Assert.Throws<InvalidDataException>(() => DummyWorldMapArchive.ReadDimensions(invalid));
+    }
+
+    [TestCase(2048, 1, 32)]
+    [TestCase(int.MaxValue, 1, 1024)]
+    public void ReadDimensions_RejectsDimensionsThatWorldInitPacketCannotRepresent(
+        int widthChunks,
+        int heightChunks,
+        int chunkSize)
+    {
+        string map = Path.Combine(_root, "oversized.mapb");
+        using (var stream = File.Create(map))
+        using (var writer = new BinaryWriter(stream))
+        {
+            writer.Write(widthChunks);
+            writer.Write(heightChunks);
+            writer.Write(chunkSize);
+            writer.Write(0);
+        }
+
+        Assert.Throws<InvalidDataException>(() => DummyWorldMapArchive.ReadDimensions(map));
+    }
+
     [UnityTest]
     public IEnumerator FailedPreparation_IsNotCached() => UniTask.ToCoroutine(async () =>
     {
@@ -171,6 +268,12 @@ public sealed class DummyWorldMapArchiveTests
 
     private static byte[] Marker => [1, 2, 3];
 
+    private static int ReadFormatVersion(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return WorldLayerFileHeader.TryReadFormatVersion(stream) ?? -1;
+    }
+
     private static byte[] ValidMap()
     {
         using var stream = new MemoryStream();
@@ -179,8 +282,11 @@ public sealed class DummyWorldMapArchiveTests
             writer.Write(2);
             writer.Write(3);
             writer.Write(32);
-            writer.Write(0);
-            writer.Write(new byte[64]);
+            writer.Write(WorldLayerFileHeader.LegacyRLEFormatVersion);
+            for (int index = 0; index < 6; index++)
+            {
+                writer.Write(-1L);
+            }
         }
 
         return stream.ToArray();

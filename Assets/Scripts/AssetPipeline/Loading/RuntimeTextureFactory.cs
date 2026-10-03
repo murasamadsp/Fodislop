@@ -60,6 +60,24 @@ public static class RuntimeTextureFactory
             mipChain: false);
     }
 
+    public static Texture2D CreateRGBA32MipChain(
+        int width,
+        int height,
+        string name,
+        RuntimeTextureColorSpace colorSpace,
+        FilterMode filterMode,
+        TextureWrapMode wrapMode)
+    {
+        return CreateRGBA32(
+            width,
+            height,
+            name,
+            colorSpace,
+            filterMode,
+            wrapMode,
+            mipChain: true);
+    }
+
     private static Texture2D CreateRGBA32(
         int width,
         int height,

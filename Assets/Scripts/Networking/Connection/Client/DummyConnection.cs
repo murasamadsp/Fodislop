@@ -150,13 +150,22 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             clock,
             SendPacket,
             _mockBotId);
+        _blockSpawner = new DummyBlockSpawner(
+            operations,
+            clock,
+            _worldState,
+            _playerState,
+            SendPacket,
+            LoopAlive,
+            type => _textureStorage.HasTexture($"cells/{(int)type}"));
         _windowResponder = new DummyWindowResponder(
             SendPacket,
             _buffManager,
             _inventoryResponder,
             _teleportManager,
             _clanManager,
-            _missionRunner);
+            _missionRunner,
+            _blockSpawner);
         _worldStartup = new DummyWorldStartupResponder(
             operations,
             clock,
@@ -169,7 +178,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _missionRunner,
             _teleportPositions,
             SendPacket,
-            LoopAlive);
+            LoopAlive,
+            _blockSpawner);
     }
 
     private string PlayerName => _authSession.PlayerName;
@@ -198,6 +208,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     private readonly DummyChatResponder _chatResponder;
     private readonly DummyAdminCommands _adminCommands;
     private readonly DummyClanManager _clanManager;
+    private readonly DummyBlockSpawner _blockSpawner;
     private readonly DummyPathFinder _pathFinder;
     private readonly DummyMovementResponder _movementResponder;
     private readonly DummyGameplayActionResponder _actionResponder;

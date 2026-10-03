@@ -246,4 +246,24 @@ public class ChunkLRUCacheTests
 
         Assert.IsTrue(cache.IsDirty(1));
     }
+
+    [Test]
+    public void DetachingForDispose_IncludesSnapshotAwaitingMainThreadCompletion()
+    {
+        var cache = new ChunkLRUCache<int>(maxCapacity: 4, allowDirtyEviction: false);
+        cache.AddOrUpdate(1, [11]);
+        cache.MarkDirty(1);
+        List<(int Index, int[] Chunk)> inFlight = cache.DetachDirtySnapshot();
+
+        List<(int Index, int[] Chunk)> finalSnapshot = cache.DetachDirtySnapshot(includeDetachedSnapshots: true);
+
+        Assert.That(finalSnapshot, Has.Count.EqualTo(1));
+        Assert.That(finalSnapshot[0].Index, Is.EqualTo(1));
+        Assert.That(finalSnapshot[0].Chunk, Is.SameAs(inFlight[0].Chunk));
+
+        cache.CompleteDirtySnapshot(finalSnapshot);
+        cache.CompleteDirtySnapshot(inFlight);
+
+        Assert.That(cache.DirtyCount, Is.Zero);
+    }
 }

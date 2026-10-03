@@ -254,9 +254,12 @@ internal sealed class PauseMenuDisplayTabBuilder
         void UpdateHDRSlidersState()
         {
             bool HDROn = HDROutput.Active;
+            bool nextStart = HDROutput.AppliesAtNextStart;
             HDRToggle.SetEnabled(HDROutput.CanSwitch);
-            HDRToggle.SetValueWithoutNotify(HDROn);
-            HDRStatus.text = _loc.Get(HDROutput.Status switch
+            HDRToggle.SetValueWithoutNotify(nextStart ? HDROutput.Enabled : HDROn);
+            HDRStatus.text = _loc.Get(nextStart
+                ? HDROutput.Enabled ? "settings.display.hdr_next_start" : "settings.display.hdr_inactive"
+                : HDROutput.Status switch
             {
                 HDROutputController.Phase.Pending => "settings.display.hdr_pending",
                 HDROutputController.Phase.Retrying => "settings.display.hdr_retrying",
@@ -294,6 +297,14 @@ internal sealed class PauseMenuDisplayTabBuilder
     {
         bool previous = !enabled;
         HDROutput.ApplyRequestResult result = _displayManager.SetHDREnabled(enabled);
+
+        // Выбор лёг в стартовый режим, экран сейчас не меняется: спрашивать
+        // «оставить ли режим» не о чем, и метка безопасного старта не нужна.
+        if (result == HDROutput.ApplyRequestResult.AppliesAtNextStart)
+        {
+            _displayManager.ConfirmHDRSwitchSeen();
+            return;
+        }
 
         // Спрашивать есть смысл только о том, что система приняла. Отказ
         // виден по строке состояния, и окно поверх него только мешало бы.

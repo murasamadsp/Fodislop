@@ -44,8 +44,8 @@ internal sealed class MapTextureController
         TexWidth = texW;
         TexHeight = texH;
 
-        _lastPanelWidth = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 1920;
-        _lastPanelHeight = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 1080;
+        _lastPanelWidth = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 0;
+        _lastPanelHeight = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 0;
 
         DestroyTexture();
 
@@ -53,7 +53,7 @@ internal sealed class MapTextureController
         {
             name = "WorldMapRenderTexture",
             enableRandomWrite = true,
-            filterMode = FilterMode.Bilinear,
+            filterMode = FilterMode.Point,
             wrapMode = TextureWrapMode.Clamp,
         };
         MapTexture.Create();

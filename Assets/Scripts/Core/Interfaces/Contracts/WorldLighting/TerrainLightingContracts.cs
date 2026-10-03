@@ -33,7 +33,8 @@ public readonly record struct LightingMaterialEmissionContext(
 /// <summary>
 /// Single AO occupancy target borrowed for one call; WorldRect is a positive extent in Unity world units.
 /// Lighting binds and clears the target. Contributors must preserve its contents and draw only
-/// inside RasterRect, a half-open rectangle in bottom-left-origin render-target pixels.
+/// inside RasterRect, a half-open rectangle in render-target pixels using the target's own row
+/// origin (see <see cref="LightingFieldOrientation"/>).
 /// Null RasterRect denotes the complete target. Handles are borrowed for this render phase only.
 /// </summary>
 public readonly record struct LightingAmbientOcclusionContext(

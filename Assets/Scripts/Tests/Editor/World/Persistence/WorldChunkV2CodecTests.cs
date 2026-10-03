@@ -33,14 +33,14 @@ public sealed class WorldChunkV2CodecTests
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            WorldChunkV2Codec.EncodeChunk(writer, expected, area);
+            WorldChunkV2Codec.EncodeChunk(writer, expected, area, chunkIndex: 0);
         }
 
         memory.Position = 0;
         byte[] actual;
         using (var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            actual = WorldChunkV2Codec.DecodeChunk<byte>(reader, area);
+            actual = WorldChunkV2Codec.DecodeChunk<byte>(reader, area, chunkIndex: 0);
         }
 
         CollectionAssert.AreEqual(expected, actual);
@@ -53,7 +53,7 @@ public sealed class WorldChunkV2CodecTests
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            WorldChunkV2Codec.EncodeChunk(writer, expected, expected.Length);
+            WorldChunkV2Codec.EncodeChunk(writer, expected, expected.Length, chunkIndex: 12);
         }
 
         memory.Position = 0;
@@ -85,7 +85,7 @@ public sealed class WorldChunkV2CodecTests
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            WorldChunkV2Codec.EncodeChunk(writer, expected, area);
+            WorldChunkV2Codec.EncodeChunk(writer, expected, area, chunkIndex: 4);
         }
 
         Assert.AreEqual(3, memory.GetBuffer()[4]);
@@ -112,7 +112,7 @@ public sealed class WorldChunkV2CodecTests
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            WorldChunkV2Codec.EncodeChunk(writer, new byte[] { 1, 2, 3, 4 }, 4);
+            WorldChunkV2Codec.EncodeChunk(writer, new byte[] { 1, 2, 3, 4 }, 4, chunkIndex: 0);
         }
 
         byte[] bytes = memory.ToArray();
@@ -121,7 +121,7 @@ public sealed class WorldChunkV2CodecTests
         memory.Write(bytes);
         memory.Position = 0;
         using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
-        Assert.Throws<InvalidDataException>(() => WorldChunkV2Codec.DecodeChunk<byte>(reader, 4));
+        Assert.Throws<InvalidDataException>(() => WorldChunkV2Codec.DecodeChunk<byte>(reader, 4, chunkIndex: 0));
 
         memory.Position = 0;
         int visitorCalls = 0;
@@ -132,7 +132,74 @@ public sealed class WorldChunkV2CodecTests
     }
 
     [Test]
-    public void MigrateV1ToV2_RewritesPayloadAndPreservesBackup()
+    public void IndexedFrame_RejectsBeingAddressedAsAnotherChunk()
+    {
+        byte[] expected = [4, 4, 7, 9];
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            WorldChunkV2Codec.EncodeChunk(writer, expected, expected.Length, chunkIndex: 12);
+        }
+
+        memory.Position = 0;
+        using (var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            Assert.Throws<InvalidDataException>(() =>
+                WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length, chunkIndex: 13));
+        }
+
+        memory.Position = 0;
+        using (var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            CollectionAssert.AreEqual(
+                expected,
+                WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length, chunkIndex: 12));
+        }
+
+        memory.Position = 0;
+        int visitorCalls = 0;
+        using var visitReader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+        Assert.Throws<InvalidDataException>(() => WorldChunkV2Codec.VisitChunkRuns<byte>(
+            visitReader,
+            expected.Length,
+            13,
+            (_, _, _) => visitorCalls++));
+        Assert.AreEqual(0, visitorCalls);
+    }
+
+    [Test]
+    public void LegacyV2Frame_IsRejectedByCurrentIndexedReader()
+    {
+        byte[] expected = [4, 4, 7, 9];
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            WorldChunkV2Codec.EncodeLegacyV2Chunk(writer, expected, expected.Length);
+        }
+
+        memory.Position = 0;
+        using (var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            Assert.Throws<InvalidDataException>(() =>
+                WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length, chunkIndex: 0));
+        }
+
+        memory.Position = 0;
+        using var legacyReader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+        CollectionAssert.AreEqual(expected, WorldChunkV2Codec.DecodeChunk<byte>(legacyReader, expected.Length));
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void DecodeChunk_NonPositiveArea_ThrowsArgumentOutOfRange(int chunkArea)
+    {
+        using var reader = new BinaryReader(new MemoryStream());
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WorldChunkV2Codec.DecodeChunk<byte>(reader, chunkArea));
+    }
+
+    [Test]
+    public void MigrateV1ToCurrent_RewritesPayloadAndPreservesBackup()
     {
         string filePath = Path.Combine(Path.GetTempPath(), "kern_v1_to_v2_" + Guid.NewGuid().ToString("N") + ".map");
         const int width = 1;
@@ -154,18 +221,18 @@ public sealed class WorldChunkV2CodecTests
                 stream.Flush(true);
             }
 
-            Assert.AreEqual(1, WorldChunkV2Codec.MigrateV1ToV2<byte>(filePath, width, height, chunkSize));
+            Assert.AreEqual(1, WorldLayerFileMigrator.MigrateV1ToCurrent<byte>(filePath, width, height, chunkSize));
             Assert.IsTrue(File.Exists(filePath + ".v1.backup"));
             using var migrated = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             long[] offsetsAfter = new long[1];
             Assert.IsTrue(WorldLayerFileHeader.TryReadHeader(migrated, width, height, chunkSize, offsetsAfter));
             migrated.Position = offsetsAfter[0];
             using var reader = new BinaryReader(migrated, System.Text.Encoding.UTF8, leaveOpen: true);
-            CollectionAssert.AreEqual(expected, WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length));
+            CollectionAssert.AreEqual(expected, WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length, chunkIndex: 0));
         }
         finally
         {
-            foreach (string path in new[] { filePath, filePath + ".v1.backup", filePath + ".v2.migrate.tmp" })
+            foreach (string path in new[] { filePath, filePath + ".v1.backup", filePath + ".v3.migrate.tmp" })
             {
                 if (File.Exists(path))
                 {
@@ -176,7 +243,122 @@ public sealed class WorldChunkV2CodecTests
     }
 
     [Test]
-    public void MigrateV1ToV2_ReplacesMalformedChunkWithZeroes()
+    public void MigrateV2ToCurrent_BindsFramesToTheirChunkIndices()
+    {
+        string filePath = Path.Combine(Path.GetTempPath(), "kern_v2_to_v3_" + Guid.NewGuid().ToString("N") + ".map");
+        const int width = 1;
+        const int height = 1;
+        const int chunkSize = 2;
+        byte[] expected = [1, 1, 2, 3];
+        try
+        {
+            using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+            using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                writer.Write(width);
+                writer.Write(height);
+                writer.Write(chunkSize);
+                writer.Write(WorldLayerFileHeader.LegacyFramedFormatVersion);
+                writer.Write(24L);
+                stream.Position = 24;
+                WorldChunkV2Codec.EncodeLegacyV2Chunk(writer, expected, expected.Length);
+                writer.Flush();
+                stream.Flush(true);
+            }
+
+            Assert.AreEqual(1, WorldLayerFileMigrator.MigrateV2ToCurrent<byte>(filePath, width, height, chunkSize));
+            Assert.IsTrue(File.Exists(filePath + ".v2.backup"));
+            using var migrated = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            long[] offsets = new long[1];
+            Assert.IsTrue(WorldLayerFileHeader.TryReadHeader(migrated, width, height, chunkSize, offsets));
+            Assert.AreEqual(WorldLayerFileHeader.CurrentFormatVersion, WorldLayerFileHeader.TryReadFormatVersion(migrated));
+            migrated.Position = offsets[0];
+            using var reader = new BinaryReader(migrated, System.Text.Encoding.UTF8, leaveOpen: true);
+            CollectionAssert.AreEqual(expected, WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length, 0));
+        }
+        finally
+        {
+            foreach (string path in new[] { filePath, filePath + ".v2.backup", filePath + ".v3.migrate.tmp" })
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+    }
+
+    [TestCase(WorldLayerFileHeader.LegacyRLEFormatVersion)]
+    [TestCase(WorldLayerFileHeader.LegacyFramedFormatVersion)]
+    public void LegacyMigration_DuplicateChunkOffsetsProduceZeroChunks(int formatVersion)
+    {
+        string filePath = Path.Combine(Path.GetTempPath(), "kern_duplicate_offsets_" + Guid.NewGuid().ToString("N") + ".map");
+        const int width = 2;
+        const int height = 1;
+        const int chunkSize = 2;
+        const int chunkArea = chunkSize * chunkSize;
+        const long sharedChunkOffset = WorldLayerFileHeader.HeaderSize + (width * sizeof(long));
+        byte[] duplicatedCells = [7, 7, 7, 7];
+        try
+        {
+            using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+            using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                writer.Write(width);
+                writer.Write(height);
+                writer.Write(chunkSize);
+                writer.Write(formatVersion);
+                writer.Write(sharedChunkOffset);
+                writer.Write(sharedChunkOffset);
+                stream.Position = sharedChunkOffset;
+                if (formatVersion == WorldLayerFileHeader.LegacyRLEFormatVersion)
+                {
+                    WorldChunkRLECodec.EncodeChunk(writer, duplicatedCells, chunkArea);
+                }
+                else
+                {
+                    WorldChunkV2Codec.EncodeLegacyV2Chunk(writer, duplicatedCells, chunkArea);
+                }
+
+                writer.Flush();
+                stream.Flush(true);
+            }
+
+            int migratedChunks = formatVersion == WorldLayerFileHeader.LegacyRLEFormatVersion
+                ? WorldLayerFileMigrator.MigrateV1ToCurrent<byte>(filePath, width, height, chunkSize)
+                : WorldLayerFileMigrator.MigrateV2ToCurrent<byte>(filePath, width, height, chunkSize);
+            Assert.That(migratedChunks, Is.EqualTo(2));
+
+            using var migrated = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            long[] offsets = new long[width * height];
+            Assert.That(WorldLayerFileHeader.TryReadHeader(migrated, width, height, chunkSize, offsets), Is.True);
+            using var reader = new BinaryReader(migrated, System.Text.Encoding.UTF8, leaveOpen: true);
+            for (int chunkIndex = 0; chunkIndex < offsets.Length; chunkIndex++)
+            {
+                migrated.Position = offsets[chunkIndex];
+                CollectionAssert.AreEqual(
+                    new byte[chunkArea],
+                    WorldChunkV2Codec.DecodeChunk<byte>(reader, chunkArea, chunkIndex));
+            }
+        }
+        finally
+        {
+            string backupSuffix = formatVersion == WorldLayerFileHeader.LegacyRLEFormatVersion
+                ? ".v1.backup"
+                : ".v2.backup";
+            foreach (string path in new[] { filePath, filePath + backupSuffix, filePath + ".v3.migrate.tmp" })
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+    }
+
+    [TestCase(0)]
+    [TestCase(5)]
+    public void MigrateV1ToCurrent_ReplacesMalformedChunkWithZeroes(int malformedRunCount)
     {
         string filePath = Path.Combine(Path.GetTempPath(), "kern_v1_corrupt_" + Guid.NewGuid().ToString("N") + ".map");
         const int chunkArea = 4;
@@ -191,22 +373,73 @@ public sealed class WorldChunkV2CodecTests
                 writer.Write(WorldLayerFileHeader.LegacyRLEFormatVersion);
                 writer.Write(24L);
                 stream.Position = 24;
-                writer.Write((ushort)0);
+                writer.Write((ushort)malformedRunCount);
                 writer.Write((byte)7);
                 writer.Flush();
             }
 
-            Assert.AreEqual(1, WorldChunkV2Codec.MigrateV1ToV2<byte>(filePath, 1, 1, 2));
+            Assert.AreEqual(1, WorldLayerFileMigrator.MigrateV1ToCurrent<byte>(filePath, 1, 1, 2));
             using var migrated = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             long[] offsets = new long[1];
             Assert.IsTrue(WorldLayerFileHeader.TryReadHeader(migrated, 1, 1, 2, offsets));
             migrated.Position = offsets[0];
             using var reader = new BinaryReader(migrated, System.Text.Encoding.UTF8, leaveOpen: true);
-            CollectionAssert.AreEqual(new byte[chunkArea], WorldChunkV2Codec.DecodeChunk<byte>(reader, chunkArea));
+            CollectionAssert.AreEqual(new byte[chunkArea], WorldChunkV2Codec.DecodeChunk<byte>(reader, chunkArea, chunkIndex: 0));
         }
         finally
         {
-            foreach (string path in new[] { filePath, filePath + ".v1.backup", filePath + ".v1.backup.tmp", filePath + ".v2.migrate.tmp" })
+            foreach (string path in new[] { filePath, filePath + ".v1.backup", filePath + ".v1.backup.tmp", filePath + ".v3.migrate.tmp" })
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public void MigrateV1ToCurrent_DoesNotDecodeAcrossTheNextStoredChunkOffset()
+    {
+        string filePath = Path.Combine(Path.GetTempPath(), "kern_v1_cross_chunk_" + Guid.NewGuid().ToString("N") + ".map");
+        const int chunkArea = 4;
+        const long firstChunkOffset = 32;
+        const long secondChunkOffset = 35;
+        try
+        {
+            using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+            using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                writer.Write(2);
+                writer.Write(1);
+                writer.Write(2);
+                writer.Write(WorldLayerFileHeader.LegacyRLEFormatVersion);
+                writer.Write(firstChunkOffset);
+                writer.Write(secondChunkOffset);
+                stream.Position = firstChunkOffset;
+                writer.Write((ushort)2);
+                writer.Write((byte)7);
+                stream.Position = secondChunkOffset;
+                WorldChunkRLECodec.EncodeChunk(writer, new byte[] { 9, 9, 9, 9 }, chunkArea);
+                writer.Flush();
+            }
+
+            Assert.AreEqual(2, WorldLayerFileMigrator.MigrateV1ToCurrent<byte>(filePath, 2, 1, 2));
+            using var migrated = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            long[] offsets = new long[2];
+            Assert.IsTrue(WorldLayerFileHeader.TryReadHeader(migrated, 2, 1, 2, offsets));
+            using var reader = new BinaryReader(migrated, System.Text.Encoding.UTF8, leaveOpen: true);
+
+            migrated.Position = offsets[0];
+            CollectionAssert.AreEqual(new byte[chunkArea], WorldChunkV2Codec.DecodeChunk<byte>(reader, chunkArea, chunkIndex: 0));
+            migrated.Position = offsets[1];
+            CollectionAssert.AreEqual(
+                new byte[] { 9, 9, 9, 9 },
+                WorldChunkV2Codec.DecodeChunk<byte>(reader, chunkArea, chunkIndex: 1));
+        }
+        finally
+        {
+            foreach (string path in new[] { filePath, filePath + ".v1.backup", filePath + ".v1.backup.tmp", filePath + ".v3.migrate.tmp" })
             {
                 if (File.Exists(path))
                 {

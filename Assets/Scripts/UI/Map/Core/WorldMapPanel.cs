@@ -21,8 +21,10 @@ internal sealed class WorldMapPanel : IDisposable
     private Button? _followButton;
     private Label? _status;
     private EventCallback<WheelEvent>? _wheelCallback;
+    private EventCallback<GeometryChangedEvent>? _geometryCallback;
     private Action _closeRequested = null!;
     private Action _followPlayer = null!;
+    private Action? _geometryChanged;
     private bool _bindingFailureReported;
     private float _lastMarkerLeft = float.MinValue;
     private float _lastMarkerTop = float.MinValue;
@@ -42,7 +44,8 @@ internal sealed class WorldMapPanel : IDisposable
         UIDocument? document,
         Action closeRequested,
         Action followPlayer,
-        EventCallback<WheelEvent> wheelCallback)
+        EventCallback<WheelEvent> wheelCallback,
+        Action? geometryChanged = null)
     {
         if (IsBound)
         {
@@ -103,6 +106,13 @@ internal sealed class WorldMapPanel : IDisposable
         _closeButton.clicked += _closeRequested;
         _followButton.clicked += _followPlayer;
         _wheelCallback = wheelCallback;
+        _geometryChanged = geometryChanged;
+        if (_geometryChanged != null)
+        {
+            _geometryCallback = _ => _geometryChanged();
+            _image.RegisterCallback(_geometryCallback);
+        }
+
         _bindingFailureReported = false;
         _document.rootVisualElement.RegisterCallback(
             _wheelCallback,
@@ -128,8 +138,7 @@ internal sealed class WorldMapPanel : IDisposable
 
     public void UpdatePreparationStatus(
         bool mipReady,
-        float cellsPerPixel,
-        int chunkSize,
+        bool mipRequired,
         bool failed,
         int progress,
         int total,
@@ -140,7 +149,7 @@ internal sealed class WorldMapPanel : IDisposable
             return;
         }
 
-        bool visible = !mipReady && cellsPerPixel >= chunkSize;
+        bool visible = !mipReady && mipRequired;
         _status.EnableInClassList("is-hidden", !visible);
         if (!visible)
         {
@@ -169,7 +178,7 @@ internal sealed class WorldMapPanel : IDisposable
             return;
         }
 
-        if (!blinkVisible)
+        if (!blinkVisible || (_image != null && (_image.layout.width <= 0f || _image.layout.height <= 0f)))
         {
             UIState.SetHidden(_playerMarker, true);
             return;
@@ -222,6 +231,12 @@ internal sealed class WorldMapPanel : IDisposable
 
     public void Dispose()
     {
+        if (_image != null && _geometryCallback != null)
+        {
+            _image.UnregisterCallback(_geometryCallback);
+            _geometryCallback = null;
+        }
+
         if (_document?.rootVisualElement != null && _wheelCallback != null)
         {
             _document.rootVisualElement.UnregisterCallback(

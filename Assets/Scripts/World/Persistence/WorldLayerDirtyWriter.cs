@@ -36,7 +36,8 @@ internal sealed class WorldLayerDirtyWriter<T>
         _chunkArea = chunkArea;
     }
 
-    public List<(int Index, T[] Chunk)> TakeSnapshot() => _cache.DetachDirtySnapshot();
+    public List<(int Index, T[] Chunk)> TakeSnapshot(bool includeDetachedSnapshots = false) =>
+        _cache.DetachDirtySnapshot(includeDetachedSnapshots);
 
     public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot) =>
         _cache.RestoreDirtySnapshot(snapshot);

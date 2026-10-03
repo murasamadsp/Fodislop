@@ -193,7 +193,11 @@ public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
 
         if (fileVersion == WorldLayerFileHeader.LegacyRLEFormatVersion)
         {
-            WorldChunkV2Codec.MigrateV1ToV2<T>(filePath, widthChunks, heightChunks, chunkSize);
+            WorldLayerFileMigrator.MigrateV1ToCurrent<T>(filePath, widthChunks, heightChunks, chunkSize);
+        }
+        else if (fileVersion == WorldLayerFileHeader.LegacyFramedFormatVersion)
+        {
+            WorldLayerFileMigrator.MigrateV2ToCurrent<T>(filePath, widthChunks, heightChunks, chunkSize);
         }
     }
 
@@ -350,6 +354,11 @@ public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
                 $"Region origin ({startX}, {startY}) is outside the world layer bounds {worldWidth}x{worldHeight}.");
         }
 
+        if (cellsOffset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(cellsOffset));
+        }
+
         long requiredCells = (long)cellsOffset + ((long)width * height);
         if (width <= 0 || height <= 0 || cells.Length < requiredCells)
         {
@@ -441,7 +450,8 @@ public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
 
     public void Flush(bool flushToDisk = false) => _dirtyWriter.Flush(flushToDisk);
 
-    public List<(int Index, T[] Chunk)> TakeDirtySnapshot() => _dirtyWriter.TakeSnapshot();
+    public List<(int Index, T[] Chunk)> TakeDirtySnapshot(bool includeDetachedSnapshots = false) =>
+        _dirtyWriter.TakeSnapshot(includeDetachedSnapshots);
 
     public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot) =>
         _dirtyWriter.RestoreDirty(snapshot);
@@ -507,6 +517,24 @@ public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
         {
             throw new IOException(
                 $"[WorldLayer] Failed to persist or close map file '{_filePath}'.",
+                disposeFailure);
+        }
+    }
+
+    internal void DisposeAfterDurableSnapshot()
+    {
+        if (_lifetime.Disposed)
+        {
+            return;
+        }
+
+        Exception? disposeFailure = _file.DisposeStreams();
+        _cache.Clear();
+        _loader.ClearLoadingState();
+        if (disposeFailure != null)
+        {
+            throw new IOException(
+                $"[WorldLayer] Failed to close map file '{_filePath}' after its durable snapshot was written.",
                 disposeFailure);
         }
     }

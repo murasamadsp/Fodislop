@@ -339,7 +339,8 @@ production AO draws to that rectangle. `ClearRenderTarget` is never used for
 partial clearing because Metal ignores scissor for attachment clears. The
 rectangle is the clipped union of changed world cells expanded by three cells
 (neighbour-dependent geometry plus displacement and contact support), mapped
-to bottom-left render-target pixels. Contributors receive the borrowed
+to render-target pixels using the target's own row origin from
+`LightingFieldOrientation`. Contributors receive the borrowed
 `LightingAmbientOcclusionContext.RasterRect` and must preserve existing contents.
 A dirty field before region activation, an unjournaled revision, contributor
 change, entering the mode, resource recreation or region movement requires a full

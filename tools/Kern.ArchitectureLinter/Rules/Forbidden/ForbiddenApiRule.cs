@@ -100,6 +100,7 @@ public sealed class ForbiddenApiRule : IRule
         ["Assets/Scripts/Tests/Editor/Core/ProductionSceneContractValidatorTests.cs"] = new[] { "new GameObject" },
         ["Assets/Scripts/Tests/Editor/Core/DisplayOutputProfileTests.cs"] = new[] { "new GameObject" },
         ["Assets/Scripts/Tests/Editor/Core/LocalPlayerStateFuzzTests.cs"] = new[] { "new GameObject" },
+        ["Assets/Scripts/Tests/Editor/Player/CameraFollowTests.cs"] = new[] { "new GameObject" },
     };
 
     public string Id => "KERN-FORBIDDEN-API";

@@ -38,8 +38,12 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
         RequestFullReset(TerrainLightingFullResetReason.WorldReplaced);
     }
 
+    // Сброс из-за текстуры — самый слабый: любой другой полный сброс его
+    // покрывает и не должен ждать вместе с ним.
     public void RequestFullReset(TerrainLightingFullResetReason reason) =>
-        _pendingFullReset ??= reason;
+        _pendingFullReset = _pendingFullReset is null or TerrainLightingFullResetReason.LightingVisibleTextureChanged
+            ? reason
+            : _pendingFullReset;
 
     public LightingTerrainRequirements ReadRequirements()
     {
@@ -65,14 +69,29 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
         return exchange != null && exchange.TryReadLightingOutput(out output);
     }
 
-    public void PublishCommittedChanges(ulong terrainContentRevision, IReadOnlyList<RectInt> changedRegions)
+    /// <param name="textureRefreshOutstanding">
+    /// Приехавшая текстура ещё не дошла до опубликованных клеток: тип ждёт
+    /// шага, шаг в работе или поставлен полный пересбор.
+    /// </param>
+    public void PublishCommittedChanges(
+        ulong terrainContentRevision,
+        IReadOnlyList<RectInt> changedRegions,
+        bool textureRefreshOutstanding)
     {
         if (exchange == null)
         {
             return;
         }
 
-        if (_pendingFullReset is TerrainLightingFullResetReason fullResetReason)
+        // Сброс из-за текстуры описывает клетки, которые её уже несут. Отданный
+        // в кадр прихода, он перестраивал поля и AO целиком по старым
+        // клеткам, а публикация шага с новой текстурой через кадр-два
+        // перестраивала всё ещё раз: два полных пересчёта подряд, первый
+        // впустую. Сброс уходит в кадре публикации этих клеток.
+        bool deferTextureReset =
+            _pendingFullReset == TerrainLightingFullResetReason.LightingVisibleTextureChanged &&
+            textureRefreshOutstanding;
+        if (!deferTextureReset && _pendingFullReset is TerrainLightingFullResetReason fullResetReason)
         {
             PublishTerrainChange(
                 terrainContentRevision,

@@ -80,6 +80,53 @@ public class LightingRegionCalculatorTests
         }
     }
 
+    // Регрессия: регион мерился текущим зумом и рос рекордами отдаления.
+    // Каждый рост пересоздавал ресурсы света и считал всё заново — провис
+    // около секунды на колесе мыши. Кадр 3420×1890, зум от середины до упора.
+    [Test]
+    public void ZoomingOutWithinCameraContractKeepsRegionSize()
+    {
+        const float aspect = 3420f / 1890f;
+        const float maximumOrthographicSize = 30f;
+        Vector4 previous = new(float.NaN, 0, 0, 0);
+        Vector4 first = default;
+        for (float orthographicSize = 16.5f; orthographicSize <= maximumOrthographicSize; orthographicSize += 0.5f)
+        {
+            int visibleWidth = Mathf.CeilToInt(orthographicSize * 2f * aspect);
+            int visibleHeight = Mathf.CeilToInt(orthographicSize * 2f);
+            Vector2Int sizing = LightingRegionCalculator.ResolveSizingViewport(
+                orthographicSize, aspect, maximumOrthographicSize, cellSize: 1f);
+            Vector4 next = LightingRegionCalculator.GetStableLightingRegion(
+                -visibleWidth / 2,
+                -visibleHeight / 2,
+                visibleWidth,
+                visibleHeight,
+                previous,
+                sizing);
+            if (float.IsNaN(previous.x))
+            {
+                first = next;
+            }
+
+            Assert.That(next, Is.EqualTo(first), $"orthographic size {orthographicSize}");
+            previous = next;
+        }
+
+        // Кадр на упоре: 109×60 клеток плюс по 16 клеток каймы с каждой
+        // стороны и квант 32 — 192×128, а не 128×128 середины зума.
+        Assert.That(first.z, Is.EqualTo(192f));
+        Assert.That(first.w, Is.EqualTo(128f));
+    }
+
+    [Test]
+    public void SizingViewportFollowsCameraBeyondMaximumZoom()
+    {
+        Vector2Int sizing = LightingRegionCalculator.ResolveSizingViewport(
+            orthographicSize: 40f, aspect: 2f, maximumOrthographicSize: 30f, cellSize: 1f);
+
+        Assert.That(sizing, Is.EqualTo(new Vector2Int(160, 80)));
+    }
+
     [Test]
     public void RegionDoesNotShrinkWhenViewportNeedsLessSpace()
     {

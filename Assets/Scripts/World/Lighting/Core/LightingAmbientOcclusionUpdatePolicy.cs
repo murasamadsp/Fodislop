@@ -6,7 +6,14 @@ using UnityEngine;
 
 namespace Kern.World.Lighting;
 
-/// <summary>Maps committed world-cell edits to bottom-left-origin AO raster pixels.</summary>
+/// <summary>Maps committed world-cell edits to AO render-target pixels.</summary>
+/// <remarks>
+/// A render target's row origin is device-dependent: Metal and Direct3D start
+/// at the top, OpenGL at the bottom. Callers pass the field's row order from
+/// <c>LightingFieldOrientation</c>, so the raster rectangle uses the same origin
+/// as the scissored draw and the rasterized clear. A wrong origin mirrors the
+/// region and the edited cells never leave the retained field.
+/// </remarks>
 internal static class LightingAmbientOcclusionUpdatePolicy
 {
     // A cell edit changes its one-cell neighbourhood. Displaced geometry extends
@@ -32,7 +39,8 @@ internal static class LightingAmbientOcclusionUpdatePolicy
     public static RectInt ResolveRasterRect(
         IReadOnlyList<RectInt> dirtyRegions,
         RectInt fieldWorldCells,
-        int pixelsPerCell)
+        int pixelsPerCell,
+        bool rowsTopDown)
     {
         if (fieldWorldCells.width <= 0 || fieldWorldCells.height <= 0 || pixelsPerCell <= 0)
         {
@@ -70,10 +78,19 @@ internal static class LightingAmbientOcclusionUpdatePolicy
             return default;
         }
 
+        int pixelWidth = checked((int)((maxX - minX) * pixelsPerCell));
+        int pixelHeight = checked((int)((maxY - minY) * pixelsPerCell));
+        int bottomUpY = checked((int)((minY - fieldWorldCells.yMin) * pixelsPerCell));
+        // A top-down render target addresses bottom-up field row y as
+        // height - 1 - y. Flip the rectangle so it matches the field transform
+        // that wrote the geometry and the scissor that limits the redraw.
+        int pixelY = rowsTopDown
+            ? checked(fieldWorldCells.height * pixelsPerCell - bottomUpY - pixelHeight)
+            : bottomUpY;
         return new RectInt(
             checked((int)((minX - fieldWorldCells.xMin) * pixelsPerCell)),
-            checked((int)((minY - fieldWorldCells.yMin) * pixelsPerCell)),
-            checked((int)((maxX - minX) * pixelsPerCell)),
-            checked((int)((maxY - minY) * pixelsPerCell)));
+            pixelY,
+            pixelWidth,
+            pixelHeight);
     }
 }

@@ -42,8 +42,8 @@ public sealed class PostProcessRuntimeContractRule : IRule
             "Kern.Rendering.DisplayManager",
             "SetHDREnabled",
             [
-                new("Kern.Rendering.HdrOutput", "SetEnabled", 1),
-                new("Kern.Rendering.HdrOutput", "ConfigureCamera", 1),
+                new("Kern.Rendering.HDROutput", "SetEnabled", 1),
+                new("Kern.Rendering.HDROutput", "ConfigureCamera", 1),
             ]),
     ];
 

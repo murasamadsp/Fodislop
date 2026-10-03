@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Kern.Core;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
@@ -110,6 +111,10 @@ public static class BuildScript
         // типы рефлексией — агрессивный стриппинг вырезает то, на что
         // нет статических ссылок, и DI падает только в билде.
         PlayerSettings.SetManagedStrippingLevel(namedTarget, ManagedStrippingLevel.Minimal);
+
+        // В редакторе useHDRDisplay следует выбору разработчика (HDROutput),
+        // а игрок стартует в режиме по умолчанию из контракта.
+        PlayerSettings.useHDRDisplay = ProjectRuntimeContracts.ClientConfiguration.DefaultHDREnabled;
 
         var options = new BuildPlayerOptions
         {

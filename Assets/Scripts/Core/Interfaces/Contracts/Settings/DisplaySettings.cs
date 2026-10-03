@@ -83,4 +83,10 @@ public sealed class DisplaySettings
     [SettingLabel("settings.display.peak_brightness")]
     [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPeakBrightnessNits / PostProcessRuntimeState.SetDisplayCalibration")]
     public float PeakBrightnessNits = DefaultPeakBrightness;
+
+    // Пиковую яркость сообщает сам дисплей, пока человек не сдвинул ползунок:
+    // авторская 1300 у XDR-экрана занижает пики, у HDR400-монитора завышает.
+    [SettingUnbounded("Признак: пиковая яркость берётся с дисплея.")]
+    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPeakBrightnessNits / HDROutput.AutoDetectDisplayCapabilities")]
+    public bool PeakBrightnessFromDisplay = true;
 }

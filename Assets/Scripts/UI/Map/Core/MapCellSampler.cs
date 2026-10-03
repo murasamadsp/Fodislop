@@ -10,7 +10,9 @@ internal sealed class MapCellSampler
     private const int MaxChunkCacheEntries = 4096;
 
     private readonly Dictionary<int, CellType[]?> _chunks = new();
-    private readonly Queue<int> _chunkOrder = new();
+    private readonly LinkedList<int> _chunkOrder = new();
+    private readonly Dictionary<int, LinkedListNode<int>> _chunkOrderNodes = new();
+    private readonly Stack<LinkedListNode<int>> _freeChunkOrderNodes = new();
     private IWorldLayer<CellType>? _layer;
     private int _chunkSize;
     private int _heightChunks;
@@ -44,6 +46,8 @@ internal sealed class MapCellSampler
         _layer = layer;
         _chunks.Clear();
         _chunkOrder.Clear();
+        _chunkOrderNodes.Clear();
+        _freeChunkOrderNodes.Clear();
         _lastChunkIndex = -1;
         _lastChunk = null;
         _chunkSize = layer?.ChunkSize ?? 0;
@@ -57,6 +61,8 @@ internal sealed class MapCellSampler
     {
         _chunks.Clear();
         _chunkOrder.Clear();
+        _chunkOrderNodes.Clear();
+        _freeChunkOrderNodes.Clear();
         _lastChunkIndex = -1;
         _lastChunk = null;
         Revision++;
@@ -73,6 +79,13 @@ internal sealed class MapCellSampler
         int chunkY = serverY / _chunkSize;
         int chunkIndex = chunkY + (chunkX * _heightChunks);
         _chunks.Remove(chunkIndex);
+        if (_chunkOrderNodes.TryGetValue(chunkIndex, out LinkedListNode<int>? node))
+        {
+            _chunkOrderNodes.Remove(chunkIndex);
+            _chunkOrder.Remove(node);
+            _freeChunkOrderNodes.Push(node);
+        }
+
         if (_lastChunkIndex == chunkIndex)
         {
             _lastChunkIndex = -1;
@@ -109,7 +122,12 @@ internal sealed class MapCellSampler
         ChunkReadResult<CellType> result = _layer.ReadChunk(chunkIndex, touchLRU: false);
         chunk = (result.Status == ChunkReadStatus.Available) ? result.Data : null;
         _chunks[chunkIndex] = chunk;
-        _chunkOrder.Enqueue(chunkIndex);
+        LinkedListNode<int> node = _freeChunkOrderNodes.Count > 0
+            ? _freeChunkOrderNodes.Pop()
+            : new LinkedListNode<int>(chunkIndex);
+        node.Value = chunkIndex;
+        _chunkOrder.AddLast(node);
+        _chunkOrderNodes.Add(chunkIndex, node);
         TrimCache();
         _lastChunkIndex = chunkIndex;
         _lastChunk = chunk;
@@ -144,7 +162,11 @@ internal sealed class MapCellSampler
     {
         while (_chunks.Count > MaxChunkCacheEntries && _chunkOrder.Count > 0)
         {
-            _chunks.Remove(_chunkOrder.Dequeue());
+            LinkedListNode<int> oldest = _chunkOrder.First!;
+            _chunkOrder.RemoveFirst();
+            _chunkOrderNodes.Remove(oldest.Value);
+            _chunks.Remove(oldest.Value);
+            _freeChunkOrderNodes.Push(oldest);
         }
     }
 }

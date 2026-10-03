@@ -369,7 +369,10 @@ public class TerrainRenderer : MonoBehaviour, Kern.Core.Interfaces.WorldLighting
             _window.TakePublishedChangedRegions(_publishedChangedRegions);
             LightingFramePublisher.PublishCommittedChanges(
                 CommittedContentRevision,
-                _publishedChangedRegions);
+                _publishedChangedRegions,
+                _window.PendingTextureCellTypes.Count > 0 ||
+                    _window.HasUnpublishedTextureRefresh ||
+                    _window.NeedsRefresh);
 
             if (holdingView)
             {

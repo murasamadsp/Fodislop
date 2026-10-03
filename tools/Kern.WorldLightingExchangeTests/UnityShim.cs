@@ -38,6 +38,10 @@ namespace UnityEngine
         public static int RoundToInt(float value) => (int)System.MathF.Round(value);
 
         public static int Max(int left, int right) => System.Math.Max(left, right);
+
+        public static float Max(float left, float right) => System.MathF.Max(left, right);
+
+        public static int CeilToInt(float value) => (int)System.MathF.Ceiling(value);
     }
 
     public readonly struct RectInt(int x, int y, int width, int height)

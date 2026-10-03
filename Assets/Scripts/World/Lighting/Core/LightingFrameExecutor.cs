@@ -176,7 +176,8 @@ internal sealed class LightingFrameExecutor
                         Mathf.RoundToInt(request.WorldRect.y / request.CellSize),
                         Mathf.RoundToInt(request.WorldRect.z / request.CellSize),
                         Mathf.RoundToInt(request.WorldRect.w / request.CellSize)),
-                    LightingConfigHolder.AmbientOcclusionPixelsPerCell)
+                    LightingConfigHolder.AmbientOcclusionPixelsPerCell,
+                    Kern.Core.Interfaces.WorldLighting.LightingFieldOrientation.RowsTopDown)
                 : null;
             RecordAmbientOcclusionField(
                 commandBuffer,

@@ -42,7 +42,13 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
         commands.SetGlobalFloat("_SurfaceFieldThreshold", 0.5f);
         Vector4 worldRect = new(-8f, -8f, 16f, 16f);
         // Deliberately asymmetric in Y, with a retained cell far from the patch.
-        RectInt patch = new(64, 352, 32, 32);
+        // The patch is a render-target rectangle, so its row origin follows the
+        // field; on a top-down target the same world cells sit at the mirrored row.
+        RectInt patch = new(
+            64,
+            LightingFieldOrientation.RowsTopDown ? (16 * 32) - 352 - 32 : 352,
+            32,
+            32);
         try
         {
             resources.EnsureAmbientOcclusionOnlyResources(16, 16);
@@ -69,10 +75,12 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
             int changedOutside = 0;
             for (int y = 0; y < field.height; y++)
             {
-                int row = LightingFieldOrientation.MemoryRow(y, field.height) * field.width;
+                int memoryRow = LightingFieldOrientation.MemoryRow(y, field.height);
+                int row = memoryRow * field.width;
                 for (int x = 0; x < field.width; x++)
                 {
-                    if ((x < patch.xMin || x >= patch.xMax || y < patch.yMin || y >= patch.yMax) &&
+                    if ((x < patch.xMin || x >= patch.xMax ||
+                         memoryRow < patch.yMin || memoryRow >= patch.yMax) &&
                         before[row + x].a != partial[row + x].a)
                     {
                         changedOutside++;

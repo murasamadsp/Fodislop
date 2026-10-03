@@ -28,6 +28,13 @@ public static class WorldChunkRLECodec
             throw new ArgumentOutOfRangeException(nameof(chunkArea), "Chunk area must be positive.");
         }
 
+        if (chunk.Length < chunkArea)
+        {
+            throw new ArgumentException(
+                $"Chunk buffer has {chunk.Length} cells; expected at least {chunkArea}.",
+                nameof(chunk));
+        }
+
         // EqualityComparer<T>.Default resolves to a specialized non-boxing
         // implementation for unmanaged types, avoiding ValueType.Equals boxing.
         EqualityComparer<T> comparer = EqualityComparer<T>.Default;
@@ -51,6 +58,11 @@ public static class WorldChunkRLECodec
     public static T[] DecodeChunk<T>(BinaryReader reader, int chunkArea)
         where T : unmanaged
     {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
         if (chunkArea <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(chunkArea), "Chunk area must be positive.");
@@ -98,13 +110,15 @@ public static class WorldChunkRLECodec
                     break;
                 }
 
-                int fill = Math.Min(count, chunkArea - ptr);
-                chunk.AsSpan(ptr, fill).Fill(value);
-                ptr += fill;
-                if (fill < count)
+                int remaining = chunkArea - ptr;
+                if (count > remaining)
                 {
-                    break;
+                    throw new InvalidDataException(
+                        $"World layer chunk run of {count} cells exceeds the remaining {remaining} cells.");
                 }
+
+                chunk.AsSpan(ptr, count).Fill(value);
+                ptr += count;
             }
         }
         catch (EndOfStreamException)
@@ -154,13 +168,15 @@ public static class WorldChunkRLECodec
                     break;
                 }
 
-                int acceptedRunLength = Math.Min(runLength, chunkArea - decodedCells);
-                visitor(chunkIndex, value, acceptedRunLength);
-                decodedCells += acceptedRunLength;
-                if (acceptedRunLength < runLength)
+                int remaining = chunkArea - decodedCells;
+                if (runLength > remaining)
                 {
-                    break;
+                    throw new InvalidDataException(
+                        $"World layer chunk run of {runLength} cells exceeds the remaining {remaining} cells.");
                 }
+
+                visitor(chunkIndex, value, runLength);
+                decodedCells += runLength;
             }
         }
         catch (EndOfStreamException)

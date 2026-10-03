@@ -13,8 +13,10 @@ public class ClientConfig
     // 35: EffectSettings.BloomVariant.
     // 36: перебиндиваемые клавиши InterfaceSettings.Key* (вкладка «Управление»).
     // 37: InterfaceSettings.KeyAggression (агрессия перебиндивается).
-    // Схемы 31–36 мигрируются штатным загрузчиком с созданием backup.
-    public const int CurrentSchemaVersion = 37;
+    // 38: DisplaySettings.HDRSwitchPending для подтверждения смены режима дисплея.
+    // 39: DisplaySettings.PeakBrightnessFromDisplay — пик с дисплея до ручной настройки.
+    // Схемы 31–38 мигрируются штатным загрузчиком с созданием backup.
+    public const int CurrentSchemaVersion = 39;
 
     public int SchemaVersion;
     public AudioSettings Audio = new();
