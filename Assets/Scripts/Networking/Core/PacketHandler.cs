@@ -140,7 +140,7 @@ public sealed class PacketHandler(
         On<DisconnectPacket>(_connection.Process);
         On<ReconnectPacket>(_connection.Process);
         On<AuthTokenPacket>(_authToken.Process);
-        On<OpenURLPacket>(packet => Application.OpenURL(packet.URL));
+        On<OpenURLPacket>(packet => ExternalUrlOpener.TryOpen(packet.URL, nameof(PacketHandler)));
         On<MissionArrowPacket>(_missionArrow.Process);
 
         IsSubscribed = true;

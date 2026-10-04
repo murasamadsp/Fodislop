@@ -2,6 +2,7 @@
 
 using System;
 using System.Runtime.CompilerServices;
+using Kern.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -224,6 +225,23 @@ public static class RuntimeTextureFactory
             throw new ArgumentException(
                 "Encoded image data cannot be empty.",
                 nameof(data));
+        }
+
+        if (!EncodedImageHeader.TryReadSize(data, out int encodedWidth, out int encodedHeight))
+        {
+            throw new InvalidOperationException(
+                $"Encoded image '{name}' is not PNG, JPEG or EXR, or its header is damaged.");
+        }
+
+        int maximumSide = Math.Min(
+            ProjectRuntimeContracts.AssetStreaming.MaximumEncodedImageSide,
+            SystemInfo.maxTextureSize);
+        if (encodedWidth <= 0 || encodedHeight <= 0 ||
+            encodedWidth > maximumSide || encodedHeight > maximumSide)
+        {
+            throw new InvalidOperationException(
+                $"Encoded image '{name}' declares {encodedWidth}x{encodedHeight}; " +
+                $"the limit is {maximumSide} per side.");
         }
 
         Texture2D staging = CreateRGBA32NoMip(

@@ -57,7 +57,7 @@ public sealed class StatusProcessor(
         connection?.HandleServerDisconnect(detail);
         if (!string.IsNullOrWhiteSpace(packet.UpdateURL))
         {
-            Application.OpenURL(packet.UpdateURL);
+            ExternalUrlOpener.TryOpen(packet.UpdateURL, nameof(StatusProcessor));
         }
     }
 

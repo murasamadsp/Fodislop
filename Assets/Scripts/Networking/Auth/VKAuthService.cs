@@ -146,7 +146,10 @@ public sealed class VKIdentityProvider
                 return Error("device_authorize: empty response");
             }
 
-            Application.OpenURL(authorize.user_confirm_link);
+            if (!ExternalUrlOpener.TryOpen(authorize.user_confirm_link, "VKAuth"))
+            {
+                return Error("device_authorize: confirm link is not http(s)");
+            }
 
             // Шаг 2: опрашивать device_token, пока пользователь подтвердит.
             int interval = Mathf.Max(3, authorize.interval);

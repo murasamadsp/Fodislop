@@ -54,8 +54,24 @@ public sealed class WebAssetLoader : IWebAssetLoader
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCancellation.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
-        using UnityWebRequest request = UnityWebRequest.Get(url);
-        await request.SendWebRequest().WithCancellation(timeoutCancellation.Token);
+        var download = new BoundedDownloadHandler(
+            ProjectRuntimeContracts.AssetStreaming.MaximumWebAssetBytes);
+        using UnityWebRequest request = new(url, UnityWebRequest.kHttpVerbGET, download, null);
+        try
+        {
+            await request.SendWebRequest().WithCancellation(timeoutCancellation.Token);
+        }
+        catch (UnityWebRequestException) when (download.LimitExceeded)
+        {
+            // Обрыв по пределу: понятная ошибка — ниже, вместо сетевой.
+        }
+
+        if (download.LimitExceeded)
+        {
+            throw new InvalidOperationException(
+                $"Web asset '{url}' exceeds {ProjectRuntimeContracts.AssetStreaming.MaximumWebAssetBytes} bytes.");
+        }
+
         if (request.result != UnityWebRequest.Result.Success)
         {
             throw new InvalidOperationException(
@@ -63,6 +79,42 @@ public sealed class WebAssetLoader : IWebAssetLoader
                 $"{request.error} ({request.responseCode}).");
         }
 
-        return request.downloadHandler.data;
+        return download.ToArray();
+    }
+
+    // Адрес картинки задаёт сервер, ответ — чужой хост. Стандартный обработчик
+    // копит весь ответ в памяти без предела; этот обрывает загрузку, как только
+    // заявленный или фактический размер выходит за предел.
+    private sealed class BoundedDownloadHandler : DownloadHandlerScript
+    {
+        private readonly int _limit;
+        private readonly System.IO.MemoryStream _received = new();
+
+        public BoundedDownloadHandler(int limit)
+            : base(new byte[64 * 1024])
+        {
+            _limit = limit;
+        }
+
+        public bool LimitExceeded { get; private set; }
+
+        public byte[] ToArray() => _received.ToArray();
+
+        protected override void ReceiveContentLengthHeader(ulong contentLength)
+        {
+            LimitExceeded = contentLength > (ulong)_limit;
+        }
+
+        protected override bool ReceiveData(byte[] data, int dataLength)
+        {
+            if (LimitExceeded || _received.Length + dataLength > _limit)
+            {
+                LimitExceeded = true;
+                return false;
+            }
+
+            _received.Write(data, 0, dataLength);
+            return true;
+        }
     }
 }
