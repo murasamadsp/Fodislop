@@ -58,5 +58,5 @@ GameObject — только то, у чего есть **место в мире 
 | `GameManager` | перенесён: `RegisterEntryPoint`, `ITickable` + `IDisposable` |
 | `MapManager` | в очереди: гизмо и превью для редактора выносятся отдельно, `Update` → `ITickable`, пауза/выход → `IDisposable` + хук приложения |
 | `WorldTextureManager` | в очереди: сериализованные ссылки на ассеты → настройки через `ScriptableObject` или `RegisterInstance` |
-| `WorldBackgroundSetup`, `TerrainRenderer`, `SurfaceRenderer`, `WorldEntityBatchRenderer`, `CameraFollow`, `LightingEngine`, `VfxPool` | остаются компонентами (рендер/камера), тик — к явному порядку §3 |
+| `WorldBackgroundSetup`, `TerrainRenderer`, `SurfaceRenderer`, `WorldEntityBatchRenderer`, `CameraFollow`, `LightingEngine`, `VFXPool` | остаются компонентами (рендер/камера), тик — к явному порядку §3 |
 | UI-контроллеры (`PlayerHUDView`, `InventoryView`, `PauseMenu`, …) | в очереди: презентеры поверх одного `UIDocument` |

@@ -51,7 +51,7 @@ public sealed class ProductionSceneContractValidator : IPreprocessBuildWithRepor
         List<string> errors = ValidateBuildScenes(out _);
         if (errors.Count > 0)
         {
-            throw new InvalidOperationException(
+            throw new BuildFailedException(
                 "[SceneContract] Build aborted: the build scenes violate the production scene contract:\n- " +
                 string.Join("\n- ", errors));
         }

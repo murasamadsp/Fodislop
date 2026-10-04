@@ -41,7 +41,11 @@ internal sealed class ChatMuteTracker
             ? loc.Get("chat.mute.forever")
             : loc.Get("chat.mute.until", ChatMessageFormatter.FormatMuteEnd(packet.EndsAt));
 
-        statusMessage = loc.Get("chat.mute.blocked", moderator, reason, duration);
+        statusMessage = loc.Get(
+            "chat.mute.blocked",
+            ChatMessageFormatter.PlainText(moderator),
+            ChatMessageFormatter.PlainText(reason),
+            duration);
         notificationMessage = loc.Get("chat.mute.received");
     }
 

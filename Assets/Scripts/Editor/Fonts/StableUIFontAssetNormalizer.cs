@@ -22,11 +22,6 @@ internal static class StableUIFontAssetNormalizer
     ];
 
     [MenuItem(MenuPath)]
-    private static void NormalizeFromMenu()
-    {
-        Normalize();
-    }
-
     private static void Normalize()
     {
         foreach ((string assetPath, bool includeCjk) in s_fontAssets)

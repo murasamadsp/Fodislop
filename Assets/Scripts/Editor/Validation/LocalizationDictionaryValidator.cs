@@ -11,7 +11,7 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
-namespace Kern.Editor.Validation;
+namespace Kern.Editor;
 
 public sealed class LocalizationDictionaryValidator : IPreprocessBuildWithReport
 {
@@ -27,23 +27,19 @@ public sealed class LocalizationDictionaryValidator : IPreprocessBuildWithReport
     [MenuItem("Kern/Localization/Validate Dictionaries")]
     public static void ValidateFromMenu()
     {
-        IReadOnlyList<string> errors = CollectErrors();
-        if (errors.Count > 0)
-        {
-            throw new InvalidOperationException(
-                "Localization validation failed:" + Environment.NewLine +
-                string.Join(Environment.NewLine, errors));
-        }
-
+        ThrowIfInvalid(message => new InvalidOperationException(message));
         Debug.Log($"[Localization] Validated {s_languages.Length} language dictionaries.");
     }
 
-    public void OnPreprocessBuild(BuildReport report)
+    public void OnPreprocessBuild(BuildReport report) =>
+        ThrowIfInvalid(message => new BuildFailedException(message));
+
+    private static void ThrowIfInvalid(Func<string, Exception> createException)
     {
         IReadOnlyList<string> errors = CollectErrors();
         if (errors.Count > 0)
         {
-            throw new BuildFailedException(
+            throw createException(
                 "Localization validation failed:" + Environment.NewLine +
                 string.Join(Environment.NewLine, errors));
         }

@@ -15,9 +15,6 @@ internal static class UnityVersionGate
         "^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?<channel>[abfp])(?<revision>\\d+)$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    private static bool s_isBlocked;
-    private static bool s_hasReported;
-
     static UnityVersionGate()
     {
         if (IsSupported(Application.unityVersion))
@@ -25,18 +22,11 @@ internal static class UnityVersionGate
             return;
         }
 
-        s_isBlocked = true;
         EditorApplication.delayCall += Enforce;
     }
 
     private static void Enforce()
     {
-        if (!s_isBlocked)
-        {
-            return;
-        }
-
-        EditorApplication.delayCall -= Enforce;
         EditorApplication.isPlaying = false;
 
         string message =
@@ -46,9 +36,8 @@ internal static class UnityVersionGate
 
         Debug.LogError($"[UnityVersionGate] {message}");
 
-        if (!Application.isBatchMode && !s_hasReported)
+        if (!Application.isBatchMode)
         {
-            s_hasReported = true;
             EditorUtility.DisplayDialog("Unsupported Unity version", message, "Close");
         }
 

@@ -25,10 +25,10 @@ internal sealed class ServerAudioVisualPlayback : IDisposable
     private readonly ILocalPlayerState _localPlayer;
     private readonly IAssetLoader _assetLoader;
     private readonly MapManager _mapManager;
-    private readonly IVfxService _vfxPool;
+    private readonly IVFXService _vfxPool;
     private readonly ServerAudioParameters _parsedParams;
 
-    private IVfxSlot? _slot;
+    private IVFXSlot? _slot;
     private GameObject? _gameObject;
     private Color _primaryColor = Color.white;
     private float _speed = 1f;
@@ -57,12 +57,12 @@ internal sealed class ServerAudioVisualPlayback : IDisposable
         ushort sourceX,
         ushort sourceY,
         ServerAudioParameters parsedParams,
-        IVfxSlot? slot,
+        IVFXSlot? slot,
         IRobotService robotService,
         ILocalPlayerState localPlayer,
         IAssetLoader assetLoader,
         MapManager mapManager,
-        IVfxService vfxPool)
+        IVFXService vfxPool)
     {
         _visualEffectName = visualEffectName;
         _sourceX = sourceX;
@@ -189,6 +189,12 @@ internal sealed class ServerAudioVisualPlayback : IDisposable
         }
     }
 
+    // Эффект только ищет робота, но не создаёт его: botId приходит от сервера,
+    // и робот, созданный ради эффекта, не попадал бы под удаление устаревших —
+    // каждый незнакомый id оставлял бы объект на сцене до конца сессии.
+    private IRobotView? FindExistingRobot(uint botId) =>
+        _robotService.TryGetRobot(botId, out IRobotView? robot) ? robot : null;
+
     private void SetupSlotPosition()
     {
         Vector3 pos;
@@ -196,7 +202,7 @@ internal sealed class ServerAudioVisualPlayback : IDisposable
         if (_parsedParams.HasSourceBot)
         {
             long robotStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            _sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotId);
+            _sourceBot = FindExistingRobot(_parsedParams.SourceBotId);
             RecordIfSlow("робот-источник", robotStart);
             pos = _sourceBot != null
                 ? _sourceBot.transform.position
@@ -223,7 +229,7 @@ internal sealed class ServerAudioVisualPlayback : IDisposable
         if (_targetBotId != 0 && _gameObject != null)
         {
             long robotStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            _targetBot = _robotService.GetOrCreateRobot(_targetBotId);
+            _targetBot = FindExistingRobot(_targetBotId);
             RecordIfSlow("робот-цель", robotStart);
             if (_targetBot != null)
             {
@@ -402,7 +408,7 @@ internal sealed class ServerAudioVisualPlayback : IDisposable
 
             if (_targetBotId != 0)
             {
-                var targetBot = _robotService.GetOrCreateRobot(_targetBotId);
+                var targetBot = FindExistingRobot(_targetBotId);
                 if (targetBot != null)
                 {
                     _effekseerHandle.SetTargetLocation(targetBot.transform.position);

@@ -144,7 +144,7 @@ namespace Kern.Core
             builder.Register<StatusProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<MapRegionProcessor>(Lifetime.Singleton);
             builder.Register<AudioPacketProcessor>(Lifetime.Singleton);
-            builder.Register<VfxPacketProcessor>(Lifetime.Singleton);
+            builder.Register<VFXPacketProcessor>(Lifetime.Singleton);
             builder.RegisterEntryPoint<ProgrammatorProcessor>().AsSelf();
             builder.Register<PlayerInfoProcessor>(Lifetime.Singleton);
             builder.Register<ChatProcessor>(Lifetime.Singleton);
@@ -154,7 +154,7 @@ namespace Kern.Core
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
             builder.RegisterEntryPoint<GameManager>().AsSelf();
-            RegisterManager<VfxPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
+            RegisterManager<VFXPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
             builder.Register<BuildingManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.RegisterEntryPoint<PackPlacementPreview>().AsSelf();
             builder.Register<RobotManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();

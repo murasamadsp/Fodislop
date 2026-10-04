@@ -4,7 +4,7 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace Kern.Core.Interfaces;
 
-public interface IServerVfxService
+public interface IServerVFXService
 {
     void PlayEffect(VFXPacket packet);
 }

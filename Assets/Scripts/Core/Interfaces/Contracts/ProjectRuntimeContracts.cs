@@ -204,5 +204,10 @@ public static class ProjectRuntimeContracts
         public const int MaximumPacketBatchPerFrame = 250;
         public const int MaximumQueuedPacketCount = 4096;
         public const long MaximumQueuedPacketBytes = 16L * 1024 * 1024;
+
+        // Роботов создаёт поток пакетов сервера: каждый новый botId — объект
+        // на сцене. Предел с большим запасом над видимой толпой не даёт
+        // потоку уникальных id исчерпать память за окно до удаления устаревших.
+        public const int MaximumRobots = 2048;
     }
 }

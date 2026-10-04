@@ -18,7 +18,7 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
 
     public int callbackOrder => 0;
 
-    public void OnPreprocessBuild(BuildReport report) => SyncBanksForBuild();
+    public void OnPreprocessBuild(BuildReport report) => SyncBanksCore(throwOnFailure: true);
 
     [MenuItem("Kern/Audio/Sync FMOD Banks")]
     public static void SyncBanks()
@@ -32,8 +32,6 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             Debug.LogError($"[FmodBankBuilder] {ex.Message}");
         }
     }
-
-    private static void SyncBanksForBuild() => SyncBanksCore(throwOnFailure: true);
 
     private static void SyncBanksCore(bool throwOnFailure)
     {
@@ -174,13 +172,8 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             Log("FMOD Studio CLI build completed successfully.");
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not BuildFailedException)
         {
-            if (ex is BuildFailedException)
-            {
-                throw;
-            }
-
             throw new BuildFailedException($"Could not run FMOD Studio CLI compiler: {ex.Message}");
         }
     }

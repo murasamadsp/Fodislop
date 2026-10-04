@@ -39,7 +39,6 @@ public interface IRobotService
 {
     void RegisterRobot(IRobotView robot);
     void UnregisterRobot(uint botId);
-    IRobotView GetOrCreateRobot(uint botId);
 
     /// <summary>
     /// Возвращает только уже существующего робота и никогда не создаёт нового.

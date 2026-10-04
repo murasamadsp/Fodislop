@@ -32,7 +32,7 @@ public sealed class PacketHandler(
     ChatProcessor chat,
     StatusProcessor status,
     AudioPacketProcessor audio,
-    VfxPacketProcessor vfx,
+    VFXPacketProcessor vfx,
     InventoryProcessor inventory,
     ClanProcessor clan,
     MissionProcessor mission,
@@ -50,7 +50,7 @@ public sealed class PacketHandler(
     private readonly ChatProcessor _chat = chat;
     private readonly StatusProcessor _status = status;
     private readonly AudioPacketProcessor _audio = audio;
-    private readonly VfxPacketProcessor _vfx = vfx;
+    private readonly VFXPacketProcessor _vfx = vfx;
     private readonly InventoryProcessor _inventory = inventory;
     private readonly ClanProcessor _clan = clan;
     private readonly MissionProcessor _mission = mission;

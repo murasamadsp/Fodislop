@@ -164,7 +164,9 @@ namespace Kern.Player.Logic
         {
             _robot = GetComponent<Robot>();
             _clickPathRenderer = GetComponent<ClickPathRenderer>();
-            if (_clickPathRenderer == null)
+            // ExecuteAlways: в редакторе Awake срабатывает при открытии сцены,
+            // и AddComponent записал бы компонент в сцену. Добавлять только в игре.
+            if (_clickPathRenderer == null && Application.isPlaying)
             {
                 _clickPathRenderer = gameObject.AddComponent<ClickPathRenderer>();
             }
