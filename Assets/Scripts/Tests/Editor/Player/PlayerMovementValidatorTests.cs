@@ -104,6 +104,20 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
+    public void CalculateMoveCooldown_PregenerCell_UsesEmptyTileCooldown()
+    {
+        var mapProvider = new StubMapDataProvider(normalCooldown: 0.5f, emptyCooldown: 0.1f);
+
+        float cooldown = PlayerMovementValidator.CalculateMoveCooldown(
+            mapProvider,
+            CellType.Pregener,
+            isCtrlPressed: false,
+            ignoreCollision: false);
+
+        Assert.AreEqual(0.1f, cooldown);
+    }
+
+    [Test]
     public void IsPassable_EmptyCell_AlwaysReturnsTrue()
     {
         var nonPassableConfig = new CellConfigurationPacket(CellConfigProperties.None, (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
@@ -115,6 +129,13 @@ public class PlayerMovementValidatorTests
     {
         var passableConfig = new CellConfigurationPacket(CellConfigProperties.Passable, (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
         Assert.IsFalse(PlayerMovementValidator.IsPassable(CellType.Unloaded, passableConfig));
+    }
+
+    [Test]
+    public void IsPassable_PregenerCell_ReturnsFalse()
+    {
+        var passableConfig = new CellConfigurationPacket(CellConfigProperties.Passable, (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
+        Assert.IsFalse(PlayerMovementValidator.IsPassable(CellType.Pregener, passableConfig));
     }
 
     [Test]
@@ -193,6 +214,26 @@ public class PlayerMovementValidatorTests
     public void TryEvaluateStep_UnloadedCell_ReturnsFalse()
     {
         var storage = new StubWorldStorage(cellLayerAvailable: true, defaultCell: CellType.Unloaded);
+        var mapProvider = new StubMapDataProvider(100, 100);
+
+        bool evaluated = PlayerMovementValidator.TryEvaluateStep(
+            new Vector2Int(10, 10),
+            Vector2Int.right,
+            mapProvider,
+            storage,
+            out Vector2Int targetPosition,
+            out CellType cellType,
+            out bool isPassable);
+
+        Assert.IsFalse(evaluated);
+        Assert.AreEqual(CellType.Unloaded, cellType);
+        Assert.IsFalse(isPassable);
+    }
+
+    [Test]
+    public void TryEvaluateStep_PregenerCell_ReturnsFalse()
+    {
+        var storage = new StubWorldStorage(cellLayerAvailable: true, defaultCell: CellType.Pregener);
         var mapProvider = new StubMapDataProvider(100, 100);
 
         bool evaluated = PlayerMovementValidator.TryEvaluateStep(

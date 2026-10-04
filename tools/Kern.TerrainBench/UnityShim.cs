@@ -247,4 +247,38 @@ namespace UnityEngine
 
         public static float HalfToFloat(ushort half) => (float)BitConverter.UInt16BitsToHalf(half);
     }
+
+    public enum RuntimeInitializeLoadType
+    {
+        AfterSceneLoad = 0,
+        BeforeSceneLoad = 1,
+        AfterAssembliesLoaded = 2,
+        BeforeSplashScreen = 3,
+        SubsystemRegistration = 4,
+    }
+
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+    public sealed class RuntimeInitializeOnLoadMethodAttribute : Attribute
+    {
+        public RuntimeInitializeLoadType loadType { get; }
+        public RuntimeInitializeOnLoadMethodAttribute() { }
+        public RuntimeInitializeOnLoadMethodAttribute(RuntimeInitializeLoadType loadType)
+            => this.loadType = loadType;
+    }
+
+    public static class Application
+    {
+        public static string dataPath => System.AppContext.BaseDirectory;
+    }
+
+    public class TextAsset
+    {
+        public string text { get; }
+        public TextAsset(string text) => this.text = text;
+    }
+
+    public static class Resources
+    {
+        public static T? Load<T>(string path) where T : class => null;
+    }
 }

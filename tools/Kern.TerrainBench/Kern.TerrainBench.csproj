@@ -66,7 +66,11 @@
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainCellMaskRules.cs" Link="Game/TerrainCellMaskRules.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainVertexDistortionCalculator.cs" Link="Game/TerrainVertexDistortionCalculator.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/Contracts/RenderingConstants.cs" Link="Game/RenderingConstants.cs" />
+    <Compile Include="../../Assets/Scripts/World/Common/Contracts/BlockDefinition.cs" Link="Game/BlockDefinition.cs" />
+    <Compile Include="../../Assets/Scripts/World/Common/Contracts/IBlockRegistry.cs" Link="Game/IBlockRegistry.cs" />
+    <Compile Include="../../Assets/Scripts/World/Common/Contracts/CellVisualProtocol.cs" Link="Game/CellVisualProtocolContracts.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
+    <Compile Include="../../Assets/Scripts/World/Storage/BlockRegistry.cs" Link="Game/BlockRegistry.cs" />
     <Compile Include="../../Assets/Scripts/World/Storage/CellVisualProtocol.cs" Link="Game/CellVisualProtocol.cs" />
     <Compile Include="../../Assets/Scripts/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
     <!-- Каталоги типов: FillQuad опрашивает их на каждый квад. -->

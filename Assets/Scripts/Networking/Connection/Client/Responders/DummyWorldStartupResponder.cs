@@ -7,6 +7,7 @@ using Cysharp.Threading.Tasks;
 using Kern;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.World;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -128,7 +129,7 @@ internal sealed class DummyWorldStartupResponder(
             (ushort)world.Width,
             (ushort)world.Height,
             world.CellConfigurations,
-            [[37, 38, 106]])));
+            BlockRegistry.GetTileGroups())));
         sendPacket(new ServerPacket(new PlayerInfoPacket(999, playerBotId, playerName)));
         sendPacket(new ServerPacket(new RobotInfoPacket(
             playerBotId,

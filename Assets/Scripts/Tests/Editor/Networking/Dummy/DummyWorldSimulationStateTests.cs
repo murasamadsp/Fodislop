@@ -7,8 +7,10 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Kern;
 using Kern.Core.Interfaces;
+using Kern.World;
 using MinesServer.Data;
 using MinesServer.Networking.Connection.Client;
+using MinesServer.Networking.Server.Packets.Connection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -92,6 +94,83 @@ public sealed class DummyWorldSimulationStateTests
 
         Assert.That(inventory[ItemType.Rem], Is.EqualTo(1));
         Assert.That(inventory[ItemType.Battery], Is.EqualTo(2));
+    }
+
+    [Test]
+    public void CreateCellConfigurations_ConfiguresAllGameplayCellTypes()
+    {
+        CellConfigurationPacket[] configs = DummyCellConfigurationUtilities.CreateCellConfigurations();
+        Assert.That(configs, Is.Not.Null);
+        Assert.That(configs.Length, Is.EqualTo(256));
+
+        foreach (CellType type in Enum.GetValues(typeof(CellType)))
+        {
+            Assert.That(
+                BlockRegistry.Blocks.ContainsKey(type),
+                Is.True,
+                $"CellType '{type}' must be present in BlockRegistry.");
+        }
+    }
+
+    [Test]
+    public void CreateMovementSpeeds_ProvidesValidSpeedsForGameplayCellTypes()
+    {
+        CellConfigurationPacket[] configs = DummyCellConfigurationUtilities.CreateCellConfigurations();
+        Dictionary<CellType, ushort> speeds = DummyCellConfigurationUtilities.CreateMovementSpeeds(configs);
+
+        Assert.That(speeds, Is.Not.Null);
+        Assert.That(speeds.ContainsKey(CellType.BackgroundWithLightTraces), Is.True);
+        Assert.That(speeds.ContainsKey(CellType.BackgroundWithHeavyTraces), Is.True);
+        Assert.That(speeds.ContainsKey(CellType.Skull), Is.True);
+        Assert.That(speeds[CellType.BackgroundWithLightTraces], Is.GreaterThan(0));
+        Assert.That(speeds[CellType.BackgroundWithHeavyTraces], Is.GreaterThan(0));
+        Assert.That(speeds[CellType.Skull], Is.GreaterThan(0));
+
+        foreach (CellType type in Enum.GetValues(typeof(CellType)))
+        {
+            Assert.That(
+                speeds.TryGetValue(type, out ushort speed) && speed > 0,
+                Is.True,
+                $"CellType '{type}' must have a movement speed greater than zero.");
+        }
+    }
+
+    [Test]
+    public void GetBlockDefinition_MatchesConfiguredPropertiesAndCrystalBaskets()
+    {
+        BlockDefinition green = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Green);
+        Assert.That(green.CrystalBasketIndex, Is.EqualTo(0));
+        Assert.That(green.Passable, Is.False);
+        Assert.That(green.MeshDistortion, Is.EqualTo(CellDistortionType.Cause));
+        Assert.That(green.MapColorHex, Is.EqualTo("#08D764"));
+
+        BlockDefinition road = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Road);
+        Assert.That(road.CrystalBasketIndex, Is.EqualTo(-1));
+        Assert.That(road.Passable, Is.True);
+        Assert.That(road.MapColorHex, Is.EqualTo("#444444"));
+        Assert.That(road.IsRoad, Is.True);
+        Assert.That(road.DecalFamily, Is.EqualTo("Road"));
+
+        BlockDefinition buildingRoad = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.BuildingRoad);
+        Assert.That(buildingRoad.MeshDistortion, Is.EqualTo(CellDistortionType.Block));
+
+        BlockDefinition lava = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Lava);
+        Assert.That(lava.CanRoundCorners, Is.True);
+        Assert.That(lava.IsFluid, Is.True);
+        Assert.That(lava.SurfaceShaderProfile, Is.EqualTo("MoltenSurface"));
+
+        BlockDefinition xgreen = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.XGreen);
+        Assert.That(xgreen.SurfaceShaderProfile, Is.EqualTo("PrismaticCrystal"));
+        Assert.That(xgreen.PrismaticPaletteIndex, Is.EqualTo(1));
+
+        byte[][] tileGroups = BlockRegistry.GetTileGroups();
+        Assert.That(tileGroups.Length, Is.EqualTo(1));
+        Assert.That(tileGroups[0], Is.EquivalentTo(new byte[] { 37, 38, 106 }));
+
+        CellConfigurationPacket[] configs = DummyCellConfigurationUtilities.CreateCellConfigurations();
+        Dictionary<CellType, ushort> speeds = DummyCellConfigurationUtilities.CreateMovementSpeeds(configs);
+        Assert.That(speeds.ContainsKey(CellType.Unloaded), Is.True);
+        Assert.That(speeds.ContainsKey(CellType.Pregener), Is.True);
     }
 
     private sealed class StubSupervisor : IAsyncOperationSupervisor

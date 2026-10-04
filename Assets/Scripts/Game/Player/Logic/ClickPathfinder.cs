@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using Kern.Core.Interfaces;
 using MinesServer.Data;
+using Kern.World;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
@@ -76,13 +77,15 @@ public static class ClickPathfinder
         int targetCost = CellCost(targetCell, mapDataProvider, allowBuildingDoor: true);
         // Клик по двери: вход в пак осознанный - промежуточные двери на пути
         // к ней тоже разрешены (двери бывают двухклеточными).
-        bool targetIsDoor = targetCell == CellType.BuildingDoor;
+        BlockDefinition targetDef = BlockRegistry.Get(targetCell);
+        bool targetIsDoor = targetDef.StructurePartType == "Door";
         // Старт на паковой клетке (дверь или дорога пака): робот уже в паке -
         // это ВЫХОД, а не вход. Двери на маршруте разрешены, иначе из пака
         // мышкой не выйти (стоя на двери, наружу ведёт только соседняя дверь).
         CellType startCell = storage.GetCell(start.x, start.y);
-        bool startInPack = startCell is CellType.BuildingRoad or CellType.BuildingDoor;
-        if (targetCost < 0 && !IsPackBlock(targetCell) && !IsBuildingBlock(targetCell))
+        BlockDefinition startDef = BlockRegistry.Get(startCell);
+        bool startInPack = startDef.StructurePartType is "Door" or "Road";
+        if (targetCost < 0 && !targetDef.IsPackBlock && !targetDef.IsBuildingBlock)
         {
             return null;
         }
@@ -230,23 +233,18 @@ public static class ClickPathfinder
             return -1;
         }
 
+        BlockDefinition def = BlockRegistry.Get(cell);
+
         // Паки и строительные блоки: бурением не убираются - только обход.
-        if (IsPackBlock(cell) || IsBuildingBlock(cell))
+        if (def.IsPackBlock || def.IsBuildingBlock)
         {
             return -1;
         }
 
         // Дверь пака: только как явная цель клика, иначе - обход.
-        if (cell == CellType.BuildingDoor && !allowBuildingDoor)
+        if (def.StructurePartType == "Door" && !allowBuildingDoor)
         {
             return -1;
-        }
-
-        // Федеральный блок: в игре это проходимая клетка, хотя в cells.json
-        // у него нет isEmpty - без этой ветки путь через него не строится.
-        if (cell == CellType.FedBlock)
-        {
-            return StepCost;
         }
 
         if (PlayerMovementValidator.IsPassable(cell, mapDataProvider.GetCellConfig(cell)))
@@ -254,46 +252,14 @@ public static class ClickPathfinder
             return StepCost;
         }
 
-        // Буром берутся только is_diggable-клетки. Черноскал/Красноскал и пр.
-        // помечены сервером как Breakable (is_destructible - бомбой), но буром
-        // не копаются - явный список из cells.json.
-        if (IsUndiggable(cell))
-        {
-            return -1;
-        }
-
-        if (!mapDataProvider.GetCellConfig(cell).Properties.HasFlag(CellConfigProperties.Breakable))
+        // Буром берутся только копаемые клетки из конфигурации.
+        if (!def.Diggable || !mapDataProvider.GetCellConfig(cell).Properties.HasFlag(CellConfigProperties.Breakable))
         {
             return -1;
         }
 
         return DigCost;
     }
-
-    // Сплошные клетки без is_diggable в cells.json сервера: бур их не берёт.
-    // Черноскал раньше назывался NiggerRock (легаси-имя),
-    // в актуальном протоколе переименован в BlackRock (114).
-    private static bool IsUndiggable(CellType cell) =>
-        cell is CellType.BlackRock          // Черноскал (114)
-            or CellType.LivingBlackRock     // Чёрная скала живородящая (115)
-            or CellType.RedRock             // Красноскал (117)
-            or CellType.HypnoRock           // Гипноскал (119)
-            or CellType.Skull               // Череп (88)
-            or CellType.SuperRainbow;       // Суперрадуга (87)
-
-    // Пак-здания (зеркало WorldCellChecks.isPackBlock на сервере).
-    // BuildingRoad и BuildingDoor - не блокеры, а проходимые клетки пака
-    // (дорога и дверь; в cells.json у обеих isEmpty/passable): их
-    // проходимость решает PlayerMovementValidator.IsPassable - на них можно
-    // и кликать, и заходить по WASD, в том числе внутрь пака через дверь.
-    private static bool IsPackBlock(CellType cell) =>
-        cell is CellType.BuildingWall or CellType.BuildingCorner;
-
-    // Строительные блоки (зеркало WorldCellChecks.isBuildingBlock на сервере).
-    private static bool IsBuildingBlock(CellType cell) =>
-        cell is CellType.GreenBlock or CellType.YellowBlock or CellType.RedBlock
-            or CellType.MilitaryBlockFrame or CellType.MilitaryBlock
-            or CellType.Support or CellType.QuadBlock;
 
     private static int Heuristic(Vector2Int from, Vector2Int to)
     {

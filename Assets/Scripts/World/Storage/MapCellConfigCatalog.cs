@@ -20,16 +20,14 @@ public sealed class MapCellConfigCatalog
     public static CellVisualProperties GetVisualProperties(CellType type) =>
         CellVisualProtocolRegistry.Current.Get(type);
 
-    // Совместимый фасад для старых статических потребителей. Новые системы
-    // должны получать профиль через MapCellConfigCatalog и не знать legacy-таблицу.
-    public static bool IsRoundableLoose(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).IsRoundableLoose;
+    public static bool CanRoundCorners(CellType type) =>
+        CellVisualProtocolRegistry.Current.Get(type).CanRoundCorners;
 
     public static bool IsRoad(CellType type) =>
         CellVisualProtocolRegistry.Current.Get(type).IsRoad;
 
-    public static bool IsContinuousSheet(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).IsContinuousSheet;
+    public static bool IsContinuousBed(CellType type) =>
+        CellVisualProtocolRegistry.Current.Get(type).IsContinuousBed;
 
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {

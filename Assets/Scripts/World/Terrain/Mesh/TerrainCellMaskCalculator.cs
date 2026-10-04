@@ -243,24 +243,24 @@ public sealed class TerrainCellMaskCalculator
         CachedCellData bottom)
     {
         int cornerSideMask = 0;
-        if (data.Type == CellType.BuildingWall)
+        if (MapCellConfigCatalog.GetVisualProperties(data.Type).IsBuildingWall)
         {
-            if (left.Type == CellType.BuildingCorner)
+            if (MapCellConfigCatalog.GetVisualProperties(left.Type).IsBuildingCorner)
             {
                 cornerSideMask |= 1;
             }
 
-            if (right.Type == CellType.BuildingCorner)
+            if (MapCellConfigCatalog.GetVisualProperties(right.Type).IsBuildingCorner)
             {
                 cornerSideMask |= 2;
             }
 
-            if (top.Type == CellType.BuildingCorner)
+            if (MapCellConfigCatalog.GetVisualProperties(top.Type).IsBuildingCorner)
             {
                 cornerSideMask |= 4;
             }
 
-            if (bottom.Type == CellType.BuildingCorner)
+            if (MapCellConfigCatalog.GetVisualProperties(bottom.Type).IsBuildingCorner)
             {
                 cornerSideMask |= 8;
             }

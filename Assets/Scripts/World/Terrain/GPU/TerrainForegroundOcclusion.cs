@@ -80,7 +80,7 @@ namespace Kern.World.Terrain
         {
             if (cell.State != TerrainCellState.Loaded ||
                 !TerrainVertexDistortionCalculator.IsCause(cell) ||
-                MapCellConfigCatalog.GetVisualProperties(cell.Type).IsRoundableLoose)
+                MapCellConfigCatalog.GetVisualProperties(cell.Type).CanRoundCorners)
             {
                 return false;
             }

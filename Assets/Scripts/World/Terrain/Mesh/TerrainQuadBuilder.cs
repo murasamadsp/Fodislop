@@ -67,7 +67,7 @@ internal static class TerrainQuadBuilder
         CellType cellFgType = ccd.Type;
         CellVisualProperties foregroundVisuals = MapCellConfigCatalog.GetVisualProperties(cellFgType);
 
-        bool isDoor = !isBackground && cellFgType == CellType.BuildingDoor;
+        bool isDoor = !isBackground && foregroundVisuals.IsBuildingDoor;
 
         if (ccd.State != TerrainCellState.Loaded)
         {
@@ -116,7 +116,7 @@ internal static class TerrainQuadBuilder
         // Общие смещённые рёбра закрывают друг друга. Подложка нужна только
         // там, где Organic врезает открытый край внутрь собственной клетки;
         // внутри сплошного массива второй слой не рисуем.
-        bool foregroundFillsCell = !foregroundVisuals.IsRoundableLoose && !needsOrganicUnderlay;
+        bool foregroundFillsCell = !foregroundVisuals.CanRoundCorners && !needsOrganicUnderlay;
 
         if (!TerrainCellLayers.TryGetType(
             cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
@@ -201,7 +201,7 @@ internal static class TerrainQuadBuilder
         int cornerSideMask = precalc.CellCornerVariants[x, y];
         bool useNeighborVariants =
             !isBackground &&
-            cellFgType == CellType.BuildingWall &&
+            foregroundVisuals.IsBuildingWall &&
             cornerSideMask != 0;
         float packedW = hasTileGroup || useNeighborVariants ? 1f : 0f;
 
@@ -247,7 +247,7 @@ internal static class TerrainQuadBuilder
             !isBackground &&
             cellFgType != CellType.Empty &&
             !foregroundVisuals.IsRoad &&
-            !foregroundVisuals.IsNonPhysicalMass;
+            !foregroundVisuals.IsFluid;
         Vector4 animDataVec = new(
             (float)animType,
             animationSettings.Speed,
@@ -259,7 +259,7 @@ internal static class TerrainQuadBuilder
         // больше 1.5 уже означает «отбросить», и Terrain.shader вместе с
         // TerrainCellBuilder выкидывали по нему всю породу и все кристаллы.
         int packedColumn = descriptor & 0x1F;
-        if (TerrainSheetCatalog.IsContinuousSheet(cellType))
+        if (TerrainSheetCatalog.IsContinuousBed(cellType))
         {
             packedColumn |= 32;
         }
@@ -274,7 +274,7 @@ internal static class TerrainQuadBuilder
             (minimapColor.b << 16);
 
         bool hasRoundedPhysicalContour =
-            !isBackground && foregroundVisuals.IsRoundableLoose;
+            !isBackground && foregroundVisuals.CanRoundCorners;
 
         // Маска соседства кладётся и фоновым квадам тоже.
         //
