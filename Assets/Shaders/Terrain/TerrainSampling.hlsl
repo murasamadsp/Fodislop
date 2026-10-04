@@ -275,4 +275,23 @@ float2 ClampTerrainTileUV(float2 uv, TerrainTileUvResult tile)
     return clamp(uv, minTile, maxTile);
 }
 
+// Ширина экранного пикселя в текселях атласа для PixelArtSampleUV.
+//
+// finalUV клетки рвётся: сплошной лист оборачивается через frac на границах
+// клеток, кратных его ширине, а клетка за краем берёт соседний тайл. fwidth
+// от такой UV в квадах 2×2 на этих линиях — целый лист, сглаживание шва
+// прилипало к углу текселя, и прямые грани на целых границах мерцали с зумом.
+// Координата носителя (packedData.yz) непрерывна на всём примитиве, клетка —
+// ровно один тайл. Её производную вызывающий берёт в начале фрагмента, до
+// ветвлений и clip. Максимум по осям: поворот тайла автотайлинга меняет оси
+// местами.
+float2 TerrainPixelArtWidthTexels(
+    float2 carrierPixelWidth,
+    float4 tileSize,
+    float4 atlasTexelSize)
+{
+    float cellsPerPixel = max(carrierPixelWidth.x, carrierPixelWidth.y);
+    return cellsPerPixel * tileSize.xy * atlasTexelSize.zw;
+}
+
 #endif
