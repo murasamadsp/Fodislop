@@ -689,7 +689,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ba330c964bc50d74096579160aa69d19, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Kern.Runtime::Kern.UI.WorldMapRenderer
-  _renderInterval: 0.02
   _dragSpeed: 1
 --- !u!1 &1000000000
 GameObject:
@@ -814,14 +813,17 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 100000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1000000008}
   m_SourcePrefab: {fileID: 100100000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
 --- !u!114 &1000000005 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 11400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
   m_PrefabInstance: {fileID: 1000000004}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 1000000007}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e55a1800031c9374ba92fb984b2216f6, type: 3}
@@ -832,6 +834,23 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
   m_PrefabInstance: {fileID: 1000000004}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1000000007 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 100000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
+  m_PrefabInstance: {fileID: 1000000004}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1000000008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1000000007}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d0f924cca3ee2140bc1bdad8662ffcb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Kern.Application::Kern.Player.Logic.ClickPathRenderer
 --- !u!43 &1011521769
 Mesh:
   m_ObjectHideFlags: 0
@@ -1154,10 +1173,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 28db09fc049bf324fbee51907a8eaa35, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Kern.Runtime::Kern.Game.VfxPool
-  _configs: []
-  _defaultInitialSize: 2
+  _initialSize: 2
   _shrinkDelay: 30
-  _softMaxPerType: 30
 --- !u!1 &1403310850
 GameObject:
   m_ObjectHideFlags: 0
@@ -1203,9 +1220,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Kern.Runtime::Kern.Player.CameraFollow
   _target: {fileID: 0}
-  _smoothSpeed: 5
+  _followSmoothTime: 0.06
   _offset: {x: 0, y: 0}
-  _zoomSpeed: 10
+  _zoomStepPerNotch: 0.12
   _minZoom: 5
   _maxZoom: 30
   _zoomSmoothness: 8
@@ -1808,7 +1825,7 @@ MonoBehaviour:
   - _managerType: Kern.Game.Managers.ServerAudioEventManager, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Audio
     _target: {fileID: 881552890}
-  - _managerType: Kern.Game.VfxPool, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+  - _managerType: Kern.Game.VFXPool, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering
     _target: {fileID: 1150380009}
   - _managerType: Kern.Game.WorldEntityBatchRenderer, Kern.Application, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null

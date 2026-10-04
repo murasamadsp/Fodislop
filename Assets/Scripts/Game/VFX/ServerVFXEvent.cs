@@ -30,7 +30,7 @@ namespace Kern.Game;
 /// ромбик (гарантированно виден даже без ассетов).
 /// </summary>
 [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any dynamic asset load/play errors.")]
-public sealed class ServerVfxEvent : IServerWorldEffect
+public sealed class ServerVFXEvent : IServerWorldEffect
 {
     private const float FlightDurationSeconds = 0.4f;
     private const float FlightArcHeightUnits = 0.75f;
@@ -55,7 +55,7 @@ public sealed class ServerVfxEvent : IServerWorldEffect
     // VFX.PlaceDeny — маркер «клетку занять нельзя» при неудачной установке
     // пака. В клиентском пакете MinesServer.Data член не объявлен, сервер
     // присылает сырой байт 19.
-    private const byte PlaceDenyVfxValue = 19;
+    private const byte PlaceDenyVFXValue = 19;
 
     // Процедурный запрещающий маркер: 16px при PPU 16 = ровно одна клетка.
     private const int DenyMarkerSize = 16;
@@ -74,11 +74,11 @@ public sealed class ServerVfxEvent : IServerWorldEffect
     private readonly IRobotService _robotService;
     private readonly IAssetLoader _assetLoader;
     private readonly MapManager _mapManager;
-    private readonly IVfxService _vfxPool;
+    private readonly IVFXService _vfxPool;
 
     private readonly ServerAudioParameters _parsedParams;
 
-    private IVfxSlot? _slot;
+    private IVFXSlot? _slot;
     private GameObject? _gameObject;
 
     private float _speed = 1f;
@@ -123,13 +123,13 @@ public sealed class ServerVfxEvent : IServerWorldEffect
 
     private CancellationTokenSource? _cts;
 
-    public ServerVfxEvent(
+    public ServerVFXEvent(
         VFXPacket packet,
-        IVfxSlot? slot,
+        IVFXSlot? slot,
         IRobotService robotService,
         IAssetLoader assetLoader,
         MapManager mapManager,
-        IVfxService vfxPool,
+        IVFXService vfxPool,
         IAsyncOperationSupervisor operations,
         WorldEntityBatchRenderer batchRenderer,
         ISceneObjectFactory sceneObjects)
@@ -297,7 +297,7 @@ public sealed class ServerVfxEvent : IServerWorldEffect
             // проводом сырым байтом — в клиентском пакете MinesServer.Data
             // этот член enum не объявлен. Опциональный ассет "VFX/placedeny",
             // иначе процедурный красный круг, как в легаси-клиенте.
-            if ((byte)_effectType == PlaceDenyVfxValue)
+            if ((byte)_effectType == PlaceDenyVFXValue)
             {
                 await LoadPlaceDenyVisualAsync(token);
                 return;
@@ -489,7 +489,7 @@ public sealed class ServerVfxEvent : IServerWorldEffect
         _flightMode = true;
         _maxLifetime = FlightDurationSeconds + LabelLingerSeconds + 1f;
 
-        Debug.Log($"[ServerVfxEvent] Crystal flight: cell {_sourceX}:{_sourceY}, bot {_targetBotId}, " +
+        Debug.Log($"[ServerVFXEvent] Crystal flight: cell {_sourceX}:{_sourceY}, bot {_targetBotId}, " +
                   $"sprite '{(sprite.texture != null ? sprite.texture.name : "?")}', amount {_parsedParams.CrystalCount}, " +
                   $"crystalScale {CrystalScale}.");
 
@@ -809,7 +809,7 @@ public sealed class ServerVfxEvent : IServerWorldEffect
 
             if (_targetBotId != 0)
             {
-                var targetBot = _robotService.GetOrCreateRobot(_targetBotId);
+                var targetBot = FindExistingRobot(_targetBotId);
                 if (targetBot != null)
                 {
                     _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -834,11 +834,17 @@ public sealed class ServerVfxEvent : IServerWorldEffect
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"[ServerVfxEvent] Failed to load Effekseer effect '{filename}': {ex.Message}");
+            Debug.LogWarning($"[ServerVFXEvent] Failed to load Effekseer effect '{filename}': {ex.Message}");
             MarkVisualCompleted();
             return false;
         }
     }
+
+    // Эффект только ищет робота, но не создаёт его: botId приходит от сервера,
+    // и робот, созданный ради эффекта, не попадал бы под удаление устаревших —
+    // каждый незнакомый id оставлял бы объект на сцене до конца сессии.
+    private IRobotView? FindExistingRobot(uint botId) =>
+        _robotService.TryGetRobot(botId, out IRobotView? robot) ? robot : null;
 
     private void SetupSlotPosition()
     {
@@ -846,7 +852,7 @@ public sealed class ServerVfxEvent : IServerWorldEffect
 
         if (_parsedParams.HasSourceBot)
         {
-            _sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotId);
+            _sourceBot = FindExistingRobot(_parsedParams.SourceBotId);
             pos = _sourceBot != null
                 ? _sourceBot.transform.position
                 : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
@@ -866,7 +872,7 @@ public sealed class ServerVfxEvent : IServerWorldEffect
 
         if (_targetBotId != 0)
         {
-            _targetBot = _robotService.GetOrCreateRobot(_targetBotId);
+            _targetBot = FindExistingRobot(_targetBotId);
             if (_targetBot != null && _gameObject != null)
             {
                 // Направленные эффекты разворачиваются по направлению взгляда

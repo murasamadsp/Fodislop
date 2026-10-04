@@ -174,7 +174,7 @@ public sealed class AnimationContainerDecoderTests
     }
 
     [Test]
-    public void DecodeAnimationSprites_ActualPngVfx_SuccessfullyDecodes()
+    public void DecodeAnimationSprites_ActualPngVFX_SuccessfullyDecodes()
     {
         string vfxPath = Path.Combine(Application.dataPath, "Textures", "VFX", "bz.png");
         if (!File.Exists(vfxPath))

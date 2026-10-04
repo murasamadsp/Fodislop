@@ -7,7 +7,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 
-namespace Kern.Editor.Validation;
+namespace Kern.Editor;
 
 public sealed class ProductionServerEndpointValidator : IPreprocessBuildWithReport
 {

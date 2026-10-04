@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.IO;
 using Kern.Core;
 using UnityEditor;
@@ -12,6 +13,8 @@ namespace Kern.Editor;
 [InitializeOnLoad]
 public static class PlayModeSceneBootstrapper
 {
+    private const string TestRunnerScenePrefix = "InitTestScene";
+
     public static readonly string BootstrapScenePath =
         BuildSceneOrder.ScenePath(ProjectRuntimeContracts.SceneNames.Bootstrap);
 
@@ -45,8 +48,6 @@ public static class PlayModeSceneBootstrapper
         }
     }
 
-    private const string TestRunnerScenePrefix = "InitTestScene";
-
     private static void OnPlayModeStateChanged(PlayModeStateChange stateChange)
     {
         if (stateChange == PlayModeStateChange.ExitingEditMode)
@@ -54,7 +55,7 @@ public static class PlayModeSceneBootstrapper
             // Тест-раннер входит в Play Mode со своей служебной сценой и ждёт
             // именно её. Подмена на Bootstrap оставляла раннер без сцены, и
             // PlayMode-тесты висели до таймаута. Тесты поднимают Bootstrap сами.
-            if (EditorSceneManager.GetActiveScene().name.StartsWith(TestRunnerScenePrefix, System.StringComparison.Ordinal))
+            if (EditorSceneManager.GetActiveScene().name.StartsWith(TestRunnerScenePrefix, StringComparison.Ordinal))
             {
                 EditorSceneManager.playModeStartScene = null;
                 SessionState.SetString(ProjectRuntimeContracts.EditorSession.PlayModeTargetScene, string.Empty);

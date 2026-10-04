@@ -28,10 +28,10 @@ public sealed class UnityRenderLayerValidator : IPreprocessBuildWithReport
                 $"Required GameObject layer '{ProjectRuntimeContracts.RequiredLayers.WorldUI}' is missing.");
         }
 
-        int sortingLayer = UnityEngine.SortingLayer.NameToID(
+        int sortingLayer = SortingLayer.NameToID(
             ProjectRuntimeContracts.RequiredLayers.WorldUISortingLayer);
         if (sortingLayer == 0 && !string.Equals(
-                UnityEngine.SortingLayer.IDToName(sortingLayer),
+                SortingLayer.IDToName(sortingLayer),
                 ProjectRuntimeContracts.RequiredLayers.WorldUISortingLayer,
                 StringComparison.Ordinal))
         {
@@ -39,7 +39,7 @@ public sealed class UnityRenderLayerValidator : IPreprocessBuildWithReport
                 $"Required Sorting Layer '{ProjectRuntimeContracts.RequiredLayers.WorldUISortingLayer}' is missing.");
         }
 
-        UnityEngine.Debug.Log(
+        Debug.Log(
             $"[RenderLayers] World UI: GameObject layer={gameObjectLayer} " +
             $"('{ProjectRuntimeContracts.RequiredLayers.WorldUI}'), " +
             $"Sorting Layer ID={sortingLayer} " +

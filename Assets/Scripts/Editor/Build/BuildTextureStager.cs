@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.IO;
 using System.Linq;
 using UnityEditor.Build;
@@ -30,7 +31,7 @@ public sealed class BuildTextureStager : BuildPlayerProcessor
         string[] relativeFiles = Directory
             .EnumerateFiles(stagedTextures, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(stagedTextures, path).Replace('\\', '/'))
-            .OrderBy(path => path, System.StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
         string manifestPath = Path.Combine(stagingRoot, "Textures.manifest");
         File.WriteAllLines(manifestPath, relativeFiles);
@@ -44,7 +45,7 @@ public sealed class BuildTextureStager : BuildPlayerProcessor
         Directory.CreateDirectory(destination);
         foreach (string sourceFile in Directory.EnumerateFiles(source))
         {
-            if (sourceFile.EndsWith(".meta", System.StringComparison.OrdinalIgnoreCase))
+            if (sourceFile.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

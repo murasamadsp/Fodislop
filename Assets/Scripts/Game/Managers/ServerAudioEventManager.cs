@@ -17,7 +17,7 @@ using VContainer;
 
 namespace Kern.Game.Managers
 {
-    public class ServerAudioEventManager : MonoBehaviour, IServerAudioService, IServerVfxService
+    public class ServerAudioEventManager : MonoBehaviour, IServerAudioService, IServerVFXService
     {
         private const string TAG = "[ServerAudioEventManager]";
 
@@ -28,7 +28,7 @@ namespace Kern.Game.Managers
         private bool _isMusicStarting;
 
         [Inject]
-        private IVfxService _vfxService = null!;
+        private IVFXService _vfxService = null!;
 
         [Inject]
         private IRobotService _robotService = null!;
@@ -43,7 +43,7 @@ namespace Kern.Game.Managers
         private MapManager _mapManager = null!;
 
         [Inject]
-        private VfxPool _vfxPool = null!;
+        private VFXPool _vfxPool = null!;
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
         [Inject]
@@ -98,11 +98,11 @@ namespace Kern.Game.Managers
 
         public void PlayEffect(VFXPacket packet)
         {
-            IVfxSlot? slot = _vfxService.Acquire();
+            IVFXSlot? slot = _vfxService.Acquire();
 
             Debug.Log($"{TAG} VFX '{packet.EffectType}' at {packet.X}:{packet.Y} (bot {packet.TargetBotId}).");
 
-            var effect = new ServerVfxEvent(
+            var effect = new ServerVFXEvent(
                 packet,
                 slot,
                 _robotService,

@@ -13,7 +13,7 @@ namespace Kern.Game
     // решает имя эффекта из пакета и стриминг ассетов. Раньше пул делился на
     // клиентские типы (Bz, Destroy, Death, Custom) — урезанный дубль
     // протокольного VFX, который ничем, кроме имени ведра, не отличался.
-    public class VfxPool : MonoBehaviour, IVfxService
+    public class VFXPool : MonoBehaviour, IVFXService
     {
         [SerializeField]
         [FormerlySerializedAs("_defaultInitialSize")]
@@ -69,7 +69,7 @@ namespace Kern.Game
             ShrinkIfIdle(Time.realtimeSinceStartup);
         }
 
-        public IVfxSlot? Acquire()
+        public IVFXSlot? Acquire()
         {
             EnsureInitialized();
             if (_sceneObjects == null || _entityBatchRenderer == null)
@@ -89,7 +89,7 @@ namespace Kern.Game
             return slot;
         }
 
-        public void Release(IVfxSlot slot)
+        public void Release(IVFXSlot slot)
         {
             if (slot is not PooledSlot pooled || pooled.IsInPool)
             {
@@ -152,7 +152,7 @@ namespace Kern.Game
 
         private PooledSlot CreatePooledSlot()
         {
-            GameObject go = _sceneObjects.Create("PooledVfx", RuntimeOwner.VFX);
+            GameObject go = _sceneObjects.Create("PooledVFX", RuntimeOwner.VFX);
             go.SetActive(false);
 
             WorldEntityBatchRenderer.SpriteHandle? handle =
@@ -180,7 +180,7 @@ namespace Kern.Game
             }
         }
 
-        public sealed class PooledSlot : IVfxSlot
+        public sealed class PooledSlot : IVFXSlot
         {
             public GameObject? GameObject { get; set; }
             public WorldEntityBatchRenderer EntityBatchRenderer = null!;

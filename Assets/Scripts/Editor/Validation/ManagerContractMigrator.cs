@@ -15,13 +15,14 @@ namespace Kern.Editor;
 public static class ManagerContractMigrator
 {
     private const string ScopeSourcePath = "Assets/Scripts/Core/Bootstrap/Scopes/GameLifetimeScope.cs";
-    private const string MainGameScenePath = "Assets/Scenes/MainGame.unity";
+    private static readonly string s_mainGameScenePath =
+        BuildSceneOrder.ScenePath(ProjectRuntimeContracts.SceneNames.MainGame);
 
     private static readonly Regex s_callPattern = new(
         @"RegisterManager<(?<type>[A-Za-z0-9_.]+)>\(\s*builder\s*,\s*\""(?<group>[A-Za-z0-9_]+)\""",
         RegexOptions.Compiled);
 
-    private static readonly Dictionary<string, Type> s_resolvedTypes = new();
+    private static readonly Dictionary<string, Type?> s_resolvedTypes = new();
 
     [MenuItem("Kern/Architecture/Populate Manager Contract")]
     public static void Populate()
@@ -36,7 +37,7 @@ public static class ManagerContractMigrator
             return;
         }
 
-        Scene scene = OpenOrReuse(MainGameScenePath, out bool openedHere);
+        Scene scene = OpenOrReuse(s_mainGameScenePath, out bool openedHere);
         try
         {
             GameLifetimeScope scope = FindSingleSceneComponent(scene);
@@ -171,7 +172,7 @@ public static class ManagerContractMigrator
         Transform servicesRoot = scope.ServicesRoot;
         if (servicesRoot == null)
         {
-            errors.Add($"MainGame scope has no ServicesRoot reference.");
+            errors.Add("MainGame scope has no ServicesRoot reference.");
             return null;
         }
 
@@ -241,10 +242,10 @@ public static class ManagerContractMigrator
             }
 
             type ??= byShortName;
-            s_resolvedTypes[name] = type ?? typeof(MonoBehaviour);
+            s_resolvedTypes[name] = type;
         }
 
-        return type == typeof(MonoBehaviour) ? null : type;
+        return type;
     }
 
     private static GameLifetimeScope FindSingleSceneComponent(Scene scene)

@@ -67,7 +67,7 @@ public class WorldInitProcessorTests
         Assert.That(_robotManager.ClearAllRobotsCalled, Is.True, "Robots must be cleared on world init");
         Assert.That(_buildingManager.ClearAllBuildingsCalled, Is.True, "Buildings must be cleared on world init");
         Assert.That(stubPlayer.HasServerPosition, Is.False, "Player server position must be reset on world init");
-        Assert.That(_mapManager.LoadedPacket, Is.SameAs(packet));
+        Assert.That(_mapManager.LoadedPacket, Is.EqualTo(packet));
         Assert.That(_gameManager.WorldLoadedNotified, Is.True, "WorldLoaded must be notified via OnWorldInitialized");
     }
 
@@ -142,7 +142,6 @@ public class WorldInitProcessorTests
         public void RegisterRobot(IRobotView robot) { }
         public void UnregisterRobot(IRobotView robot) { }
         public void UnregisterRobot(uint botId) { }
-        public IRobotView GetOrCreateRobot(uint botId) => null!;
         public bool TryGetRobot(uint botId, out IRobotView? robot)
         {
             robot = null;

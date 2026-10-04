@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
@@ -19,6 +20,7 @@ public sealed class RobotManager(
     private readonly Dictionary<uint, float> _lastSeenAt = new();
     private readonly HashSet<uint> _overwriteWarningsLogged = [];
     private readonly List<uint> _keysToRemove = [];
+    private bool _robotLimitWarningLogged;
 
     public uint LocalPlayerBotId { get; private set; }
 
@@ -67,11 +69,11 @@ public sealed class RobotManager(
         _robots[robot.BotId] = concrete;
     }
 
-    public IRobotView GetOrCreateRobot(uint botId)
+    private bool TryGetOrCreateRobot(uint botId, [NotNullWhen(true)] out Robot? robot)
     {
-        if (_robots.TryGetValue(botId, out var robot))
+        if (_robots.TryGetValue(botId, out robot))
         {
-            return robot;
+            return true;
         }
 
         if (botId != 0 && botId == LocalPlayerBotId)
@@ -85,16 +87,30 @@ public sealed class RobotManager(
                 {
                     robot.Initialize(botId);
                     _robots[botId] = robot;
-                    return robot;
+                    return true;
                 }
             }
+        }
+
+        if (_robots.Count >= ProjectRuntimeContracts.RuntimeLimits.MaximumRobots)
+        {
+            if (!_robotLimitWarningLogged)
+            {
+                _robotLimitWarningLogged = true;
+                Debug.LogWarning(
+                    $"{TAG} Robot limit {ProjectRuntimeContracts.RuntimeLimits.MaximumRobots} reached; " +
+                    "updates for new bot ids are dropped until stale robots are pruned.");
+            }
+
+            robot = null;
+            return false;
         }
 
         robot = sceneObjects.Create<Robot>($"Robot_{botId}", RuntimeOwner.Robots);
 
         robot.Initialize(botId);
         _robots[botId] = robot;
-        return robot;
+        return true;
     }
 
     public bool TryGetRobot(uint botId, out IRobotView? robot)
@@ -111,7 +127,11 @@ public sealed class RobotManager(
 
     public void UpdateRobotPosition(uint botId, ushort x, ushort y, byte rotation)
     {
-        var robot = GetOrCreateRobot(botId);
+        if (!TryGetOrCreateRobot(botId, out Robot? robot))
+        {
+            return;
+        }
+
         robot.SetPosition(x, y);
         robot.SetRotation(rotation);
         _lastSeenAt[botId] = Time.unscaledTime;
@@ -119,7 +139,11 @@ public sealed class RobotManager(
 
     public void UpdateRobotMetadata(uint botId, RobotMetadata metadata)
     {
-        var robot = GetOrCreateRobot(botId);
+        if (!TryGetOrCreateRobot(botId, out Robot? robot))
+        {
+            return;
+        }
+
         robot.SetMetadata(metadata.PlayerId, metadata.ClanId, metadata.Nickname, metadata.SkinPath, metadata.TailPath);
         _lastSeenAt[botId] = Time.unscaledTime;
     }
@@ -148,6 +172,7 @@ public sealed class RobotManager(
     {
         int cleared = 0;
         _overwriteWarningsLogged.Clear();
+        _robotLimitWarningLogged = false;
         _keysToRemove.Clear();
         foreach (var kvp in _robots)
         {
