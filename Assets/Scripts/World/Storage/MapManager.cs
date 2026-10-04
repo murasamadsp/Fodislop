@@ -275,7 +275,7 @@ namespace Kern.World
 
         public CellConfigurationPacket GetCellConfig(CellType type) => _cellCatalog.GetCellConfig(type);
 
-        public static bool IsRoundableLoose(CellType type) => MapCellConfigCatalog.IsRoundableLoose(type);
+        public static bool CanRoundCorners(CellType type) => MapCellConfigCatalog.CanRoundCorners(type);
 
         public bool TryGetTileGroup(CellType type, out int groupId) => _cellCatalog.TryGetTileGroup(type, out groupId);
 

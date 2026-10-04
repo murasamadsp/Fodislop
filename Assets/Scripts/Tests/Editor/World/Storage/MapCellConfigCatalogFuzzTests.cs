@@ -158,9 +158,9 @@ public class MapCellConfigCatalogFuzzTests
     [TestCase(CellType.Lava, true)]
     [TestCase(CellType.Empty, false)]
     [TestCase(CellType.Rock, false)]
-    public void IsRoundableLoose_DocumentedTypes(CellType type, bool expected)
+    public void CanRoundCorners_DocumentedTypes(CellType type, bool expected)
     {
-        Assert.That(MapCellConfigCatalog.IsRoundableLoose(type), Is.EqualTo(expected));
+        Assert.That(MapCellConfigCatalog.CanRoundCorners(type), Is.EqualTo(expected));
     }
 
     [TestCase(CellType.Road, true)]

@@ -9,7 +9,6 @@ namespace Kern.World.Terrain;
 // визуальными свойствами клетки.
 public static class TerrainSheetCatalog
 {
-    public static bool IsContinuousSheet(CellType cellType) =>
-        MapCellConfigCatalog.IsContinuousSheet(cellType);
-
+    public static bool IsContinuousBed(CellType cellType) =>
+        MapCellConfigCatalog.IsContinuousBed(cellType);
 }

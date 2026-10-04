@@ -89,10 +89,10 @@ internal sealed class DummyProgrammatorResponder
             record.Breakpoints)));
     }
 
-    private void SetState(ProgramState state)
+    private void SetState(ProgramState state, bool isMovementAllowed = true)
     {
         _state = state;
-        _sendPacket(new ServerPacket(new ProgramStatePacket(_state)));
+        _sendPacket(new ServerPacket(new ProgramStatePacket(_state, isMovementAllowed)));
     }
 
     private sealed record ProgramRecord(

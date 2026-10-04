@@ -548,7 +548,7 @@ namespace Kern.Player.Logic
                         (ushort)targetPosition.x,
                         (ushort)targetPosition.y,
                         out CellType residentTargetCellType) ||
-                        residentTargetCellType == CellType.Unloaded))
+                        residentTargetCellType is CellType.Unloaded or CellType.Pregener))
                 {
                     _lastMoveTime = Time.time;
                     _awaitingMoveConfirmation = true;

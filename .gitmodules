@@ -1,0 +1,3 @@
+[submodule "Packages/MinesServerNetworking"]
+	path = Packages/MinesServerNetworking
+	url = https://github.com/MinesReborn/MinesServerNetworking

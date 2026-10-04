@@ -71,7 +71,7 @@ public sealed class BackgroundFloodFill
     {
         return (properties & CellConfigProperties.Passable) != 0 &&
             type != CellType.Unloaded &&
-            type != CellType.BuildingDoor;
+            !CellVisualProtocolRegistry.Current.Get(type).IsBuildingDoor;
     }
 
     // Дорога — покрытие, которое кладёт игрок, а не грунт. Своя клетка

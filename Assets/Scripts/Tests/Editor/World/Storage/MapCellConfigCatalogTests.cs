@@ -268,12 +268,12 @@ public class MapCellConfigCatalogTests
     }
 
     [Test]
-    public void IsRoundableLoose_CorrectlyIdentifiesCellTypes()
+    public void CanRoundCorners_CorrectlyIdentifiesCellTypes()
     {
-        Assert.IsTrue(MapCellConfigCatalog.IsRoundableLoose(CellType.WhiteSand));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoundableLoose(CellType.Lava));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoundableLoose(CellType.Empty));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoundableLoose(CellType.Rock));
+        Assert.IsTrue(MapCellConfigCatalog.CanRoundCorners(CellType.WhiteSand));
+        Assert.IsTrue(MapCellConfigCatalog.CanRoundCorners(CellType.Lava));
+        Assert.IsFalse(MapCellConfigCatalog.CanRoundCorners(CellType.Empty));
+        Assert.IsFalse(MapCellConfigCatalog.CanRoundCorners(CellType.Rock));
     }
 
     [Test]

@@ -13,6 +13,7 @@ using Kern.Networking;
 using Kern.Networking.Auth;
 using Kern.Networking.Connection;
 using Kern.Rendering;
+using Kern.World;
 using MinesServer.Networking.Connection.Client;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -402,6 +403,7 @@ namespace Kern.Core
             builder.Register<WorldLoadProgress>(Lifetime.Singleton).As<IWorldLoadProgress>();
             builder.Register<WindowCommandStream>(Lifetime.Singleton);
             builder.Register<ItemRegistry>(Lifetime.Singleton).As<IItemCatalog>();
+            builder.RegisterInstance(BlockRegistry.Default).As<IBlockRegistry>();
 
             // The persistent application camera as a typed DI dependency.
             // RegisterComponent(applicationCamera) below exposes the Camera

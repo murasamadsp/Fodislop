@@ -60,7 +60,11 @@
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainVertexDistortionCalculator.cs" Link="Game/TerrainVertexDistortionCalculator.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainPrecalculator.cs" Link="Game/TerrainPrecalculator.cs" />
     <Compile Include="$(Game)/World/Common/Contracts/RenderingConstants.cs" Link="Game/RenderingConstants.cs" />
+    <Compile Include="$(Game)/World/Common/Contracts/BlockDefinition.cs" Link="Game/BlockDefinition.cs" />
+    <Compile Include="$(Game)/World/Common/Contracts/IBlockRegistry.cs" Link="Game/IBlockRegistry.cs" />
+    <Compile Include="$(Game)/World/Common/Contracts/CellVisualProtocol.cs" Link="Game/CellVisualProtocolContracts.cs" />
     <Compile Include="$(Game)/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
+    <Compile Include="$(Game)/World/Storage/BlockRegistry.cs" Link="Game/BlockRegistry.cs" />
     <Compile Include="$(Game)/World/Storage/CellVisualProtocol.cs" Link="Game/CellVisualProtocol.cs" />
     <Compile Include="$(Game)/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainAnimationProfile.cs" Link="Game/TerrainAnimationProfile.cs" />

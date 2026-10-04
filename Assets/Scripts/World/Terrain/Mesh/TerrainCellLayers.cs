@@ -17,8 +17,7 @@ internal static class TerrainCellLayers
             return CellType.Empty;
         }
 
-        bool building = foreground is CellType.BuildingWall or
-            CellType.BuildingDoor or CellType.BuildingCorner;
+        bool building = MapCellConfigCatalog.GetVisualProperties(foreground).IsBuilding;
         return building && (properties & CellConfigProperties.Passable) != 0
             ? CellType.Road
             : propagated;

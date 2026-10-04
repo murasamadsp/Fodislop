@@ -22,7 +22,7 @@ public static class PlayerMovementValidator
         bool isCtrlPressed,
         bool ignoreCollision)
     {
-        float cooldown = isCtrlPressed || currentCellType == CellType.Unloaded
+        float cooldown = isCtrlPressed || currentCellType is CellType.Unloaded or CellType.Pregener
             ? mapDataProvider.GetMoveCooldown(CellType.Empty)
             : mapDataProvider.GetMoveCooldown(currentCellType);
 
@@ -36,7 +36,7 @@ public static class PlayerMovementValidator
 
     public static bool IsPassable(CellType cellType, in CellConfigurationPacket cellConfig)
     {
-        return cellType != CellType.Unloaded &&
+        return cellType is not (CellType.Unloaded or CellType.Pregener) &&
                (cellType == CellType.Empty ||
                 ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable));
     }
@@ -69,7 +69,7 @@ public static class PlayerMovementValidator
         ushort targetServerY = (ushort)targetPosition.y;
 
         if (!storage.TryGetCell(targetServerX, targetServerY, out cellType) ||
-            cellType == CellType.Unloaded)
+            cellType is CellType.Unloaded or CellType.Pregener)
         {
             cellType = CellType.Unloaded;
             return false;
