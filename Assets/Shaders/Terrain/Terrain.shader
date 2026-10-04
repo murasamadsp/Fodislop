@@ -204,6 +204,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 frag (Varyings input) : SV_Target
             {
+                // До любых ветвлений и clip: см. TerrainPixelArtWidthTexels.
+                float2 carrierPixelWidth = fwidth(input.packedData.yz);
                 [branch]
                 if (_KernTerrainBenchmarkStage == 1)
                 {
@@ -418,7 +420,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     animationProfile, animType, input.worldPos, input.packedData, _FlowScale);
 
                 float2 finalUV = tileUV.finalUV;
-                finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
+                finalUV = PixelArtSampleUV(
+                    finalUV,
+                    atlasTexelSize.zw,
+                    TerrainPixelArtWidthTexels(carrierPixelWidth, input.tileSizeUV, atlasTexelSize));
                 finalUV = ClampTerrainTileUV(finalUV, tileUV);
 
                 half4 texColor = SampleAtlasColor(atlasSlot, finalUV);
@@ -551,6 +556,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             MaterialFieldOutput MaterialFieldFrag(TerrainLightingFieldVaryings input)
             {
+                // До любых ветвлений и clip: см. TerrainPixelArtWidthTexels.
+                float2 carrierPixelWidth = fwidth(input.packedData.yz);
                 MaterialFieldOutput output;
                 if (_KernLightingFieldDiagnosticStage == 1)
                 {
@@ -590,7 +597,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.animData,
                     input.packedData,
                     albedoAtlasSlot,
-                    atlasTexelSize);
+                    atlasTexelSize,
+                    carrierPixelWidth);
                 if (_KernLightingFieldDiagnosticStage == 2)
                 {
                     output.material = albedoTexel;
@@ -687,6 +695,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 AmbientOcclusionFieldFrag(TerrainLightingFieldVaryings input) : SV_Target
             {
+                // До квантования, ветвлений и clip: см. TerrainPixelArtWidthTexels.
+                float2 carrierPixelWidth = fwidth(input.packedData.yz);
                 // Evaluate coverage and falloff at the native 1/32-cell sample.
                 // No resampling/quantization pass follows this field calculation.
                 input.packedData.yz = QuantizeTerrainPixelCenter(input.packedData.yz);
@@ -778,7 +788,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.animData,
                     input.packedData,
                     atlasSlot,
-                    atlasTexelSize);
+                    atlasTexelSize,
+                    carrierPixelWidth);
                 if (albedoTexel.a < _AlphaCutoff)
                 {
                     clip(-1.0);

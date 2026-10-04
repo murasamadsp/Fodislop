@@ -60,7 +60,8 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
     float4 animData,
     float4 packedData,
     int atlasSlot,
-    float4 atlasTexelSize)
+    float4 atlasTexelSize,
+    float2 carrierPixelWidth)
 {
     TerrainTileUvResult tileUV = ResolveTerrainTileUV(
         geometryUv,
@@ -78,7 +79,10 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
         return half4(0.0, 0.0, 0.0, 0.0);
     }
 
-    float2 finalUV = PixelArtSampleUV(tileUV.finalUV, atlasTexelSize.zw);
+    float2 finalUV = PixelArtSampleUV(
+        tileUV.finalUV,
+        atlasTexelSize.zw,
+        TerrainPixelArtWidthTexels(carrierPixelWidth, tileSize, atlasTexelSize));
     finalUV = ClampTerrainTileUV(finalUV, tileUV);
 #if defined(KERN_TERRAIN_CELLS)
     [branch]

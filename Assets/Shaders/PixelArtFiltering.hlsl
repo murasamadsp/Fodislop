@@ -18,7 +18,12 @@ float _PixelArtFiltering;
 // Сглаживание идёт по ширине пикселя, а не по фиксированной
 // доле текселя: иначе на приближении картинка размывалась бы
 // тем сильнее, чем крупнее тексель, — а нужно ровно обратное.
-float2 PixelArtSampleUV(float2 uv, float2 textureSize)
+//
+// Ширина экранного пикселя в текселях — явный вход. Производная самой UV
+// годится только там, где UV непрерывна на всём примитиве: на разрыве UV
+// (обёртка листа, переход в соседний тайл) fwidth в квадах 2×2 на этой
+// линии равен целому листу, и выборка прилипает к углу текселя.
+float2 PixelArtSampleUV(float2 uv, float2 textureSize, float2 pixelWidthTexels)
 {
     if (_PixelArtFiltering < 0.5)
     {
@@ -27,9 +32,15 @@ float2 PixelArtSampleUV(float2 uv, float2 textureSize)
 
     float2 uvTexels = uv * textureSize;
     float2 seam = floor(uvTexels + 0.5);
-    float2 pixelWidth = max(fwidth(uvTexels), 1e-5);
+    float2 pixelWidth = max(pixelWidthTexels, 1e-5);
     uvTexels = seam + clamp((uvTexels - seam) / pixelWidth, -0.5, 0.5);
     return uvTexels / textureSize;
+}
+
+// Непрерывная UV (сущности): ширина — её собственная производная.
+float2 PixelArtSampleUV(float2 uv, float2 textureSize)
+{
+    return PixelArtSampleUV(uv, textureSize, fwidth(uv * textureSize));
 }
 
 // Shared texture-sampling entry point used by entity shaders. Keep the
