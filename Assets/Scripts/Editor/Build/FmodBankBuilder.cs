@@ -124,18 +124,29 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             return false;
         }
 
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        bool macCommandLine = fmodCliPath.EndsWith(".app/Contents/MacOS/fmodstudio", StringComparison.Ordinal);
+        string arguments = macCommandLine
+            ? $"-working-dir \"{projectRoot}\" -build -ignore-warnings \"{fsproPath}\""
+            : $"-build -ignore-warnings \"{fsproPath}\"";
+
         try
         {
-            Log($"Invoking FMOD Studio CLI compiler: '{fmodCliPath}' -build -ignore-warnings \"{fsproPath}\"...");
+            Log($"Invoking FMOD Studio CLI compiler: '{fmodCliPath}' {arguments}...");
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = fmodCliPath,
-                Arguments = $"-build -ignore-warnings \"{fsproPath}\"",
+                Arguments = arguments,
+                WorkingDirectory = projectRoot,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
             };
+            if (macCommandLine)
+            {
+                psi.EnvironmentVariables["FMODSTUDIOCMDLINE"] = "1";
+            }
 
             using var process = System.Diagnostics.Process.Start(psi) ??
                 throw new BuildFailedException("FMOD Studio CLI could not be started.");
@@ -155,9 +166,9 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             Task.WhenAll(standardOutputTask, standardErrorTask).GetAwaiter().GetResult();
             if (process.ExitCode != 0)
             {
-                string error = standardErrorTask.Result;
+                string details = standardErrorTask.Result + standardOutputTask.Result;
                 throw new BuildFailedException(
-                    $"FMOD Studio CLI build failed with exit code {process.ExitCode}: {error}");
+                    $"FMOD Studio CLI build failed with exit code {process.ExitCode}: {details}");
             }
 
             Log("FMOD Studio CLI build completed successfully.");
@@ -176,8 +187,11 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
 
     private static string? ResolveFmodStudioCliPath()
     {
-        // macOS default installation path
-        const string macos = "/Applications/FMOD Studio.app/Contents/MacOS/fmodstudiocl";
+        // macOS fmodstudiocl is only a shell wrapper: it relaunches the app
+        // through `open -W ... --stdout $(tty)`, so it fails whenever the
+        // caller has no controlling terminal — which is every Unity build.
+        // Run the real binary in command-line mode instead.
+        const string macos = "/Applications/FMOD Studio.app/Contents/MacOS/fmodstudio";
 
         // Windows default installation path (64-bit)
         const string windows = @"C:\Program Files (x86)\FMOD SoundSystem\FMOD Studio\fmodstudiocl.exe";
