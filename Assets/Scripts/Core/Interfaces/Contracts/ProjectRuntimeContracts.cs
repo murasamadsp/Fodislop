@@ -91,6 +91,14 @@ public static class ProjectRuntimeContracts
         public const int LargeAssetRequestTimeoutSeconds = 10;
         public const long AssetCacheCapacityBytes = 256L * 1024 * 1024;
         public const long DecodedAssetCacheCapacityBytes = 256L * 1024 * 1024;
+
+        // Картинки приходят от сервера и по ссылкам из его окон. Крупнейшая своя
+        // картинка — 2496 по стороне, крупнейший ассет сервера — PNG 320×320
+        // на 270 КБ. Без пределов ответ на гигабайт держался бы в памяти
+        // целиком, а PNG 16384×16384 весом в килобайты распаковывался бы в
+        // гигабайт RGBA.
+        public const int MaximumWebAssetBytes = 16 * 1024 * 1024;
+        public const int MaximumEncodedImageSide = 4096;
     }
 
     public static class ResourcePaths
