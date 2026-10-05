@@ -70,6 +70,7 @@ float3 max(float3 a,float3 b) { return {max(a.x,b.x),max(a.y,b.y),max(a.z,b.z)};
 float3 min(float3 a,float b) { return {min(a.x,b),min(a.y,b),min(a.z,b)}; }
 float3 max(float3 a,float b) { return {max(a.x,b),max(a.y,b),max(a.z,b)}; }
 float2 abs(float2 a) { return {(float)std::fabs(a.x),(float)std::fabs(a.y)}; }
+int2 abs(int2 a) { return {std::abs(a.x), std::abs(a.y)}; }
 float2 floor(float2 a) { return {(float)std::floor(a.x),static_cast<float>(std::floor(a.y))}; }
 float2 round(float2 a) { return {(float)std::round(a.x),(float)std::round(a.y)}; }
 float2 ceil(float2 a) { return {(float)std::ceil(a.x),(float)std::ceil(a.y)}; }

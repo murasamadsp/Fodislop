@@ -52,16 +52,18 @@ int FarSideTexel(int latticeLine, int stepSign)
 }
 
 // Crossing mask bits: 1 = x lattice line crossed, 2 = y lattice line crossed.
-// `entered*` describe the step into the current region D, `previous*` the
-// step into the region M before it; lines are field-global texel coordinates.
+// `entered*` describe the step into the current region D, `solidEntry*` the
+// entry into the solid region M before it; lines are field-global texel coordinates.
 // COST: 0 loads on ordinary steps; 1 at an L-turn out of a solid between air;
 // 2 at an exact lattice-point crossing.
 bool CornerSealed(
     int enteredMask,
     int2 enteredLines,
-    int previousMask,
-    int2 previousLines,
-    bool beforePreviousSolid,
+    int solidEntryMask,
+    int2 solidEntryLines,
+    int2 solidEntryTexel,
+    int2 currentFieldTexel,
+    int2 maxCornerSpan,
     bool previousSolid,
     bool currentSolid,
     int2 step)
@@ -76,17 +78,18 @@ bool CornerSealed(
         sealed = TransportSolidTexel(sideA) && TransportSolidTexel(sideB);
     }
     else if ((enteredMask == 1 || enteredMask == 2) &&
-        (previousMask == 1 || previousMask == 2) &&
-        enteredMask != previousMask &&
-        previousSolid && !beforePreviousSolid && !currentSolid)
+        (solidEntryMask == 1 || solidEntryMask == 2) &&
+        enteredMask != solidEntryMask &&
+        previousSolid && !currentSolid &&
+        all(abs(currentFieldTexel - solidEntryTexel) <= maxCornerSpan))
     {
-        // M was entered across one axis and left across the other: O lies on
-        // the near side of M's entry line and the far side of its exit line.
-        int lineX = previousMask == 1 ? previousLines.x : enteredLines.x;
-        int lineY = previousMask == 2 ? previousLines.y : enteredLines.y;
+        // Solid region M was entered across one axis and left across the other into air:
+        // O lies on the near side of M's entry line and the far side of its exit line.
+        int lineX = solidEntryMask == 1 ? solidEntryLines.x : enteredLines.x;
+        int lineY = solidEntryMask == 2 ? solidEntryLines.y : enteredLines.y;
         int2 opposite = int2(
-            previousMask == 1 ? NearSideTexel(lineX, step.x) : FarSideTexel(lineX, step.x),
-            previousMask == 2 ? NearSideTexel(lineY, step.y) : FarSideTexel(lineY, step.y));
+            solidEntryMask == 1 ? NearSideTexel(lineX, step.x) : FarSideTexel(lineX, step.x),
+            solidEntryMask == 2 ? NearSideTexel(lineY, step.y) : FarSideTexel(lineY, step.y));
         sealed = TransportSolidTexel(opposite);
     }
     return sealed;
@@ -244,13 +247,15 @@ void TraceLightSegmentLocal(
     float2 stride = abs(inverseDirection);
     float distance = entry;
     // Corner-seal history: how the current and previous regions (texel or
-    // uniform cell) were entered, and whether the two regions before were solid.
+    // uniform cell) were entered, and the entry boundary into the solid region.
     int enteredMask = 0;
     int2 enteredLines = 0;
-    int previousMask = 0;
-    int2 previousLines = 0;
+    int solidEntryMask = 0;
+    int2 solidEntryLines = 0;
+    int2 solidEntryTexel = 0;
+    float solidDistanceCells = 0.0;
     bool previousSolid = false;
-    bool beforePreviousSolid = false;
+    int2 maxCornerSpan = int2(ceil(1.0 / max(cellsPerPixel, 0.0001))) + 1;
     int2 cachedUniformCell = int2(-1, -1);
     bool uniformCell = false;
     float uniformOccupancy = 0.0;
@@ -309,16 +314,33 @@ void TraceLightSegmentLocal(
             solid = saturate(_MaterialField.Load(int3(materialPixel, 0)).a);
         }
         bool currentSolid = TransportSolidOccupancy(solid);
-        if (CornerSealed(enteredMask, enteredLines, previousMask, previousLines,
-            beforePreviousSolid, previousSolid, currentSolid, step))
+        if (CornerSealed(enteredMask, enteredLines, solidEntryMask, solidEntryLines,
+            solidEntryTexel, texel + fieldAnchor, maxCornerSpan,
+            previousSolid, currentSolid, step))
         {
-            // The closed corner is before this region, including its emitter.
-            transmittance = 0.0;
-            break;
+            float extraCells = max(0.0, 1.0 - solidDistanceCells);
+            transmittance *= SegmentTransmission(1.0, extraCells);
+            solidEntryMask = 0;
+            if (Max3(transmittance) == 0.0)
+            {
+                break;
+            }
+        }
+
+        if (!previousSolid && currentSolid)
+        {
+            solidEntryMask = enteredMask;
+            solidEntryLines = enteredLines;
+            solidEntryTexel = texel + fieldAnchor;
+            solidDistanceCells = 0.0;
         }
 
         float3 extinction = SegmentExtinction(solid);
         float3 transmission = OpticalDepthTransmission(extinction * distanceCells);
+        if (currentSolid)
+        {
+            solidDistanceCells += distanceCells;
+        }
         if (collectEmission)
         {
             float3 emission = 0.0;
@@ -375,10 +397,7 @@ void TraceLightSegmentLocal(
             crossedLines = int2(step.x > 0 ? maximum.x : minimum.x, step.y > 0 ? maximum.y : minimum.y) +
                 fieldAnchor;
         }
-        beforePreviousSolid = previousSolid;
         previousSolid = currentSolid;
-        previousMask = enteredMask;
-        previousLines = enteredLines;
         enteredMask = (crossX ? 1 : 0) | (crossY ? 2 : 0);
         enteredLines = crossedLines;
         if (uniformCell)

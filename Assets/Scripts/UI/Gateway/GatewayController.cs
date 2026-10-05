@@ -49,10 +49,19 @@ namespace Kern.UI
             // (мост, фаза Awake), и панель UIDocument (создаётся в OnEnable
             // документа). Здесь — только реактивация уже построенного UI:
             // переприменяем текст, не перестраивая.
-            if (_initialized && _root != null && _loc != null)
+            if (_initialized && _root != null)
             {
-                _loc.RegisterLocalizable(this);
-                ApplyLocalizedText();
+                _document = GetComponent<UIDocument>();
+                if (_document?.rootVisualElement != null && !_document.rootVisualElement.Contains(_root))
+                {
+                    _document.rootVisualElement.Add(_root);
+                }
+
+                if (_loc != null)
+                {
+                    _loc.RegisterLocalizable(this);
+                    ApplyLocalizedText();
+                }
             }
         }
 

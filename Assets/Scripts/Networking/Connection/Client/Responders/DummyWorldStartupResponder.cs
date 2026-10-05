@@ -35,7 +35,8 @@ internal sealed class DummyWorldStartupResponder(
     List<(ushort X, ushort Y)> teleportPositions,
     Action<ServerPacket> sendPacket,
     Func<int, bool> loopAlive,
-    DummyBlockSpawner blockSpawner)
+    DummyBlockSpawner blockSpawner,
+    IRuntimeAssetPaths? assetPaths = null)
 {
 
     public async UniTask InitializeAsync(
@@ -48,6 +49,7 @@ internal sealed class DummyWorldStartupResponder(
     {
         DummyWorldDescriptor world = await worldState.OpenAsync(worldCodeName);
         SendWorldIdentity(worldCodeName, world, playerName, playerBotId);
+        SendClientConfig();
 
         playerState.SetPosition(25, 50);
         StartBotSimulation(lifecycleVersion);
@@ -216,5 +218,57 @@ internal sealed class DummyWorldStartupResponder(
             sendPacket(new ServerPacket(new OnlinePacket(players, 3)));
             await clock.Delay(12000, cancellationToken);
         }
+    }
+
+    private void SendClientConfig()
+    {
+        IReadOnlyList<string> textures = GetAvailableTextures();
+        sendPacket(new ServerPacket(new ClientConfigPacket(
+            new SoundConfigPacket(255, new Dictionary<string, byte>()),
+            RendererMode.Default,
+            Array.Empty<StringPairPacket>(),
+            textures)));
+    }
+
+    private IReadOnlyList<string> GetAvailableTextures()
+    {
+        if (assetPaths == null)
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            string root = assetPaths.BundledTexturesRoot;
+            if (!System.IO.Directory.Exists(root))
+            {
+                return Array.Empty<string>();
+            }
+
+            var list = new List<string>();
+            foreach (string filePath in System.IO.Directory.EnumerateFiles(root, "*.*", System.IO.SearchOption.AllDirectories))
+            {
+                if (IsTextureFile(filePath))
+                {
+                    string relative = System.IO.Path.GetRelativePath(root, filePath).Replace('\\', '/');
+                    list.Add(relative);
+                }
+            }
+
+            return list;
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static bool IsTextureFile(string path)
+    {
+        string ext = System.IO.Path.GetExtension(path);
+        return ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".exr", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -138,6 +138,12 @@ public class ModalWindowHandler : IDisposable
     {
         if (_overlay != null)
         {
+            VisualElement element = _overlay.parent ?? _overlay;
+            if (_doc.rootVisualElement != null && !_doc.rootVisualElement.Contains(element))
+            {
+                _doc.rootVisualElement.Add(element);
+            }
+
             return;
         }
 

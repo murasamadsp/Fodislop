@@ -373,6 +373,34 @@ int main() {
         _EmissionField.data[3]={16,16,16,0};
         float3 cornerLight;trace(float2{.5f,.5f},float2{1.5f,1.5f},&cornerLight);
         near(cornerLight.x,0,1e-30f,"emitter behind closed diagonal corner");
+        {
+            setup(2,2,2);_SolidExtinctionRGB={1.25f,1.25f,1.25f,0};
+            for(int y=0;y<2;y++)for(int x=2;x<4;x++)_MaterialField.data[y*4+x].w=1;
+            for(int y=2;y<4;y++)for(int x=0;x<2;x++)_MaterialField.data[y*4+x].w=1;
+            _MaterialField.data[2*4+0].w = 0.95f; // edge of block has 0.95 alpha (still solid!)
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_EmissionField.data[y*4+x]={16,16,16,0};
+            float3 light;
+            float3 t1 = trace(float2{.1f,1.91f},float2{3.8f,2.29f},&light);
+            near(t1.x, 0.219059f, 0.005f, "shallow ray attenuates with solid extinction");
+            float3 t2 = trace(float2{1.f,1.f},float2{3.f,3.f},&light);
+            near(t2.x, 0.215921f, 0.005f, "45-deg ray attenuates with solid extinction");
+            float3 t3 = trace(float2{1.91f,.1f},float2{2.29f,3.8f},&light);
+            near(t3.x, 0.218922f, 0.005f, "steep ray attenuates with solid extinction");
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_EmissionField.data[y*4+x]={0,0,0,0};
+            _EmissionField.data[0]={16,16,16,0};
+            float3 t4 = trace(float2{3.8f,2.29f},float2{.1f,1.91f},&light);
+            near(t4.x, t1.x, 1e-5f, "forward and reverse diagonal transmittance match");
+            // 5. Open ray in air within cell (1,1) must NOT be sealed
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_EmissionField.data[y*4+x]={16,16,16,0};
+            trace(float2{2.1f,2.5f},float2{3.9f,2.5f},&light);
+            if (light.x <= 0.001f) throw std::runtime_error("open air ray was incorrectly sealed");
+            // 6. Solitary block: open ray grazing its convex corner must NOT be sealed
+            setup(2,2,2);_SolidExtinctionRGB={1.25f,1.25f,1.25f,0};
+            for(int y=2;y<4;y++)for(int x=0;x<2;x++)_MaterialField.data[y*4+x].w=1; // only top-left is solid
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_EmissionField.data[y*4+x]={16,16,16,0};
+            trace(float2{1.f,1.f},float2{3.f,3.f},&light);
+            if (light.x <= 0.001f) throw std::runtime_error("ray grazing solitary block corner was incorrectly sealed");
+        }
         // Supplementary arithmetic proof using the actual HLSL gather and an
         // independent continuous-square integral. This does not replace GPU
         // production-camera verification.

@@ -135,10 +135,12 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
         // Corner-seal history, as in TraceLightSegmentLocal (DDA.hlsl).
         int enteredMask = 0;
         int2 enteredLines = 0;
-        int previousMask = 0;
-        int2 previousLines = 0;
+        int solidEntryMask = 0;
+        int2 solidEntryLines = 0;
+        int2 solidEntryTexel = 0;
+        float solidDistanceCells = 0.0;
         bool previousSolid = false;
-        bool beforePreviousSolid = false;
+        int2 maxCornerSpan = int2(ceil(1.0 / max(cellsPerPixel, 0.0001))) + 1;
         int2 cachedUniformCell = int2(-1, -1);
         bool uniformCell = false;
         float uniformOccupancy = 0.0;
@@ -188,24 +190,21 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
                 solid = saturate(_MaterialField.Load(int3(materialPixel, 0)).a);
             }
             bool currentSolid = TransportSolidOccupancy(solid);
-            if (CornerSealed(enteredMask, enteredLines, previousMask, previousLines,
-                beforePreviousSolid, previousSolid, currentSolid, step))
+            if (CornerSealed(enteredMask, enteredLines, solidEntryMask, solidEntryLines,
+                solidEntryTexel, texel, maxCornerSpan,
+                previousSolid, currentSolid, step))
             {
-                [loop]
-                while (nextRadius < radii)
-                {
-                    WriteDynamicPolar(angleIndex, nextRadius, pointIndex,
-                        float4(1e6, 1e6, 1e6, 0.0));
-                    nextRadius++;
-                }
+                float extraCells = max(0.0, 1.0 - solidDistanceCells);
+                opticalDepth += SegmentExtinction(1.0) * extraCells;
+                solidEntryMask = 0;
+            }
 
-                if (!horizonFound)
-                {
-                    horizon = distance;
-                    horizonFound = true;
-                }
-
-                break;
+            if (!previousSolid && currentSolid)
+            {
+                solidEntryMask = enteredMask;
+                solidEntryLines = enteredLines;
+                solidEntryTexel = texel;
+                solidDistanceCells = 0.0;
             }
 
             float3 extinction = SegmentExtinction(solid);
@@ -219,6 +218,10 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
             }
 
             opticalDepth += extinction * distanceCells;
+            if (currentSolid)
+            {
+                solidDistanceCells += distanceCells;
+            }
             distance = end;
             if (!horizonFound &&
                 Max3(OpticalDepthTransmission(max(opticalDepth - horizonEntryDepth, 0.0)) * horizonSource) <
@@ -242,10 +245,7 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
                 int2 maximum = int2(round(cellMax));
                 crossedLines = int2(step.x > 0 ? maximum.x : minimum.x, step.y > 0 ? maximum.y : minimum.y);
             }
-            beforePreviousSolid = previousSolid;
             previousSolid = currentSolid;
-            previousMask = enteredMask;
-            previousLines = enteredLines;
             enteredMask = (crossX ? 1 : 0) | (crossY ? 2 : 0);
             enteredLines = crossedLines;
             if (uniformCell)

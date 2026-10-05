@@ -290,7 +290,11 @@ namespace Kern
                     var localData = await tsm.GetTextureData(filename);
                     if (localData != null && localData.Length > 0)
                     {
-                        await _persistentCache.SaveAssetAsync(filename, localData, string.Empty);
+                        if (!_persistentCache.HasAsset(filename))
+                        {
+                            await _persistentCache.SaveAssetAsync(filename, localData, string.Empty);
+                        }
+
                         _dispatcher.RemoveReportedFailure(filename);
                         return localData;
                     }
