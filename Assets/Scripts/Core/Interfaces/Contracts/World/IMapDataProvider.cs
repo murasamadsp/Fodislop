@@ -16,6 +16,9 @@ public interface IMapDataProvider
     bool IsStandaloneMode { get; }
     CellConfigurationPacket GetCellConfig(CellType type);
     float GetMoveCooldown(CellType cellType);
+
+    /// <summary>Самый короткий кулдаун из присланных сервером, в секундах.</summary>
+    float GetMinMoveCooldown();
     bool TryGetTileGroup(CellType type, out int groupId);
     Color GetCellMinimapColor(CellType type);
 

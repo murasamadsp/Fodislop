@@ -133,14 +133,14 @@ internal sealed class DummyGameplayActionResponder(
 
     private void AddCrystalToBasket(CellType cellType)
     {
-        int basketIndex = DummyCellConfigurationUtilities.GetCrystalBasketIndex(cellType);
-        if (basketIndex < 0)
+        CrystalType crystal = DummyCellConfigurationUtilities.GetMinedCrystal(cellType);
+        if (crystal == CrystalType.Unknown)
         {
             return;
         }
 
         long[]? contents = playerState.AddToBasket(
-            basketIndex,
+            (int)crystal,
             clock.Random.Next(1, 101));
         if (contents != null)
         {

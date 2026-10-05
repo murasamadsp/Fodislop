@@ -2,7 +2,6 @@
 
 using System.Collections.Generic;
 using Kern.Core.Interfaces;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 
 namespace Kern.World.Terrain;
@@ -10,8 +9,7 @@ namespace Kern.World.Terrain;
 // Всё, из чего собирается клетка террейна.
 public readonly record struct TerrainCellSources(
     ITerrainCellDataSource CellCache,
-    TerrainPrecalculator Precalc,
-    BackgroundFloodFill FloodFill,
+    TerrainDistortionSettings Distortion,
     int WorldWidth,
     int WorldHeight,
     IReadOnlyList<IAtlasDescriptor> Atlases)

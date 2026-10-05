@@ -123,6 +123,8 @@ public class TerrainRenderer : MonoBehaviour, Kern.Core.Interfaces.WorldLighting
         internal int LastFullBuildAnchoredForegroundCellCount =>
             _window.Driver.Pipeline.CellBuilder.LastFullBuildAnchoredForegroundCellCount;
 
+        internal TerrainCellBuffers CellBuffers => _window.Driver.Pipeline.CellBuilder.Buffers;
+
         public bool IsReadyForGameplay =>
             TerrainReadiness.IsReadyForGameplay(_window, _textureService);
 

@@ -4,10 +4,21 @@ using System.Collections.Generic;
 #if UNITY_5_3_OR_NEWER
 using Kern.Core.Interfaces;
 #endif
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
+using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Kern.World.Terrain;
+
+public struct CachedCellInfo
+{
+    public CellType Type;
+    public CellConfigProperties Properties;
+}
+
+public interface ICachedCellDataProvider
+{
+    CachedCellInfo GetCell(int x, int y);
+}
 
 #if UNITY_5_3_OR_NEWER
 public interface ITerrainMetadataLookup
@@ -22,6 +33,11 @@ public interface ITerrainCellDataSource : ICachedCellDataProvider, ITerrainMetad
     int CacheMinX { get; }
 
     int CacheMinY { get; }
+
+    // Окно с каймой в клетку с каждой стороны.
+    int CacheWidth { get; }
+
+    int CacheHeight { get; }
 
     CachedCellData GetCellData(int x, int y);
 
@@ -41,6 +57,11 @@ public interface ITerrainCellDataSource : ICachedCellDataProvider
     int CacheMinX { get; }
 
     int CacheMinY { get; }
+
+    // Окно с каймой в клетку с каждой стороны.
+    int CacheWidth { get; }
+
+    int CacheHeight { get; }
 
     CachedCellData GetCellData(int x, int y);
 }

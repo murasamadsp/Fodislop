@@ -1,5 +1,6 @@
 #nullable enable
 
+using Kern.World;
 using Kern.World.Terrain;
 using MinesServer.Data;
 using NUnit.Framework;

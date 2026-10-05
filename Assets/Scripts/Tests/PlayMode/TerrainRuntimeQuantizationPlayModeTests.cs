@@ -59,8 +59,6 @@ public sealed class TerrainRuntimeQuantizationPlayModeTests
         Assert.That(cellMaterial, Is.Not.Null);
         Assert.That(cellMaterial.shader.name,
             Is.EqualTo(ProjectRuntimeContracts.ShaderNames.Terrain));
-        Assert.That(cellMaterial.IsKeywordEnabled("KERN_TERRAIN_CELLS"), Is.True,
-            "The live terrain renderer is drawing without the cell-data shader path.");
         Assert.That(terrain.BypassCPUMeshRebuild, Is.False,
             "The production test must observe the real builder, not a debug bypass.");
         Assert.That(terrain.LastFullBuildAnchoredForegroundCellCount, Is.GreaterThan(0),

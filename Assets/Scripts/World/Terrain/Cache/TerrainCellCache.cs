@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.World;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using UnityEngine;
 
@@ -13,15 +12,18 @@ namespace Kern.World.Terrain;
 // Реализует ICachedCellDataProvider сам: заливке фона нужен тип и свойства
 // клетки, и брать их больше неоткуда. Раньше переходником служил
 // TerrainRenderer — MonoBehaviour в роли адаптера над собственным полем.
+//
+// Клетка кэша — один байт типа. Всё, что одинаково у всех клеток типа
+// (свойства, атлас, анимация), живёт в таблице метаданных и собирается в
+// CachedCellData по запросу; состояние — тоже функция типа (Unloaded ⇔
+// незагружена). Приехавшая текстура меняет строку типа, а не клетки.
 public class TerrainCellCache : ITerrainCellDataSource
 {
-    private readonly TerrainRingGrid<CachedCellData> _cellCache = new();
+    private readonly TerrainRingGrid<CellType> _cellCache = new();
     private int _cacheMinX = int.MinValue;
     private int _cacheMinY = int.MinValue;
     private int _cacheWidth;
     private int _cacheHeight;
-    private readonly CellTypeSpatialIndex _cellsByType = new();
-    private readonly List<(long Key, CellType Type)> _refreshEntries = [];
     private readonly TerrainCellMetadataCache _metadataCache = new();
 
     // Снятое главным потоком и ещё не применённое: куда встанет кэш и какие
@@ -29,11 +31,10 @@ public class TerrainCellCache : ITerrainCellDataSource
     //
     // Разделение по потокам проходит ровно здесь. Главный поток читает
     // хранилище — это только байты типов, по байту на клетку, — и разрешает
-    // метаданные немногих встретившихся типов. Раскладка в кольцо,
-    // 80-байтные записи клеток и индекс типов — рабочий поток. Прежде всё это
-    // шло на главном: сдвиг на квант по двум осям стоил ~7 мс кадра.
+    // метаданные немногих встретившихся типов. Раскладка в кольцо — рабочий
+    // поток. Прежде всё это шло на главном: сдвиг на квант по двум осям
+    // стоил ~7 мс кадра.
     private readonly List<RectInt> _pendingRects = [];
-    private readonly HashSet<CellType> _pendingRefreshTypes = [];
     private readonly bool[] _seenTypes = new bool[256];
     private CellType[] _pendingTypes = [];
     private int _pendingTypeCount;
@@ -51,6 +52,8 @@ public class TerrainCellCache : ITerrainCellDataSource
         AtlasIndex = -1,
     };
 
+    private static CachedCellInfo UnloadedCellInfo => new() { Type = CellType.Unloaded };
+
     public int CacheMinX => _hasPending ? _pendingMinX : _cacheMinX;
     public int CacheMinY => _hasPending ? _pendingMinY : _cacheMinY;
     public int CacheWidth => _cacheWidth;
@@ -63,8 +66,6 @@ public class TerrainCellCache : ITerrainCellDataSource
         if (_cellCache.Width != _cacheWidth || _cellCache.Height != _cacheHeight)
         {
             _cellCache.EnsureSize(_cacheWidth, _cacheHeight);
-            _cellsByType.EnsureWindow(_cacheWidth, _cacheHeight);
-            _cellsByType.Clear();
         }
     }
 
@@ -78,11 +79,21 @@ public class TerrainCellCache : ITerrainCellDataSource
 
     public CachedCellInfo GetCell(int x, int y)
     {
-        CachedCellData data = GetCellData(x, y);
-        return new CachedCellInfo { Type = data.Type, Properties = data.Properties };
+        CellType type = GetCellType(x, y);
+        return type == CellType.Unloaded
+            ? UnloadedCellInfo
+            : new CachedCellInfo { Type = type, Properties = RequireMetadata(type).Properties };
     }
 
     public CachedCellData GetCellData(int x, int y)
+    {
+        CellType type = GetCellType(x, y);
+        return type == CellType.Unloaded
+            ? UnloadedCellData
+            : _metadataCache.CreateCachedData(type, RequireMetadata(type));
+    }
+
+    public CellType GetCellType(int x, int y)
     {
         if (x < 0 || x >= _cacheWidth || y < 0 || y >= _cacheHeight)
         {
@@ -170,8 +181,8 @@ public class TerrainCellCache : ITerrainCellDataSource
     }
 
     /// <summary>
-    /// Типы, у которых приехала текстура: метаданные перерешаются сейчас, а
-    /// клетки этих типов в кэше переписываются при применении шага.
+    /// Типы, у которых приехала текстура: метаданные перерешаются сейчас.
+    /// Клетки хранят только тип, поэтому переписывать их не нужно.
     /// </summary>
     ///
     /// Тип перерешается, даже если его клеток в окне нет: он мог остаться
@@ -187,11 +198,6 @@ public class TerrainCellCache : ITerrainCellDataSource
             return;
         }
 
-        if (!_hasPending)
-        {
-            BeginCapture(_cacheMinX, _cacheMinY, full: false, 0, 0);
-        }
-
         _metadataCache.Invalidate(cellTypes);
         _metadataCache.BeginPass();
         foreach (CellType cellType in cellTypes)
@@ -200,8 +206,6 @@ public class TerrainCellCache : ITerrainCellDataSource
             {
                 _metadataCache.GetMetadata(cellType, mapManager, textureService, atlases);
             }
-
-            _pendingRefreshTypes.Add(cellType);
         }
     }
 
@@ -236,9 +240,8 @@ public class TerrainCellCache : ITerrainCellDataSource
     // ---- Рабочий поток: применение шага -----------------------------------
 
     /// <summary>
-    /// Разложить снятое в кольцо: сдвиг, клетки прямоугольников, перечитанные
-    /// типы. Читает метаданные, разрешённые главным потоком до старта, и
-    /// ничего не разрешает сам.
+    /// Разложить снятое в кольцо: сдвиг и клетки прямоугольников. Метаданные
+    /// разрешены главным потоком до старта; читаются они при сборке клетки.
     /// </summary>
     public void ApplyPendingCapture()
     {
@@ -247,15 +250,8 @@ public class TerrainCellCache : ITerrainCellDataSource
             return;
         }
 
-        if (_pendingFull)
+        if (!_pendingFull && (_pendingDeltaX != 0 || _pendingDeltaY != 0))
         {
-            _cellsByType.Clear();
-        }
-        else if (_pendingDeltaX != 0 || _pendingDeltaY != 0)
-        {
-            // Снимать уехавшие клетки с индекса типов отдельным проходом не
-            // нужно: индекс адресует клетку кольцом по размеру окна, и слот
-            // уехавшей клетки — это ровно слот той, что встала на её место.
             _cellCache.Scroll(_pendingDeltaX, _pendingDeltaY);
         }
 
@@ -270,25 +266,7 @@ public class TerrainCellCache : ITerrainCellDataSource
             {
                 for (int y = rect.yMin; y < rect.yMax; y++)
                 {
-                    CellType type = _pendingTypes[cursor++];
-                    SetCachedData(x, y, CreateFromCapturedType(type));
-                }
-            }
-        }
-
-        if (_pendingRefreshTypes.Count > 0)
-        {
-            // Один проход по индексу вместо прохода по окну на каждый тип.
-            _refreshEntries.Clear();
-            _cellsByType.CollectEntries(_pendingRefreshTypes, _refreshEntries);
-            for (int index = 0; index < _refreshEntries.Count; index++)
-            {
-                (long key, CellType cellType) = _refreshEntries[index];
-                int x = TerrainCoordinateKey.UnpackX(key) - _cacheMinX;
-                int y = TerrainCoordinateKey.UnpackY(key) - _cacheMinY;
-                if ((uint)x < (uint)_cacheWidth && (uint)y < (uint)_cacheHeight)
-                {
-                    _cellCache[x, y] = CreateFromCapturedType(cellType);
+                    _cellCache[x, y] = _pendingTypes[cursor++];
                 }
             }
         }
@@ -382,7 +360,6 @@ public class TerrainCellCache : ITerrainCellDataSource
     private void ClearPending()
     {
         _pendingRects.Clear();
-        _pendingRefreshTypes.Clear();
         _pendingTypeCount = 0;
         _hasPending = false;
         _pendingFull = false;
@@ -392,20 +369,15 @@ public class TerrainCellCache : ITerrainCellDataSource
 
     // Метаданные разрешены главным потоком до старта: промах — дефект
     // подготовки, а не повод рисовать подделку.
-    private CachedCellData CreateFromCapturedType(CellType type)
+    private CellMetadata RequireMetadata(CellType type)
     {
-        if (type == CellType.Unloaded)
-        {
-            return UnloadedCellData;
-        }
-
         if (!_metadataCache.TryGet(type, out CellMetadata metadata))
         {
             throw new InvalidOperationException(
-                $"Terrain metadata for cell type '{type}' was not resolved before the cache was applied.");
+                $"Terrain metadata for cell type '{type}' was not resolved before the cache was read.");
         }
 
-        return _metadataCache.CreateCachedData(type, metadata);
+        return metadata;
     }
 
     private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, IWorldLayer<CellType> layer, ref int lastChunkIndex, ref CellType[]? currentChunk)
@@ -441,15 +413,5 @@ public class TerrainCellCache : ITerrainCellDataSource
         }
 
         return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
-    }
-
-    private void SetCachedData(int x, int y, CachedCellData data)
-    {
-        // Снимать клетку с прежнего типа отдельным флагом больше не нужно:
-        // индекс адресует слот кольцом и сам видит, кто в слоте был.
-        _cellsByType.Set(
-            TerrainCoordinateKey.Pack(_cacheMinX + x, _cacheMinY + y),
-            data.Type);
-        _cellCache[x, y] = data;
     }
 }

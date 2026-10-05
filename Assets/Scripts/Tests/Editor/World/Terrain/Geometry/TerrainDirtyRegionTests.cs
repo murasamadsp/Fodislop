@@ -25,23 +25,16 @@ public class TerrainDirtyRegionTests
 
     private static bool Covers(TerrainDirtyRegion region, int ringX, int ringY)
     {
-        for (int layer = 0; layer < TerrainCellDataPacker.LayersPerCell; layer++)
+        for (int i = 0; i < region.Count; i++)
         {
-            int row = (ringY * TerrainCellDataPacker.LayersPerCell) + layer;
-            bool covered = false;
-            for (int i = 0; i < region.Count; i++)
+            RectInt rect = region[i];
+            if (ringX >= rect.xMin && ringX < rect.xMax && ringY >= rect.yMin && ringY < rect.yMax)
             {
-                RectInt rect = region[i];
-                covered |= ringX >= rect.xMin && ringX < rect.xMax && row >= rect.yMin && row < rect.yMax;
-            }
-
-            if (!covered)
-            {
-                return false;
+                return true;
             }
         }
 
-        return true;
+        return false;
     }
 
     // Регрессия, найденная бенчмарком: полосы x и y диагонального шага
@@ -56,7 +49,7 @@ public class TerrainDirtyRegionTests
 
         Assert.That(region.IsAll, Is.False);
         Assert.That(region.Count, Is.EqualTo(2));
-        Assert.That(region.Area, Is.LessThan((long)Width * Height * 2 / 10));
+        Assert.That(region.Area, Is.LessThan((long)Width * Height / 10));
     }
 
     [Test]
@@ -65,7 +58,7 @@ public class TerrainDirtyRegionTests
         TerrainDirtyRegion region = Fresh();
         region.MarkCells(Width - 1, Height - 1, 3, 2);
 
-        Assert.That(region.Area, Is.EqualTo(3L * 2 * TerrainCellDataPacker.LayersPerCell));
+        Assert.That(region.Area, Is.EqualTo(3L * 2));
         foreach ((int x, int y) in new[] { (Width - 1, Height - 1), (0, Height - 1), (1, 0), (Width - 1, 0) })
         {
             Assert.That(Covers(region, x, y), Is.True, $"cell {x},{y}");
@@ -86,7 +79,7 @@ public class TerrainDirtyRegionTests
             region.MarkCells(x, y, 1, 1);
         }
 
-        Assert.That(region.Area, Is.LessThanOrEqualTo(60L * TerrainCellDataPacker.LayersPerCell));
+        Assert.That(region.Area, Is.LessThanOrEqualTo(60L));
 
         foreach ((int x, int y) in marked)
         {
@@ -104,7 +97,7 @@ public class TerrainDirtyRegionTests
             region.MarkCells(90 + random.Next(8), 60 + random.Next(8), 1, 1);
         }
 
-        Assert.That(region.Area, Is.LessThanOrEqualTo(8L * 8 * TerrainCellDataPacker.LayersPerCell));
+        Assert.That(region.Area, Is.LessThanOrEqualTo(8L * 8));
     }
 
     [Test]

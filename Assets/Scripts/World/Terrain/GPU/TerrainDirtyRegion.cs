@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Kern.World.Terrain;
 
-// Изменённые тексели текстур клетки с прошлой выгрузки.
+// Изменённые клетки буфера клеток с прошлой выгрузки.
 //
 // Несколько прямоугольников, а не один общий: при диагональном шаге полоса
 // по x занимает всю высоту, по y — всю ширину, и их объединение было бы всей
@@ -31,7 +31,7 @@ public sealed class TerrainDirtyRegion
 
     public RectInt this[int index] => _rects[index];
 
-    // Площадь в текселях (по две строки на клетку).
+    // Площадь в клетках.
     public long Area
     {
         get
@@ -74,10 +74,10 @@ public sealed class TerrainDirtyRegion
 
         width = Math.Min(width, _cellWidth);
         height = Math.Min(height, _cellHeight);
-        MarkRect(ringX, ringY, width, height, TerrainCellDataPacker.LayersPerCell);
+        MarkRect(ringX, ringY, width, height);
     }
 
-    private void MarkRect(int ringX, int ringY, int width, int height, int layersPerCell)
+    private void MarkRect(int ringX, int ringY, int width, int height)
     {
         if (IsAll || width <= 0 || height <= 0 || _cellWidth <= 0 || _cellHeight <= 0)
         {
@@ -91,29 +91,25 @@ public sealed class TerrainDirtyRegion
         int leftWidth = width - Math.Max(0, rightPart);
         int bottomHeight = height - Math.Max(0, topPart);
 
-        AddRect(ringX, ringY, leftWidth, bottomHeight, layersPerCell);
+        AddRect(ringX, ringY, leftWidth, bottomHeight);
         if (rightPart > 0)
         {
-            AddRect(0, ringY, rightPart, bottomHeight, layersPerCell);
+            AddRect(0, ringY, rightPart, bottomHeight);
         }
 
         if (topPart > 0)
         {
-            AddRect(ringX, 0, leftWidth, topPart, layersPerCell);
+            AddRect(ringX, 0, leftWidth, topPart);
             if (rightPart > 0)
             {
-                AddRect(0, 0, rightPart, topPart, layersPerCell);
+                AddRect(0, 0, rightPart, topPart);
             }
         }
     }
 
-    private void AddRect(int x, int y, int width, int height, int layersPerCell)
+    private void AddRect(int x, int y, int width, int height)
     {
-        var rect = new RectInt(
-            x,
-            y * layersPerCell,
-            width,
-            height * layersPerCell);
+        var rect = new RectInt(x, y, width, height);
         // Сливается только то, что не раздувает площадь: перекрытие или стык
         // по целой стороне. Раньше сливалось всё соприкасающееся, и полосы x
         // и y диагонального шага, касаясь в углу, давали прямоугольник во всю

@@ -138,32 +138,32 @@ public sealed class DummyWorldSimulationStateTests
     [Test]
     public void GetBlockDefinition_MatchesConfiguredPropertiesAndCrystalBaskets()
     {
+        Assert.That(DummyCellConfigurationUtilities.GetMinedCrystal(CellType.Green), Is.EqualTo(CrystalType.Green));
+        Assert.That(DummyCellConfigurationUtilities.GetMinedCrystal(CellType.Cyan), Is.EqualTo(CrystalType.Cyan));
+        Assert.That(DummyCellConfigurationUtilities.GetMinedCrystal(CellType.Road), Is.EqualTo(CrystalType.Unknown));
+
         BlockDefinition green = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Green);
-        Assert.That(green.CrystalBasketIndex, Is.EqualTo(0));
         Assert.That(green.Passable, Is.False);
-        Assert.That(green.MeshDistortion, Is.EqualTo(CellDistortionType.Cause));
+        Assert.That(green.Shape, Is.EqualTo(CellShape.Organic));
         Assert.That(green.MapColorHex, Is.EqualTo("#08D764"));
 
         BlockDefinition road = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Road);
-        Assert.That(road.CrystalBasketIndex, Is.EqualTo(-1));
         Assert.That(road.Passable, Is.True);
         Assert.That(road.MapColorHex, Is.EqualTo("#444444"));
-        Assert.That(road.IsRoad, Is.True);
-        Assert.That(road.DecalFamily, Is.EqualTo("Road"));
+        Assert.That(road.DecalFamily, Is.EqualTo(TerrainDecalFamily.None));
 
         BlockDefinition buildingRoad = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.BuildingRoad);
-        Assert.That(buildingRoad.MeshDistortion, Is.EqualTo(CellDistortionType.Block));
+        Assert.That(buildingRoad.Shape, Is.EqualTo(CellShape.Square));
 
         BlockDefinition lava = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Lava);
-        Assert.That(lava.CanRoundCorners, Is.True);
-        Assert.That(lava.IsFluid, Is.True);
-        Assert.That(lava.SurfaceShaderProfile, Is.EqualTo("MoltenSurface"));
+        Assert.That(lava.Shape, Is.EqualTo(CellShape.Round));
+        Assert.That(lava.Surface, Is.EqualTo(CellSurface.Molten));
 
         BlockDefinition xgreen = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.XGreen);
-        Assert.That(xgreen.SurfaceShaderProfile, Is.EqualTo("PrismaticCrystal"));
-        Assert.That(xgreen.PrismaticPaletteIndex, Is.EqualTo(1));
+        Assert.That(xgreen.Surface, Is.EqualTo(CellSurface.Prismatic));
+        Assert.That(xgreen.SurfacePalette, Is.EqualTo(1));
 
-        byte[][] tileGroups = BlockRegistry.GetTileGroups();
+        byte[][] tileGroups = DummyCellConfigurationUtilities.CreateTileGroups();
         Assert.That(tileGroups.Length, Is.EqualTo(1));
         Assert.That(tileGroups[0], Is.EquivalentTo(new byte[] { 37, 38, 106 }));
 

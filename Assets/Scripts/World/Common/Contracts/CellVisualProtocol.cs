@@ -1,52 +1,81 @@
 #nullable enable
 
-using System;
 using MinesServer.Data;
 
 namespace Kern.World;
 
-public enum TerrainRimFamily : byte
+// Часть постройки: стена и угол пака, дверь и дорога внутри пака, строительный
+// блок. Стена, угол и блок — глухие (бурением не убираются).
+public enum CellStructurePart : byte
 {
     None = 0,
-    Crystal = 1,
-    Rock = 2,
-    GreenBlueRock = 3,
+    Wall = 1,
+    Corner = 2,
+    Door = 3,
+    Road = 4,
+    Block = 5,
 }
 
-[Flags]
-public enum CellVisualFlags : ushort
+// Декаль переднего плана: земля (атлас земли, доля из TerrainConfigHolder)
+// или камень (атлас красно-чёрного камня, 30%). Фон всегда получает землю.
+public enum TerrainDecalFamily : byte
 {
     None = 0,
-    CanRoundCorners = 1 << 0,
-    Road = 1 << 1,
-    CrystalVein = 1 << 2,
-    SolidRockBed = 1 << 3,
-    Fluid = 1 << 4,
-    GreenBlueRockBed = 1 << 5,
-    BuildingWall = 1 << 6,
-    BuildingCorner = 1 << 7,
-    BuildingDoor = 1 << 8,
+    Ground = 1,
+    Stone = 2,
 }
 
-public readonly record struct CellVisualProperties(CellVisualFlags Flags)
+public enum TerrainAnimationProfile : byte
 {
-    public bool CanRoundCorners => (Flags & CellVisualFlags.CanRoundCorners) != 0;
-    public bool IsRoad => (Flags & CellVisualFlags.Road) != 0;
-    public bool IsCrystalVein => (Flags & CellVisualFlags.CrystalVein) != 0;
-    public bool IsSolidRockBed => (Flags & CellVisualFlags.SolidRockBed) != 0;
-    public bool IsFluid => (Flags & CellVisualFlags.Fluid) != 0;
-    public bool IsGreenBlueRockBed => (Flags & CellVisualFlags.GreenBlueRockBed) != 0;
-    public bool IsBuildingWall => (Flags & CellVisualFlags.BuildingWall) != 0;
-    public bool IsBuildingCorner => (Flags & CellVisualFlags.BuildingCorner) != 0;
-    public bool IsBuildingDoor => (Flags & CellVisualFlags.BuildingDoor) != 0;
-    public bool IsBuilding => (Flags & (CellVisualFlags.BuildingWall | CellVisualFlags.BuildingCorner | CellVisualFlags.BuildingDoor)) != 0;
-    public bool IsContinuousBed => IsCrystalVein || IsSolidRockBed || IsGreenBlueRockBed;
+    Default = 0,
+    PrismaticCrystal = 1,
+    MoltenSurface = 2,
+    FacetedCrystal = 3,
+}
 
-    public TerrainRimFamily RimFamily =>
-        IsGreenBlueRockBed ? TerrainRimFamily.GreenBlueRock :
-        IsSolidRockBed ? TerrainRimFamily.Rock :
-        IsCrystalVein ? TerrainRimFamily.Crystal :
-        TerrainRimFamily.None;
+// Поверхность клетки — одна анимация на тип.
+//   Plain     — неподвижная текстура;
+//   Blinking  — мигание (скорость — SurfaceSpeed);
+//   Shimmer   — мерцание (скорость — SurfaceSpeed);
+//   Molten    — расплав (лава);
+//   Faceted   — грани кристалла;
+//   Prismatic — радужный кристалл (палитра — SurfacePalette).
+public enum CellSurface : byte
+{
+    Plain = 0,
+    Blinking = 1,
+    Shimmer = 2,
+    Molten = 3,
+    Faceted = 4,
+    Prismatic = 5,
+}
+
+// Форма клетки — одна на все её геометрические решения.
+//   Flat    — плоский пол: не искажается, лежит под остальным;
+//   Organic — органическая порода: рваный край, двигает узлы сетки;
+//   Square  — жёсткий квадрат: не искажается и держит соседние узлы;
+//   Round   — круглая капля (пески, лава, кислоты): жёсткая, как Square,
+//             но клетку целиком не закрывает.
+public enum CellShape : byte
+{
+    Flat = 0,
+    Organic = 1,
+    Square = 2,
+    Round = 3,
+}
+
+public readonly record struct CellVisualProperties(
+    CellShape Shape,
+    TerrainDecalFamily DecalFamily = TerrainDecalFamily.None,
+    TerrainAnimationProfile SurfaceProfile = TerrainAnimationProfile.Default,
+    byte PaletteIndex = 0,
+    CellStructurePart StructurePart = CellStructurePart.None)
+{
+    public bool IsRound => Shape == CellShape.Round;
+    public bool IsBuildingWall => StructurePart == CellStructurePart.Wall;
+    public bool IsBuildingCorner => StructurePart == CellStructurePart.Corner;
+    public bool IsBuildingDoor => StructurePart == CellStructurePart.Door;
+    public bool IsBuilding => StructurePart is CellStructurePart.Wall or CellStructurePart.Corner or CellStructurePart.Door;
 }
 
 public interface ICellVisualProtocol

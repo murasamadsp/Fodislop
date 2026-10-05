@@ -96,7 +96,6 @@ public static class LightingFrameDumper
         public int lightingFieldRebuildCount;
         public float terrainMeshTimeMs;
         public float terrainCacheTimeMs;
-        public float terrainFloodFillTimeMs;
         [UnityEngine.Serialization.FormerlySerializedAs("terrainGpuUploadTimeMs")]
         public float terrainGPUUploadTimeMs;
         public float terrainAtlasUploadTimeMs;
@@ -238,7 +237,6 @@ public static class LightingFrameDumper
             lightingFieldRebuildCount = telemetry.LightingFieldRebuildCount,
             terrainMeshTimeMs = telemetry.TerrainMeshTimeMs,
             terrainCacheTimeMs = telemetry.TerrainCacheTimeMs,
-            terrainFloodFillTimeMs = telemetry.TerrainFloodFillTimeMs,
             terrainGPUUploadTimeMs = telemetry.TerrainGPUUploadTimeMs,
             terrainAtlasUploadTimeMs = telemetry.TerrainAtlasUploadTimeMs,
             terrainTextureUpload = CreateTerrainTextureUploadDump(telemetry),

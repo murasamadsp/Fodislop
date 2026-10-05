@@ -18,10 +18,7 @@ namespace Kern.Tests.World;
 // причём Execute идёт на настоящем рабочем потоке, а итог сверяется с
 // независимой полной сборкой того же конечного окна.
 //
-// Сверяются кэш с каймой, маски соседства и узлы искажения — чистые функции
-// содержимого окна. Заливка фона и зависящий от неё фоновый слой текселей
-// намеренно не сверяются: инкрементальная заливка сохраняет уже разрешённую
-// внутренность (см. TerrainIncrementalScrollDifferentialTests).
+// Сверяется кэш с каймой — чистая функция содержимого окна.
 [TestFixture]
 public sealed class TerrainBuildPipelineWorkerTests
 {
@@ -94,7 +91,6 @@ public sealed class TerrainBuildPipelineWorkerTests
             new DirtyRectSet(), noTextures, contentRevision: 1, worldGeneration: 0));
 
         AssertCachesEqual(incremental.CellCache, full.CellCache);
-        AssertPrecalculationEqual(incremental.Precalculator, full.Precalculator);
         Assert.That(
             incremental.CellCache.TryGet(CellType.BuildingDoor, out CellMetadata door) &&
             door.IsTextureReady,
@@ -137,45 +133,6 @@ public sealed class TerrainBuildPipelineWorkerTests
         Assert.That(task.Wait(TimeSpan.FromSeconds(10)), Is.True, "шаг не завершился");
         Assert.That(workerThread, Is.Not.EqualTo(mainThread));
         pipeline.RecordPublished(request, task.Result, latencyMs: 0f);
-    }
-
-    private static void AssertPrecalculationEqual(
-        TerrainPrecalculator actual,
-        TerrainPrecalculator expected)
-    {
-        for (int x = 0; x < Width; x++)
-        {
-            for (int y = 0; y < Height; y++)
-            {
-                Assert.That(
-                    actual.CellTilingDescriptors[x, y],
-                    Is.EqualTo(expected.CellTilingDescriptors[x, y]),
-                    $"тайлинг {x},{y}");
-                Assert.That(
-                    actual.CellCornerVariants[x, y],
-                    Is.EqualTo(expected.CellCornerVariants[x, y]),
-                    $"вариант угла {x},{y}");
-                Assert.That(
-                    actual.CellReliefMasks[x, y],
-                    Is.EqualTo(expected.CellReliefMasks[x, y]),
-                    $"рельефная маска {x},{y}");
-                Assert.That(
-                    actual.CellSolidBoundaryMasks[x, y],
-                    Is.EqualTo(expected.CellSolidBoundaryMasks[x, y]),
-                    $"маска твёрдости {x},{y}");
-            }
-        }
-
-        for (int x = 0; x < Width + 1; x++)
-        {
-            for (int y = 0; y < Height + 1; y++)
-            {
-                Assert.That(
-                    actual.GridVertexOffsets[x, y],
-                    Is.EqualTo(expected.GridVertexOffsets[x, y]),
-                    $"смещение узла {x},{y}");
-            }
-        }
     }
 
     private static void AssertCachesEqual(TerrainCellCache actual, TerrainCellCache expected)

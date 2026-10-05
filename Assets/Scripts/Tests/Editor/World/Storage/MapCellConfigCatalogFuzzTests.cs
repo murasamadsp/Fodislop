@@ -154,24 +154,14 @@ public class MapCellConfigCatalogFuzzTests
         Assert.That(c.a, Is.EqualTo(1f));
     }
 
-    [TestCase(CellType.WhiteSand, true)]
-    [TestCase(CellType.Lava, true)]
-    [TestCase(CellType.Empty, false)]
-    [TestCase(CellType.Rock, false)]
-    public void CanRoundCorners_DocumentedTypes(CellType type, bool expected)
+    [TestCase(CellType.WhiteSand, CellShape.Round)]
+    [TestCase(CellType.Lava, CellShape.Round)]
+    [TestCase(CellType.Empty, CellShape.Flat)]
+    [TestCase(CellType.Rock, CellShape.Organic)]
+    [TestCase(CellType.Boulder1, CellShape.Square)]
+    public void Shape_DocumentedTypes(CellType type, CellShape expected)
     {
-        Assert.That(MapCellConfigCatalog.CanRoundCorners(type), Is.EqualTo(expected));
-    }
-
-    [TestCase(CellType.Road, true)]
-    [TestCase(CellType.GoldenRoad, true)]
-    [TestCase(CellType.BuildingRoad, true)]
-    [TestCase(CellType.PolymerRoad, true)]
-    [TestCase(CellType.Empty, false)]
-    [TestCase(CellType.Rock, false)]
-    public void IsRoad_DocumentedTypes(CellType type, bool expected)
-    {
-        Assert.That(MapCellConfigCatalog.IsRoad(type), Is.EqualTo(expected));
+        Assert.That(MapCellConfigCatalog.GetVisualProperties(type).Shape, Is.EqualTo(expected));
     }
 
 

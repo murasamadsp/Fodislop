@@ -268,6 +268,8 @@ public class PlayerMovementValidatorTests
         public float GetMoveCooldown(CellType cellType) =>
             cellType == CellType.Empty ? emptyCooldown : normalCooldown;
 
+        public float GetMinMoveCooldown() => Mathf.Min(emptyCooldown, normalCooldown);
+
         public bool TryGetTileGroup(CellType type, out int groupId)
         {
             groupId = 0;

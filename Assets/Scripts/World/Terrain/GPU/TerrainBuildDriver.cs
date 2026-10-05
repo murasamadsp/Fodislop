@@ -127,9 +127,7 @@ public sealed class TerrainBuildDriver : IDisposable
             request,
             result,
             _pipeline.CellBuilder,
-            _pipeline.CreateSources(request),
-            _pipeline.LastBuildScrolled,
-            _pipeline.LastScrollDelta);
+            _pipeline.LastBuildScrolled);
     }
 
     /// <summary>Опубликованной версии больше нет: её двери не показываются.</summary>

@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Kern.World;
@@ -17,7 +16,6 @@ public sealed class BlockRegistry : IBlockRegistry
 
     private static readonly BlockDefinition[] s_blockArray = new BlockDefinition[256];
     private static readonly Dictionary<CellType, BlockDefinition> s_blocks = LoadRegistry();
-    private static readonly byte[][] s_tileGroups = ComputeTileGroups();
     private static readonly BlockRegistry s_defaultInstance = new();
 
     public static IBlockRegistry Default => s_defaultInstance;
@@ -44,12 +42,6 @@ public sealed class BlockRegistry : IBlockRegistry
     bool IBlockRegistry.TryGet(CellType type, out BlockDefinition definition) =>
         s_blocks.TryGetValue(type, out definition);
 
-    public static byte[][] GetTileGroups() =>
-        s_tileGroups;
-
-    byte[][] IBlockRegistry.GetTileGroups() =>
-        s_tileGroups;
-
     private static Dictionary<CellType, BlockDefinition> LoadRegistry()
     {
         string json = LoadJsonContent();
@@ -75,47 +67,17 @@ public sealed class BlockRegistry : IBlockRegistry
                 continue;
             }
 
-            CellDistortionType distortion = CellDistortionType.Neutral;
-            if (!string.IsNullOrEmpty(raw.MeshDistortion))
-            {
-                Enum.TryParse(raw.MeshDistortion, true, out distortion);
-            }
-
-            CellAnimationType animation = CellAnimationType.None;
-            if (!string.IsNullOrEmpty(raw.ShaderEffect))
-            {
-                Enum.TryParse(raw.ShaderEffect, true, out animation);
-            }
-
             var def = new BlockDefinition
             {
                 Passable = raw.Passable,
-                Breakable = raw.Breakable,
-                Diggable = raw.Diggable,
-                MoveCooldownMs = raw.MoveCooldownMs,
-                CastsShadow = raw.CastsShadow,
-                ReceivesShadow = raw.ReceivesShadow,
-                BlendWithNeighbors = raw.BlendWithNeighbors,
                 EmitsLight = raw.EmitsLight,
-                ConnectedTileGroupId = raw.ConnectedTileGroupId,
-                MeshDistortion = distortion,
-                ShaderEffect = animation,
-                ShaderEffectSpeed = raw.ShaderEffectSpeed,
-                ShaderEffectPhaseOffset = raw.ShaderEffectPhaseOffset,
-                SurfaceShaderProfile = raw.SurfaceShaderProfile ?? "Default",
-                DecalFamily = raw.DecalFamily ?? "None",
-                PrismaticPaletteIndex = raw.PrismaticPaletteIndex,
-                TerrainSeamGroupId = raw.TerrainSeamGroupId,
-                CanRoundCorners = raw.CanRoundCorners,
-                IsRoad = raw.IsRoad,
-                IsCrystalVein = raw.IsCrystalVein,
-                IsSolidRockBed = raw.IsSolidRockBed,
-                IsFluid = raw.IsFluid,
-                ReliefRimFamily = raw.ReliefRimFamily ?? "None",
-                StructurePartType = raw.StructurePartType ?? "None",
-                IsPackBlock = raw.IsPackBlock,
-                IsBuildingBlock = raw.IsBuildingBlock,
-                CrystalBasketIndex = raw.CrystalBasketIndex,
+                Surface = ParseEnum(raw.Surface, CellSurface.Plain, cellName),
+                SurfaceSpeed = raw.SurfaceSpeed,
+                SurfacePalette = raw.SurfacePalette,
+                DecalFamily = ParseEnum(raw.DecalFamily, TerrainDecalFamily.None, cellName),
+                RimGroup = raw.RimGroup,
+                Shape = ParseEnum(raw.Shape, CellShape.Flat, cellName),
+                StructurePart = ParseEnum(raw.StructurePartType, CellStructurePart.None, cellName),
                 MapColorHex = raw.MapColorHex,
             };
 
@@ -124,6 +86,21 @@ public sealed class BlockRegistry : IBlockRegistry
         }
 
         return result;
+    }
+
+    // Неизвестное имя — ошибка конфига, а не повод тихо нарисовать тип
+    // значением по умолчанию.
+    private static T ParseEnum<T>(string? value, T fallback, string cellName)
+        where T : struct, Enum
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return fallback;
+        }
+
+        return Enum.TryParse(value, ignoreCase: true, out T parsed)
+            ? parsed
+            : throw new InvalidDataException($"Cell '{cellName}': unknown {typeof(T).Name} '{value}'.");
     }
 
     private static string LoadJsonContent()
@@ -162,96 +139,32 @@ public sealed class BlockRegistry : IBlockRegistry
             $"Master block config file not found at '{RelativeFilePath}' or Resources '{ResourcePath}'.");
     }
 
-    private static byte[][] ComputeTileGroups()
-    {
-        var map = new SortedDictionary<int, List<byte>>();
-        foreach ((CellType type, BlockDefinition def) in s_blocks)
-        {
-            if (def.ConnectedTileGroupId >= 0)
-            {
-                if (!map.TryGetValue(def.ConnectedTileGroupId, out List<byte>? list))
-                {
-                    list = new List<byte>();
-                    map[def.ConnectedTileGroupId] = list;
-                }
-
-                list.Add((byte)type);
-            }
-        }
-
-        var result = new byte[map.Count][];
-        int i = 0;
-        foreach (List<byte> list in map.Values)
-        {
-            result[i++] = list.ToArray();
-        }
-
-        return result;
-    }
-
     private sealed class RawCellDefinition
     {
         // 1. Физика и базовые свойства
         public bool Passable { get; set; }
 
-        public bool Breakable { get; set; }
-
-        public bool Diggable { get; set; }
-
-        public ushort MoveCooldownMs { get; set; }
-
         // 2. Светотень и освещение
-        public bool CastsShadow { get; set; }
-
-        public bool ReceivesShadow { get; set; }
-
-        public bool BlendWithNeighbors { get; set; }
-
         public bool EmitsLight { get; set; }
 
-        // 3. Текстура и шейдерные эффекты
-        public int ConnectedTileGroupId { get; set; } = -1;
+        // 3. Поверхность и декаль
+        public string? Surface { get; set; }
 
-        public string? MeshDistortion { get; set; }
+        public byte SurfaceSpeed { get; set; }
 
-        public string? ShaderEffect { get; set; }
-
-        public byte ShaderEffectSpeed { get; set; }
-
-        public byte ShaderEffectPhaseOffset { get; set; }
-
-        public string? SurfaceShaderProfile { get; set; }
+        public byte SurfacePalette { get; set; }
 
         public string? DecalFamily { get; set; }
 
-        public int PrismaticPaletteIndex { get; set; }
+        // 4. Геометрия и кайма
+        public byte RimGroup { get; set; }
 
-        // 4. Геометрия террейна и швы
-        public byte TerrainSeamGroupId { get; set; }
-
-        public bool CanRoundCorners { get; set; }
-
-        public bool IsRoad { get; set; }
-
-        public bool IsCrystalVein { get; set; }
-
-        public bool IsSolidRockBed { get; set; }
-
-        public bool IsFluid { get; set; }
-
-        public string? ReliefRimFamily { get; set; }
+        public string? Shape { get; set; }
 
         // 5. Постройки и интерактивные зоны
         public string? StructurePartType { get; set; }
 
-        public bool IsPackBlock { get; set; }
-
-        public bool IsBuildingBlock { get; set; }
-
-        // 6. Экономика и сбор
-        public int CrystalBasketIndex { get; set; } = -1;
-
-        // 7. Карта
+        // 6. Карта
         public string? MapColorHex { get; set; }
     }
 }

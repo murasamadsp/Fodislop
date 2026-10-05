@@ -88,12 +88,11 @@ public class TerrainCellMaskCalculatorFuzzTests
     }
 
     [Test]
-    public void CalculateSolidBoundaryMask_AlwaysFitsInEightBits()
+    public void CalculateSolidBoundaryMask_AlwaysFitsInFourBits()
     {
         byte mask = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            new CachedCellData(), new CachedCellData(), new CachedCellData(), new CachedCellData(),
             new CachedCellData(), new CachedCellData(), new CachedCellData(), new CachedCellData());
-        Assert.That(mask, Is.InRange(0, 255));
+        Assert.That(mask, Is.InRange(0, 15));
     }
 
     [Test]

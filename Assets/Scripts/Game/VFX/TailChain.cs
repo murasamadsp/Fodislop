@@ -34,7 +34,7 @@ public sealed class TailChain
     ///     elapsed time. Deriving the alpha this way is what makes the motion frame-rate
     ///     independent; a plain <c>lerp</c> toward the predecessor per frame would not be.
     /// </summary>
-    private const float ReferenceStepsPerSecond = 60f;
+    private const float ReferenceStepsPerSecond = 60f; //TODO убрать нахуй эту функцию.
 
     /// <summary>Weight of the old node position; the remainder is the pull toward the target.</summary>
     private const float BaseInertia = 0.35f;

@@ -116,9 +116,9 @@ LightingEngine
 
 TerrainRenderer
   ├── TerrainViewportCalculator  — размер и origin terrain window
-  ├── TerrainCellCache           — CPU ring cache
-  ├── TerrainCellBuilder         — mesh/vertex data
-  └── TerrainCellDataTextures    — cell/material textures
+  ├── TerrainCellCache           — CPU ring cache, one CellType byte per cell
+  ├── TerrainCellBuilder         — cell buffer fill, door overlay index
+  └── TerrainCellBuffers         — ushort per cell (both layers) + 256-row type table
 
 DummyMapStreamer
   ├── StreamingGovernor          — target window
@@ -167,11 +167,11 @@ displaced silhouette as the visible pass. Coverage alone retains the full
 foreground carrier to expose its cutouts; background quads remain rectangular
 in all views.
 
-Background autotile descriptors are computed from the resolved flood-fill
-background types, not borrowed from the foreground descriptor. The metadata
-warmup includes the one-cell neighborhood required by the eight-neighbor tile
-group mask. Regional background rebuilds therefore need their adjacent fill
-types warmed before parallel quad generation.
+Background autotile descriptors are computed from the neighbours' background
+types, not borrowed from the foreground descriptor. The background type is a
+pure function of the cell's own type (`TerrainCellLayers.ResolveBackground`):
+a floor lies on itself, the passable part of a pack lies on road, everything
+else lies on ground (Empty). There is no flood fill.
 
 ## Lighting stages and contracts
 
@@ -286,12 +286,36 @@ texel in world units, converted to cell-local units by the terrain shader. This
 keeps the full contact falloff available at extreme corners;
 material/emission and visible passes use zero carrier padding.
 
-The cell shape encoding has two explicit owners at the CPU/GPU boundary:
-`TerrainCellGeometry` encodes four organic edge bends and their Meta bytes on
-the CPU; `TerrainGeometryContract.hlsl` owns shader-side 1/32 quantization and
-Meta decoding. `TerrainQuadBuilder` selects the four edge values but does not
-own their wire format, and `TerrainCellDataPacker` transports the contract but
-does not define it. `TerrainCellData.hlsl` consumes decoded geometry metadata;
+The cell data wire format has one owner per side: `TerrainCellData.cs` packs
+one `ushort` per cell (two per buffer `uint`): the foreground type (0 = not
+loaded) and the background type before the layer decision (the floor itself,
+pack road or ground). One two-`uint4` row per cell type carries the atlas
+rect, tile, frames, animation, light colour, emission, flags and the
+neighbourhood properties (solid, tile group, pack wall/corner, opacity,
+continuous sheet for Organic shapes, rim group); row 0 stays zero. Two cells
+form one mass without a rim exactly when their rim groups are equal and
+non-zero. The ring is one cell wider than the
+window on every side; the margin holds only the neighbour's foreground type.
+`TerrainCellData.hlsl` reads the cell, its eight neighbours and each
+neighbour's flags/neighbourhood row pair once, and derives everything else
+with the rules of the former CPU quad builder: whether the background is drawn
+or fully occluded, autotile descriptors of both layers, pack wall variants,
+the solid-neighbour mask, relief code and concave corners, organic edge bends,
+the four grid nodes (`TerrainNode`, integer classic jitter or integer value
+noise in 1/256 cell, bit-exact with
+`TerrainVertexDistortionCalculator.ComputeNode`), animation phase, decal and
+world cell. The autotile table (`TileBitmaskConverter`) is uploaded as a small
+buffer; distortion parameters are eight global `float4`s
+(`TerrainCellData.PackDistortion`). The cell ID mesh vertex is four halves
+(x, y, layer, corner index) — 8 bytes.
+`TerrainGeometryContract.hlsl` owns shader-side 1/32 quantization.
+`TerrainCellPacker.ResolveTypeSurface` is the single source for per-type
+values. Doors are drawn by a second mesh of the same cell addresses (layer 2:
+grid address without the view offset) with the same cell material. The
+former CPU vertex builder lives in `Assets/Scripts/Tests/Editor/World/Terrain/Reference`
+as the frozen visual reference for equivalence tests.
+Node offsets are integers in 1/256 cell on both sides, so CPU reference and
+shader agree bit for bit.
 `TerrainGeometry.hlsl` evaluates the polygon and signed distance, while
 `TerrainContour.hlsl` owns contour and relief consumers. This keeps
 carrier construction, raster coverage, relief, AO, and crystal sampling on the

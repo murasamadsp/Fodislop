@@ -58,13 +58,13 @@ public sealed class TerrainPresentationWindow : IDisposable
         if (offset != _viewOffset)
         {
             _viewOffset = offset;
-            Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, offset);
+            Shader.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, offset);
         }
 
         if (meshFilter != null && meshFilter.sharedMesh != _mesh.Mesh)
         {
             meshFilter.sharedMesh = _mesh.Mesh;
-            Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, _viewOffset);
+            Shader.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, _viewOffset);
         }
     }
 

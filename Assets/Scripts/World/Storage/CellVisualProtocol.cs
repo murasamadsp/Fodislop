@@ -41,53 +41,18 @@ public sealed class LegacyCellVisualProtocol : ICellVisualProtocol
         var properties = new CellVisualProperties[256];
         foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
         {
-            CellVisualFlags flags = CellVisualFlags.None;
-            if (def.CanRoundCorners)
-            {
-                flags |= CellVisualFlags.CanRoundCorners;
-            }
-
-            if (def.IsRoad)
-            {
-                flags |= CellVisualFlags.Road;
-            }
-
-            if (def.IsFluid)
-            {
-                flags |= CellVisualFlags.Fluid;
-            }
-
-            if (def.IsCrystalVein)
-            {
-                flags |= CellVisualFlags.CrystalVein;
-            }
-
-            if (def.IsSolidRockBed)
-            {
-                flags |= CellVisualFlags.SolidRockBed;
-            }
-
-            if (string.Equals(def.ReliefRimFamily, "GreenBlueRock", StringComparison.OrdinalIgnoreCase))
-            {
-                flags |= CellVisualFlags.GreenBlueRockBed;
-            }
-
-            if (string.Equals(def.StructurePartType, "Wall", StringComparison.OrdinalIgnoreCase))
-            {
-                flags |= CellVisualFlags.BuildingWall;
-            }
-
-            if (string.Equals(def.StructurePartType, "Corner", StringComparison.OrdinalIgnoreCase))
-            {
-                flags |= CellVisualFlags.BuildingCorner;
-            }
-
-            if (string.Equals(def.StructurePartType, "Door", StringComparison.OrdinalIgnoreCase))
-            {
-                flags |= CellVisualFlags.BuildingDoor;
-            }
-
-            properties[(byte)type] = new CellVisualProperties(flags);
+            properties[(byte)type] = new CellVisualProperties(
+                def.Shape,
+                def.DecalFamily,
+                def.Surface switch
+                {
+                    CellSurface.Molten => TerrainAnimationProfile.MoltenSurface,
+                    CellSurface.Faceted => TerrainAnimationProfile.FacetedCrystal,
+                    CellSurface.Prismatic => TerrainAnimationProfile.PrismaticCrystal,
+                    _ => TerrainAnimationProfile.Default,
+                },
+                def.SurfacePalette,
+                def.StructurePart);
         }
 
         return properties;

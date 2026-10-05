@@ -6,7 +6,6 @@ using Cysharp.Threading.Tasks;
 using Kern.Core.Interfaces;
 using Kern.World;
 using Kern.World.Terrain;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
@@ -58,8 +57,7 @@ public sealed class TerrainTestWorld
         set => _textures.RoadTextureReady = value;
     }
 
-    // Порода с полостями из хеша координаты: те же клетки, что у соседних
-    // тестов заливки фона, чтобы один и тот же мир читался узнаваемо.
+    // Порода с полостями из хеша координаты.
     public static CellType CellAt(int worldX, int serverY)
     {
         if ((uint)worldX >= WorldWidth || (uint)serverY >= WorldHeight)
@@ -82,31 +80,21 @@ public sealed class TerrainTestWorld
     }
 
     // Собранный вход сборки клеток для окна (minX, minY) размера w×h:
-    // кэш, предрасчёт и заливка фона уже посчитаны, как в LateUpdate.
+    // кэш уже заполнен, как в LateUpdate.
     public TerrainCellSources BuildSources(
         TerrainCellCache cache,
-        TerrainPrecalculator precalc,
-        BackgroundFloodFill floodFill,
+        TerrainDistortionSettings distortion,
         int minX,
         int minY,
         int width,
         int height)
     {
         cache.EnsureCapacity(width, height);
-        precalc.EnsureCapacity(width, height);
-        floodFill.Allocate(width, height);
-
         cache.PopulateFull(minX, minY, _storage, _mapData, _textures, _atlases);
-        precalc.PrecalculateFull(new TerrainPrecalculationInput(
-            cache,
-            new Vector2Int(width, height),
-            new Vector2Int(WorldWidth, WorldHeight)));
-        floodFill.ComputeFull(cache);
 
         return new TerrainCellSources(
             cache,
-            precalc,
-            floodFill,
+            distortion,
             WorldWidth,
             WorldHeight,
             _atlases);
@@ -169,6 +157,9 @@ public sealed class TerrainTestWorld
         }
 
         public float GetMoveCooldown(CellType cellType) => 0f;
+
+
+        public float GetMinMoveCooldown() => 0f;
 
         public bool TryGetTileGroup(CellType type, out int groupId)
         {

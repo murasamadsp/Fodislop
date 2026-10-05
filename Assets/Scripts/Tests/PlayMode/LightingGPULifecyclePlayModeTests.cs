@@ -11,6 +11,7 @@ using Kern.Player;
 using Kern.Rendering;
 using Kern.World.Lighting;
 using Kern.World.Terrain;
+using MinesServer.Data;
 using UnityEngine.Rendering;
 using NUnit.Framework;
 using UnityEngine;
@@ -1605,32 +1606,27 @@ public sealed class LightingGPULifecyclePlayModeTests
                 }
             }
         }
-        Texture? meta = Shader.GetGlobalTexture("_TerrainCellMeta");
-        Assert.That(meta, Is.Not.Null);
-        bool metaRead = false;
+        // Ближайшая к камере клетка переднего плана — по той же копии слоёв
+        // клетки, что уходит в _TerrainCells.
+        TerrainCellBuffers cells = terrain.CellBuffers;
         Vector2 nearestForeground = default;
-        AsyncGPUReadback.Request(meta!, 0, request =>
         {
-            Assert.That(request.hasError, Is.False);
-            var texels = request.GetData<Color32>();
             int foregroundAtlas = 0;
             Vector4 origin = Shader.GetGlobalVector("_TerrainCellOrigin");
             Vector4 grid = Shader.GetGlobalVector("_TerrainCellGridSize");
             Vector3 cameraPosition = PlayModeHarness.RequireInGame<IGameplayCamera>().Camera.transform.position;
             float nearestDistance = float.MaxValue;
-            for (int row = 1; row < meta!.height; row += 2)
+            for (int localY = 0; localY < cells.MeshHeight; localY++)
             {
-                for (int x = 0; x < meta.width; x++)
+                for (int localX = 0; localX < cells.MeshWidth; localX++)
                 {
-                    if (texels[row * meta.width + x].r > 0)
+                    int gridX = (int)origin.x + localX;
+                    int unityY = (int)origin.y + localY;
+                    CellType foregroundType = TerrainCellData.ForegroundTypeOf(cells.GetCell(gridX, unityY));
+                    if (foregroundType is not (CellType.Unloaded or CellType.Empty))
                     {
                         foregroundAtlas++;
-                        int localX = (x - (int)origin.x) % (int)grid.x;
-                        int localY = (row / 2 - (int)origin.y) % (int)grid.y;
-                        if (localX < 0) { localX += (int)grid.x; }
-                        if (localY < 0) { localY += (int)grid.y; }
-                        Vector2 world = new((origin.x + localX + 0.5f) * grid.z,
-                            (origin.y + localY + 0.5f) * grid.z);
+                        Vector2 world = new((gridX + 0.5f) * grid.z, (unityY + 0.5f) * grid.z);
                         float distance = ((Vector3)world - cameraPosition).sqrMagnitude;
                         if (distance < nearestDistance)
                         {
@@ -1640,10 +1636,9 @@ public sealed class LightingGPULifecyclePlayModeTests
                     }
                 }
             }
-            TestContext.WriteLine($"foregroundAtlasTexels={foregroundAtlas}; meta={meta.width}x{meta.height}");
-            metaRead = true;
-        });
-        yield return PlayModeHarness.WaitUntil(() => metaRead, 10f, "Terrain mesh addressing readback did not finish.");
+            TestContext.WriteLine($"foregroundCells={foregroundAtlas}; grid={cells.MeshWidth}x{cells.MeshHeight}");
+        }
+
         var standaloneMaterial = new RenderTexture(materialField.descriptor);
         var standaloneEmission = new RenderTexture(lighting.GPUResources.Geometry.StaticEmission!.descriptor);
         try

@@ -25,7 +25,7 @@ internal sealed class TerrainBuildPresentation : IDisposable
 
     public Material[] CellMaterials => _materials.CellMaterials;
 
-    public bool HasMaterials => _materials.Materials.Length > 0;
+    public bool HasMaterials => _materials.CellMaterials.Length > 0;
 
     public float CellSize => _cellSize;
 
@@ -105,7 +105,7 @@ internal sealed class TerrainBuildPresentation : IDisposable
     }
 
     public bool CanContinueBuild(IReadOnlyList<IAtlasDescriptor> atlases) =>
-        atlases.Count > 0 && _materials.Materials.Length > 0;
+        atlases.Count > 0 && _materials.CellMaterials.Length > 0;
 
     public void Publish(
         IReadOnlyList<IAtlasDescriptor> atlases,
@@ -113,22 +113,15 @@ internal sealed class TerrainBuildPresentation : IDisposable
         TerrainCPUBuildRequest request,
         TerrainCPUBuildResult result,
         TerrainCellBuilder cellBuilder,
-        in TerrainCellSources sources,
-        bool lastBuildScrolled,
-        Vector2Int lastScrollDelta)
+        bool lastBuildScrolled)
     {
         FlushAtlases(context);
         _materials.BindAtlasTextures(atlases, context.TextureService);
-        if (result.DoorsTouched)
+        // Адреса накладки заданы в сетке окна: после сдвига окна они
+        // указывают на другие клетки и пересобираются вместе с составом.
+        if (result.DoorsTouched || lastBuildScrolled)
         {
-            RebuildDoorOverlay(cellBuilder, sources, request);
-            return;
-        }
-
-        if (lastBuildScrolled)
-        {
-            _doorOverlay.CompensateParentTranslation(
-                new Vector3(lastScrollDelta.x * _cellSize, lastScrollDelta.y * _cellSize, 0f));
+            RebuildDoorOverlay(cellBuilder, request);
         }
     }
 
@@ -142,7 +135,6 @@ internal sealed class TerrainBuildPresentation : IDisposable
 
     private void RebuildDoorOverlay(
         TerrainCellBuilder cellBuilder,
-        in TerrainCellSources sources,
         TerrainCPUBuildRequest request)
     {
         if (_parent == null || _sceneObjects == null)
@@ -153,12 +145,9 @@ internal sealed class TerrainBuildPresentation : IDisposable
 
         _doorOverlay.Rebuild(
             cellBuilder,
-            sources,
-            request.Origin.x,
-            request.Origin.y,
             _parent,
             _sceneObjects,
-            _materials.OverlayMaterials,
+            _materials.CellMaterials,
             _sortingLayerName,
             _doorOverlaySortingOrder,
             request.Size.x,

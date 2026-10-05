@@ -50,8 +50,6 @@ public static class FrameProbeCatalog
         new("· сборка мусора", "GC.Collect", true, false, "GarbageCollector.CollectIncremental"),
         new("Террейн — весь этап", "Kern.Terrain.LateUpdate.CPU"),
         new("· кеш клеток", "Kern.Terrain.Cache", isDetail: true),
-        new("· предрасчёт", "Kern.Terrain.Precalculate", isDetail: true),
-        new("· заливка фона", "Kern.World.Terrain.BackgroundFloodFill", isDetail: true),
         new("· сборка меша", "Kern.Terrain.MeshBuild", isDetail: true),
         new("· заливка вершин", "Kern.Terrain.MeshUpload", isDetail: true),
         new("Свет — весь этап", "Kern.Lighting.UpdateLighting.CPU"),

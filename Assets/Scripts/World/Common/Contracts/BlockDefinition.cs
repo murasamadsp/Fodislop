@@ -1,7 +1,6 @@
 #nullable enable
 
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Kern.World;
 
@@ -10,64 +9,30 @@ public readonly record struct BlockDefinition
     // 1. Физика и базовые свойства
     public bool Passable { get; init; } = false;
 
-    public bool Breakable { get; init; } = false;
-
-    public bool Diggable { get; init; } = false;
-
-    public ushort MoveCooldownMs { get; init; } = 0;
-
     // 2. Светотень и освещение
-    public bool CastsShadow { get; init; } = false;
-
-    public bool ReceivesShadow { get; init; } = false;
-
-    public bool BlendWithNeighbors { get; init; } = false;
-
     public bool EmitsLight { get; init; } = false;
 
-    // 3. Текстура и шейдерные эффекты
-    public int ConnectedTileGroupId { get; init; } = -1;
+    // 3. Поверхность и декаль
+    public CellSurface Surface { get; init; } = CellSurface.Plain;
 
-    public CellDistortionType MeshDistortion { get; init; } = CellDistortionType.Neutral;
+    // Скорость мигания и мерцания; у остальных поверхностей ноль.
+    public byte SurfaceSpeed { get; init; } = 0;
 
-    public CellAnimationType ShaderEffect { get; init; } = CellAnimationType.None;
+    // Палитра радужного кристалла; у остальных поверхностей ноль.
+    public byte SurfacePalette { get; init; } = 0;
 
-    public byte ShaderEffectSpeed { get; init; } = 0;
+    public TerrainDecalFamily DecalFamily { get; init; } = TerrainDecalFamily.None;
 
-    public byte ShaderEffectPhaseOffset { get; init; } = 0;
+    // 4. Геометрия и кайма
+    // Группа каймы: соседи одной ненулевой группы — одна масса без каймы.
+    public byte RimGroup { get; init; } = 0;
 
-    public string SurfaceShaderProfile { get; init; } = "Default";
-
-    public string DecalFamily { get; init; } = "None";
-
-    public int PrismaticPaletteIndex { get; init; } = 0;
-
-    // 4. Геометрия террейна и швы
-    public byte TerrainSeamGroupId { get; init; } = 0;
-
-    public bool CanRoundCorners { get; init; } = false;
-
-    public bool IsRoad { get; init; } = false;
-
-    public bool IsCrystalVein { get; init; } = false;
-
-    public bool IsSolidRockBed { get; init; } = false;
-
-    public bool IsFluid { get; init; } = false;
-
-    public string ReliefRimFamily { get; init; } = "None";
+    public CellShape Shape { get; init; } = CellShape.Flat;
 
     // 5. Постройки и интерактивные зоны
-    public string StructurePartType { get; init; } = "None";
+    public CellStructurePart StructurePart { get; init; } = CellStructurePart.None;
 
-    public bool IsPackBlock { get; init; } = false;
-
-    public bool IsBuildingBlock { get; init; } = false;
-
-    // 6. Экономика и сбор
-    public int CrystalBasketIndex { get; init; } = -1;
-
-    // 7. Карта
+    // 6. Карта
     public string? MapColorHex { get; init; } = null;
 
     public BlockDefinition()

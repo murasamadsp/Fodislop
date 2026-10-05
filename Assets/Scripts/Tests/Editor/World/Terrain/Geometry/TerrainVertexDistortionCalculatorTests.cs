@@ -11,15 +11,27 @@ using UnityEngine;
 [TestFixture]
 public class TerrainVertexDistortionCalculatorTests
 {
+    // Узел считается целыми числами и лежит на сетке 1/256 клетки:
+    // шейдер считает его тем же правилом и получает ту же точку.
     [Test]
-    public void EnsureCapacity_AllocatesCorrectGridDimensions()
+    public void OrganicNodeLiesOnTheGeometryUnitGrid()
     {
-        var calculator = new TerrainVertexDistortionCalculator();
-        calculator.EnsureCapacity(10, 20);
+        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
+        int moved = 0;
+        for (int x = 1; x < 200; x++)
+        {
+            for (int y = 1; y < 200; y += 7)
+            {
+                TerrainVertexOffset node = TerrainVertexDistortionCalculator.ComputeOrganicOffset(
+                    cause, cause, cause, cause, x, y);
+                Assert.That(node.XSteps * TerrainVertexDistortionCalculator.UnitsPerStep % 1f, Is.Zero);
+                Assert.That(node.YSteps * TerrainVertexDistortionCalculator.UnitsPerStep % 1f, Is.Zero);
+                Assert.That(Mathf.Abs(node.XSteps), Is.LessThanOrEqualTo(TerrainConfigHolder.OrganicMaximumOffsetSteps / 2f));
+                moved += node != TerrainVertexOffset.Zero ? 1 : 0;
+            }
+        }
 
-        Assert.IsNotNull(calculator.GridVertexOffsets);
-        Assert.AreEqual(11, calculator.GridVertexOffsets.GetLength(0));
-        Assert.AreEqual(21, calculator.GridVertexOffsets.GetLength(1));
+        Assert.That(moved, Is.GreaterThan(0));
     }
 
     [Test]

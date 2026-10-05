@@ -15,8 +15,8 @@ namespace Kern.World.Terrain;
 /// </summary>
 ///
 /// Кэш клеток заполняется на главном потоке — это единственное место, где
-/// читается живое хранилище мира и разрешаются типы. После этого кэш,
-/// предрасчёт, заливка фона и тексели принадлежат рабочему потоку до
+/// читается живое хранилище мира и разрешаются типы. После этого кэш и
+/// клетки принадлежат рабочему потоку до
 /// публикации. Снимок кэша не копируется: владение передаётся целиком, а
 /// главный поток до публикации к этим структурам не прикасается.
 internal sealed class TerrainCPUBuildRequest
@@ -66,7 +66,7 @@ internal sealed class TerrainCPUBuildRequest
 
     public Vector2Int Size { get; }
 
-    /// <summary>Кэш перенёс перекрытие; предрасчёт и заливка идут приращением.</summary>
+    /// <summary>Кэш перенёс перекрытие; клетки идут приращением.</summary>
     public bool CacheScrolled { get; }
 
     public Vector2Int ScrollDelta { get; }
@@ -100,12 +100,9 @@ internal sealed class TerrainCPUBuildResult
     public TerrainCPUBuildResult(
         bool doorsTouched,
         float cacheMs,
-        float precalculateMs,
-        float floodFillMs,
         float meshMs,
         float elapsedMs,
         float scrollMs,
-        float warmupMs,
         float fillMs,
         int filledCells,
         float quadMs,
@@ -113,12 +110,9 @@ internal sealed class TerrainCPUBuildResult
     {
         DoorsTouched = doorsTouched;
         CacheMs = cacheMs;
-        PrecalculateMs = precalculateMs;
-        FloodFillMs = floodFillMs;
         MeshMs = meshMs;
         ElapsedMs = elapsedMs;
         ScrollMs = scrollMs;
-        WarmupMs = warmupMs;
         FillMs = fillMs;
         FilledCells = filledCells;
         QuadMs = quadMs;
@@ -129,17 +123,11 @@ internal sealed class TerrainCPUBuildResult
 
     public float CacheMs { get; }
 
-    public float PrecalculateMs { get; }
-
-    public float FloodFillMs { get; }
-
     public float MeshMs { get; }
 
     public float ElapsedMs { get; }
 
     public float ScrollMs { get; }
-
-    public float WarmupMs { get; }
 
     public float FillMs { get; }
 
@@ -157,17 +145,11 @@ internal sealed class TerrainCPUBuildResultBuilder
     /// <summary>Раскладка снятых клеток в кольцо кэша.</summary>
     public float CacheMs { get; set; }
 
-    public float PrecalculateMs { get; set; }
-
-    public float FloodFillMs { get; set; }
-
     public float MeshMs { get; set; }
 
     // Разбивка текселей по стадиям сборщика, сложенная по всем его вызовам
     // шага: полоса и каждая заплатка сбрасывают счётчики сборщика заново.
     public float ScrollMs { get; set; }
-
-    public float WarmupMs { get; set; }
 
     public float FillMs { get; set; }
 
@@ -182,7 +164,6 @@ internal sealed class TerrainCPUBuildResultBuilder
     public void AddBuilderStages(TerrainCellBuilder builder)
     {
         ScrollMs += builder.LastScrollMs;
-        WarmupMs += builder.LastWarmupMs;
         FillMs += builder.LastFillMs;
         FilledCells += builder.LastFilledCells;
         QuadMs += builder.LastQuadMs;
@@ -192,12 +173,9 @@ internal sealed class TerrainCPUBuildResultBuilder
     public TerrainCPUBuildResult Build() => new(
         DoorsTouched,
         CacheMs,
-        PrecalculateMs,
-        FloodFillMs,
         MeshMs,
         ElapsedMs,
         ScrollMs,
-        WarmupMs,
         FillMs,
         FilledCells,
         QuadMs,

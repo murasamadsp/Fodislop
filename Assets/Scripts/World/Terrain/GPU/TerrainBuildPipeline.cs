@@ -7,7 +7,6 @@ using System.Threading;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Interfaces.Diagnostics;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using Unity.Profiling;
 using UnityEngine;
@@ -15,27 +14,24 @@ using UnityEngine;
 namespace Kern.World.Terrain;
 
 /// <summary>
-/// Путь клетки от данных мира до текселя: кэш → предрасчёт → заливка фона →
-/// тексели.
+/// Путь клетки от данных мира до буфера клеток: кэш → клетки.
 /// </summary>
 ///
-/// Четыре стадии всегда идут вместе и в этом порядке: маски соседства читают
-/// кэш, заливка читает кэш, тексель читает и маски, и заливку. Поэтому они
-/// живут одним типом, а не четырьмя полями рендерера, и каждая стадия имеет
-/// ровно три входа — полный проход, сдвиг окна и заплатка по прямоугольнику.
+/// Стадии всегда идут вместе и в этом порядке: клетка читает кэш. Поэтому
+/// они живут одним типом, а не полями рендерера, и каждая стадия имеет ровно
+/// три входа — полный проход, сдвиг окна и заплатка по прямоугольнику.
 ///
 /// Работа разделена по потокам ровно по границе живого мира. Кэш клеток
 /// читает хранилище и разрешает типы — это главный поток, <see cref="Prepare"/>.
 /// Всё остальное считает только из кэша и снимков атласов — это рабочий
 /// поток, <see cref="Execute"/>. Между ними владение передаётся целиком:
-/// пока шаг идёт, главный поток не трогает ни одну из четырёх стадий.
+/// пока шаг идёт, главный поток не трогает ни одну из стадий.
 public sealed class TerrainBuildPipeline : IDisposable
 {
     private static readonly ProfilerMarker s_cacheMarker = new("Kern.Terrain.Cache");
 
     private readonly TerrainCellCache _cellCache = new();
-    private readonly TerrainPrecalculator _precalc = new();
-    private readonly BackgroundFloodFill _floodFill = new();
+    private readonly TerrainDistortionSettings _distortion = new();
     private readonly TerrainCellBuilder _cellBuilder = new();
     private readonly List<IAtlasDescriptor> _snapshotSources = [];
     private IAtlasDescriptor[] _atlasSnapshots = [];
@@ -45,18 +41,16 @@ public sealed class TerrainBuildPipeline : IDisposable
 
     public TerrainCellBuilder CellBuilder => _cellBuilder;
 
-    internal TerrainPrecalculator Precalculator => _precalc;
-
     public bool EnableDistortion
     {
-        get => _precalc.EnableDistortion;
-        set => _precalc.EnableDistortion = value;
+        get => _distortion.EnableDistortion;
+        set => _distortion.EnableDistortion = value;
     }
 
     public TerrainDistortionStyle DistortionStyle
     {
-        get => _precalc.DistortionStyle;
-        set => _precalc.DistortionStyle = value;
+        get => _distortion.DistortionStyle;
+        set => _distortion.DistortionStyle = value;
     }
 
     /// <summary>Последний опубликованный шаг перенёс перекрытие вместо полной сборки.</summary>
@@ -76,20 +70,8 @@ public sealed class TerrainBuildPipeline : IDisposable
     public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
     {
         _cellCache.EnsureCapacity(meshWidth, meshHeight);
-        _precalc.EnsureCapacity(meshWidth, meshHeight);
         _cellBuilder.EnsureCapacity(meshWidth, meshHeight, cellSize);
-        _floodFill.Allocate(meshWidth, meshHeight);
     }
-
-    /// <summary>Источники для главного потока: накладка дверей после публикации.</summary>
-    internal TerrainCellSources CreateSources(TerrainCPUBuildRequest request) =>
-        new(
-            _cellCache,
-            _precalc,
-            _floodFill,
-            request.WorldWidth,
-            request.WorldHeight,
-            request.Atlases);
 
     /// <summary>
     /// Главный поток: довести кэш клеток до шага и составить задание рабочему.
@@ -219,7 +201,7 @@ public sealed class TerrainBuildPipeline : IDisposable
     }
 
     /// <summary>
-    /// Рабочий поток: предрасчёт, заливка и тексели по уже заполненному кэшу.
+    /// Рабочий поток: клетки по уже заполненному кэшу.
     /// Ни хранилища, ни сервисов, ни Unity-объектов здесь нет.
     /// </summary>
     ///
@@ -235,26 +217,21 @@ public sealed class TerrainBuildPipeline : IDisposable
         int minY = request.Origin.y;
         TerrainCellSources sources = new(
             _cellCache,
-            _precalc,
-            _floodFill,
+            _distortion,
             request.WorldWidth,
             request.WorldHeight,
             request.Atlases);
-        var precalculation = new TerrainPrecalculationInput(
-            _cellCache,
-            request.Size,
-            new Vector2Int(request.WorldWidth, request.WorldHeight));
 
         long cacheStart = Stopwatch.GetTimestamp();
         _cellCache.ApplyPendingCapture();
         result.CacheMs = ElapsedMs(cacheStart);
 
         // Шаг из одних изменённых клеток кэш не двигал: полосы нет, и
-        // приращение предрасчёта и заливки было бы пустым проходом.
+        // приращение было бы пустым проходом.
         bool moved = request.BuildFull || request.ScrollDelta != Vector2Int.zero;
         if (moved)
         {
-            RunWindowStages(request, precalculation, sources, result, cancellationToken);
+            RunWindowStages(request, sources, result, cancellationToken);
         }
 
         for (int index = 0; index < request.DirtyRegions.Length; index++)
@@ -271,17 +248,6 @@ public sealed class TerrainBuildPipeline : IDisposable
             {
                 continue;
             }
-
-            long precalculateStart = Stopwatch.GetTimestamp();
-            _precalc.PrecalculateRegion(
-                precalculation,
-                region);
-            result.PrecalculateMs += ElapsedMs(precalculateStart);
-
-            long floodStart = Stopwatch.GetTimestamp();
-            _floodFill.UpdateLocalRegion(
-                region.StartX, region.StartY, region.CountX, region.CountY, _cellCache);
-            result.FloodFillMs += ElapsedMs(floodStart);
 
             long meshStart = Stopwatch.GetTimestamp();
             _cellBuilder.BuildRegion(
@@ -313,46 +279,10 @@ public sealed class TerrainBuildPipeline : IDisposable
 
     private void RunWindowStages(
         TerrainCPUBuildRequest request,
-        in TerrainPrecalculationInput precalculation,
         in TerrainCellSources sources,
         TerrainCPUBuildResultBuilder result,
         CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        // Полная сборка текселей идёт по полному предрасчёту и заливке: после
-        // пачки изменений приращение по сдвигу не покрыло бы изменённые
-        // клетки, а рабочему потоку полный проход ничего не стоит в кадре.
-        bool incremental = request.CacheScrolled && !request.BuildFull;
-        long precalculateStart = Stopwatch.GetTimestamp();
-        if (incremental)
-        {
-            _precalc.PrecalculateIncremental(
-                precalculation,
-                request.ScrollDelta);
-        }
-        else
-        {
-            _precalc.PrecalculateFull(
-                precalculation);
-        }
-
-        result.PrecalculateMs += ElapsedMs(precalculateStart);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // Тем же сдвигом, что кэш и предрасчёт выше: иначе на каждом переходе
-        // через границу региона заливка одна платила по площади за то, что
-        // сдвинулось на кайму.
-        long floodStart = Stopwatch.GetTimestamp();
-        if (incremental)
-        {
-            _floodFill.ComputeScrolled(request.ScrollDelta.x, request.ScrollDelta.y, _cellCache);
-        }
-        else
-        {
-            _floodFill.ComputeFull(_cellCache);
-        }
-
-        result.FloodFillMs += ElapsedMs(floodStart);
         cancellationToken.ThrowIfCancellationRequested();
 
         // Тексели лежат по кольцевому адресу и при сдвиге не двигаются:
@@ -455,11 +385,8 @@ public sealed class TerrainBuildPipeline : IDisposable
         LastWorkerCost = new TerrainWorkerCost(
             kind,
             result.CacheMs,
-            result.PrecalculateMs,
-            result.FloodFillMs,
             result.MeshMs,
             result.ScrollMs,
-            result.WarmupMs,
             result.FillMs,
             result.FilledCells,
             result.QuadMs,

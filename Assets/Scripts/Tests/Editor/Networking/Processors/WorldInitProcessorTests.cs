@@ -101,6 +101,8 @@ public class WorldInitProcessorTests
         public Camera MainCamera => null!;
         public bool IsStandaloneMode => false;
         public float GetMoveCooldown(CellType cellType) => 0f;
+
+        public float GetMinMoveCooldown() => 0f;
         public CellConfigurationPacket GetCellConfig(CellType type) => default;
         public bool TryGetTileGroup(CellType type, out int groupId)
         {

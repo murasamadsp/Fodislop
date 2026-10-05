@@ -82,9 +82,9 @@ ol, ul { margin: 10px 0; padding-left: 22px; } li { margin: 5px 0; }
   <td>Определяет и картинку, и <em>физическую</em> занятость для света: ошибка в списке меняет тени.</td></tr>
 
 <tr><td>Дороги не перекрывают свет</td>
-  <td><code>MapCellConfigCatalog.IsRoad</code></td>
+  <td>решено: массы нет у любой проходимой клетки (<code>Passable</code>)</td>
   <td>свойства клетки</td>
-  <td>Свободный бит в <code>Properties</code> есть, а признак живёт списком.</td></tr>
+  <td>Отдельного признака дороги больше нет.</td></tr>
 
 <tr><td>Постройки и искусственные блоки</td>
   <td><code>MapCellConfigCatalog.IsBuildingOrArtificialBlock</code>, <code>TerrainQuadBuilder.IsBuildingBlock</code></td>
@@ -114,7 +114,7 @@ ol, ul { margin: 10px 0; padding-left: 22px; } li { margin: 5px 0; }
 <table>
 <tr><th>Бит</th><th>Имя</th><th>Заменяет</th></tr>
 <tr><td>1 &lt;&lt; 6</td><td><code>RoundedSilhouette</code></td><td><code>IsRoundableLoose</code></td></tr>
-<tr><td>1 &lt;&lt; 7</td><td><code>TransmitsLight</code></td><td><code>IsRoad</code></td></tr>
+<tr><td>1 &lt;&lt; 7</td><td><code>TransmitsLight</code></td><td>не нужен: свет решает <code>Passable</code></td></tr>
 </table>
 <p>Размер пакета не меняется.</p>
 

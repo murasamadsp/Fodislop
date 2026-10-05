@@ -66,7 +66,7 @@ boundary (`Assets/Scripts/World/Terrain/**/*.cs` → Lighting implementation and
   `LightingPresentation`, `LightingRuntimeState`, and `LightingInvalidationFlags`.
 - Lighting → Terrain implementation: `TerrainRenderer`,
   `TerrainViewportCalculator`, `TerrainCellCache`, `TerrainCellBuilder`,
-  `TerrainCellDataTextures`, `TerrainMeshManager`, `TerrainMaterialManager`,
+  `TerrainCellBuffers`, `TerrainMeshManager`, `TerrainMaterialManager`,
   `TerrainLook`, and any `Kern.World.Terrain` implementation namespace/type.
 - Either direction: concrete implementation types, private state, or mutable
   invalidation flags from the other domain; `GetComponent`, `Find*`, scene/name
@@ -438,7 +438,7 @@ and review each hit in the diff. Run from repository root:
 
 ```sh
 rg -n '\b(LightingEngine|LightingComposition|LightingUpdateCoordinator|LightingFrameExecutor|GeometryLightingSolver|StaticLightingSolver|DynamicLightingSolver|IndirectLightingSolver|LightingGeometryRegistry|LightingResourceManager|LightingTexturePool|LightingPresentation|LightingRuntimeState|LightingInvalidationFlags)\b' Assets/Scripts/World/Terrain --glob '*.cs'
-rg -n '\b(TerrainRenderer|TerrainViewportCalculator|TerrainCellCache|TerrainCellBuilder|TerrainCellDataTextures|TerrainMeshManager|TerrainMaterialManager|TerrainLook)\b|Kern\.World\.Terrain' Assets/Scripts/World/Lighting --glob '*.cs'
+rg -n '\b(TerrainRenderer|TerrainViewportCalculator|TerrainCellCache|TerrainCellBuilder|TerrainCellBuffers|TerrainMeshManager|TerrainMaterialManager|TerrainLook)\b|Kern\.World\.Terrain' Assets/Scripts/World/Lighting --glob '*.cs'
 ```
 
 These scans are currently **manual gates**, not CI checks. Nonzero output is

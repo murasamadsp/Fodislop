@@ -133,14 +133,19 @@ namespace Kern.World.Terrain
         // Три пространственных масштаба органического смещения и их веса.
         // Оба направления используют одинаковые масштабы и веса, но разные
         // ключи шума, чтобы не двигаться по диагонали синхронно.
+        //
+        // Шум считается целыми числами (TerrainVertexDistortionCalculator и
+        // шейдер одинаково), поэтому веса — проценты (в сумме 100), контраст —
+        // целый множитель, центр — процент. Период не больше 10 клеток:
+        // иначе билинейная интерполяция выходит за 32 бита.
         public const int OrganicNoiseBroadPeriodCells = 9;
         public const int OrganicNoiseMediumPeriodCells = 4;
         public const int OrganicNoiseFinePeriodCells = 2;
-        public const float OrganicNoiseBroadWeight = 0.50f;
-        public const float OrganicNoiseMediumWeight = 0.35f;
-        public const float OrganicNoiseFineWeight = 0.15f;
-        public const float OrganicNoiseContrast = 2f;
-        public const float OrganicNoiseCenter = 0.5f;
+        public const int OrganicNoiseBroadWeightPercent = 50;
+        public const int OrganicNoiseMediumWeightPercent = 35;
+        public const int OrganicNoiseFineWeightPercent = 15;
+        public const int OrganicNoiseContrast = 2;
+        public const int OrganicNoiseCenterPercent = 50;
         public const uint OrganicNoiseBroadXSeed = 0xA53u;
         public const uint OrganicNoiseMediumXSeed = 0xB71u;
         public const uint OrganicNoiseFineXSeed = 0xC25u;
