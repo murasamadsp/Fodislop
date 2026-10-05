@@ -64,8 +64,6 @@ public sealed class FrameBenchmarkPlayModeTests
         "Kern.Terrain.MeshBuild",
         "Kern.Terrain.MeshUpload",
         "Kern.Terrain.Cache",
-        "Kern.Terrain.Precalculate",
-        "Kern.World.Terrain.BackgroundFloodFill",
         "Gfx.WaitForPresentOnGfxThread",
         "Gfx.PresentFrame",
         "UIR.DrawChain",
@@ -147,7 +145,6 @@ public sealed class FrameBenchmarkPlayModeTests
         public readonly bool? ProducerLifecycleValid = (telemetry as IFrameTelemetryProducerStamp)?.ProducerLifecycleValid;
         public readonly float TerrainMesh = telemetry.TerrainMeshTimeMs;
         public readonly float TerrainCache = telemetry.TerrainCacheTimeMs;
-        public readonly float TerrainFloodFill = telemetry.TerrainFloodFillTimeMs;
         public readonly float TerrainGPUUpload = telemetry.TerrainGPUUploadTimeMs;
         public readonly float TerrainAtlasUpload = telemetry.TerrainAtlasUploadTimeMs;
         public readonly float LightingBuildCommands = telemetry.LightingBuildCommandsTimeMs;
@@ -279,7 +276,6 @@ public sealed class FrameBenchmarkPlayModeTests
             {
                 terrainMesh = TerrainMesh,
                 terrainCache = TerrainCache,
-                terrainFloodFill = TerrainFloodFill,
                 terrainGPUUpload = TerrainGPUUpload,
                 terrainAtlasUpload = TerrainAtlasUpload,
                 lightingBuildCommands = LightingBuildCommands,

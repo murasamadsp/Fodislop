@@ -5,7 +5,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         // Runtime materials must inject both textures. Neutral shader values
         // deliberately make a missing injection visible instead of rendering
         // an implicit white/gray world.
-        [MainTexture] _BaseMap ("Texture Atlas", 2D) = "black" {}
         _PrismaticFlowMap ("X Crystal Phase Vectors", 2D) = "black" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
         _TerrainDecalAtlas ("Terrain Decal Atlas", 2D) = "black" {}
@@ -49,7 +48,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         _PrismaticTintE ("Prismatic Tint E", Color) = (1,0,0,1)
         _PremultiplyAlphaFloor ("Premultiply Alpha Floor", Float) = 0.15
         _AlphaCutoff ("Alpha Cutoff", Float) = 0.05
-        [HideInInspector] _TerrainAtlasIndex ("Terrain Atlas Index", Float) = 0
         [HideInInspector] _TerrainAtlas0 ("Terrain Atlas 0", 2D) = "black" {}
         [HideInInspector] _TerrainAtlas1 ("Terrain Atlas 1", 2D) = "black" {}
         [HideInInspector] _TerrainAtlas2 ("Terrain Atlas 2", 2D) = "black" {}
@@ -82,7 +80,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile _ KERN_WORLD_LIGHTING
-            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/Terrain/TerrainColorAnimation.hlsl"
@@ -103,8 +100,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             // Explicit benchmark-only cumulative fragment checkpoints; zero is production.
             int _KernTerrainBenchmarkStage;
 
-            TEXTURE2D(_BaseMap);
-            SAMPLER(sampler_BaseMap);
             TEXTURE2D(_PrismaticFlowMap);
             SAMPLER(sampler_PrismaticFlowMap);
             TEXTURE2D(_FlowMap);
@@ -117,7 +112,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             {
                 float4 positionCS   : SV_POSITION;
                 float2 uv           : TEXCOORD0;
-                float4 color        : COLOR;
                 float4 subAtlasRect : TEXCOORD1;
                 float4 tileSizeUV   : TEXCOORD2;
                 float4 worldPos     : TEXCOORD3;
@@ -136,7 +130,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 SampleAtlasColor(int slot, float2 uv)
             {
-            #if defined(KERN_TERRAIN_CELLS)
                 [branch]
                 if (_PixelArtFiltering < 0.5)
                 {
@@ -144,15 +137,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 }
 
                 return TerrainSampleAtlas(slot, sampler_LinearClamp, uv);
-            #else
-                [branch]
-                if (_PixelArtFiltering < 0.5)
-                {
-                    return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, uv, 0);
-                }
-
-                return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, uv, 0);
-            #endif
             }
 
             float MissingTextureHash(float2 position)
@@ -176,7 +160,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Varyings vert (TerrainVertexInput input)
             {
                 Varyings output = (Varyings)0;
-            #if defined(KERN_TERRAIN_CELLS)
                 TERRAIN_RESOLVE_CELL_VERTEX(input, output)
                 output.worldPosition = TransformObjectToWorld(cell.positionOS);
                 output.cellWorldOrigin = TransformObjectToWorld(float3(
@@ -189,17 +172,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 }
                 output.worldPosition = rasterWorldPosition;
                 return output;
-            #else
-                TERRAIN_RESOLVE_ATTRIBUTE_VERTEX(input, output)
-                output.worldPosition = TransformObjectToWorld(input.positionOS.xyz);
-                float3 rasterWorldPosition = KernWorldGridVertex(output.worldPosition);
-                if (output.atlasIndex >= 0.0)
-                {
-                    output.positionCS = KernWorldGridClipPosition(rasterWorldPosition);
-                }
-                output.worldPosition = rasterWorldPosition;
-                return output;
-            #endif
             }
 
             half4 frag (Varyings input) : SV_Target
@@ -212,7 +184,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.5, 0.5, 0.5, 1.0);
                 }
 
-            #if defined(KERN_TERRAIN_CELLS)
                 // Мировая позиция фрагмента нужна только свету и AO. Интерполянт
                 // около y≈40000 держит 1/256 клетки (1/8 арт-пикселя): у границы
                 // текселя AO (32 на клетку, точечный) до 17% строк пикселей брали
@@ -222,7 +193,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // Текстура и силуэт считаются по packedData, как прежде.
                 input.worldPosition.xy = input.cellWorldOrigin +
                     (QuantizeTerrainPixelCenter(input.packedData.yz) * _TerrainCellGridSize.z);
-            #endif
                 TerrainSurfaceInputs surface = BuildTerrainSurfaceInputs(
                     input.packedData,
                     input.uv,
@@ -231,13 +201,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.glowData,
                     input.animData.w);
                 int animationProfile = surface.animationProfile;
-                float applyGeometry = 0.0;
-            #if defined(KERN_TERRAIN_CELLS)
                 // Geometry belongs to the foreground layer.  Keep the
                 // background quad rectangular so it can fill the area exposed
                 // by a displaced foreground silhouette.
-                applyGeometry = input.isForeground;
-            #endif
+                float applyGeometry = input.isForeground;
                 float cellCoverage = EvaluateTerrainCellCoverage(
                     surface,
                     1.0,
@@ -246,12 +213,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (!KernTerrainDebugActive() &&
                     _WorldLightDebugView != 0 && _WorldLightDebugView != 9)
                 {
-                #if defined(KERN_TERRAIN_CELLS)
                     if (input.isForeground > 0.5)
                     {
                         clip(cellCoverage - 0.5);
                     }
-                #endif
                     return half4(
                         GetWorldLightColor(input.worldPosition.xy).rgb,
                         1.0);
@@ -259,12 +224,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (!KernTerrainDebugActive() && _WorldLightDebugView == 9)
                 {
-                #if defined(KERN_TERRAIN_CELLS)
                     if (input.isForeground > 0.5)
                     {
                         clip(cellCoverage - 0.5);
                     }
-                #endif
                     float occlusion = KernSampleTerrainAmbientOcclusion(
                         input.worldPosition.xy,
                         _WorldLightRect);
@@ -287,12 +250,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                             }
                             else
                             {
-                            #if defined(KERN_TERRAIN_CELLS)
                                 clip(input.isForeground - 0.5);
                                 clip(cellCoverage - 0.5);
-                            #else
-                                clip(-1.0);
-                            #endif
                             }
 
                             int debugAtlasSlot = (int)round(input.atlasIndex);
@@ -325,13 +284,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                                 1.0);
                         }
 
-                    #if defined(KERN_TERRAIN_CELLS)
                         if (input.isForeground > 0.5 &&
                             _TerrainDebugView != KERN_TERRAIN_DEBUG_COVERAGE)
                         {
                             clip(cellCoverage - 0.5);
                         }
-                    #endif
                         float debugOcclusion = 1.0;
                         #ifdef KERN_WORLD_LIGHTING
                         debugOcclusion = KernTerrainAmbientOcclusionMultiplier(
@@ -339,10 +296,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                             input.worldPosition.xy,
                             _WorldLightRect);
                         #endif
-                        float debugForeground = 1.0;
-                    #if defined(KERN_TERRAIN_CELLS)
-                        debugForeground = input.isForeground;
-                    #endif
+                        float debugForeground = input.isForeground;
                         return half4(
                             KernTerrainDebugColor(
                                 surface,
@@ -354,9 +308,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     }
                 }
 
-            #if defined(KERN_TERRAIN_CELLS)
                 clip(cellCoverage - 0.5);
-            #endif
                 [branch]
                 if (_KernTerrainBenchmarkStage == 2)
                 {
@@ -370,18 +322,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         return half4(1.0, 0.0, 0.8, 1.0);
                     }
 
-                    if (input.color.a < _AlphaCutoff)
-                    {
-                        return half4(0.0, 0.0, 0.0, 0.0);
-                    }
-
                     float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                     float3 diagnosticTexture = SampleMissingTexture(input.worldPos.xy);
                     return half4(
                         diagnosticTexture * worldLight.rgb,
-                        input.color.a * cellCoverage);
+                        cellCoverage);
                 }
-                if (input.color.a < _AlphaCutoff) return half4(0.0, 0.0, 0.0, 0.0);
 
                 int atlasSlot = (int)round(input.atlasIndex);
                 float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(atlasSlot);
@@ -412,7 +358,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     }
 
                     float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
-                    return half4(0.0, 0.0, 0.0, input.color.a * cellCoverage * worldLight.r);
+                    return half4(0.0, 0.0, 0.0, cellCoverage * worldLight.r);
                 }
 
                 int animType = (int)(input.animData.x + 0.5);
@@ -525,7 +471,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma target 4.5
             #pragma vertex TerrainLightingFieldVert
             #pragma fragment MaterialFieldFrag
-            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/PixelArtFiltering.hlsl"
@@ -540,7 +485,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             // Lighting field stores a time-independent albedo snapshot. Visual
             // crystal/shimmer animation belongs to the screen pass; sampling it
             // here would make a region rebuild capture a different random phase.
-            TEXTURE2D(_BaseMap);
 
             #include "Assets/Shaders/Terrain/TerrainMaterialCBuffer.hlsl"
             #include "Assets/Shaders/Terrain/TerrainPassCommon.hlsl"
@@ -620,10 +564,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // гарантирует !isBackground (фон не получает PhysicalMass),
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
-                float applyGeometry = 0.0;
-            #if defined(KERN_TERRAIN_CELLS)
-                applyGeometry = input.isForeground;
-            #endif
+                float applyGeometry = input.isForeground;
                 float cellCoverage = EvaluateTerrainCellCoverage(
                     surface,
                     1.0,
@@ -645,9 +586,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float3 emissionAlbedo = surfaceAlbedo;
                 surfaceAlbedo *= TerrainReliefBevel(surface);
 
-                // Маска присутствия материала в поле: прозрачные и фоновые
-                // фрагменты не вносят в поле ни альбедо, ни свечения.
-                float materialMask = step(_AlphaCutoff, input.color.a) * isForeground;
+                // Маска присутствия материала в поле: фоновые фрагменты не
+                // вносят в поле ни альбедо, ни свечения; прозрачные отрезаны
+                // clip по альфе текселя выше.
+                float materialMask = isForeground;
                 output.material = half4(surfaceAlbedo * materialMask, occupancy);
                 output.emission = half4(
                     emissionAlbedo * emissionStrength * materialMask * cellCoverage,
@@ -673,7 +615,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma target 4.5
             #pragma vertex TerrainLightingFieldVert
             #pragma fragment AmbientOcclusionFieldFrag
-            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/PixelArtFiltering.hlsl"
@@ -686,7 +627,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/Terrain/TerrainSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainAnimationProfile.hlsl"
 
-            TEXTURE2D(_BaseMap);
 
             #include "Assets/Shaders/Terrain/TerrainMaterialCBuffer.hlsl"
             #include "Assets/Shaders/Terrain/TerrainPassCommon.hlsl"

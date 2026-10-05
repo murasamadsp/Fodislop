@@ -1,7 +1,6 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 
 namespace Kern.World.Terrain;
@@ -15,8 +14,7 @@ public interface ITerrainMetadataLookup
 // interfaces and asset-backed atlas implementations out of the benchmark.
 public readonly record struct TerrainCellSources(
     ITerrainCellDataSource CellCache,
-    TerrainPrecalculator Precalc,
-    BackgroundFloodFill FloodFill,
+    TerrainDistortionSettings Distortion,
     int WorldWidth,
     int WorldHeight,
     IReadOnlyList<Kern.Core.Interfaces.IAtlasDescriptor> Atlases,

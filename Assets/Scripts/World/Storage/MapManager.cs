@@ -273,9 +273,9 @@ namespace Kern.World
 
         public float GetMoveCooldown(CellType cellType) => _cellCatalog.GetMoveCooldown(cellType);
 
-        public CellConfigurationPacket GetCellConfig(CellType type) => _cellCatalog.GetCellConfig(type);
+        public float GetMinMoveCooldown() => _cellCatalog.GetMinMoveCooldown();
 
-        public static bool CanRoundCorners(CellType type) => MapCellConfigCatalog.CanRoundCorners(type);
+        public CellConfigurationPacket GetCellConfig(CellType type) => _cellCatalog.GetCellConfig(type);
 
         public bool TryGetTileGroup(CellType type, out int groupId) => _cellCatalog.TryGetTileGroup(type, out groupId);
 

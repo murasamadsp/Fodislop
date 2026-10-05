@@ -129,7 +129,7 @@ internal sealed class DummyWorldStartupResponder(
             (ushort)world.Width,
             (ushort)world.Height,
             world.CellConfigurations,
-            BlockRegistry.GetTileGroups())));
+            DummyCellConfigurationUtilities.CreateTileGroups())));
         sendPacket(new ServerPacket(new PlayerInfoPacket(999, playerBotId, playerName)));
         sendPacket(new ServerPacket(new RobotInfoPacket(
             playerBotId,

@@ -266,24 +266,4 @@ public class MapCellConfigCatalogTests
         Assert.Throws<InvalidOperationException>(() => catalog.GetMoveCooldown((CellType)0));
         Assert.Throws<InvalidOperationException>(() => catalog.GetCellConfig((CellType)0));
     }
-
-    [Test]
-    public void CanRoundCorners_CorrectlyIdentifiesCellTypes()
-    {
-        Assert.IsTrue(MapCellConfigCatalog.CanRoundCorners(CellType.WhiteSand));
-        Assert.IsTrue(MapCellConfigCatalog.CanRoundCorners(CellType.Lava));
-        Assert.IsFalse(MapCellConfigCatalog.CanRoundCorners(CellType.Empty));
-        Assert.IsFalse(MapCellConfigCatalog.CanRoundCorners(CellType.Rock));
-    }
-
-    [Test]
-    public void IsRoad_CorrectlyIdentifiesCellTypes()
-    {
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.Road));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.GoldenRoad));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.BuildingRoad));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.PolymerRoad));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoad(CellType.Empty));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoad(CellType.Rock));
-    }
 }

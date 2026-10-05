@@ -2,6 +2,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using Kern.World;
 using Kern.World.Terrain;
 using NUnit.Framework;
 using UnityEngine;
@@ -17,24 +18,11 @@ public sealed class TerrainTextureAnimationPlayModeTests
     private const string TerrainShaderName = "Universal Render Pipeline/Custom/Terrain";
     private const float AnimationCycleSeconds = 2.5f;
     private readonly List<Object> _ownedObjects = [];
-    private readonly int[] _textureGlobalIds =
-    [
-        TerrainCellDataTextures.ColorId,
-        TerrainCellDataTextures.MetaId,
-        TerrainCellDataTextures.AtlasRectId,
-        TerrainCellDataTextures.TileSizeId,
-        TerrainCellDataTextures.AnimationId,
-        TerrainCellDataTextures.WorldId,
-        TerrainCellDataTextures.GlowId,
-        TerrainCellDataTextures.GeometryXId,
-        TerrainCellDataTextures.GeometryYId,
-    ];
-    private Texture?[] _previousGlobalTextures = null!;
     private readonly int[] _vectorGlobalIds =
     [
-        TerrainCellDataTextures.GridSizeId,
-        TerrainCellDataTextures.OriginId,
-        TerrainCellDataTextures.ViewOffsetId,
+        TerrainCellBuffers.GridSizeId,
+        TerrainCellBuffers.OriginId,
+        TerrainCellBuffers.ViewOffsetId,
     ];
     private static readonly int s_terrainDebugViewId = Shader.PropertyToID("_TerrainDebugView");
     private static readonly int s_worldLightDebugViewId = Shader.PropertyToID("_WorldLightDebugView");
@@ -43,7 +31,7 @@ public sealed class TerrainTextureAnimationPlayModeTests
     private int _previousTerrainDebugView;
     private int _previousWorldLightDebugView;
     private float _previousPixelArtFiltering;
-    private TerrainCellDataTextures _cellData = null!;
+    private TerrainCellBuffers _cellData = null!;
     private float _previousTimeScale;
     private bool _worldLightingKeywordWasEnabled;
     private Texture2D _readback = null!;
@@ -51,12 +39,6 @@ public sealed class TerrainTextureAnimationPlayModeTests
     [UnitySetUp]
     public IEnumerator SetUp()
     {
-        _previousGlobalTextures = new Texture?[_textureGlobalIds.Length];
-        for (int index = 0; index < _textureGlobalIds.Length; index++)
-        {
-            _previousGlobalTextures[index] = Shader.GetGlobalTexture(_textureGlobalIds[index]);
-        }
-
         _previousGlobalVectors = new Vector4[_vectorGlobalIds.Length];
         for (int index = 0; index < _vectorGlobalIds.Length; index++)
         {
@@ -87,11 +69,6 @@ public sealed class TerrainTextureAnimationPlayModeTests
         else
         {
             Shader.DisableKeyword("KERN_WORLD_LIGHTING");
-        }
-
-        for (int index = 0; index < _textureGlobalIds.Length; index++)
-        {
-            Shader.SetGlobalTexture(_textureGlobalIds[index], _previousGlobalTextures[index]);
         }
 
         for (int index = 0; index < _vectorGlobalIds.Length; index++)
@@ -125,7 +102,6 @@ public sealed class TerrainTextureAnimationPlayModeTests
 
         Material material = Own(new Material(shader));
         Texture2D atlas = CreateTwoFrameAtlas();
-        material.SetTexture("_BaseMap", atlas);
         material.SetTexture("_TerrainAtlas0", atlas);
         material.SetTexture("_TerrainDecalAtlas", CreateSolidTexture(Color.clear));
         material.SetTexture("_TerrainDecalStoneAtlas", CreateSolidTexture(Color.clear));
@@ -134,29 +110,34 @@ public sealed class TerrainTextureAnimationPlayModeTests
         material.SetFloat("_AlphaCutoff", 0.01f);
         material.SetFloat("_GroundDecalStrength", 0f);
         material.SetFloat("_StoneDecalStrength", 0f);
-        material.EnableKeyword("KERN_TERRAIN_CELLS");
 
         Mesh mesh = Own(CreateTerrainAnimationQuad());
-        _cellData = new TerrainCellDataTextures();
-        _cellData.EnsureCapacity(1, 1);
-        _cellData.SetCell(
-            0,
-            0,
-            TerrainCellDataPacker.ForegroundLayer,
-            new TerrainCellTexels(
-                Color.white,
-                new Color32(1, 0xB4, 0, 0),
-                new TerrainHalfTexel(H(0f), H(0f), H(0.5f), H(0.5f)),
-                new TerrainHalfTexel(H(0.5f), H(0.5f), H(2f), H(1f)),
-                new TerrainHalfTexel(H(0f), H(1f), H(0f), H(0f)),
-                Vector4.zero,
-                Vector4.zero,
-                default,
-                default));
-        _cellData.MarkAllDirty();
-        _cellData.Apply();
-        _cellData.BindGlobals(cellSize: 2f, originX: 0, originY: 0);
-        Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, Vector4.zero);
+        // Атлас 4×4 с двумя кадрами по половине высоты; тайл — полатласа.
+        UploadSingleCell(
+            new TerrainTypeSurface(
+                AtlasSlot: 0,
+                AtlasRect: new Vector4(0f, 0f, 0.5f, 0.5f),
+                TileSize: 0.5f,
+                FrameCount: 2,
+                FrameHeightTiles: 1f,
+                Animation: MinesServer.Data.CellAnimationType.None,
+                AnimationSettings: new TerrainAnimationSettings(TerrainAnimationProfile.Default, 1f),
+                HasTileGroup: false,
+                TileGroupId: 0,
+                ContinuousSheet: false,
+                ReliefGroup: 0,
+                LightColor: default,
+                IsGlowing: false,
+                EmissionPower: 0f,
+                Solid: false,
+                ForegroundRoundable: false,
+                ForegroundDecal: TerrainDecalFamily.None,
+                IsBuildingWall: false,
+                IsBuildingCorner: false,
+                OpaqueInOwnAtlas: false,
+                OpaqueInAnyAtlas: false),
+            originX: 0,
+            worldHeight: 1);
         RenderTexture target = Own(new RenderTexture(32, 32, 0, RenderTextureFormat.ARGB32)
         {
             name = "TerrainAnimationRegressionTarget",
@@ -203,7 +184,6 @@ public sealed class TerrainTextureAnimationPlayModeTests
 
         Material material = Own(new Material(shader));
         Texture2D lavaAtlas = CreateSolidTexture(new Color(0.9f, 0.12f, 0.015f, 1f));
-        material.SetTexture("_BaseMap", lavaAtlas);
         material.SetTexture("_TerrainAtlas0", lavaAtlas);
         material.SetTexture("_TerrainDecalAtlas", CreateSolidTexture(Color.clear));
         material.SetTexture("_TerrainDecalStoneAtlas", CreateSolidTexture(Color.clear));
@@ -212,29 +192,34 @@ public sealed class TerrainTextureAnimationPlayModeTests
         material.SetFloat("_AlphaCutoff", 0.01f);
         material.SetFloat("_GroundDecalStrength", 0f);
         material.SetFloat("_StoneDecalStrength", 0f);
-        material.EnableKeyword("KERN_TERRAIN_CELLS");
 
         Mesh mesh = Own(CreateTerrainAnimationQuad());
-        _cellData = new TerrainCellDataTextures();
-        _cellData.EnsureCapacity(1, 1);
-        _cellData.SetCell(
-            0,
-            0,
-            TerrainCellDataPacker.ForegroundLayer,
-            new TerrainCellTexels(
-                Color.white,
-                new Color32(1, 0xB4, 0, 0),
-                new TerrainHalfTexel(H(0f), H(0f), H(1f), H(1f)),
-                new TerrainHalfTexel(H(1f), H(1f), H(1f), H(1f)),
-                new TerrainHalfTexel(H(0f), H(10f), H(0f), H(2f)),
-                new Vector4(4f, 4f, 0f, 0f),
-                Vector4.zero,
-                default,
-                default));
-        _cellData.MarkAllDirty();
-        _cellData.Apply();
-        _cellData.BindGlobals(cellSize: 2f, originX: 0, originY: 0);
-        Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, Vector4.zero);
+        // Лава: профиль расплава, мировая клетка (4, 4) — фаза потока от неё.
+        UploadSingleCell(
+            new TerrainTypeSurface(
+                AtlasSlot: 0,
+                AtlasRect: new Vector4(0f, 0f, 1f, 1f),
+                TileSize: 1f,
+                FrameCount: 1,
+                FrameHeightTiles: 1f,
+                Animation: MinesServer.Data.CellAnimationType.None,
+                AnimationSettings: new TerrainAnimationSettings(TerrainAnimationProfile.MoltenSurface, 10f),
+                HasTileGroup: false,
+                TileGroupId: 0,
+                ContinuousSheet: false,
+                ReliefGroup: 0,
+                LightColor: default,
+                IsGlowing: false,
+                EmissionPower: 0f,
+                Solid: false,
+                ForegroundRoundable: false,
+                ForegroundDecal: TerrainDecalFamily.None,
+                IsBuildingWall: false,
+                IsBuildingCorner: false,
+                OpaqueInOwnAtlas: false,
+                OpaqueInAnyAtlas: false),
+            originX: 4,
+            worldHeight: 5);
 
         RenderTexture target = Own(new RenderTexture(32, 32, 0, RenderTextureFormat.ARGB32)
         {
@@ -265,6 +250,24 @@ public sealed class TerrainTextureAnimationPlayModeTests
 
         Assert.That(changed, Is.True,
             "Lava's production terrain pass stayed static. Check the molten profile in mesh animation data and its time-based shader branch.");
+    }
+
+    // Одна клетка переднего плана типа 1 через рабочий формат и рабочую
+    // выгрузку: строка типа, клетка (кайма вокруг пуста), глобальные адреса окна.
+    private void UploadSingleCell(TerrainTypeSurface surface, int originX, int worldHeight)
+    {
+        var type = (MinesServer.Data.CellType)1;
+        _cellData = new TerrainCellBuffers();
+        _cellData.EnsureCapacity(1, 1);
+        _cellData.SetType(type, TerrainCellData.PackType(surface));
+        _cellData.SetCell(
+            originX,
+            0,
+            TerrainCellData.PackCell(type, MinesServer.Data.CellType.Unloaded));
+        _cellData.MarkAllDirty();
+        _cellData.Apply();
+        _cellData.BindGlobals(cellSize: 2f, originX, originY: 0, worldWidth: originX + 1, worldHeight, distortionMode: 0);
+        Shader.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, Vector4.zero);
     }
 
     private Texture2D CreateTwoFrameAtlas()
@@ -334,8 +337,6 @@ public sealed class TerrainTextureAnimationPlayModeTests
             RenderTexture.active = previous;
         }
     }
-
-    private static ushort H(float value) => TerrainVertex.H(value);
 
     private T Own<T>(T value)
         where T : Object

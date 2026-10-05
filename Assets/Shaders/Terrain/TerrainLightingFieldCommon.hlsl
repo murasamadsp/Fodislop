@@ -7,7 +7,6 @@ struct TerrainLightingFieldVaryings
 {
     float4 positionCS   : SV_POSITION;
     float2 uv           : TEXCOORD0;
-    float4 color        : COLOR;
     float4 worldPos     : TEXCOORD1;
     float4 animData     : TEXCOORD2;
     float4 packedData   : TEXCOORD3;
@@ -24,7 +23,6 @@ struct TerrainLightingFieldVaryings
 TerrainLightingFieldVaryings TerrainLightingFieldVert(TerrainVertexInput input)
 {
     TerrainLightingFieldVaryings output = (TerrainLightingFieldVaryings)0;
-#if defined(KERN_TERRAIN_CELLS)
     // Background contributes neither material, emission nor occupancy.
     if (input.positionOS.z < 0.5)
     {
@@ -36,10 +34,6 @@ TerrainLightingFieldVaryings TerrainLightingFieldVert(TerrainVertexInput input)
     output.positionCS = cell.atlasIndex >= 0.0
         ? KernLightingFieldClipPosition(cell.positionOS)
         : TerrainCulledPosition();
-#else
-    TERRAIN_RESOLVE_ATTRIBUTE_VERTEX(input, output)
-    output.positionCS = KernLightingFieldClipPosition(input.positionOS.xyz);
-#endif
 #if defined(KERN_TERRAIN_AO_FIELD)
     // A non-physical foreground cell cannot contribute contact occlusion.
     // Cull its quad before rasterization, including its expanded AO carrier.
@@ -84,7 +78,6 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
         atlasTexelSize.zw,
         TerrainPixelArtWidthTexels(carrierPixelWidth, tileSize, atlasTexelSize));
     finalUV = ClampTerrainTileUV(finalUV, tileUV);
-#if defined(KERN_TERRAIN_CELLS)
     [branch]
     if (_PixelArtFiltering < 0.5)
     {
@@ -92,15 +85,6 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
     }
 
     return TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
-#else
-    [branch]
-    if (_PixelArtFiltering < 0.5)
-    {
-        return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, finalUV, 0);
-    }
-
-    return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, finalUV, 0);
-#endif
 }
 
 #endif

@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using Kern.World.Terrain;
+using MinesServer.Data;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -117,33 +118,6 @@ public sealed class TerrainQuantizationContractTests
     }
 
     [Test]
-    public void GeometryChannelsRoundTripThroughCellPacker()
-    {
-        TerrainCellGeometry geometry = TerrainCellGeometry.FromOffsets(
-            new Vector3(-5f / 32f, 3f / 32f, 0f),
-            new Vector3(4f / 32f, -2f / 32f, 0f),
-            new Vector3(6f / 32f, 5f / 32f, 0f),
-            new Vector3(-3f / 32f, 7f / 32f, 0f));
-        TerrainVertex[] quad = new TerrainVertex[4];
-        Vector2[] corners =
-        [geometry.Corner00, geometry.Corner10, geometry.Corner11, geometry.Corner01];
-        for (int index = 0; index < quad.Length; index++)
-        {
-            quad[index].UV5 = new Vector4(1f, corners[index].x, corners[index].y, 0f);
-        }
-
-        TerrainCellTexels packed = TerrainCellDataPacker.PackQuad(quad, 0);
-        Assert.That(Mathf.HalfToFloat(packed.GeometryX.R), Is.EqualTo(geometry.Corner00.x).Within(0.001f));
-        Assert.That(Mathf.HalfToFloat(packed.GeometryX.G), Is.EqualTo(geometry.Corner10.x).Within(0.001f));
-        Assert.That(Mathf.HalfToFloat(packed.GeometryX.B), Is.EqualTo(geometry.Corner11.x).Within(0.001f));
-        Assert.That(Mathf.HalfToFloat(packed.GeometryX.A), Is.EqualTo(geometry.Corner01.x).Within(0.001f));
-        Assert.That(Mathf.HalfToFloat(packed.GeometryY.R), Is.EqualTo(geometry.Corner00.y).Within(0.001f));
-        Assert.That(Mathf.HalfToFloat(packed.GeometryY.G), Is.EqualTo(geometry.Corner10.y).Within(0.001f));
-        Assert.That(Mathf.HalfToFloat(packed.GeometryY.B), Is.EqualTo(geometry.Corner11.y).Within(0.001f));
-        Assert.That(Mathf.HalfToFloat(packed.GeometryY.A), Is.EqualTo(geometry.Corner01.y).Within(0.001f));
-    }
-
-    [Test]
     public void GeometrySourcePreservesContinuousCornersForFinalShaderQuantization()
     {
         TerrainCellGeometry geometry = TerrainCellGeometry.FromOffsets(
@@ -170,9 +144,8 @@ public sealed class TerrainQuantizationContractTests
         string geometry = ReadRepoFile("Assets", "Shaders", "Terrain", "TerrainGeometry.hlsl");
         string geometryContract = ReadRepoFile("Assets", "Shaders", "Terrain", "TerrainGeometryContract.hlsl");
         string cellData = ReadRepoFile("Assets", "Shaders", "Terrain", "TerrainCellData.hlsl");
-        string cellGeometry = ReadRepoFile("Assets", "Scripts", "World", "Terrain", "Mesh", "TerrainCellGeometry.cs");
-        string cellPacker = ReadRepoFile("Assets", "Scripts", "World", "Terrain", "GPU", "TerrainCellDataPacker.cs");
-        string textures = ReadRepoFile("Assets", "Scripts", "World", "Terrain", "GPU", "TerrainCellDataTextures.cs");
+        string cellGeometry = ReadRepoFile("Assets", "Scripts", "Tests", "Editor", "World", "Terrain", "Reference", "TerrainCellGeometry.cs");
+        string buffers = ReadRepoFile("Assets", "Scripts", "World", "Terrain", "GPU", "TerrainCellBuffers.cs");
 
         Assert.That(CountOccurrences(terrain, "EvaluateTerrainCellCoverage("), Is.EqualTo(2));
         // The production path clips the visible pass, two lighting-debug
@@ -190,25 +163,17 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(geometry, Does.Contain("KERN_TERRAIN_GEOMETRY_EPSILON"));
         Assert.That(contour, Does.Contain("TerrainGeometryCoverage("));
         Assert.That(contour, Does.Not.Contain("edgeMargins"));
-        Assert.That(cellData, Does.Contain("_TerrainCellGeometryX"));
-        Assert.That(cellData, Does.Contain("_TerrainCellGeometryY"));
+        Assert.That(cellData, Does.Contain("float2 node00 = TerrainNodeCells(TerrainNode(gridX, unityY,"));
         Assert.That(cellGeometry, Does.Not.Contain("Quantize("));
         Assert.That(geometry, Does.Contain("TerrainGeometryRawCorner"));
-        Assert.That(cellData, Does.Contain("bool occludedBackground = layer == 0 && meta.b > 0.5"));
-        Assert.That(cellData, Does.Contain("DecodeTerrainGeometryMetadata(meta, layer > 0)"));
-        Assert.That(cellPacker, Does.Contain("v.UV5x != 0"));
+        Assert.That(cellData, Does.Contain("occluded = occluded && TerrainSolidMassCell(neighbourTraits[m]);"));
+        Assert.That(cellData, Does.Contain("bool anchored = foreground && foregroundAnchored;"));
         Assert.That(terrain, Does.Contain("applyGeometry = input.isForeground"));
         Assert.That(cellData, Does.Contain("v.atlasIndex = -1.0"));
-        Assert.That(textures, Does.Contain("_geometryX.Data[index] = texels.GeometryX"));
-        Assert.That(textures, Does.Contain("_geometryY.Data[index] = texels.GeometryY"));
-        Assert.That(textures, Does.Contain("_geometryX.UploadAll()"));
-        Assert.That(textures, Does.Contain("_geometryY.UploadAll()"));
-        Assert.That(textures, Does.Contain("_geometryX.Stage(slot"));
-        Assert.That(textures, Does.Contain("_geometryY.Stage(slot"));
-        Assert.That(textures, Does.Contain("_geometryX.CopyStaged(slot"));
-        Assert.That(textures, Does.Contain("_geometryY.CopyStaged(slot"));
-        Assert.That(textures, Does.Contain("Shader.SetGlobalTexture(GeometryXId"));
-        Assert.That(textures, Does.Contain("Shader.SetGlobalTexture(GeometryYId"));
+        // Геометрия — часть того же uint, что и остальной слой клетки: одна
+        // выгрузка и одна привязка, разойтись им негде.
+        Assert.That(buffers, Does.Contain("_cellBuffer!.SetData(_words"));
+        Assert.That(buffers, Does.Contain("Shader.SetGlobalBuffer(CellsId"));
         Assert.That(terrain, Does.Not.Contain("_TerrainGridOffsets"));
         Assert.That(terrain, Does.Not.Contain("packedGeometryCorners"));
         Assert.That(contour, Does.Not.Contain("PhysicalContour("));

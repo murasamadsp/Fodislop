@@ -11,7 +11,7 @@ public static class CaptureAnalyzer
 
     private static readonly string[] _RequiredCPUMetrics =
     [
-        "terrainMesh", "terrainCache", "terrainFloodFill", "terrainGpuUpload",
+        "terrainMesh", "terrainCache", "terrainGpuUpload",
         "terrainAtlasUpload", "lightingBuildCommands", "lightingExecuteCommands",
         "lightingCascadeTrace", "lightingCascadeMerge", "lightingDynamic", "lightingComposite",
     ];

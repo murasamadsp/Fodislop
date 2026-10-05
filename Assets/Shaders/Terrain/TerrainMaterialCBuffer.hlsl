@@ -10,9 +10,6 @@
 // выключается, и счётчик пакетов показывает ноль при трёх сотнях смен
 // материала.
 //
-// `_BaseMap_TexelSize` Unity заводит сам под текстуру _BaseMap, то есть это
-// свойство материала; стоя снаружи блока, оно ломало совместимость целиком.
-//
 // Раньше блок стоял в обоих пассах скопированным слово в слово, и совпадение
 // держалось на дисциплине. Теперь оно механическое: файл один. Ни одно из этих
 // свойств не читается в пассе поля материалов — блок стоит там ради раскладки,
@@ -59,10 +56,8 @@ CBUFFER_START(UnityPerMaterial)
     float4 _PrismaticTintE;
     float _PremultiplyAlphaFloor;
     float _AlphaCutoff;
-    float4 _BaseMap_TexelSize;
     float4 _FlowMap_TexelSize; // KERN-SHADER-DEAD-UNIFORM: layout — см. комментарий выше
     float4 _TerrainDecalAtlas_TexelSize; // KERN-SHADER-DEAD-UNIFORM: layout — см. комментарий выше
-    float _TerrainAtlasIndex;
     float4 _TerrainAtlas0_TexelSize;
     float4 _TerrainAtlas1_TexelSize;
     float4 _TerrainAtlas2_TexelSize;
@@ -80,7 +75,6 @@ CBUFFER_END
 // один. Требует TerrainAtlasSampling.hlsl.
 float4 TerrainMaterialAtlasTexelSize(int slot)
 {
-#if defined(KERN_TERRAIN_CELLS)
     return TerrainAtlasTexelSize(
         slot,
         _TerrainAtlas0_TexelSize,
@@ -91,9 +85,6 @@ float4 TerrainMaterialAtlasTexelSize(int slot)
         _TerrainAtlas5_TexelSize,
         _TerrainAtlas6_TexelSize,
         _TerrainAtlas7_TexelSize);
-#else
-    return _BaseMap_TexelSize;
-#endif
 }
 
 #endif

@@ -3,8 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Kern.Core;
 using Kern.Core.Interfaces;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using UnityEngine;
 
@@ -12,14 +12,15 @@ namespace Kern.World.Terrain;
 
 public sealed class TerrainCellBuilder : IDisposable
 {
-    private readonly TerrainCellDataTextures _textures = new();
+    private readonly TerrainCellBuffers _buffers = new();
     private readonly TerrainDoorOverlayIndex _doors = new();
-    private readonly TerrainCellTextureIndex _textureIndex = new();
-    private readonly TerrainMetadataWarmup _warmup = new();
     private readonly TerrainCellFillExecutor _fillExecutor;
     private int _width;
     private int _height;
     private float _cellSize;
+    private int _worldWidth;
+    private int _worldHeight;
+    private int _distortionMode;
     private bool _doorsTouched;
 
     internal int LastFullBuildAnchoredForegroundCellCount =>
@@ -27,10 +28,10 @@ public sealed class TerrainCellBuilder : IDisposable
 
     public TerrainCellBuilder()
     {
-        _fillExecutor = new TerrainCellFillExecutor(_textures, _doors, _textureIndex, _warmup);
+        _fillExecutor = new TerrainCellFillExecutor(_buffers, _doors);
     }
 
-    public TerrainCellDataTextures Textures => _textures;
+    public TerrainCellBuffers Buffers => _buffers;
 
     public float CellSize => _cellSize;
 
@@ -48,18 +49,14 @@ public sealed class TerrainCellBuilder : IDisposable
 
     public float LastIndexRemoveMs { get; private set; }
 
-    public float LastWarmupMs => _fillExecutor.LastWarmupMs;
 
     public float LastFillMs => _fillExecutor.LastFillMs;
 
     public int LastFilledCells => _fillExecutor.LastFilledCells;
 
-    /// <summary>Сумма времени сборки квадов по рабочим потокам, не длительность кадра.</summary>
+    /// <summary>Сумма времени классификации клеток (дверь, смещение) по рабочим потокам, не длительность кадра.</summary>
     ///
-    /// Заливка полосы оказалась в тридцать раз дороже той же работы в
-    /// бенчмарке, а в ней два разных дела: TerrainQuadBuilder.FillQuad (его
-    /// бенчмарк не меряет вообще) и упаковка с записью (её меряет, 43 нс на
-    /// клетку). Разделение показывает, какое из двух врёт.
+    /// Отдельно от упаковки: так видно, какое из двух дел дорожает.
     public float LastQuadMs => _fillExecutor.LastQuadMs;
 
     /// <summary>Сумма времени упаковки по рабочим потокам; может превышать LastFillMs.</summary>
@@ -69,7 +66,7 @@ public sealed class TerrainCellBuilder : IDisposable
     {
         _cellSize = cellSize;
         _fillExecutor.Configure(meshWidth, meshHeight, cellSize);
-        if (_width == meshWidth && _height == meshHeight && _textures.IsAllocated)
+        if (_width == meshWidth && _height == meshHeight && _buffers.IsAllocated)
         {
             return;
         }
@@ -77,9 +74,7 @@ public sealed class TerrainCellBuilder : IDisposable
         _width = meshWidth;
         _height = meshHeight;
         _doors.EnsureSize(meshWidth, meshHeight);
-        _textureIndex.EnsureWindow(meshWidth, meshHeight);
-        _textureIndex.Clear();
-        _textures.EnsureCapacity(meshWidth, meshHeight);
+        _buffers.EnsureCapacity(meshWidth, meshHeight);
     }
 
     public void BuildFull(TerrainCellSources sources, int minX, int minY)
@@ -101,19 +96,10 @@ public sealed class TerrainCellBuilder : IDisposable
         ResetStageTimings();
         _doorsTouched = true;
         _doors.BeginFullBuild();
-        _fillExecutor.TrackTextureIndex = false;
-        _textures.MarkAllDirty();
+        _buffers.MarkAllDirty();
         _fillExecutor.FillFull(sources, minX, minY, cancellationToken);
         _doors.CompleteFullBuild();
-        _fillExecutor.TrackTextureIndex = true;
-        _textureIndex.Clear();
-        for (int x = 0; x < _width; x++)
-        {
-            for (int y = 0; y < _height; y++)
-            {
-                _fillExecutor.UpdateTextureIndexCell(x, y, minX, minY, sources);
-            }
-        }
+        FinishBuild(sources, minX, minY);
     }
 
     public void ScrollAndBuildBand(TerrainCellSources sources, int minX, int minY, int dx, int dy)
@@ -158,6 +144,7 @@ public sealed class TerrainCellBuilder : IDisposable
         _doors.ClearBand(entered.RowBand);
         FillBand(bands.ColumnBand, minX, minY, sources);
         FillBand(bands.RowBand, minX, minY, sources);
+        FinishBuild(sources, minX, minY);
     }
 
     public void BuildRegion(
@@ -184,8 +171,12 @@ public sealed class TerrainCellBuilder : IDisposable
             minX,
             minY,
             sources);
+        FinishBuild(sources, minX, minY);
     }
 
+    // Приехала текстура типа. В клетке нет ничего, что от неё зависит: вид
+    // типа уходит строкой таблицы (FinishBuild), шейдер подхватывает её во
+    // всех клетках сразу, включая накладку дверей.
     internal void BuildTextureCells(
         in TerrainCellTypeSet cellTypes,
         TerrainCellSources sources,
@@ -193,91 +184,112 @@ public sealed class TerrainCellBuilder : IDisposable
         int minY)
     {
         _doorsTouched = false;
-        if (!CanBuild(sources))
+        if (!CanBuild(sources) || cellTypes.IsEmpty)
         {
             return;
         }
 
         ResetStageTimings();
-
-        _fillExecutor.WarmAll(sources);
-
-        // Сбор квадов по типам занимает отдельную графу: он идёт по обратному
-        // индексу, а не по окну, и его цена растёт с числом приехавших типов.
-        long collectStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        _textureIndex.CollectRefreshQuads(cellTypes, minX, minY, _width, _height);
-        LastIndexRemoveMs = ElapsedMs(collectStart);
-        List<int> refreshQuads = _textureIndex.TextureRefreshQuads;
-        _fillExecutor.FillTextureQuads(refreshQuads, minX, minY, sources, ref _doorsTouched);
-
-        MarkTextureRefreshRuns(refreshQuads, minX, minY);
+        FinishBuild(sources, minX, minY);
     }
 
-    private void MarkTextureRefreshRuns(List<int> refreshQuads, int minX, int minY)
-    {
-        int index = 0;
-        while (index < refreshQuads.Count)
-        {
-            int firstQuad = refreshQuads[index];
-            int x = firstQuad / _height;
-            int firstY = firstQuad % _height;
-            int lastY = firstY;
-            index++;
-
-            while (index < refreshQuads.Count)
-            {
-                int nextQuad = refreshQuads[index];
-                if (nextQuad / _height != x || nextQuad % _height != lastY + 1)
-                {
-                    break;
-                }
-
-                lastY++;
-                index++;
-            }
-
-            _textures.MarkCells(
-                TerrainCellDataTextures.Ring(minX + x, _width),
-                TerrainCellDataTextures.Ring(minY + firstY, _height),
-                1,
-                lastY - firstY + 1);
-        }
-    }
-
-
-    // Вершины накладки дверей: клеток с дверью мало, поэтому их квады
-    // собираются заново по требованию, а не хранятся для всей сетки.
-    public void BuildDoorOverlay(
-        TerrainCellSources sources,
-        int minX,
-        int minY,
-        List<TerrainVertex> vertices,
-        List<int>[] indicesPerAtlas) =>
-        _fillExecutor.BuildDoorOverlay(
-            sources,
-            minX,
-            minY,
-            vertices,
-            indicesPerAtlas);
+    /// <summary>Квады дверей окна по возрастанию — для меша накладки.</summary>
+    public void CopyDoorQuads(List<int> target) => _doors.CopyQuads(target);
 
     // Выгрузка cell-data на GPU и адрес окна для шейдера. При scroll
     // переписываются только новые клетки; полный upload остаётся для первого
     // build и resize.
     public void Commit(int originX, int originY)
     {
-        _textures.Apply();
-        _textures.BindGlobals(_cellSize, originX, originY);
+        _buffers.Apply();
+        _buffers.BindGlobals(_cellSize, originX, originY, _worldWidth, _worldHeight, _distortionMode);
     }
 
     public void Dispose()
     {
-        _textures.Dispose();
+        _buffers.Dispose();
         _width = 0;
         _height = 0;
     }
 
-    private bool CanBuild(TerrainCellSources sources) =>
-        _textures.IsAllocated && sources.Atlases != null && sources.Atlases.Count > 0;
+    private bool CanBuild(TerrainCellSources sources)
+    {
+        if (!_buffers.IsAllocated || sources.Atlases == null || sources.Atlases.Count == 0)
+        {
+            return false;
+        }
+
+        _worldWidth = sources.WorldWidth;
+        _worldHeight = sources.WorldHeight;
+        _distortionMode = TerrainCellData.DistortionMode(sources.Distortion);
+        return true;
+    }
+
+    private void FinishBuild(TerrainCellSources sources, int minX, int minY)
+    {
+        RefreshTypes(sources);
+        RefreshMargin(sources, minX, minY);
+    }
+
+    // Кайма кольца: тип и узел клеток вокруг окна. Её читают только соседи
+    // краевых клеток, поэтому пишется вся (2·(w+h)+4 клеток), а на выгрузку
+    // помечается четырьмя полосами и только если что-то поменялось.
+    private void RefreshMargin(TerrainCellSources sources, int minX, int minY)
+    {
+        bool changed = false;
+        for (int x = -1; x <= _width; x++)
+        {
+            changed |= RefreshMarginCell(sources, minX, minY, x, -1);
+            changed |= RefreshMarginCell(sources, minX, minY, x, _height);
+        }
+
+        for (int y = 0; y < _height; y++)
+        {
+            changed |= RefreshMarginCell(sources, minX, minY, -1, y);
+            changed |= RefreshMarginCell(sources, minX, minY, _width, y);
+        }
+
+        if (changed)
+        {
+            _buffers.MarkCells(minX - 1, minY - 1, _width + 2, 1);
+            _buffers.MarkCells(minX - 1, minY + _height, _width + 2, 1);
+            _buffers.MarkCells(minX - 1, minY, 1, _height);
+            _buffers.MarkCells(minX + _width, minY, 1, _height);
+        }
+    }
+
+    private bool RefreshMarginCell(TerrainCellSources sources, int minX, int minY, int x, int y)
+    {
+        TerrainCell cell = TerrainCellPacker.PackMargin(sources, x, y);
+        if (_buffers.GetCell(minX + x, minY + y) == cell)
+        {
+            return false;
+        }
+
+        _buffers.SetCell(minX + x, minY + y, cell);
+        return true;
+    }
+
+    // Таблица типов обновляется в конце каждой сборки, после прогрева
+    // метаданных: строка типа — то же, что сборка квада взяла из его конфига
+    // (ResolveTypeSurface), и вид типа, приехавший с текстурой, доходит до
+    // всех его клеток в той же публикации. Тип без разрешённой метаданности
+    // оставляет прежнюю строку: перезапись нулём стёрла бы вид, который ещё
+    // может быть на экране.
+    private void RefreshTypes(TerrainCellSources sources)
+    {
+        for (int index = 0; index < TerrainCellData.TypeCount; index++)
+        {
+            var type = (CellType)index;
+            if (sources.MetadataLookup.TryGet(type, out CellMetadata metadata))
+            {
+                _buffers.SetType(
+                    type,
+                    TerrainCellData.PackType(
+                        TerrainCellPacker.ResolveTypeSurface(type, in metadata, sources.Atlases)));
+            }
+        }
+    }
 
     // Графы отчёта обнуляются на входе в КАЖДЫЙ путь сборки. Пока это делали
     // только сдвиг и перечитывание текстур, отчёт о полной сборке печатал

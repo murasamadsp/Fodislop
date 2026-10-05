@@ -13,7 +13,6 @@ namespace Kern.World.Terrain;
 
 public sealed class TerrainMaterialManager
 {
-    private static readonly int s_baseMapPropertyId = Shader.PropertyToID("_BaseMap");
     private static readonly int s_prismaticFlowMapPropertyId = Shader.PropertyToID("_PrismaticFlowMap");
     private static readonly int s_flowMapPropertyId = Shader.PropertyToID("_FlowMap");
     private static readonly int s_terrainDecalAtlasPropertyId = Shader.PropertyToID("_TerrainDecalAtlas");
@@ -25,21 +24,15 @@ public sealed class TerrainMaterialManager
     private static readonly int s_worldLightTexturePropertyId = Shader.PropertyToID("_WorldLightTexture");
     private static readonly int s_worldLightRectPropertyId = Shader.PropertyToID("_WorldLightRect");
 
-    private Material[] _materials = [];
-    private Material[] _overlayMaterials = [];
     private Material[] _cellMaterials = [];
 
-    // Единственный материал террейна: меш идентификаторов, все атласы разом.
+    // Единственный материал террейна: меш идентификаторов и накладка дверей,
+    // все атласы разом.
     public Material[] CellMaterials => _cellMaterials;
     private Shader? _terrainShader;
     private readonly List<IAtlasDescriptor> _lastAtlases = new();
     private bool _lightingBindingValidated;
 
-    public Material[] Materials => _materials;
-
-    // Материалы накладки дверей: те же, но без режима клеток — накладка
-    // остаётся обычным мешем вершин.
-    public Material[] OverlayMaterials => _overlayMaterials;
     public Shader? TerrainShader
     {
         get => _terrainShader;
@@ -62,12 +55,7 @@ public sealed class TerrainMaterialManager
 
     public void ApplyClientConfig(ClientConfig config)
     {
-        if (_materials.Length == 0)
-        {
-            return;
-        }
-
-        foreach (Material material in AllMaterials())
+        foreach (Material material in _cellMaterials)
         {
             material.SetVector(s_flowScalePropertyId, config.Terrain.FlowScale);
             material.SetFloat(s_shimmerSpeedScalePropertyId, config.Terrain.ShimmerSpeedScale);
@@ -120,41 +108,15 @@ public sealed class TerrainMaterialManager
         if (IsAtlasAppend(atlases, _lastAtlases) && _cellMaterials.Length > 0)
         {
             int startIndex = _lastAtlases.Count;
-            Array.Resize(ref _materials, atlases.Count);
-            Array.Resize(ref _overlayMaterials, atlases.Count);
-            for (int i = startIndex; i < atlases.Count; i++)
-            {
-                CreateAtlasMaterials(i, clientConfig);
-            }
-
             SnapshotAtlasRefs(atlases);
-            FrameEventLog.Record($"террейн: материалы для атласов {startIndex}..{atlases.Count - 1}");
+            FrameEventLog.Record($"террейн: атласы {startIndex}..{atlases.Count - 1} добавлены");
             return false;
         }
 
         _lightingBindingValidated = false;
         cellCache.ClearCaches();
         CleanupMaterials();
-        _cellMaterials = [];
-
-        _materials = new Material[atlases.Count];
-        _overlayMaterials = new Material[atlases.Count];
-        for (int i = 0; i < atlases.Count; i++)
-        {
-            CreateAtlasMaterials(i, clientConfig);
-        }
-
-        // Один материал на все атласы рисует меш идентификаторов: при
-        // материале на атлас каждый проходил бы все вершины сетки.
-        _cellMaterials =
-        [
-            new Material(_materials[0])
-            {
-                name = "Terrain Cell Material",
-                hideFlags = HideFlags.HideAndDontSave,
-            },
-        ];
-        _cellMaterials[0].EnableKeyword(CellModeKeyword);
+        _cellMaterials = [CreateCellMaterial(clientConfig)];
 
         SnapshotAtlasRefs(atlases);
         FrameEventLog.Record($"террейн: материалы пересозданы, атласов {atlases.Count}");
@@ -207,133 +169,69 @@ public sealed class TerrainMaterialManager
         _lastAtlases.AddRange(atlases);
     }
 
-    private void CreateAtlasMaterials(int index, ClientConfig clientConfig)
+    private Material CreateCellMaterial(ClientConfig clientConfig)
     {
         Shader shader = _terrainShader ??
             throw new InvalidOperationException(
-                "Terrain shader was not initialized before atlas material creation.");
-        _materials[index] = new Material(shader)
+                "Terrain shader was not initialized before material creation.");
+        var material = new Material(shader)
         {
-            name = $"Terrain Atlas Material {index}",
+            name = "Terrain Cell Material",
             hideFlags = HideFlags.HideAndDontSave,
         };
-        RequireShaderProperties(_materials[index]);
-        _materials[index].SetVector(s_flowScalePropertyId, clientConfig.Terrain.FlowScale);
-        _materials[index].SetFloat(s_shimmerSpeedScalePropertyId, clientConfig.Terrain.ShimmerSpeedScale);
-        _materials[index].SetFloat(s_pulseSpeedScalePropertyId, clientConfig.Terrain.PulseSpeedScale);
-        _materials[index].SetColor(s_shimmerColorPropertyId, clientConfig.Terrain.ShimmerColor);
+        RequireShaderProperties(material);
+        material.SetVector(s_flowScalePropertyId, clientConfig.Terrain.FlowScale);
+        material.SetFloat(s_shimmerSpeedScalePropertyId, clientConfig.Terrain.ShimmerSpeedScale);
+        material.SetFloat(s_pulseSpeedScalePropertyId, clientConfig.Terrain.PulseSpeedScale);
+        material.SetColor(s_shimmerColorPropertyId, clientConfig.Terrain.ShimmerColor);
         // Вид поверхности авторский: декали, кайма, глинт и
         // призматик берут числа из TerrainConfigHolder.
-        TerrainMaterialTuning.Apply(_materials[index]);
+        TerrainMaterialTuning.Apply(material);
+        RequireLightingPasses(material);
+        return material;
+    }
 
-        if (_materials[index].FindPass("Universal2D") < 0 ||
-            _materials[index].FindPass(
+    private static void RequireLightingPasses(Material material)
+    {
+        if (material.FindPass("Universal2D") < 0 ||
+            material.FindPass(
                 ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField) < 0 ||
-            _materials[index].FindPass(
+            material.FindPass(
                 ProjectRuntimeContracts.ShaderPassNames.LightingAmbientOcclusionField) < 0)
         {
             throw new InvalidOperationException(
-                $"Terrain material '{_materials[index].name}' is missing a required " +
-                "world-lighting pass.");
+                $"Terrain material '{material.name}' is missing a required world-lighting pass.");
         }
-
-        _overlayMaterials[index] = new Material(_materials[index])
-        {
-            name = $"Terrain Door Overlay Material {index}",
-            hideFlags = HideFlags.HideAndDontSave,
-        };
     }
 
     public void BindAtlasTextures(
         IReadOnlyList<IAtlasDescriptor> atlases,
         ITextureService textureService)
     {
-        for (int i = 0; i < atlases.Count && i < _materials.Length; i++)
+        if (_cellMaterials.Length == 0)
         {
-            BindAtlas(
-                _materials[i],
-                atlases[i].Texture,
-                textureService.FlowMapTexture,
-                textureService.PrismaticFlowMapTexture,
-                textureService.TerrainDecalAtlasTexture,
-                textureService.TerrainDecalStoneAtlasTexture);
-            BindAtlas(
-                _overlayMaterials[i],
-                atlases[i].Texture,
-                textureService.FlowMapTexture,
-                textureService.PrismaticFlowMapTexture,
-                textureService.TerrainDecalAtlasTexture,
-                textureService.TerrainDecalStoneAtlasTexture);
-            if (_cellMaterials.Length > 0 && i < s_terrainAtlasPropertyIds.Length &&
-                _cellMaterials[0].GetTexture(s_terrainAtlasPropertyIds[i]) != atlases[i].Texture)
-            {
-                _cellMaterials[0].SetTexture(s_terrainAtlasPropertyIds[i], atlases[i].Texture);
-            }
+            return;
         }
 
-        if (_cellMaterials.Length > 0)
+        // Атлас или карта потока могут быть ещё не загружены: пустой слот
+        // материала — штатное состояние до загрузки, SetTexture принимает null.
+        Material material = _cellMaterials[0];
+        for (int i = 0; i < atlases.Count && i < s_terrainAtlasPropertyIds.Length; i++)
         {
-            BindAtlas(
-                _cellMaterials[0],
-                atlases[0].Texture,
-                textureService.FlowMapTexture,
-                textureService.PrismaticFlowMapTexture,
-                textureService.TerrainDecalAtlasTexture,
-                textureService.TerrainDecalStoneAtlasTexture);
+            SetTextureIfChanged(material, s_terrainAtlasPropertyIds[i], atlases[i].Texture);
         }
+
+        SetTextureIfChanged(material, s_flowMapPropertyId, textureService.FlowMapTexture);
+        SetTextureIfChanged(material, s_prismaticFlowMapPropertyId, textureService.PrismaticFlowMapTexture);
+        SetTextureIfChanged(material, s_terrainDecalAtlasPropertyId, textureService.TerrainDecalAtlasTexture);
+        SetTextureIfChanged(material, s_terrainDecalStoneAtlasPropertyId, textureService.TerrainDecalStoneAtlasTexture);
     }
 
-    // Атлас или карта потока могут быть ещё не загружены: пустой слот
-    // материала — штатное состояние до загрузки, SetTexture принимает null.
-    private static void BindAtlas(
-        Material material,
-        Texture? atlas,
-        Texture? flowMap,
-        Texture? prismaticFlowMap,
-        Texture? terrainDecalAtlas,
-        Texture? terrainDecalStoneAtlas)
+    private static void SetTextureIfChanged(Material material, int propertyId, Texture? texture)
     {
-        if (material.GetTexture(s_baseMapPropertyId) != atlas)
+        if (material.GetTexture(propertyId) != texture)
         {
-            material.SetTexture(s_baseMapPropertyId, atlas);
-        }
-
-        if (material.GetTexture(s_flowMapPropertyId) != flowMap)
-        {
-            material.SetTexture(s_flowMapPropertyId, flowMap);
-        }
-
-        if (material.GetTexture(s_prismaticFlowMapPropertyId) != prismaticFlowMap)
-        {
-            material.SetTexture(s_prismaticFlowMapPropertyId, prismaticFlowMap);
-        }
-
-        if (material.GetTexture(s_terrainDecalAtlasPropertyId) != terrainDecalAtlas)
-        {
-            material.SetTexture(s_terrainDecalAtlasPropertyId, terrainDecalAtlas);
-        }
-
-        if (material.GetTexture(s_terrainDecalStoneAtlasPropertyId) != terrainDecalStoneAtlas)
-        {
-            material.SetTexture(s_terrainDecalStoneAtlasPropertyId, terrainDecalStoneAtlas);
-        }
-    }
-
-    private System.Collections.Generic.IEnumerable<Material> AllMaterials()
-    {
-        foreach (Material material in _materials)
-        {
-            yield return material;
-        }
-
-        foreach (Material material in _overlayMaterials)
-        {
-            yield return material;
-        }
-
-        foreach (Material material in _cellMaterials)
-        {
-            yield return material;
+            material.SetTexture(propertyId, texture);
         }
     }
 
@@ -348,11 +246,10 @@ public sealed class TerrainMaterialManager
         Shader.PropertyToID("_TerrainAtlas6"),
         Shader.PropertyToID("_TerrainAtlas7"),
     ];
-    private const string CellModeKeyword = "KERN_TERRAIN_CELLS";
 
     public void ValidateLightingBinding(in LightingOutputSnapshot output)
     {
-        if (output.State == LightingOutputState.Disabled || _lightingBindingValidated || _materials.Length == 0)
+        if (output.State == LightingOutputState.Disabled || _lightingBindingValidated || _cellMaterials.Length == 0)
         {
             return;
         }
@@ -363,19 +260,7 @@ public sealed class TerrainMaterialManager
             throw new InvalidOperationException("Lighting output snapshot is invalid for Terrain binding.");
         }
 
-        for (int materialIndex = 0; materialIndex < _materials.Length; materialIndex++)
-        {
-            Material material = _materials[materialIndex];
-            if (material.FindPass("Universal2D") < 0 ||
-                material.FindPass(
-                    ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField) < 0 ||
-                material.FindPass(
-                    ProjectRuntimeContracts.ShaderPassNames.LightingAmbientOcclusionField) < 0)
-            {
-                throw new InvalidOperationException(
-                    $"Terrain material '{material.name}' is missing world-lighting passes.");
-            }
-        }
+        RequireLightingPasses(_cellMaterials[0]);
 
         Texture globalTexture = Shader.GetGlobalTexture(s_worldLightTexturePropertyId);
         Vector4 globalRect = Shader.GetGlobalVector(s_worldLightRectPropertyId);
@@ -403,30 +288,30 @@ public sealed class TerrainMaterialManager
 
     public void CleanupMaterials()
     {
-        if (_materials != null)
+        foreach (Material material in _cellMaterials)
         {
-            foreach (var mat in AllMaterials())
+            if (material == null)
             {
-                if (mat != null)
-                {
-                    if (Application.isPlaying)
-                    {
-                        UnityEngine.Object.Destroy(mat);
-                    }
-                    else
-                    {
-                        UnityEngine.Object.DestroyImmediate(mat, allowDestroyingAssets: true);
-                    }
-                }
+                continue;
+            }
+
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(material);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(material, allowDestroyingAssets: true);
             }
         }
+
+        _cellMaterials = [];
     }
 
     private static void RequireShaderProperties(Material material)
     {
         string[] requiredProperties =
         [
-            "_BaseMap",
             "_FlowMap",
             "_PrismaticFlowMap",
             "_TerrainDecalAtlas",

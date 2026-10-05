@@ -55,7 +55,7 @@ public sealed class TerrainFrameDiagnostics : IDisposable
 
         // Счётчики сборщика клеток принадлежат рабочему потоку и здесь не
         // читаются: цена шага берётся из его опубликованного итога.
-        TerrainCellDataTextures textures = pipeline.CellBuilder.Textures;
+        TerrainCellBuffers textures = pipeline.CellBuilder.Buffers;
         _stall.Record(
             stallStart,
             telemetry,
@@ -71,8 +71,6 @@ public sealed class TerrainFrameDiagnostics : IDisposable
                 textures.LastUploadRectCount,
                 textures.LastUploadTexels,
                 textures.LastStageMs,
-                textures.LastStageCopyMs,
-                textures.LastStageApplyMs,
                 textures.LastUploadStrips,
                 timings.PlanMs,
                 timings.DimensionsMs,

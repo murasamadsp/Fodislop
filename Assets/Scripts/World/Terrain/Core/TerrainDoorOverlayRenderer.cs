@@ -9,13 +9,20 @@ using UnityEngine.Rendering;
 
 namespace Kern.World.Terrain;
 
+// Меш накладки дверей: те же адреса, что у меша идентификаторов, только
+// дверных квадов и в слое 2 (адрес в сетке, без смещения видимого окна).
+// Вид двери шейдер читает из буфера клеток, как у самого террейна; меш
+// меняется, только когда меняется состав дверей или сдвигается окно.
 public sealed class TerrainDoorOverlayRenderer : IDisposable
 {
     private const MeshUpdateFlags UploadFlags =
         MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds;
 
-    private readonly List<TerrainVertex> _vertices = [];
-    private List<int>[] _compactSubMeshIndices = Array.Empty<List<int>>();
+    // Слой адреса накладки (TerrainCellData.hlsl).
+    private const int OverlayLayer = 2;
+
+    private readonly List<TerrainCellIdVertex> _vertices = [];
+    private readonly List<int> _indices = [];
     private GameObject? _gameObject;
     private Mesh? _mesh;
     private MeshRenderer? _renderer;
@@ -23,9 +30,8 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
     public void Rebuild(
         Transform parent,
         ISceneObjectFactory sceneObjects,
-        List<TerrainVertex> vertices,
-        List<int>[] subMeshIndices,
-        Material[] materials,
+        List<int> doorQuads,
+        Material[] cellMaterials,
         string sortingLayerName,
         int sortingOrder,
         int meshWidth,
@@ -33,72 +39,58 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         float cellSize)
     {
         EnsureObjects(parent, sceneObjects);
-        _gameObject!.transform.localPosition = Vector3.zero;
-        // Вершины и индексы дверей приходят уже компактными из сборщика клеток.
-        EnsureSubMeshLists(subMeshIndices.Length);
-        _vertices.Clear();
-        _vertices.AddRange(vertices);
-        for (int atlasIndex = 0; atlasIndex < subMeshIndices.Length; atlasIndex++)
-        {
-            _compactSubMeshIndices[atlasIndex].Clear();
-            _compactSubMeshIndices[atlasIndex].AddRange(subMeshIndices[atlasIndex]);
-        }
-
         if (_gameObject == null || _mesh == null || _renderer == null)
         {
             return;
         }
 
-        if (_vertices.Count == 0)
+        if (doorQuads.Count == 0)
         {
             _gameObject.SetActive(false);
             return;
         }
 
+        _gameObject.transform.localPosition = Vector3.zero;
         _gameObject.SetActive(true);
+        _vertices.Clear();
+        _indices.Clear();
+        foreach (int quad in doorQuads)
+        {
+            int x = quad / meshHeight;
+            int y = quad % meshHeight;
+            int baseVertex = _vertices.Count;
+            for (int corner = 0; corner < 4; corner++)
+            {
+                _vertices.Add(new TerrainCellIdVertex(x, y, OverlayLayer, corner));
+            }
 
-        // Переописывать буфер надо только когда изменилась его длина или
-        // число подсеток. Раньше Clear + SetVertexBufferParams шли каждый
-        // раз: это перевыделение на GPU, а состав дверей в кадре почти
-        // всегда тот же самый, и менялись только их вершины.
-        bool layoutChanged =
-            _mesh.vertexCount != _vertices.Count ||
-            _mesh.subMeshCount != subMeshIndices.Length;
-        if (layoutChanged)
+            _indices.Add(baseVertex);
+            _indices.Add(baseVertex + 1);
+            _indices.Add(baseVertex + 2);
+            _indices.Add(baseVertex);
+            _indices.Add(baseVertex + 2);
+            _indices.Add(baseVertex + 3);
+        }
+
+        // Переописывать буфер надо только когда изменилась его длина: состав
+        // дверей в кадре почти всегда тот же самый.
+        if (_mesh.vertexCount != _vertices.Count)
         {
             _mesh.Clear();
-            _mesh.SetVertexBufferParams(_vertices.Count, TerrainMeshManager.VertexLayout);
-            _mesh.subMeshCount = subMeshIndices.Length;
+            _mesh.SetVertexBufferParams(_vertices.Count, TerrainCellIdMesh.VertexLayout);
         }
 
-        _mesh.SetVertexBufferData(
-            _vertices,
-            0,
-            0,
-            _vertices.Count,
-            0,
-            UploadFlags);
-
-        // Индексы переписываются всегда. Одинаковая длина буфера НЕ значит
-        // одинаковый состав: одна дверь сменилась другой — счёт тот же, а
-        // треугольники другие, и пропуск оставил бы на экране прошлый кадр.
-        for (int atlasIndex = 0; atlasIndex < _compactSubMeshIndices.Length; atlasIndex++)
-        {
-            _mesh.SetIndices(
-                _compactSubMeshIndices[atlasIndex],
-                MeshTopology.Triangles,
-                atlasIndex,
-                calculateBounds: false,
-                baseVertex: 0);
-        }
-
+        _mesh.SetVertexBufferData(_vertices, 0, 0, _vertices.Count, 0, UploadFlags);
+        // Индексы переписываются всегда: одна дверь сменилась другой — счёт
+        // тот же, а треугольники другие.
+        _mesh.SetIndices(_indices, MeshTopology.Triangles, 0, calculateBounds: false, baseVertex: 0);
         _mesh.bounds = new Bounds(
             new Vector3(meshWidth * cellSize * 0.5f, meshHeight * cellSize * 0.5f, 0f),
             new Vector3(
                 (meshWidth * cellSize) + (cellSize * 2f),
                 (meshHeight * cellSize) + (cellSize * 2f),
                 2f));
-        _renderer.sharedMaterials = materials;
+        _renderer.sharedMaterials = cellMaterials;
         _renderer.sortingLayerName = sortingLayerName;
         _renderer.sortingOrder = sortingOrder;
     }
@@ -109,16 +101,6 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         {
             _gameObject.SetActive(false);
         }
-    }
-
-    public void CompensateParentTranslation(Vector3 parentDelta)
-    {
-        if (_gameObject == null || !_gameObject.activeSelf || parentDelta == Vector3.zero)
-        {
-            return;
-        }
-
-        _gameObject.transform.localPosition -= parentDelta;
     }
 
     public void Dispose()
@@ -162,19 +144,5 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         };
         _mesh.MarkDynamic();
         meshFilter.sharedMesh = _mesh;
-    }
-
-    private void EnsureSubMeshLists(int atlasCount)
-    {
-        if (_compactSubMeshIndices.Length == atlasCount)
-        {
-            return;
-        }
-
-        _compactSubMeshIndices = new List<int>[atlasCount];
-        for (int atlasIndex = 0; atlasIndex < atlasCount; atlasIndex++)
-        {
-            _compactSubMeshIndices[atlasIndex] = [];
-        }
     }
 }

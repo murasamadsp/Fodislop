@@ -12,6 +12,4 @@ public interface IBlockRegistry
     bool TryGet(CellType type, out BlockDefinition definition);
 
     IReadOnlyDictionary<CellType, BlockDefinition> All { get; }
-
-    byte[][] GetTileGroups();
 }

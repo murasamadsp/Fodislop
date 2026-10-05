@@ -1,3 +1,34 @@
+#include <filesystem>
+#include <fstream>
+// Клетка кодируется здесь по таблице битов из TerrainCellData.cs, а не
+// рабочим C#: так проверяется, что шейдер читает ту же раскладку. Клетки —
+// ushort, по две в слове, как в TerrainCellBuffers.
+static const int RingSize = 4;
+static void setCell(int gridX, int unityY, uint bits)
+{
+    int x = ((gridX % RingSize) + RingSize) % RingSize;
+    int y = ((unityY % RingSize) + RingSize) % RingSize;
+    uint index = (uint)(y * RingSize + x);
+    uint& word = _TerrainCells.data.at(index >> 1);
+    uint shift = (index & 1u) * 16u;
+    word = (word & ~(0xFFFFu << shift)) | ((bits & 0xFFFFu) << shift);
+}
+static const uint TypeCause = 1u << 20;
+static void resetCells()
+{
+    _TerrainCells.reset(RingSize * RingSize / 2);
+    _TerrainTypes.reset(256);
+    _TerrainCellGridSize = {RingSize, RingSize, 1, 0};
+    _TerrainCellOrigin = {0, 0, 1, 1};
+    _TerrainCellViewOffset = {0, 0, 0, 0};
+    _TerrainDistortionMode = 0;
+    _TerrainTileDescriptors.reset(64);
+    // Передний план — тип 1 (слот атласа 0, искажает), фон — тип 2: разные
+    // типы, поэтому фон рисуется под каждой клеткой.
+    for (int y = 0; y < RingSize; ++y) for (int x = 0; x < RingSize; ++x) setCell(x, y, 1u | (2u << 8));
+    _TerrainTypes.data[1].b.z = TypeCause;
+}
+
 // Independent triangle rasterization, followed by the production fragment mask.
 // Sample on both sides of every logical pixel center: checking centers alone
 // cannot distinguish a staircase from an ordinary diagonal edge.
@@ -349,19 +380,12 @@ void checkAo()
     _TerrainAmbientOcclusionStrength=1;
     // Тот же пол, что в TerrainLook: множитель обязан останавливаться на нём.
     _TerrainAmbientOcclusionFloor=0.51f;
-    float2 corners[]={{0,0},{1,0},{1,1},{0,1}};
     for(int density : {8,16,32,64})
     {
         float samples[2];
         for(int shape=0;shape<2;++shape)
         {
             float4 xs={0,1,shape ? .5f : 1.f,0},ys={0,0,1,1};
-            _TerrainCellGeometryX.data[1]=xs;
-            _TerrainCellGeometryY.data[1]=ys;
-            TerrainCellVertex vertices[4];
-            for(int i=0;i<4;++i)
-                vertices[i]=LoadTerrainCellVertex(
-                    float3{3,3,1},corners[i]);
             Texture field;
             field.reset(8*density,8*density);
             for(int y=0;y<field.height;++y) for(int x=0;x<field.width;++x)
@@ -550,54 +574,6 @@ void checkFlatCellDistance()
     }
 }
 
-void checkAoCarrierPadding()
-{
-    _TerrainCellGridSize = {1,1,2,0};
-    _TerrainGeometryCarrierPaddingWorld = {.125f,.25f};
-    float4 xs={.25f,.75f,.75f,.25f};
-    float4 ys={.25f,.25f,.75f,.75f};
-    _TerrainCellGeometryX.data[1]=xs;
-    _TerrainCellGeometryY.data[1]=ys;
-    TerrainCellVertex lowerLeft=LoadTerrainCellVertex(
-        float3{0,0,1},float2{0,0});
-    TerrainCellVertex upperRight=LoadTerrainCellVertex(
-        float3{0,0,1},float2{1,1});
-    if(std::fabs(lowerLeft.packedData.y-.1875f)>1e-6f ||
-        std::fabs(lowerLeft.packedData.z-.125f)>1e-6f ||
-        std::fabs(upperRight.packedData.y-.8125f)>1e-6f ||
-        std::fabs(upperRight.packedData.z-.875f)>1e-6f)
-        throw std::runtime_error("AO carrier does not include half a field texel around silhouette corners");
-
-    // Unanchored cells still need their canonical square tested against the
-    // expanded carrier. Otherwise the new carrier margin becomes solid AO.
-    _TerrainCellMeta.data[1].a=.5f;
-    TerrainCellVertex canonicalLowerLeft=LoadTerrainCellVertex(
-        float3{0,0,1},float2{0,0});
-    TerrainCellVertex canonicalUpperRight=LoadTerrainCellVertex(
-        float3{0,0,1},float2{1,1});
-    bool escapedCanonicalSilhouette=oracle(
-        float2{-.01f,.5f},
-        canonicalLowerLeft.geometryCornersX,
-        canonicalLowerLeft.geometryCornersY);
-    bool carrierBoundsMismatch=
-        std::fabs(canonicalLowerLeft.packedData.y+.0625f)>1e-6f ||
-        std::fabs(canonicalLowerLeft.packedData.z+.125f)>1e-6f ||
-        std::fabs(canonicalUpperRight.packedData.y-1.0625f)>1e-6f ||
-        std::fabs(canonicalUpperRight.packedData.z-1.125f)>1e-6f;
-    if(carrierBoundsMismatch || escapedCanonicalSilhouette)
-        throw std::runtime_error(
-            "Expanded unanchored AO carrier mismatch="+std::to_string(carrierBoundsMismatch)+
-            " escaped="+std::to_string(escapedCanonicalSilhouette)+
-            " lower="+std::to_string(canonicalLowerLeft.geometryCornersX.x)+","+
-            std::to_string(canonicalLowerLeft.geometryCornersY.x)+","+
-            std::to_string(canonicalLowerLeft.geometryCornersX.y)+","+
-            std::to_string(canonicalLowerLeft.geometryCornersY.y));
-
-    _TerrainCellMeta.data[1].a=1.0f;
-    _TerrainGeometryCarrierPaddingWorld={0,0};
-    _TerrainCellGridSize={1,1,1,0};
-}
-
 static void checkDistortedAutotileUvSeam()
 {
     // The right edge of the left cell and left edge of the right cell share
@@ -649,135 +625,340 @@ static void checkAffineGeometryUv()
     }
 }
 
-int runChecks()
+// Независимая копия TerrainVertex.H: обрезка float до half, 11 значащих
+// бит, всё меньше 2^-14 — ноль.
+static float truncatedHalf(float value)
 {
-    checkAffineGeometryUv();
-    checkDistortedAutotileUvSeam();
-    Texture* channels[] = {&_TerrainCellColor, &_TerrainCellMeta,
-        &_TerrainCellAtlasRect, &_TerrainCellTileSize, &_TerrainCellWorld,
-        &_TerrainCellAnimation, &_TerrainCellGlow, &_TerrainCellGeometryX,
-        &_TerrainCellGeometryY};
-    for (Texture* channel : channels) channel->reset(1,2);
-    _TerrainCellGridSize = {1,1,1,0};
-    _TerrainCellOrigin = {0,0,0,0};
-    _TerrainCellViewOffset = {0,0,0,0};
-    _TerrainCellMeta.data[1] = {1.f/255,228.f/255,0,0};
-    textureReads = 0;
-    LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
-    long flatCellTextureReads = textureReads;
-    _TerrainCellMeta.data[1].w = 1;
-    _TerrainCellGeometryX.data[1] = {0,1,1,0};
-    _TerrainCellGeometryY.data[1] = {0,0,1,1};
-    textureReads = 0;
-    LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
-    long anchoredCellTextureReads = textureReads;
-    if(flatCellTextureReads != 7 || anchoredCellTextureReads != 9)
-        throw std::runtime_error(
-            "Flat terrain cells must skip both geometry texture loads: flat=" +
-            std::to_string(flatCellTextureReads) + " anchored=" +
-            std::to_string(anchoredCellTextureReads));
-    _TerrainCellMeta.data[1] = {1.f/255,228.f/255,0,1};
-    _TerrainCellMeta.data[0] = {1.f/255,228.f/255,0,1}; // stale anchor must not move background
-    std::mt19937 rng(0x32AABB);
-    float2 corners[] = {{0,0},{1,0},{1,1},{0,1}};
-    long checked=0;
-    for(int shape=0;shape<128;++shape)
+    if (value == 0.0f) return 0.0f;
+    int exponent;
+    float mantissa = std::frexp(value, &exponent);
+    if (exponent - 1 < -14) return 0.0f;
+    return std::ldexp(std::floor(mantissa * 2048.0f) / 2048.0f, exponent);
+}
+
+// Фаза k/1000 считается на GPU целыми: обязана дать ровно H(k / 1000f) для
+// всего диапазона хэша (k < 6283).
+static void checkThousandthsPhase()
+{
+    for (uint k = 0; k < 6283u; ++k)
     {
-        float4 xs,ys;
-        for(int i=0;i<4;++i)
+        float expected = truncatedHalf((float)k / 1000.0f);
+        float actual = TerrainThousandthsAsHalf(k);
+        if (actual != expected)
+            throw std::runtime_error("phase k/1000 differs at k=" + std::to_string(k) +
+                ": " + std::to_string(actual) + " != " + std::to_string(expected));
+    }
+    for (uint k = 0; k < 65536u; ++k)
+    {
+        float value = (float)k * (1.0f / 65536.0f);
+        if (TerrainTruncateToHalf(value) != truncatedHalf(value))
+            throw std::runtime_error("faceted phase truncation differs at " + std::to_string(k));
+    }
+}
+
+// Миры стенда (TerrainCellEquivalenceHarnessTests.ExportWorldsForHlslShim):
+// пёстрые типы, автотайл, стены пака, рельеф, органика, перекрытие фона.
+// Настоящий LoadTerrainCellVertex на каждом кваде обязан дать ровно
+// атрибуты вершин TerrainQuadBuilder.FillQuad — эталона прежнего вида.
+template <typename T> static T readValue(std::ifstream& in)
+{
+    T value{};
+    in.read(reinterpret_cast<char*>(&value), sizeof(T));
+    if (!in) throw std::runtime_error("truncated shim world fixture");
+    return value;
+}
+static void expectAttribute(float actual, float expected, const std::string& what)
+{
+    if (actual != expected)
+        throw std::runtime_error(what + ": " + std::to_string(actual) + " != " + std::to_string(expected));
+}
+struct WorldCell { int x, y; };
+static std::vector<WorldCell> shapes;
+static void checkWorldShapes(const std::string& path);
+static long checkWorld(const std::string& path)
+{
+    shapes.clear();
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("cannot open " + path);
+    int worldWidth = readValue<int>(in);
+    int worldHeight = readValue<int>(in);
+    _TerrainDistortionMode = readValue<int>(in);
+    for (float4& vector : _TerrainDistortion)
+        vector = float4{readValue<float>(in), readValue<float>(in), readValue<float>(in), readValue<float>(in)};
+    _TerrainOrganicHorizontalSeed = (int)readValue<uint>(in);
+    _TerrainOrganicVerticalSeed = (int)readValue<uint>(in);
+    _TerrainGroundDecalRule = (int)readValue<uint>(in);
+    _TerrainStoneDecalRule = (int)readValue<uint>(in);
+    int originX = readValue<int>(in);
+    int originY = readValue<int>(in);
+    int ringWidth = readValue<int>(in);
+    int ringHeight = readValue<int>(in);
+    _TerrainTileDescriptors.reset(64);
+    for (uint& word : _TerrainTileDescriptors.data) word = readValue<uint>(in);
+    _TerrainTypes.reset(256);
+    for (TerrainTypeRow& row : _TerrainTypes.data)
+    {
+        row.a = uint4{readValue<uint>(in), readValue<uint>(in), readValue<uint>(in), readValue<uint>(in)};
+        row.b = uint4{readValue<uint>(in), readValue<uint>(in), readValue<uint>(in), readValue<uint>(in)};
+    }
+    int cells = ringWidth * ringHeight;
+    _TerrainCells.reset((cells + 1) / 2);
+    for (int i = 0; i < cells; ++i)
+        _TerrainCells.data[i >> 1] |= (uint)readValue<uint16_t>(in) << ((i & 1) * 16);
+    _TerrainCellGridSize = {(float)ringWidth, (float)ringHeight, 1, 0};
+    _TerrainCellOrigin = {(float)originX, (float)originY, (float)worldHeight, (float)worldWidth};
+    _TerrainCellViewOffset = {0, 0, 0, 0};
+
+    float2 corners[] = {{0,0},{1,0},{1,1},{0,1}};
+    int quads = readValue<int>(in);
+    long compared = 0;
+    for (int q = 0; q < quads; ++q)
+    {
+        int x = readValue<int>(in), y = readValue<int>(in), layer = readValue<int>(in), atlas = readValue<int>(in);
+        float expected[4][26];
+        for (auto& vertex : expected) for (float& value : vertex) value = readValue<float>(in);
+        std::string where = path + " (" + std::to_string(x) + "," + std::to_string(y) + ") layer " + std::to_string(layer);
+        for (int corner = 0; corner < 4; ++corner)
         {
-            // Диапазон обязан покрывать продакшен целиком. Свободный джиттер
-            // внутри массива породы даёт +-3*DistortionStrengthSteps шагов,
-            // то есть +-6/32; при +-4/32 две самые сильные ступени не
-            // проверялись вовсе.
-            xs[i]=corners[i].x+(int(rng()%13)-6)/32.f;
-            ys[i]=corners[i].y+(int(rng()%13)-6)/32.f;
-        }
-        // Предпосылка oracle(): четырёхугольник выпуклый. При смещении до
-        // 6/32 это выполняется с запасом — чтобы стать невыпуклым, углу надо
-        // пересечь диагональ соседей, а это больше половины клетки. Проверяем,
-        // а не предполагаем: поднимут амплитуду — падёт здесь, а не в виде
-        // молчаливого расхождения с оракулом.
-        for(int i=0;i<4;++i)
-        {
-            int j=(i+1)%4, k=(i+2)%4;
-            float turn=cross2(float2{xs[j]-xs[i],ys[j]-ys[i]},
-                              float2{xs[k]-xs[j],ys[k]-ys[j]});
-            if(turn<=0) throw std::runtime_error(
-                "Generated quad is not convex; oracle() precondition broken");
-        }
-        _TerrainCellGeometryX.data[1]=xs;
-        _TerrainCellGeometryY.data[1]=ys;
-        _TerrainCellGeometryX.data[0]=xs;
-        _TerrainCellGeometryY.data[0]=ys;
-        TerrainCellVertex vertices[4];
-        for(int i=0;i<4;++i)
-        {
-            vertices[i]=LoadTerrainCellVertex(
-                float3{0,0,1},corners[i]);
-            auto background=LoadTerrainCellVertex(
-                float3{0,0,0},corners[i]);
-            if(background.positionOS.x!=corners[i].x || background.positionOS.y!=corners[i].y)
-                throw std::runtime_error("Background was distorted");
-        }
-        for(int y=-5;y<37;++y) for(int x=-5;x<37;++x)
-        {
-            for(int sy=0;sy<4;++sy) for(int sx=0;sx<4;++sx)
+            TerrainCellVertex v = LoadTerrainCellVertex(float3{(float)x, (float)y, (float)layer}, corners[corner]);
+            expectAttribute(v.atlasIndex, (float)atlas, where + ": atlas slot");
+            if (atlas < 0) break;
+            const float* e = expected[corner];
+            std::string at = where + " corner " + std::to_string(corner);
+            const float actual[26] = {
+                v.uv.x, v.uv.y,
+                v.subAtlasRect.x, v.subAtlasRect.y, v.subAtlasRect.z, v.subAtlasRect.w,
+                v.tileSizeUV.x, v.tileSizeUV.y, v.tileSizeUV.z, v.tileSizeUV.w,
+                v.worldPos.x, v.worldPos.y, v.worldPos.z, v.worldPos.w,
+                v.animData.x, v.animData.y, v.animData.z, v.animData.w,
+                v.packedData.x, v.geometryCornersX[corner], v.geometryCornersY[corner], v.packedData.w,
+                v.glowData.x, v.glowData.y, v.glowData.z, v.glowData.w,
+            };
+            static const char* names[26] = {
+                "u", "v", "rect x", "rect y", "rect z", "rect w", "tile x", "tile y", "frames", "frame height",
+                "world x", "server y", "column", "autotile", "animation", "speed", "phase", "profile",
+                "anchored", "corner x", "corner y", "organic", "light colour", "light flags", "contour", "decal",
+            };
+            for (int i = 0; i < 26; ++i) expectAttribute(actual[i], e[i], at + ": " + names[i]);
+            ++compared;
+            if (layer == 0 &&
+                (v.positionOS.x != x + corners[corner].x || v.positionOS.y != y + corners[corner].y))
+                throw std::runtime_error(at + ": background was distorted");
+
+            // Тот же передний план видимым проходом со смещением окна и
+            // накладкой дверей (слой 2, адрес в сетке) — та же вершина.
+            if (layer == 1)
             {
-                float2 p={(x+(sx+.5f)/4)/32,(y+(sy+.5f)/4)/32};
-                bool actual=rendered(p,vertices,xs,ys);
-                ++checked;
-                bool expected=expectedRendered(p,vertices,xs,ys);
-                if(actual!=expected)
+                _TerrainCellViewOffset = {3, 2, 0, 0};
+                TerrainCellVertex visible = LoadTerrainCellVertex(
+                    float3{(float)(x - 3), (float)(y - 2), 1.0f}, corners[corner]);
+                TerrainCellVertex overlay = LoadTerrainCellVertex(
+                    float3{(float)x, (float)y, 2.0f}, corners[corner]);
+                _TerrainCellViewOffset = {0, 0, 0, 0};
+                for (const TerrainCellVertex* other : {&visible, &overlay})
                 {
-                    std::cerr << "shape=" << shape << " pixel=" << x << "," << y
-                        << " subpixel=" << sx << "," << sy << " expected=" << expected << " actual=" << actual << '\n';
-                    return 1;
+                    if (other->atlasIndex != v.atlasIndex ||
+                        other->positionOS.x != v.positionOS.x || other->positionOS.y != v.positionOS.y ||
+                        other->positionOS.z != v.positionOS.z ||
+                        other->glowData.z != v.glowData.z || other->uvBits != v.uvBits)
+                        throw std::runtime_error(at + ": view offset or door overlay address differs");
                 }
             }
         }
-        // The right neighbour shares both endpoints of the displaced edge.
-        // Rasterize both independently; their union must have no black seam.
-        float4 nx={xs.y-1,1,1,xs.z-1}, ny={ys.y,0,1,ys.z};
-        _TerrainCellGeometryX.data[1]=nx;
-        _TerrainCellGeometryY.data[1]=ny;
-        TerrainCellVertex neighbour[4];
-        for(int i=0;i<4;++i)
-            neighbour[i]=LoadTerrainCellVertex(
-                float3{1,0,1},corners[i]);
-        for(int y=32;y<96;++y) for(int x=96;x<160;++x)
+        if (layer == 1 && atlas >= 0) shapes.push_back({x, y});
+    }
+    checkWorldShapes(path);
+    return compared;
+}
+// Растеризация настоящих смещённых клеток мира (классика: прямые рёбра)
+// против независимого полуплоскостного оракула, швы с соседями по общим
+// узлам и носитель AO. Узлы — из шейдерного правила, не из фикстуры.
+static long shapeSamples = 0;
+static long seamSamples = 0;
+static bool loadQuad(WorldCell cell, TerrainCellVertex* vertices)
+{
+    static const float2 corners[] = {{0,0},{1,0},{1,1},{0,1}};
+    for (int i = 0; i < 4; ++i)
+        vertices[i] = LoadTerrainCellVertex(float3{(float)cell.x, (float)cell.y, 1.0f}, corners[i]);
+    return vertices[0].atlasIndex >= 0 && vertices[0].packedData.x == 1 && vertices[0].packedData.w == 0;
+}
+static bool drawn(int x, int y)
+{
+    for (const WorldCell& cell : shapes) if (cell.x == x && cell.y == y) return true;
+    return false;
+}
+static void checkWorldShapes(const std::string& path)
+{
+    int rasterised = 0;
+    bool paddingChecked = false;
+    bool canonicalChecked = false;
+    for (const WorldCell& cell : shapes)
+    {
+        TerrainCellVertex v[4];
+        bool straight = loadQuad(cell, v);
+        if (!canonicalChecked && v[0].atlasIndex >= 0 && v[0].packedData.x == 0)
         {
-            float2 p={(x+.5f)/128,(y+.5f)/128};
-            if(!rendered(p,vertices,xs,ys) && !rendered(p,neighbour,nx,ny))
-                throw std::runtime_error("Uncovered shared edge between adjacent cells");
+            // Несмещённая клетка: расширенный носитель AO вокруг квадрата,
+            // силуэт за квадрат не выходит.
+            _TerrainCellGridSize.z = 2;
+            _TerrainGeometryCarrierPaddingWorld = {.125f, .25f};
+            TerrainCellVertex lower = LoadTerrainCellVertex(float3{(float)cell.x, (float)cell.y, 1.0f}, float2{0,0});
+            TerrainCellVertex upper = LoadTerrainCellVertex(float3{(float)cell.x, (float)cell.y, 1.0f}, float2{1,1});
+            _TerrainGeometryCarrierPaddingWorld = {0, 0};
+            _TerrainCellGridSize.z = 1;
+            if (std::fabs(lower.packedData.y + .0625f) > 1e-6f || std::fabs(lower.packedData.z + .125f) > 1e-6f ||
+                std::fabs(upper.packedData.y - 1.0625f) > 1e-6f || std::fabs(upper.packedData.z - 1.125f) > 1e-6f ||
+                oracle(float2{-.01f, .5f}, lower.geometryCornersX, lower.geometryCornersY))
+                throw std::runtime_error(path + ": expanded unanchored AO carrier mismatch");
+            canonicalChecked = true;
         }
-
-        // Верхний сосед. Проверялся только правый, то есть только
-        // вертикальный стык; горизонтальный не проверял никто, а в кадре
-        // именно он и читается — тонкой тёмной чертой поперёк породы там,
-        // где не достаётся ни одной клетке и наружу смотрит фон мира.
-        //
-        // Нижняя грань соседа — это наша верхняя, сдвинутая на клетку вниз:
-        // углы общие, так их строит TerrainCellGeometry.FromOffsets из одного
-        // и того же GridVertexOffsets.
-        float4 tx={xs.w,xs.z,1,0}, ty={ys.w-1,ys.z-1,1,1};
-        _TerrainCellGeometryX.data[1]=tx;
-        _TerrainCellGeometryY.data[1]=ty;
-        TerrainCellVertex above[4];
-        for(int i=0;i<4;++i)
-            above[i]=LoadTerrainCellVertex(
-                float3{0,1,1},corners[i]);
-        for(int y=96;y<160;++y) for(int x=32;x<96;++x)
+        if (!straight) continue;
+        float4 xs = v[0].geometryCornersX, ys = v[0].geometryCornersY;
+        // Предпосылка oracle(): четырёхугольник выпуклый.
+        for (int i = 0; i < 4; ++i)
         {
-            float2 p={(x+.5f)/128,(y+.5f)/128};
-            if(!rendered(p,vertices,xs,ys) && !rendered(p,above,tx,ty))
-                throw std::runtime_error(
-                    "Uncovered shared edge between vertically adjacent cells at " +
-                    std::to_string(p.x) + "," + std::to_string(p.y));
+            int j = (i + 1) % 4, k = (i + 2) % 4;
+            if (cross2(float2{xs[j]-xs[i], ys[j]-ys[i]}, float2{xs[k]-xs[j], ys[k]-ys[j]}) <= 0)
+                throw std::runtime_error(path + ": displaced cell is not convex");
+        }
+        if (!paddingChecked)
+        {
+            // Носитель AO: на полтексела поля вокруг крайних углов силуэта.
+            _TerrainCellGridSize.z = 2;
+            _TerrainGeometryCarrierPaddingWorld = {.125f, .25f};
+            TerrainCellVertex lower = LoadTerrainCellVertex(float3{(float)cell.x, (float)cell.y, 1.0f}, float2{0,0});
+            TerrainCellVertex upper = LoadTerrainCellVertex(float3{(float)cell.x, (float)cell.y, 1.0f}, float2{1,1});
+            _TerrainGeometryCarrierPaddingWorld = {0, 0};
+            _TerrainCellGridSize.z = 1;
+            float minX = std::min({xs.x, xs.y, xs.z, xs.w}), maxX = std::max({xs.x, xs.y, xs.z, xs.w});
+            float minY = std::min({ys.x, ys.y, ys.z, ys.w}), maxY = std::max({ys.x, ys.y, ys.z, ys.w});
+            if (std::fabs(lower.packedData.y - (minX - .0625f)) > 1e-6f ||
+                std::fabs(lower.packedData.z - (minY - .125f)) > 1e-6f ||
+                std::fabs(upper.packedData.y - (maxX + .0625f)) > 1e-6f ||
+                std::fabs(upper.packedData.z - (maxY + .125f)) > 1e-6f)
+                throw std::runtime_error(path + ": AO carrier does not enclose the silhouette with padding");
+            paddingChecked = true;
+        }
+        if (rasterised++ >= 96) continue;
+        // Поклеточная растеризация: по обе стороны каждого центра пикселя.
+        for (int y = -8; y < 40; ++y) for (int x = -8; x < 40; ++x)
+            for (int sy = 0; sy < 4; ++sy) for (int sx = 0; sx < 4; ++sx)
+            {
+                float2 p = {(float)cell.x + (x + (sx + .5f) / 4) / 32, (float)cell.y + (y + (sy + .5f) / 4) / 32};
+                float2 local = p - float2{(float)cell.x, (float)cell.y};
+                TerrainCellVertex shifted[4];
+                for (int i = 0; i < 4; ++i)
+                {
+                    shifted[i] = v[i];
+                    shifted[i].positionOS.x -= cell.x;
+                    shifted[i].positionOS.y -= cell.y;
+                }
+                if (rendered(local, shifted, xs, ys) != expectedRendered(local, shifted, xs, ys))
+                    throw std::runtime_error(path + ": raster coverage differs from polygon oracle at cell " +
+                        std::to_string(cell.x) + "," + std::to_string(cell.y));
+                ++shapeSamples;
+            }
+        // Швы с правым и верхним соседом: общие узлы совпадают, и точка у
+        // ребра внутри любого из двух силуэтов покрыта хотя бы одной клеткой.
+        for (int side = 0; side < 2; ++side)
+        {
+            WorldCell other = side == 0 ? WorldCell{cell.x + 1, cell.y} : WorldCell{cell.x, cell.y + 1};
+            TerrainCellVertex n[4];
+            if (!drawn(other.x, other.y) || !loadQuad(other, n)) continue;
+            float2 offset = side == 0 ? float2{1, 0} : float2{0, 1};
+            float4 nx = n[0].geometryCornersX, ny = n[0].geometryCornersY;
+            int ownA = side == 0 ? 1 : 3, ownB = 2;
+            int theirA = 0, theirB = side == 0 ? 3 : 1;
+            float2 a = float2{xs[ownA], ys[ownA]}, b = float2{xs[ownB], ys[ownB]};
+            if (a.x != nx[theirA] + offset.x || a.y != ny[theirA] + offset.y ||
+                b.x != nx[theirB] + offset.x || b.y != ny[theirB] + offset.y)
+                throw std::runtime_error(path + ": neighbour does not share the edge nodes");
+            for (int t = 0; t < 64; ++t)
+            {
+                float2 edge = a + (b - a) * ((t + .5f) / 64);
+                for (int o = -2; o <= 2; ++o)
+                {
+                    float2 p = edge + offset * (o / 512.0f);
+                    float2 q = p - offset;
+                    bool inside = oracle(p, xs, ys) || oracle(q, nx, ny);
+                    bool covered = TerrainGeometryCoverage(p, xs, ys, 1) > .5f ||
+                        TerrainGeometryCoverage(q, nx, ny, 1) > .5f;
+                    if (inside && !covered)
+                        throw std::runtime_error(path + ": uncovered shared edge");
+                    ++seamSamples;
+                }
+            }
         }
     }
+    if (rasterised == 0 && path.find("Classic") != std::string::npos)
+        throw std::runtime_error(path + ": classic world has no displaced cells to rasterise");
+}
+
+static void checkHarnessWorlds(const char* directory)
+{
+    if (directory == nullptr) throw std::runtime_error("shim world fixture directory was not passed");
+    long compared = 0;
+    int worlds = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(directory))
+    {
+        compared += checkWorld(entry.path().string());
+        ++worlds;
+    }
+    if (worlds != 3) throw std::runtime_error("expected 3 shim worlds, found " + std::to_string(worlds));
+    resetCells();
+    std::cout << "HLSL cell decode matches FillQuad vertices: " << worlds << " worlds, " << compared
+        << " vertices; displaced raster " << shapeSamples << " subpixels, seams " << seamSamples << " samples.\n";
+}
+
+// Номер угла из меша идентификаторов (TerrainCellIdVertex) обязан дать тот
+// же обход квада, что и углы, которыми шим зовёт LoadTerrainCellVertex.
+static void checkCornerBase()
+{
+    const float2 expected[4] = {{0,0},{1,0},{1,1},{0,1}};
+    for (int corner = 0; corner < 4; corner++)
+    {
+        float2 base = TerrainCornerBase((float)corner);
+        if (base.x != expected[corner].x || base.y != expected[corner].y)
+            throw std::runtime_error("TerrainCornerBase walks the quad in the wrong order");
+    }
+}
+
+// Чтения на вершину: клетка, восемь соседей, их признаки по разу и строка
+// типа (фон — ещё признаки фоновых типов соседей). Число
+// печатается, чтобы рост цены вершины был виден, и ограничено сверху.
+static void checkBufferReads()
+{
+    resetCells();
+    _TerrainCellOrigin = {5, 5, 100, 100};
+    _TerrainTypes.data[1].b.z = 0u;
+    bufferReads = 0;
+    LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
+    long flat = bufferReads;
+    _TerrainTypes.data[1].b.z = TypeCause;
+    _TerrainDistortionMode = 2;
+    bufferReads = 0;
+    LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
+    long organic = bufferReads;
+    bufferReads = 0;
+    LoadTerrainCellVertex(float3{0,0,0},float2{0,0});
+    long background = bufferReads;
+    std::cout << "Terrain cell reads per vertex: flat foreground=" << flat
+        << " organic foreground=" << organic << " background=" << background << '\n';
+    if (flat > 28 || organic > 28 || background > 28)
+        throw std::runtime_error("Terrain cell vertex reads exceed 28");
+    resetCells();
+}
+
+
+int runChecks(const char* worldDirectory)
+{
+    checkAffineGeometryUv();
+    checkDistortedAutotileUvSeam();
+    checkThousandthsPhase();
+    checkHarnessWorlds(worldDirectory);
+    checkBufferReads();
+    checkCornerBase();
     checkAo();
-    checkAoCarrierPadding();
     checkContinuousFieldSilhouette();
     checkOrganicVerticesUseGeometryGrid();
     checkOrganicGeometryCoverage();
@@ -785,16 +966,15 @@ int runChecks()
     checkFlatCellDistance();
     checkReliefRim();
     checkAmbientOcclusionFloor();
-    std::cout << "HLSL shim displaced autotile UV continuity, carrier/mask, geometry quantization and AO geometry edge passed: " << checked
-        << " subpixels; 512 background corners and 524288 adjacent-edge samples.\n";
+    std::cout << "HLSL shim displaced autotile UV continuity, geometry quantization, phase and AO geometry edge passed.\n";
     return 0;
 }
 
-int main()
+int main(int argc, char** argv)
 {
     try
     {
-        return runChecks();
+        return runChecks(argc > 1 ? argv[1] : nullptr);
     }
     catch (const std::exception& error)
     {

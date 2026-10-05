@@ -11,29 +11,6 @@ using NUnit.Framework;
 public class TerrainCellMaskCalculatorTests
 {
     [Test]
-    public void EnsureCapacity_AllocatesCorrectArraySizes()
-    {
-        var calculator = new TerrainCellMaskCalculator();
-        calculator.EnsureCapacity(16, 32);
-
-        Assert.IsNotNull(calculator.CellTilingDescriptors);
-        Assert.AreEqual(16, calculator.CellTilingDescriptors.GetLength(0));
-        Assert.AreEqual(32, calculator.CellTilingDescriptors.GetLength(1));
-
-        Assert.IsNotNull(calculator.CellCornerVariants);
-        Assert.AreEqual(16, calculator.CellCornerVariants.GetLength(0));
-        Assert.AreEqual(32, calculator.CellCornerVariants.GetLength(1));
-
-        Assert.IsNotNull(calculator.CellReliefMasks);
-        Assert.AreEqual(16, calculator.CellReliefMasks.GetLength(0));
-        Assert.AreEqual(32, calculator.CellReliefMasks.GetLength(1));
-
-        Assert.IsNotNull(calculator.CellSolidBoundaryMasks);
-        Assert.AreEqual(16, calculator.CellSolidBoundaryMasks.GetLength(0));
-        Assert.AreEqual(32, calculator.CellSolidBoundaryMasks.GetLength(1));
-    }
-
-    [Test]
     public void CalculateTilingDescriptor_WithoutTileGroup_ReturnsZero()
     {
         var empty = new CachedCellData { HasTileGroup = false, TileGroupId = 0 };
@@ -81,29 +58,29 @@ public class TerrainCellMaskCalculatorTests
     }
 
     [Test]
-    public void CalculateSolidBoundaryMask_DropsShadowFlag_Sets8NeighborBits()
+    public void CalculateSolidBoundaryMask_ImpassableNeighbor_Sets4NeighborBits()
     {
-        var shadow = new CachedCellData { Properties = CellConfigProperties.DropsShadow };
-        var empty = new CachedCellData { Properties = CellConfigProperties.None };
+        var shadow = new CachedCellData { Type = CellType.Rock, Properties = CellConfigProperties.None };
+        var empty = new CachedCellData { Type = CellType.Empty, Properties = CellConfigProperties.Passable };
 
         byte allShadow = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            shadow, shadow, shadow, shadow, shadow, shadow, shadow, shadow);
-        Assert.AreEqual(255, (int)allShadow);
+            shadow, shadow, shadow, shadow);
+        Assert.AreEqual(15, (int)allShadow);
 
         byte noneShadow = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            empty, empty, empty, empty, empty, empty, empty, empty);
+            empty, empty, empty, empty);
         Assert.AreEqual(0, (int)noneShadow);
 
         byte topOnly = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            shadow, empty, empty, empty, empty, empty, empty, empty);
+            shadow, empty, empty, empty);
         Assert.AreEqual(1, (int)topOnly);
 
         byte leftOnly = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            empty, shadow, empty, empty, empty, empty, empty, empty);
+            empty, shadow, empty, empty);
         Assert.AreEqual(2, (int)leftOnly);
 
-        byte bottomRightOnly = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            empty, empty, empty, empty, empty, empty, empty, shadow);
-        Assert.AreEqual(128, (int)bottomRightOnly);
+        byte rightOnly = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
+            empty, empty, empty, shadow);
+        Assert.AreEqual(8, (int)rightOnly);
     }
 }

@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 

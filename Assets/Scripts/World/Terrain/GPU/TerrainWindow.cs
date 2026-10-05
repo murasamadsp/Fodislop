@@ -50,7 +50,7 @@ public sealed class TerrainWindow
     public TerrainBuildDriver Driver => _driver;
 
     public ITerrainTextureUploadTelemetry UploadTelemetry =>
-        _driver.Pipeline.CellBuilder.Textures.UploadTelemetry;
+        _driver.Pipeline.CellBuilder.Buffers.UploadTelemetry;
 
     public TerrainDirtyTracker Dirty => _changes.Dirty;
 
@@ -370,7 +370,7 @@ public sealed class TerrainWindow
 
         if (completion.Result is not { } result)
         {
-            // Шаг прерван между стадиями: кэш, предрасчёт, заливка и тексели
+            // Шаг прерван между стадиями: кэш и клетки
             // больше не согласованы, и следующий шаг обязан собрать окно
             // целиком. Изменения шага возвращаются в очередь освещения.
             NeedsRefresh = true;

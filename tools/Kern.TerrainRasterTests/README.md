@@ -12,8 +12,17 @@ triangle rasterizer interpolates the shader outputs. Expectations come from a
 convex polygon half-plane oracle sampled at raster positions between logical
 pixel centers.
 
-Coverage includes exact displaced polygon edges, adjacent cell seams,
-background geometry isolation, displaced autotile UV continuity at a shared
+Coverage includes exact displaced polygon edges, adjacent cell seams read
+from shared grid nodes of neighbouring cells, background geometry isolation,
+shader-computed phase (every k/1000 value and every faceted value against an
+independent half truncation), shader-computed grid nodes (classic and organic,
+against `TerrainVertexDistortionCalculator.ComputeNode`), per-vertex buffer
+reads (at most 28), the ID-mesh corner index order, and the real
+`LoadTerrainCellVertex` on three varied worlds exported by the terrain stand
+(`ExportWorldsForHlslShim`): every vertex attribute must equal the frozen CPU
+reference (`TerrainQuadBuilder.FillQuad` in the test tree), including the
+view-offset and door-overlay addresses. Shader mutations of the relief,
+occlusion, pack-wall, node jitter sign and organic noise rounding rules must fail, displaced autotile UV continuity at a shared
 edge, and contact AO shape sensitivity at
 8/16/32/64 texels per cell. It verifies AO carrier padding and checks the
 signed-distance edge helper against axis-aligned and diagonal distance oracles.

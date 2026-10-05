@@ -21,7 +21,8 @@ public class TerrainLightingDataTests
             hasRelief: false);
 
         Assert.That(data.PackedFlags, Is.EqualTo(53.15f).Within(0.0001f));
-        Assert.That(data.PackedContour, Is.EqualTo(21f));
+        // Старшая тетрада 0xA5 — бывшие диагонали; в контур они не попадают.
+        Assert.That(data.PackedContour, Is.EqualTo(1f));
     }
 
     [TestCase(false, false, false)]
@@ -44,7 +45,6 @@ public class TerrainLightingDataTests
             hasRelief: false);
 
         Assert.That(data.SolidBoundary, Is.EqualTo(0x05));
-        Assert.That(data.SolidDiagonal, Is.EqualTo(0x0A));
         Assert.That(data.IsEmissive, Is.EqualTo(isGlowing));
         Assert.That(data.IsRoundable, Is.EqualTo(hasRoundedPhysicalContour));
         Assert.That(data.IsPhysicalMass, Is.EqualTo(isPhysicalMass));

@@ -1136,7 +1136,7 @@ public sealed class CaptureAnalyzerTests
               "class": "steady", "frameDurationMs": 1, "gpuFrameMs": 1,
               "counterGeneration": 0, "counterResetObserved": false,
               "cpuMs": {
-                "terrainMesh": 0, "terrainCache": 0, "terrainFloodFill": 0, "terrainGpuUpload": 0,
+                "terrainMesh": 0, "terrainCache": 0, "terrainGpuUpload": 0,
                 "terrainAtlasUpload": 0, "lightingBuildCommands": 0, "lightingExecuteCommands": 0,
                 "lightingCascadeTrace": 0, "lightingCascadeMerge": 0, "lightingDynamic": 0, "lightingComposite": 0
               },

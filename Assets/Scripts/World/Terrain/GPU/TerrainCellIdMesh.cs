@@ -11,11 +11,45 @@ using Kern.Core.Interfaces.Diagnostics;
 
 namespace Kern.World.Terrain;
 
+// Вершина меша идентификаторов: POSITION = (x, y, слой, номер угла квада)
+// в половинной точности — 8 байт. Половинка хранит целые до 2048 точно,
+// поэтому сетка ограничена TerrainCellIdVertex.MaxAddress по каждой оси.
 [StructLayout(LayoutKind.Sequential)]
-public struct TerrainCellIdVertex
+public readonly struct TerrainCellIdVertex
 {
-    public Vector3 Position;
-    public Vector2 Corner;
+    public const int MaxAddress = 2048;
+
+    public readonly ushort X;
+    public readonly ushort Y;
+    public readonly ushort Layer;
+    public readonly ushort Corner;
+
+    public TerrainCellIdVertex(int x, int y, int layer, int corner)
+    {
+        X = Half(x);
+        Y = Half(y);
+        Layer = Half(layer);
+        Corner = Half(corner);
+    }
+
+    // Точная половинка неотрицательного целого не больше MaxAddress: без
+    // Mathf, чтобы Burst-джоб собирал меш сам.
+    public static ushort Half(int value)
+    {
+        if (value <= 0)
+        {
+            return 0;
+        }
+
+        int exponent = 0;
+        while ((value >> (exponent + 1)) != 0)
+        {
+            exponent++;
+        }
+
+        int mantissa = exponent <= 10 ? (value << (10 - exponent)) & 0x3FF : (value >> (exponent - 10)) & 0x3FF;
+        return (ushort)(((exponent + 15) << 10) | mantissa);
+    }
 }
 
 [BurstCompile]
@@ -37,10 +71,10 @@ public struct GenerateCellIdMeshJob : IJobParallelFor
         int x = rem % Width;
 
         int vertex = quad * 4;
-        Vertices[vertex] = new TerrainCellIdVertex { Position = new Vector3(x, y, layer), Corner = new Vector2(0f, 0f) };
-        Vertices[vertex + 1] = new TerrainCellIdVertex { Position = new Vector3(x, y, layer), Corner = new Vector2(1f, 0f) };
-        Vertices[vertex + 2] = new TerrainCellIdVertex { Position = new Vector3(x, y, layer), Corner = new Vector2(1f, 1f) };
-        Vertices[vertex + 3] = new TerrainCellIdVertex { Position = new Vector3(x, y, layer), Corner = new Vector2(0f, 1f) };
+        Vertices[vertex] = new TerrainCellIdVertex(x, y, layer, 0);
+        Vertices[vertex + 1] = new TerrainCellIdVertex(x, y, layer, 1);
+        Vertices[vertex + 2] = new TerrainCellIdVertex(x, y, layer, 2);
+        Vertices[vertex + 3] = new TerrainCellIdVertex(x, y, layer, 3);
 
         int index = quad * 6;
         Indices[index] = vertex;
@@ -54,20 +88,20 @@ public struct GenerateCellIdMeshJob : IJobParallelFor
 
 // Меш идентификаторов квадов террейна.
 //
-// Вершина несёт только адрес: POSITION = (x, y, слой), TEXCOORD0 = угол квада
-// (0 или 1 по каждой оси). Всё остальное шейдер читает из текстур данных
+// Вершина несёт только адрес: POSITION = (x, y, слой, номер угла квада 0..3),
+// 8 байт (TerrainCellIdVertex). Всё остальное шейдер читает из буферов
 // клетки. Меш зависит только от размера сетки: при сдвиге камеры и при
 // изменении клеток он не пересобирается и не выгружается.
 //
 // Остаётся мешем под MeshRenderer, а не процедурным вызовом: так террейн
-// сохраняет слой сортировки 2D-рендерера, материалы по атласам и проход
-// поля материалов без изменений.
+// сохраняет слой сортировки 2D-рендерера и проход поля материалов без
+// изменений. Накладка дверей — такой же меш из одних дверных квадов
+// (слой 2, TerrainDoorOverlayRenderer).
 public sealed class TerrainCellIdMesh : IDisposable
 {
-    private static readonly VertexAttributeDescriptor[] s_vertexLayout =
+    internal static readonly VertexAttributeDescriptor[] VertexLayout =
     [
-        new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-        new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+        new(VertexAttribute.Position, VertexAttributeFormat.Float16, 4),
     ];
 
     private Mesh? _mesh;
@@ -103,6 +137,13 @@ public sealed class TerrainCellIdMesh : IDisposable
             return true;
         }
 
+        if (boundsWidth > TerrainCellIdVertex.MaxAddress || boundsHeight > TerrainCellIdVertex.MaxAddress)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(boundsWidth),
+                $"Сетка {boundsWidth}×{boundsHeight} шире адреса вершины ({TerrainCellIdVertex.MaxAddress}).");
+        }
+
         bool hadMesh = _mesh != null;
         int previousWidth = _width;
         int previousHeight = _height;
@@ -115,7 +156,7 @@ public sealed class TerrainCellIdMesh : IDisposable
         _boundsHeight = boundsHeight;
         _cellSize = cellSize;
 
-        int quads = meshWidth * meshHeight * TerrainCellDataPacker.LayersPerCell;
+        int quads = meshWidth * meshHeight * TerrainCellData.LayersPerCell;
         int vertexCount = quads * 4;
         int indexCount = quads * 6;
 
@@ -142,7 +183,7 @@ public sealed class TerrainCellIdMesh : IDisposable
                 hideFlags = HideFlags.DontSave,
             };
 
-            _mesh.SetVertexBufferParams(vertexCount, s_vertexLayout);
+            _mesh.SetVertexBufferParams(vertexCount, VertexLayout);
             _mesh.SetVertexBufferData(vertices, 0, 0, vertexCount, 0, MeshUpdateFlags.DontRecalculateBounds);
 
             _mesh.SetIndexBufferParams(indexCount, IndexFormat.UInt32);
@@ -164,7 +205,7 @@ public sealed class TerrainCellIdMesh : IDisposable
         // по реальному прямоугольнику сетки, как у меша вершин.
         UpdateBounds(_mesh, boundsWidth, boundsHeight, cellSize);
         _mesh.UploadMeshData(markNoLongerReadable: true);
-        long nativeBytes = (vertexCount * 20L) + (indexCount * 4L);
+        long nativeBytes = (vertexCount * (long)Marshal.SizeOf<TerrainCellIdVertex>()) + (indexCount * 4L);
         string reason = hadMesh
             ? $"геометрия {previousWidth}×{previousHeight}→{meshWidth}×{meshHeight}, " +
                 $"границы {previousBoundsWidth}×{previousBoundsHeight}→{boundsWidth}×{boundsHeight}"

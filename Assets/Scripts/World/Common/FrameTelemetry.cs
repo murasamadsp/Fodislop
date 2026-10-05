@@ -9,7 +9,6 @@ public interface IFrameTelemetry
 {
     float TerrainMeshTimeMs { get; set; }
     float TerrainCacheTimeMs { get; set; }
-    float TerrainFloodFillTimeMs { get; set; }
     float TerrainGPUUploadTimeMs { get; set; }
     float TerrainAtlasUploadTimeMs { get; set; }
     float LightingBuildCommandsTimeMs { get; set; }
@@ -96,7 +95,6 @@ public sealed class FrameTelemetry : IFrameTelemetry, IFrameTelemetryProducerSta
 {
     public float TerrainMeshTimeMs { get; set; }
     public float TerrainCacheTimeMs { get; set; }
-    public float TerrainFloodFillTimeMs { get; set; }
     public float TerrainGPUUploadTimeMs { get; set; }
     public float TerrainAtlasUploadTimeMs { get; set; }
     public float LightingBuildCommandsTimeMs { get; set; }
@@ -333,7 +331,6 @@ public sealed class FrameTelemetry : IFrameTelemetry, IFrameTelemetryProducerSta
         }
         TerrainMeshTimeMs = 0f;
         TerrainCacheTimeMs = 0f;
-        TerrainFloodFillTimeMs = 0f;
         TerrainGPUUploadTimeMs = 0f;
         TerrainAtlasUploadTimeMs = 0f;
         LightingBuildCommandsTimeMs = 0f;

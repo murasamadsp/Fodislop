@@ -9,7 +9,6 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.World;
 using Kern.World.Terrain;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
@@ -22,8 +21,6 @@ namespace Kern.TerrainBench;
 public static class Suites
 {
     private const int Seed = 1337;
-    private static int _quadFillSink;
-    private static int _maskCompositionSink;
 
     private sealed class ResidencyLayer(int chunkSize, int heightChunks) : IWorldLayer<CellType>
     {
@@ -89,6 +86,8 @@ public static class Suites
     private sealed class BenchAtlasDescriptor(int size) : IAtlasDescriptor
     {
         public int Size { get; } = size;
+
+        public bool IsFullyOpaque(CellType cellType) => true;
     }
 
     public static void All(BenchRunner runner, int width, int height)
@@ -99,14 +98,7 @@ public static class Suites
         DirtyRegion(runner, width, height);
         DirtyRects(runner, width, height);
         CacheScroll(runner, width, height);
-        FloodFill(runner, width, height);
-        Masks(runner, width, height);
-        MaskComposition(runner, width, height);
-        Distortion(runner, width, height);
-        QuadFill(runner, width, height);
-        FloodFillEquivalence(runner, width, height);
         ResidencyProbe(runner, width, height);
-        CellTypeIndex(runner, width, height);
         QuadCatalogs(runner, width, height);
         Spatial(runner, width, height);
         SessionPipeline(runner, width, height);
@@ -135,8 +127,6 @@ public static class Suites
         const int WorldSize = 4096;
         const int ChunkSize = 16;
         const int HeightChunks = WorldSize / ChunkSize;
-        const int WorldWidth = 10016;
-        const int WorldHeight = 40000;
 
         var layer = new ResidencyLayer(ChunkSize, HeightChunks);
         for (int chunkX = 0; chunkX < WorldSize / ChunkSize; chunkX++)
@@ -152,16 +142,6 @@ public static class Suites
         var residencyCache = new TerrainResidencyProbe.FrameCache();
         var cache = new TerrainCellCache();
         cache.FillCaves(width, height, MinX, MinY, Seed);
-        var masks = new TerrainCellMaskCalculator();
-        masks.EnsureCapacity(width, height);
-        masks.PrecalculateFull(cache, width, height);
-        var distortion = new TerrainVertexDistortionCalculator();
-        distortion.EnsureCapacity(width, height);
-        distortion.PrecalculateFull(cache, width, height, WorldWidth, WorldHeight);
-        var provider = new CaveProvider(width, height, Seed) { OriginX = MinX, OriginY = MinY };
-        var fill = new BackgroundFloodFill();
-        fill.Allocate(width, height);
-        fill.ComputeFull(provider);
         TerrainVertex[] vertices = SyntheticVertices(width, height);
         var texels = new TexelArrays(width, height);
         var dirty = new TerrainDirtyRegion();
@@ -171,7 +151,7 @@ public static class Suites
         Vector2Int position = new(MinX, MinY);
         var samples = new List<double>(Steps);
         var cpuSamples = new List<double>(Steps);
-        double[] stageTotals = new double[7];
+        double[] stageTotals = new double[4];
         long uploadedTexels = 0;
         int fullRebuilds = 0;
         int patches = 0;
@@ -191,8 +171,6 @@ public static class Suites
             while (dx == 0 && dy == 0);
 
             position += new Vector2Int(dx, dy);
-            provider.OriginX = position.x;
-            provider.OriginY = position.y;
             residencyCache.BeginFrame(storage, map, width, height);
             long start = Stopwatch.GetTimestamp();
             long cpuStart = currentProcess.TotalProcessorTime.Ticks;
@@ -213,30 +191,21 @@ public static class Suites
             long stage = Lap(stageTotals, 0, start);
             cache.ScrollTo(position.x, position.y, Seed);
             stage = Lap(stageTotals, 1, stage);
-            masks.PrecalculateIncremental(cache, width, height, dx, dy);
-            stage = Lap(stageTotals, 2, stage);
-            distortion.PrecalculateIncremental(cache, width, height, dx, dy, WorldWidth, WorldHeight);
-            stage = Lap(stageTotals, 3, stage);
-            fill.ComputeScrolled(dx, dy, provider);
-            stage = Lap(stageTotals, 4, stage);
 
             TerrainScrollBands bands = TerrainScrollBands.Resolve(width, height, dx, dy, neighbourMargin: 1);
             PackRect(texels, vertices, dirty, bands.ColumnBand.xMin, bands.ColumnBand.xMax,
                 bands.ColumnBand.yMin, bands.ColumnBand.yMax, position.x, position.y, width, height);
             PackRect(texels, vertices, dirty, bands.RowBand.xMin, bands.RowBand.xMax,
                 bands.RowBand.yMin, bands.RowBand.yMax, position.x, position.y, width, height);
-            stage = Lap(stageTotals, 5, stage);
+            stage = Lap(stageTotals, 2, stage);
             uploadedTexels += CopyDirty(texels, dirty, width, height);
-            stage = Lap(stageTotals, 6, stage);
+            stage = Lap(stageTotals, 3, stage);
 
             if (step % 10 == 9)
             {
                 int cx = 10 + random.Next(width - 20);
                 int cy = 10 + random.Next(height - 20);
                 cache.Dig(cx, cy, 3, 3);
-                masks.PrecalculateRegion(cache, width, height, cx - 1, cy - 1, 5, 5);
-                distortion.PrecalculateRegion(cache, width, height, cx - 1, cy - 1, 5, 5, WorldWidth, WorldHeight);
-                fill.UpdateLocalRegion(cx - 1, cy - 1, 5, 5, provider);
                 PackRect(texels, vertices, dirty, cx - 1, cx + 4, cy - 1, cy + 4,
                     position.x, position.y, width, height);
                 uploadedTexels += CopyDirty(texels, dirty, width, height);
@@ -249,9 +218,6 @@ public static class Suites
                 // В середине сессии измеряем редкий cold path в том же общем
                 // сценарии, чтобы p95/max не скрывали цену полного rebuild.
                 cache.FillCaves(width, height, position.x, position.y, Seed);
-                masks.PrecalculateFull(cache, width, height);
-                distortion.PrecalculateFull(cache, width, height, WorldWidth, WorldHeight);
-                fill.ComputeFull(provider);
                 PackRect(texels, vertices, dirty, 0, width, 0, height,
                     position.x, position.y, width, height);
                 uploadedTexels += CopyDirty(texels, dirty, width, height);
@@ -274,14 +240,8 @@ public static class Suites
             stageTotals[0] / Steps, "мс");
         runner.Metric("глобальный кадр: средняя стадия cache",
             stageTotals[1] / Steps, "мс");
-        runner.Metric("глобальный кадр: средняя стадия masks",
-            stageTotals[2] / Steps, "мс");
-        runner.Metric("глобальный кадр: средняя стадия distortion",
-            stageTotals[3] / Steps, "мс");
-        runner.Metric("глобальный кадр: средняя стадия flood-fill",
-            stageTotals[4] / Steps, "мс");
         runner.Metric("глобальный кадр: средняя стадия pack/upload",
-            (stageTotals[5] + stageTotals[6]) / Steps, "мс");
+            (stageTotals[2] + stageTotals[3]) / Steps, "мс");
         runner.Metric("глобальный кадр: полных rebuild",
             fullRebuilds, "кадров");
         runner.Metric("глобальный кадр: patch после копания",
@@ -464,7 +424,7 @@ public static class Suites
     // что и TerrainRenderer: кэш со сдвигом и дозаполнением каймы, маски и
     // искажение со сдвигом, заливка фона со сдвигом, упаковка вошедшей полосы
     // в тексели, учёт грязной области и копирование под выгрузку. Каждый
-    // десятый шаг — копание 3×3: заплатка кэша, масок, заливки и текселей.
+    // десятый шаг — копание 3×3: заплатка кэша и клеток.
     private static void SessionPipeline(BenchRunner runner, int width, int height)
     {
         runner.Suite = "session";
@@ -478,16 +438,6 @@ public static class Suites
         int minY = 7000;
         var cache = new TerrainCellCache();
         cache.FillCaves(width, height, minX, minY, Seed);
-        var masks = new TerrainCellMaskCalculator();
-        masks.EnsureCapacity(width, height);
-        masks.PrecalculateFull(cache, width, height);
-        var distortion = new TerrainVertexDistortionCalculator();
-        distortion.EnsureCapacity(width, height);
-        distortion.PrecalculateFull(cache, width, height, 10016, 40000);
-        var provider = new CaveProvider(width, height, Seed) { OriginX = minX, OriginY = minY };
-        var fill = new BackgroundFloodFill();
-        fill.Allocate(width, height);
-        fill.ComputeFull(provider);
         TerrainVertex[] vertices = SyntheticVertices(width, height);
         var texels = new TexelArrays(width, height);
         var region = new TerrainDirtyRegion();
@@ -495,7 +445,7 @@ public static class Suites
         region.Clear();
 
         var random = new Random(Seed);
-        string[] stageNames = ["кэш: сдвиг и кайма", "маски", "искажение", "заливка фона", "упаковка полос", "копирование под выгрузку"];
+        string[] stageNames = ["кэш: сдвиг и кайма", "упаковка полос", "копирование под выгрузку"];
         var stageTotals = new double[stageNames.Length];
         var samples = new List<double>(Steps);
         var digSamples = new List<double>(Steps / 10);
@@ -516,24 +466,16 @@ public static class Suites
             long start = Stopwatch.GetTimestamp();
             minX += dx;
             minY += dy;
-            provider.OriginX = minX;
-            provider.OriginY = minY;
             long stage = Stopwatch.GetTimestamp();
             cache.ScrollTo(minX, minY, Seed);
             stage = Lap(stageTotals, 0, stage);
-            masks.PrecalculateIncremental(cache, width, height, dx, dy);
-            stage = Lap(stageTotals, 1, stage);
-            distortion.PrecalculateIncremental(cache, width, height, dx, dy, 10016, 40000);
-            stage = Lap(stageTotals, 2, stage);
-            fill.ComputeScrolled(dx, dy, provider);
-            stage = Lap(stageTotals, 3, stage);
 
             TerrainScrollBands bands = TerrainScrollBands.Resolve(width, height, dx, dy, neighbourMargin: 1);
             PackRect(texels, vertices, region, bands.ColumnBand.xMin, bands.ColumnBand.xMax, bands.ColumnBand.yMin, bands.ColumnBand.yMax, minX, minY, width, height);
             PackRect(texels, vertices, region, bands.RowBand.xMin, bands.RowBand.xMax, bands.RowBand.yMin, bands.RowBand.yMax, minX, minY, width, height);
-            stage = Lap(stageTotals, 4, stage);
+            stage = Lap(stageTotals, 1, stage);
             uploadedTexels += CopyDirty(texels, region, width, height);
-            Lap(stageTotals, 5, stage);
+            Lap(stageTotals, 2, stage);
             samples.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
 
             if (step % 10 == 9)
@@ -542,9 +484,6 @@ public static class Suites
                 int cx = 10 + random.Next(width - 20);
                 int cy = 10 + random.Next(height - 20);
                 cache.Dig(cx, cy, 3, 3);
-                masks.PrecalculateRegion(cache, width, height, cx - 1, cy - 1, 5, 5);
-                distortion.PrecalculateRegion(cache, width, height, cx - 1, cy - 1, 5, 5, 10016, 40000);
-                fill.UpdateLocalRegion(cx - 1, cy - 1, 5, 5, provider);
                 PackRect(texels, vertices, region, cx - 1, cx + 4, cy - 1, cy + 4, minX, minY, width, height);
                 uploadedTexels += CopyDirty(texels, region, width, height);
                 digSamples.Add(Stopwatch.GetElapsedTime(digStart).TotalMilliseconds);
@@ -592,11 +531,11 @@ public static class Suites
         region.MarkCells(Ring(minX + startX, width), Ring(minY + startY, height), endX - startX, endY - startY);
     }
 
-    // Как TerrainCellDataTextures.Apply: прямоугольники, либо всё сразу,
-    // если изменённое больше половины текстуры.
+    // Как TerrainCellBuffers.Apply: строки прямоугольников, либо всё сразу,
+    // если изменённого больше половины буфера.
     private static long CopyDirty(TexelArrays texels, TerrainDirtyRegion region, int width, int height)
     {
-        long texelCount = (long)width * height * 2;
+        long texelCount = (long)width * height;
         long uploaded;
         if (region.IsAll || region.Area * 2 >= texelCount)
         {
@@ -620,81 +559,6 @@ public static class Suites
 
         region.Clear();
         return uploaded;
-    }
-
-    // ── Эквивалентность заливки: сдвиг против полного пересчёта ──────────
-    private static void FloodFillEquivalence(BenchRunner runner, int width, int height)
-    {
-        runner.Suite = "flood-fill";
-        if (!runner.Wants("расхождение сдвига с полным пересчётом"))
-        {
-            return;
-        }
-
-        foreach ((int dx, int dy) in new[] { (1, 0), (0, 1), (1, 1), (-1, -1) })
-        {
-            var provider = new CaveProvider(width, height, Seed) { OriginX = 5000, OriginY = 7000 };
-            var scrolled = new BackgroundFloodFill();
-            scrolled.Allocate(width, height);
-            scrolled.ComputeFull(provider);
-            provider.OriginX += dx;
-            provider.OriginY += dy;
-            scrolled.ComputeScrolled(dx, dy, provider);
-
-            var full = new BackgroundFloodFill();
-            full.Allocate(width, height);
-            full.ComputeFull(provider);
-
-            int mismatches = 0;
-            int floorMismatches = 0;
-            int borderMismatches = 0;
-            int interiorMismatches = 0;
-            int interiorCells = 0;
-            var mismatchSamples = new List<string>(8);
-            const int BorderCells = 4;
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    bool interior = x >= BorderCells && y >= BorderCells && x < width - BorderCells && y < height - BorderCells;
-                    interiorCells += interior ? 1 : 0;
-                    if (scrolled.Buffer[x, y] == full.Buffer[x, y])
-                    {
-                        continue;
-                    }
-
-                    mismatches++;
-                    if (mismatchSamples.Count < mismatchSamples.Capacity)
-                    {
-                        mismatchSamples.Add($"({x},{y}) {scrolled.Buffer[x, y]}→{full.Buffer[x, y]}");
-                    }
-
-                    CachedCellInfo cell = provider.GetCell(x + 1, y + 1);
-                    if ((cell.Properties & CellConfigProperties.Passable) != 0)
-                    {
-                        floorMismatches++;
-                    }
-
-                    if (interior)
-                    {
-                        interiorMismatches++;
-                    }
-                    else
-                    {
-                        borderMismatches++;
-                    }
-                }
-            }
-
-            runner.Metric($"расхождение сдвига с полным пересчётом ({dx},{dy})", mismatches * 100.0 / (width * height), "%");
-            runner.Metric($"  из них на проходимых клетках ({dx},{dy})", floorMismatches, "клеток");
-            runner.Metric($"  из них у каймы ≤{BorderCells} ({dx},{dy})", borderMismatches, "клеток");
-            runner.Metric($"  из них в глубине окна ({dx},{dy})", interiorMismatches * 100.0 / interiorCells, "% глубины");
-            if (mismatchSamples.Count > 0)
-            {
-                Console.WriteLine($"  примеры mismatch ({dx},{dy}): {string.Join(", ", mismatchSamples)}");
-            }
-        }
     }
 
     // ── Сдвиг окна камеры ────────────────────────────────────────────────
@@ -792,9 +656,9 @@ public static class Suites
         TerrainVertex[] vertices = SyntheticVertices(width, height);
         var texels = new TexelArrays(width, height);
 
-        runner.Run("один PackQuad", () =>
+        runner.Run("один PackCell", () =>
         {
-            GC.KeepAlive(TerrainCellDataPacker.PackQuad(vertices.AsSpan(0, 4), 1));
+            texels.PackCell(vertices, 0, 0, width, height);
         });
         runner.Run("вся сетка последовательно", () =>
         {
@@ -850,27 +714,19 @@ public static class Suites
 
         runner.Run($"старый: весь буфер вершин {vertexStaging.Length / 1048576.0:F2} МБ", () =>
             MemoryMarshal.AsBytes(vertices.AsSpan()).CopyTo(vertexStaging));
-        runner.Run($"новый: все 7 текстур {texelStaging.Length / 1048576.0:F2} МБ", () => texels.CopyAllTo(texelStaging));
+        runner.Run($"новый: весь буфер клеток {texelStaging.Length / 1048576.0:F2} МБ", () => texels.CopyAllTo(texelStaging));
 
-        int rows = height * 2;
-        var patch = new Vector4[16 * rows];
-        runner.Run("новый: полоса 2×2H одной float-текстуры", () =>
-        {
-            for (int row = 0; row < rows; row++)
-            {
-                Array.Copy(texels.World, (row * width) + width - 2, patch, row * 16, 2);
-            }
-        });
-        runner.Run("новый: полоса 2×2H всех 7 текстур", () =>
+        int rows = height;
+        runner.Run("новый: полоса 2×H буфера клеток", () =>
         {
             for (int row = 0; row < rows; row++)
             {
                 texels.CopyRowSpan(row, width - 2, 2, width);
             }
         });
-        runner.Run("новый: заплатка 3×3 клетки всех 7 текстур", () =>
+        runner.Run("новый: заплатка 3×3 клетки буфера клеток", () =>
         {
-            for (int row = 40; row < 46; row++)
+            for (int row = 40; row < 43; row++)
             {
                 texels.CopyRowSpan(row, 60, 3, width);
             }
@@ -956,439 +812,8 @@ public static class Suites
         ring.EnsureSize(width + 2, height + 2);
         runner.Run("TerrainRingGrid сдвиг x", () => ring.Scroll(1, 0));
 
-        // FillQuad адресует кольцевые сетки девять раз на квад: четыре узла
-        // искажения, три маски, атласы и флаг двери. Каждый индекс — два
-        // целочисленных деления по размеру окна.
-        var nodes = new TerrainRingGrid<int>();
-        nodes.EnsureSize(width + 1, height + 1);
-        runner.Run("девять чтений по кольцевому адресу на клетку", () =>
-        {
-            int sink = 0;
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    sink += nodes[x, y] + nodes[x + 1, y] + nodes[x, y + 1] + nodes[x + 1, y + 1];
-                    sink += nodes[x, y] + nodes[x, y] + nodes[x, y] + nodes[x, y] + nodes[x, y];
-                }
-            }
-
-            System.Threading.Volatile.Write(ref _quadFillSink, sink);
-        });
         runner.Metric("размер CachedCellData", Marshal.SizeOf<CachedCellData>(), "Б");
         runner.Metric("кэш клеток целиком", Marshal.SizeOf<CachedCellData>() * (width + 2) * (height + 2) / 1048576.0, "МБ");
-    }
-
-    // ── Заливка фона (настоящий BackgroundFloodFill) ─────────────────────
-    private static void FloodFill(BenchRunner runner, int width, int height)
-    {
-        runner.Suite = "flood-fill";
-        if (!runner.Wants("ComputeFull") &&
-            !runner.Wants("ComputeScrolled") &&
-            !runner.Wants("UpdateLocalRegion") &&
-            !runner.Wants("fixture"))
-        {
-            return;
-        }
-
-        var provider = new PrecomputedCaveProvider(width, height, Seed);
-        var generatedProvider = new CaveProvider(width, height, Seed);
-        var fill = new BackgroundFloodFill();
-        int fullProcessorCount = Environment.ProcessorCount;
-        var fullDegreeFill = new BackgroundFloodFill(fullProcessorCount);
-        fill.Allocate(width, height);
-        fullDegreeFill.Allocate(width, height);
-        int providerMismatches = CountProviderMismatches(provider, generatedProvider, width, height);
-        runner.Metric("расхождения предвычисленного и hash provider", providerMismatches, "клеток");
-        if (providerMismatches != 0)
-        {
-            throw new InvalidOperationException($"Precomputed cave source differs in {providerMismatches} cells.");
-        }
-
-        runner.Run("fixture: cached source reads", () => ReadProvider(provider, width, height));
-        runner.Run("fixture: cave hash generation", () => ReadProvider(generatedProvider, width, height));
-        fill.ComputeFull(provider);
-        fullDegreeFill.ComputeFull(provider);
-        int fillMismatches = CountFillMismatches(fill, fullDegreeFill, width, height);
-        runner.Metric("расхождения ComputeFull DOP4 и DOP max", fillMismatches, "клеток");
-        if (fillMismatches != 0)
-        {
-            throw new InvalidOperationException($"Capped flood fill differs in {fillMismatches} cells.");
-        }
-
-        if (Math.Min(4, fullProcessorCount) != fullProcessorCount)
-        {
-            runner.RunAlternating(
-                $"ComputeFull DOP {Math.Min(4, fullProcessorCount)}",
-                () => fill.ComputeFull(provider),
-                $"ComputeFull DOP {fullProcessorCount}",
-                () => fullDegreeFill.ComputeFull(provider));
-        }
-        else
-        {
-            runner.Run("ComputeFull", () => fill.ComputeFull(provider));
-        }
-
-        runner.Run("ComputeScrolled +1,0", () => fill.ComputeScrolled(1, 0, provider));
-        runner.Run("ComputeScrolled +1,+1", () => fill.ComputeScrolled(1, 1, provider));
-        runner.Run("ComputeScrolled +13,0", () => fill.ComputeScrolled(13, 0, provider));
-        runner.Run("ComputeScrolled +29,+29", () => fill.ComputeScrolled(29, 29, provider));
-        runner.Run("UpdateLocalRegion 3×3", () => fill.UpdateLocalRegion(width / 2, height / 2, 3, 3, provider));
-        runner.Run("UpdateLocalRegion 16×16", () => fill.UpdateLocalRegion(width / 3, height / 3, 16, 16, provider));
-        // Приход чанков сливается в один прямоугольник во всё окно: заплатка
-        // тогда идёт последовательно там, где полный путь идёт параллельно.
-        runner.Run("UpdateLocalRegion во всё окно", () => fill.UpdateLocalRegion(0, 0, width, height, provider));
-    }
-
-    private static int CountProviderMismatches(
-        ICachedCellDataProvider first,
-        ICachedCellDataProvider second,
-        int width,
-        int height)
-    {
-        int mismatches = 0;
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                CachedCellInfo a = first.GetCell(x + 1, y + 1);
-                CachedCellInfo b = second.GetCell(x + 1, y + 1);
-                mismatches += a.Type != b.Type || a.Properties != b.Properties ? 1 : 0;
-            }
-        }
-
-        return mismatches;
-    }
-
-    private static int CountFillMismatches(
-        BackgroundFloodFill first,
-        BackgroundFloodFill second,
-        int width,
-        int height)
-    {
-        int mismatches = 0;
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                mismatches += first.Buffer[x, y] != second.Buffer[x, y] ? 1 : 0;
-            }
-        }
-
-        return mismatches;
-    }
-
-    private static void ReadProvider(ICachedCellDataProvider provider, int width, int height)
-    {
-        int sink = 0;
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                sink += (byte)provider.GetCell(x + 1, y + 1).Type;
-            }
-        }
-
-        System.Threading.Volatile.Write(ref _maskCompositionSink, sink);
-    }
-
-    // ── Маски клеток (настоящий TerrainCellMaskCalculator) ───────────────
-    private static void Masks(BenchRunner runner, int width, int height)
-    {
-        runner.Suite = "masks";
-        var cache = new TerrainCellCache();
-        cache.FillCaves(width, height, 5000, 7000, Seed);
-        var masks = new TerrainCellMaskCalculator();
-        masks.EnsureCapacity(width, height);
-        int neighborhoodMismatches = CountNeighborhoodMismatches(cache, width, height, masks);
-        runner.Metric("расхождения скользящего окна с расчётом по клеткам", neighborhoodMismatches, "масок");
-        if (neighborhoodMismatches != 0)
-        {
-            throw new InvalidOperationException(
-                $"Sliding-neighbourhood mask calculation differs in {neighborhoodMismatches} outputs.");
-        }
-
-        int fullPassDegree = Math.Min(4, Environment.ProcessorCount);
-        if (fullPassDegree < Environment.ProcessorCount)
-        {
-            var fullDegreeOptions = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount };
-            runner.RunAlternating(
-                $"PrecalculateFull DOP {fullPassDegree}",
-                () => masks.PrecalculateFull(cache, width, height),
-                $"PrecalculateFull DOP {Environment.ProcessorCount}",
-                () => Parallel.For(0, width, fullDegreeOptions, x => masks.CalculateColumn(cache, x, 0, height)));
-        }
-        else
-        {
-            runner.Run("PrecalculateFull", () => masks.PrecalculateFull(cache, width, height));
-        }
-
-        var cellByCell = new TerrainCellMaskCalculator();
-        cellByCell.EnsureCapacity(width, height);
-        runner.Run("полный проход: по одной клетке", () =>
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    cellByCell.CalculateCellNode(cache, x, y);
-                }
-            }
-        });
-        runner.Run("PrecalculateIncremental +1,0", () => masks.PrecalculateIncremental(cache, width, height, 1, 0));
-        runner.Run("PrecalculateRegion 5×5", () => masks.PrecalculateRegion(cache, width, height, width / 2, height / 2, 5, 5));
-        runner.Run("PrecalculateRegion во всё окно", () => masks.PrecalculateRegion(cache, width, height, 0, 0, width, height));
-    }
-
-    private static int CountNeighborhoodMismatches(
-        TerrainCellCache cache,
-        int width,
-        int height,
-        TerrainCellMaskCalculator sliding)
-    {
-        sliding.PrecalculateFull(cache, width, height);
-        var reference = new TerrainCellMaskCalculator();
-        reference.EnsureCapacity(width, height);
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                reference.CalculateCellNode(cache, x, y);
-            }
-        }
-
-        int mismatches = 0;
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                mismatches += sliding.CellTilingDescriptors[x, y] != reference.CellTilingDescriptors[x, y] ? 1 : 0;
-                mismatches += sliding.CellCornerVariants[x, y] != reference.CellCornerVariants[x, y] ? 1 : 0;
-                mismatches += sliding.CellReliefMasks[x, y] != reference.CellReliefMasks[x, y] ? 1 : 0;
-                mismatches += sliding.CellReliefCornerMasks[x, y] != reference.CellReliefCornerMasks[x, y] ? 1 : 0;
-                mismatches += sliding.CellSolidBoundaryMasks[x, y] != reference.CellSolidBoundaryMasks[x, y] ? 1 : 0;
-            }
-        }
-
-        return mismatches;
-    }
-
-    // A/B the former pair of mask calculations against the fused production
-    // calculation. Both read the same deterministic neighbourhoods; the
-    // equivalence scan runs before timing so a faster wrong result is rejected.
-    private static void MaskComposition(BenchRunner runner, int width, int height)
-    {
-        runner.Suite = "mask-composition";
-        if (!runner.Wants("ReliefMask"))
-        {
-            return;
-        }
-
-        var cache = new TerrainCellCache();
-        cache.FillCaves(width, height, 5000, 7000, Seed);
-        int mismatches = CountReliefMaskMismatches(cache, width, height);
-        runner.Metric("различия fused и исходной пары масок", mismatches, "клеток");
-        if (mismatches != 0)
-        {
-            throw new InvalidOperationException($"Relief mask fusion differs on {mismatches} cells.");
-        }
-
-        runner.Run("исходная пара масок", () => RunReliefMaskComposition(cache, width, height, fused: false));
-        runner.Run("объединённые маски", () => RunReliefMaskComposition(cache, width, height, fused: true));
-    }
-
-    private static int CountReliefMaskMismatches(TerrainCellCache cache, int width, int height)
-    {
-        int mismatches = 0;
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                ReadReliefNeighborhood(cache, x, y, out CachedCellData data, out CachedCellData top,
-                    out CachedCellData left, out CachedCellData bottom, out CachedCellData right,
-                    out CachedCellData topLeft, out CachedCellData topRight,
-                    out CachedCellData bottomLeft, out CachedCellData bottomRight);
-                byte expectedRelief = TerrainCellMaskCalculator.CalculateReliefMask(data, top, left, bottom, right);
-                byte expectedCorners = TerrainCellMaskCalculator.CalculateReliefCornerMask(
-                    data, top, left, bottom, right, topLeft, topRight, bottomLeft, bottomRight);
-                TerrainCellMaskCalculator.CalculateReliefMasks(
-                    data, top, left, bottom, right, topLeft, topRight, bottomLeft, bottomRight,
-                    out byte actualRelief, out byte actualCorners);
-                if (expectedRelief != actualRelief || expectedCorners != actualCorners)
-                {
-                    mismatches++;
-                }
-            }
-        }
-
-        return mismatches;
-    }
-
-    private static void RunReliefMaskComposition(TerrainCellCache cache, int width, int height, bool fused)
-    {
-        int sink = 0;
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                ReadReliefNeighborhood(cache, x, y, out CachedCellData data, out CachedCellData top,
-                    out CachedCellData left, out CachedCellData bottom, out CachedCellData right,
-                    out CachedCellData topLeft, out CachedCellData topRight,
-                    out CachedCellData bottomLeft, out CachedCellData bottomRight);
-                if (fused)
-                {
-                    TerrainCellMaskCalculator.CalculateReliefMasks(
-                        data, top, left, bottom, right, topLeft, topRight, bottomLeft, bottomRight,
-                        out byte relief, out byte corners);
-                    sink += relief + corners;
-                }
-                else
-                {
-                    sink += TerrainCellMaskCalculator.CalculateReliefMask(data, top, left, bottom, right);
-                    sink += TerrainCellMaskCalculator.CalculateReliefCornerMask(
-                        data, top, left, bottom, right, topLeft, topRight, bottomLeft, bottomRight);
-                }
-            }
-        }
-
-        System.Threading.Volatile.Write(ref _maskCompositionSink, sink);
-    }
-
-    private static void ReadReliefNeighborhood(
-        TerrainCellCache cache,
-        int x,
-        int y,
-        out CachedCellData data,
-        out CachedCellData top,
-        out CachedCellData left,
-        out CachedCellData bottom,
-        out CachedCellData right,
-        out CachedCellData topLeft,
-        out CachedCellData topRight,
-        out CachedCellData bottomLeft,
-        out CachedCellData bottomRight)
-    {
-        int cx = x + 1;
-        int cy = y + 1;
-        data = cache.GetCellData(cx, cy);
-        top = cache.GetCellData(cx, cy + 1);
-        left = cache.GetCellData(cx - 1, cy);
-        bottom = cache.GetCellData(cx, cy - 1);
-        right = cache.GetCellData(cx + 1, cy);
-        topLeft = cache.GetCellData(cx - 1, cy + 1);
-        topRight = cache.GetCellData(cx + 1, cy + 1);
-        bottomLeft = cache.GetCellData(cx - 1, cy - 1);
-        bottomRight = cache.GetCellData(cx + 1, cy - 1);
-    }
-
-    // ── Искажение сетки (настоящий TerrainVertexDistortionCalculator) ─────
-    private static void Distortion(BenchRunner runner, int width, int height)
-    {
-        runner.Suite = "distortion";
-        var cache = new TerrainCellCache();
-        cache.FillCaves(width, height, 5000, 7000, Seed);
-        var distortion = new TerrainVertexDistortionCalculator();
-        distortion.EnsureCapacity(width, height);
-        runner.Run("PrecalculateFull", () => distortion.PrecalculateFull(cache, width, height, 10016, 40000));
-        runner.Run("PrecalculateIncremental +1,0", () => distortion.PrecalculateIncremental(cache, width, height, 1, 0, 10016, 40000));
-        runner.Run("PrecalculateRegion 5×5", () => distortion.PrecalculateRegion(cache, width, height, width / 2, height / 2, 5, 5, 10016, 40000));
-        runner.Run("PrecalculateRegion во всё окно", () => distortion.PrecalculateRegion(cache, width, height, 0, 0, width, height, 10016, 40000));
-    }
-
-    // Production FillQuad: tile-neighbour math, organic edge checks, geometry
-    // assembly, UV transform, lighting/decal packing, and all corner writes.
-    // Atlas/metadata are inert benchmark adapters; the implementation under
-    // measurement is the game's TerrainQuadBuilder itself.
-    private static void QuadFill(BenchRunner runner, int width, int height)
-    {
-        runner.Suite = "quad-fill";
-        if (!runner.Wants("FillQuad"))
-        {
-            return;
-        }
-
-        const int MinX = 5000;
-        const int MinY = 20000;
-        const int WorldWidth = 10016;
-        const int WorldHeight = 40000;
-        var cache = new TerrainCellCache();
-        cache.FillCaves(width, height, MinX, MinY, Seed);
-        cache.PrepareRenderData();
-
-        var precalculator = new TerrainPrecalculator();
-        precalculator.EnsureCapacity(width, height);
-        var input = new TerrainPrecalculationInput(
-            cache,
-            new Vector2Int(width, height),
-            new Vector2Int(WorldWidth, WorldHeight));
-        precalculator.PrecalculateFull(input);
-
-        var provider = new CaveProvider(width, height, Seed) { OriginX = MinX, OriginY = MinY };
-        var floodFill = new BackgroundFloodFill();
-        floodFill.Allocate(width, height);
-        floodFill.ComputeFull(provider);
-
-        IAtlasDescriptor[] atlases = [new BenchAtlasDescriptor(1024)];
-        var sources = new TerrainCellSources(
-            cache,
-            precalculator,
-            floodFill,
-            WorldWidth,
-            WorldHeight,
-            atlases,
-            new BenchTerrainMetadataLookup());
-        var quad = new TerrainVertex[4];
-
-        precalculator.DistortionStyle = TerrainDistortionStyle.Organic;
-        precalculator.PrecalculateFull(input);
-        MeasureQuadLayer(runner, sources, quad, width, height, MinX, MinY, TerrainQuadLayer.Foreground, "органический передний план");
-        MeasureQuadLayer(runner, sources, quad, width, height, MinX, MinY, TerrainQuadLayer.Background, "органический фон");
-
-        precalculator.DistortionStyle = TerrainDistortionStyle.Classic;
-        precalculator.PrecalculateFull(input);
-        MeasureQuadLayer(runner, sources, quad, width, height, MinX, MinY, TerrainQuadLayer.Foreground, "классический передний план");
-    }
-
-    private static void MeasureQuadLayer(
-        BenchRunner runner,
-        TerrainCellSources sources,
-        TerrainVertex[] quad,
-        int width,
-        int height,
-        int minX,
-        int minY,
-        TerrainQuadLayer layer,
-        string name)
-    {
-        int previousResultCount = runner.Results.Count;
-        runner.Run($"FillQuad · {name}", () =>
-        {
-            int sink = 0;
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    var site = new TerrainQuadSite(x, y, minX + x, minY + y, 1f);
-                    TerrainQuadResult result = TerrainQuadBuilder.FillQuad(
-                        sources,
-                        site,
-                        layer,
-                        quad);
-                    sink += result.AtlasIndex + (result.IsDoor ? 1 : 0);
-                }
-            }
-
-            System.Threading.Volatile.Write(ref _quadFillSink, sink);
-        });
-
-        if (runner.Results.Count > previousResultCount)
-        {
-            BenchResult result = runner.Results[^1];
-            runner.Metric(
-                $"FillQuad · {name}, наносекунд на клетку",
-                result.P50Ms * 1_000_000.0 / (width * (double)height),
-                "нс/клетку");
-        }
     }
 
     // ── Каталоги типов, которые FillQuad опрашивает на каждый квад ───────
@@ -1414,11 +839,8 @@ public static class Suites
                 CellType type = types[i];
                 for (int layer = 0; layer < 2; layer++)
                 {
-                    sink += MapCellConfigCatalog.IsRoundableLoose(type) ? 1 : 0;
-                    sink += MapCellConfigCatalog.IsRoad(type) ? 1 : 0;
-                    sink += TerrainSheetCatalog.IsContinuousSheet(type) ? 1 : 0;
-                    sink += TerrainReliefRimCatalog.GetFamily(type) != TerrainRimFamily.None ? 1 : 0;
-                    sink += TerrainDecalCatalog.IsGroundSurface(type) ? 1 : 0;
+                    sink += MapCellConfigCatalog.GetVisualProperties(type).IsRound ? 1 : 0;
+                    sink += TerrainDecalCatalog.GetFamily(type) == TerrainDecalFamily.Ground ? 1 : 0;
                     sink += (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
                 }
             }
@@ -1427,19 +849,13 @@ public static class Suites
         });
 
         var roundable = new bool[65536];
-        var road = new bool[65536];
-        var sheet = new bool[65536];
-        var rim = new bool[65536];
         var ground = new bool[65536];
         var profile = new int[65536];
         for (int value = 0; value < 65536; value++)
         {
             var type = (CellType)value;
-            roundable[value] = MapCellConfigCatalog.IsRoundableLoose(type);
-            road[value] = MapCellConfigCatalog.IsRoad(type);
-            sheet[value] = TerrainSheetCatalog.IsContinuousSheet(type);
-            rim[value] = TerrainReliefRimCatalog.GetFamily(type) != TerrainRimFamily.None;
-            ground[value] = TerrainDecalCatalog.IsGroundSurface(type);
+            roundable[value] = MapCellConfigCatalog.GetVisualProperties(type).IsRound;
+            ground[value] = TerrainDecalCatalog.GetFamily(type) == TerrainDecalFamily.Ground;
             profile[value] = (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
         }
 
@@ -1452,109 +868,12 @@ public static class Suites
                 for (int layer = 0; layer < 2; layer++)
                 {
                     sink += roundable[type] ? 1 : 0;
-                    sink += road[type] ? 1 : 0;
-                    sink += sheet[type] ? 1 : 0;
-                    sink += rim[type] ? 1 : 0;
                     sink += ground[type] ? 1 : 0;
                     sink += profile[type];
                 }
             }
 
             GC.KeepAlive(sink);
-        });
-    }
-
-    // ── Индекс типов клеток (настоящий CellTypeSpatialIndex) ─────────────
-    //
-    // Заплатка зовёт Set на ЗАПОЛНЕННОМ индексе, где тип почти всегда тот же;
-    // полная сборка — после Clear, на пустом. Контрольный замер рядом показывает
-    // цену того же прохода через словарь: ради неё обратная сторона индекса и
-    // лежит плотным массивом по кольцевому адресу.
-    private static void CellTypeIndex(BenchRunner runner, int width, int height)
-    {
-        runner.Suite = "cell-type-index";
-        var random = new Random(Seed);
-        var types = new CellType[width * height];
-        for (int i = 0; i < types.Length; i++)
-        {
-            types[i] = (CellType)(1 + random.Next(24));
-        }
-
-        var index = new CellTypeSpatialIndex();
-        index.EnsureWindow(width, height);
-        void Fill()
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    index.Set(
-                        TerrainCoordinateKey.Pack(5000 + x, 7000 + y),
-                        types[(x * height) + y]);
-                }
-            }
-        }
-
-        runner.Run("Set во всё окно после Clear (полная сборка)", Fill, index.Clear);
-        Fill();
-        runner.Run("Set во всё окно поверх заполненного (заплатка)", Fill);
-        // Обратная сторона сделки: запись стала двумя записями в массив, а
-        // вопрос «какие клетки этих типов» — проходом по окну. Проход платится
-        // по приходу текстуры, запись — тысячами в каждом кадре.
-        var wanted = new HashSet<CellType> { (CellType)3, (CellType)17, (CellType)42 };
-        var collected = new List<(long Key, CellType Type)>(4096);
-        runner.Run("проход по окну за клетками трёх типов", () =>
-        {
-            collected.Clear();
-            index.CollectEntries(wanted, collected);
-        });
-
-        var alternate = new CellType[types.Length];
-        for (int i = 0; i < types.Length; i++)
-        {
-            alternate[i] = (CellType)(1 + ((int)types[i] % 24));
-        }
-
-        bool flip = false;
-        runner.Run("Set во всё окно со сменой типа каждой клетки", () =>
-        {
-            CellType[] source = flip ? types : alternate;
-            flip = !flip;
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    index.Set(TerrainCoordinateKey.Pack(5000 + x, 7000 + y), source[(x * height) + y]);
-                }
-            }
-        });
-
-        Fill();
-        var probe = new Dictionary<long, CellType>(width * height);
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                probe[TerrainCoordinateKey.Pack(5000 + x, 7000 + y)] = types[(x * height) + y];
-            }
-        }
-
-        runner.Run("контроль: один поиск по обратному словарю на клетку", () =>
-        {
-            int hits = 0;
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    if (probe.TryGetValue(TerrainCoordinateKey.Pack(5000 + x, 7000 + y), out CellType t) &&
-                        t == types[(x * height) + y])
-                    {
-                        hits++;
-                    }
-                }
-            }
-
-            GC.KeepAlive(hits);
         });
     }
 
@@ -1616,13 +935,11 @@ public static class Suites
         Vector2[] corners = [new(0, 0), new(1, 0), new(1, 1), new(0, 1)];
         for (int quad = 0; quad < vertices.Length / 4; quad++)
         {
-            var color = new Color32((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256), 255);
             var atlasRect = new Vector4(random.NextSingle(), random.NextSingle(), 0.0625f, 0.0625f);
             for (int i = 0; i < 4; i++)
             {
                 ref TerrainVertex vertex = ref vertices[(quad * 4) + i];
                 vertex.Position = new Vector3(i, i, 0);
-                vertex.Color = color;
                 vertex.UV0 = corners[i];
                 vertex.UV1 = atlasRect;
                 vertex.UV2 = new Vector4(0.015625f, 0.015625f, 1, 1);
@@ -1663,77 +980,11 @@ public static class Suites
         });
     }
 
-    // Клетки окна для заливки фона: локальные (x, y) со смещением каймы кэша.
-    private sealed class CaveProvider(int width, int height, int seed) : ICachedCellDataProvider
-    {
-        public int OriginX { get; set; } = 5000;
-
-        public int OriginY { get; set; } = 7000;
-
-        public int Width => width;
-
-        public int Height => height;
-
-        public CachedCellInfo GetCell(int x, int y)
-        {
-            CachedCellData cell = TerrainCellCache.CellAt(OriginX + x - 1, OriginY + y - 1, seed);
-            return new CachedCellInfo { Type = cell.Type, Properties = cell.Properties };
-        }
-    }
-
-    private sealed class PrecomputedCaveProvider : ICachedCellDataProvider
-    {
-        private readonly CachedCellInfo[] _cells;
-        private readonly int _width;
-        private readonly int _height;
-
-        public PrecomputedCaveProvider(int width, int height, int seed)
-        {
-            _width = width;
-            _height = height;
-            _cells = new CachedCellInfo[width * height];
-            const int OriginX = 5000;
-            const int OriginY = 7000;
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    CachedCellData cell = TerrainCellCache.CellAt(OriginX + x, OriginY + y, seed);
-                    _cells[(x * height) + y] = new CachedCellInfo
-                    {
-                        Type = cell.Type,
-                        Properties = cell.Properties,
-                    };
-                }
-            }
-        }
-
-        public CachedCellInfo GetCell(int x, int y)
-        {
-            int localX = x - 1;
-            int localY = y - 1;
-            if ((uint)localX >= (uint)_width || (uint)localY >= (uint)_height)
-            {
-                return new CachedCellInfo { Type = CellType.Unloaded };
-            }
-
-            return _cells[(localX * _height) + localY];
-        }
-    }
-
-    // Семь массивов текселей в раскладке TerrainCellDataTextures.
+    // Клетки в раскладке TerrainCellBuffers: один uint на клетку, оба слоя.
     private sealed class TexelArrays
     {
-        public readonly Color32[] Color;
-        public readonly Color32[] Meta;
-        public readonly TerrainHalfTexel[] AtlasRect;
-        public readonly TerrainHalfTexel[] TileSize;
-        public readonly TerrainHalfTexel[] Animation;
-        public readonly Vector4[] World;
-        public readonly Vector4[] Glow;
-        private readonly Color32[] _patchColor = new Color32[1024];
-        private readonly Vector4[] _patchWorld = new Vector4[1024];
-        private readonly TerrainHalfTexel[] _patchHalf = new TerrainHalfTexel[1024];
+        public readonly TerrainCell[] Cells;
+        private readonly TerrainCell[] _patch = new TerrainCell[1024];
 
         public byte[] Staging => _staging ??= new byte[TotalBytes];
 
@@ -1741,68 +992,27 @@ public static class Suites
 
         public TexelArrays(int width, int height)
         {
-            int count = width * height * TerrainCellDataPacker.LayersPerCell;
-            Color = new Color32[count];
-            Meta = new Color32[count];
-            AtlasRect = new TerrainHalfTexel[count];
-            TileSize = new TerrainHalfTexel[count];
-            Animation = new TerrainHalfTexel[count];
-            World = new Vector4[count];
-            Glow = new Vector4[count];
+            Cells = new TerrainCell[width * height];
         }
 
-        public int TotalBytes => (Color.Length * 4 * 2) + (AtlasRect.Length * 8 * 3) + (World.Length * 16 * 2);
+        public int TotalBytes => Cells.Length * Marshal.SizeOf<TerrainCell>();
 
         public void PackCell(TerrainVertex[] vertices, int x, int y, int width, int height) =>
             PackCellAt(vertices, x, y, x, y, width, height);
 
+        // Упаковка клетки: типы обоих слоёв — всё, что клетка хранит.
         public void PackCellAt(TerrainVertex[] vertices, int x, int y, int ringX, int ringY, int width, int height)
         {
-            int quad = (x * height) + y;
-            for (int layer = 0; layer < TerrainCellDataPacker.LayersPerCell; layer++)
-            {
-                TerrainCellTexels texels = TerrainCellDataPacker.PackQuad(vertices.AsSpan((quad * 8) + (layer * 4), 4), 0);
-                int index = TerrainCellDataPacker.TexelIndex(ringX, ringY, layer, width);
-                Color[index] = texels.Color;
-                Meta[index] = texels.Meta;
-                AtlasRect[index] = texels.AtlasRect;
-                TileSize[index] = texels.TileSize;
-                Animation[index] = texels.Animation;
-                World[index] = texels.World;
-                Glow[index] = texels.Glow;
-            }
+            int first = ((x * height) + y) * 8;
+            Cells[(ringY * width) + ringX] = TerrainCellData.PackCell(
+                CellType.Rock,
+                vertices[first].UV3.w != 0f ? CellType.Empty : CellType.Road);
         }
 
-        public void CopyAllTo(byte[] target)
-        {
-            int offset = 0;
-            offset += CopyBytes(Color, target, offset);
-            offset += CopyBytes(Meta, target, offset);
-            offset += CopyBytes(AtlasRect, target, offset);
-            offset += CopyBytes(TileSize, target, offset);
-            offset += CopyBytes(Animation, target, offset);
-            offset += CopyBytes(World, target, offset);
-            CopyBytes(Glow, target, offset);
-        }
+        public void CopyAllTo(byte[] target) =>
+            MemoryMarshal.AsBytes(Cells.AsSpan()).CopyTo(target);
 
-        public void CopyRowSpan(int row, int x, int count, int width)
-        {
-            int start = (row * width) + x;
-            Array.Copy(Color, start, _patchColor, 0, count);
-            Array.Copy(Meta, start, _patchColor, 0, count);
-            Array.Copy(AtlasRect, start, _patchHalf, 0, count);
-            Array.Copy(TileSize, start, _patchHalf, 0, count);
-            Array.Copy(Animation, start, _patchHalf, 0, count);
-            Array.Copy(World, start, _patchWorld, 0, count);
-            Array.Copy(Glow, start, _patchWorld, 0, count);
-        }
-
-        private static int CopyBytes<T>(T[] source, byte[] target, int offset)
-            where T : struct
-        {
-            ReadOnlySpan<byte> bytes = MemoryMarshal.AsBytes(source.AsSpan());
-            bytes.CopyTo(target.AsSpan(offset));
-            return bytes.Length;
-        }
+        public void CopyRowSpan(int row, int x, int count, int width) =>
+            Array.Copy(Cells, (row * width) + x, _patch, 0, count);
     }
 }

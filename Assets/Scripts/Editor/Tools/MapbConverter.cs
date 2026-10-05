@@ -26,7 +26,7 @@ public sealed class MapbConverter : EditorWindow
 
     private Vector2 _scrollPos;
 
-    protected void OnGUI()
+    private void OnGUI()
     {
         _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
 

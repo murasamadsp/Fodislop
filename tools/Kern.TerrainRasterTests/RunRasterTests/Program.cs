@@ -10,6 +10,11 @@ internal static class Program
         "double-quantize-fragments",
         "ao-flat-contact",
         "ao-to-black",
+        "relief-merges-any-groups",
+        "background-ignores-occlusion",
+        "wall-variant-ignores-bottom",
+        "node-edge-jitter-sign",
+        "organic-noise-truncates",
     ];
 
     public static int Main()
@@ -105,6 +110,25 @@ internal static class Program
             float4 make_float4(float a, float2 b, float c) { return {a,b.x,b.y,c}; }
             float _TestFwidth = 0.0f;
             float fwidth(float) { return _TestFwidth; }
+            using uint4 = unsigned __attribute__((ext_vector_type(4)));
+            uint asuint(int value) { return (uint)value; }
+            uint asuint(float value) { uint result; std::memcpy(&result, &value, 4); return result; }
+            int min(int a, int b) { return a < b ? a : b; }
+            uint min(uint a, uint b) { return a < b ? a : b; }
+            int asint(uint value) { return (int)value; }
+            bool any(int4 a) { return a.x || a.y || a.z || a.w; }
+            float asfloat(uint value) { float result; std::memcpy(&result, &value, 4); return result; }
+            long bufferReads = 0;
+            template <typename T> struct ShimBuffer {
+                std::vector<T> data;
+                void reset(int count) { data.assign(count, T{}); }
+                T operator[](int index) const {
+                    ++bufferReads;
+                    if (index < 0 || index >= (int)data.size())
+                        throw std::runtime_error("out-of-bounds buffer read " + std::to_string(index));
+                    return data[index];
+                }
+            };
             """;
         const string terrainUniforms = """
             float _OrganicBendStrength = 1.0;
@@ -120,6 +144,20 @@ internal static class Program
         Directory.CreateDirectory(temporaryDirectory);
         try
         {
+            // Миры стенда: клетки, строки типов и вершины FillQuad, с которыми
+            // сверяется настоящий шейдер.
+            string worldDirectory = Path.Combine(temporaryDirectory, "worlds");
+            ProcessResult export = Run(
+                "dotnet",
+                ["test", Path.Combine(root, "tools/Kern.TerrainTests"), "--filter", "FullyQualifiedName~ExportWorldsForHlslShim"],
+                root,
+                ("KERN_TERRAIN_SHIM_FIXTURES", worldDirectory));
+            if (export.ExitCode != 0 || !Directory.Exists(worldDirectory))
+            {
+                Console.Error.Write(export.StandardOutput);
+                return Fail("Terrain stand did not export the shim worlds");
+            }
+
             string cppPath = Path.Combine(temporaryDirectory, "test.cpp");
             string executablePath = Path.Combine(temporaryDirectory, "test");
             foreach (string? mutation in new string?[] { null }.Concat(Mutations))
@@ -151,6 +189,31 @@ internal static class Program
                     if (candidateGeometry == terrainGeometry) return Fail("double-quantize-fragments mutation is stale");
                 }
 
+                if (mutation is "relief-merges-any-groups" or "background-ignores-occlusion" or "wall-variant-ignores-bottom"
+                    or "node-edge-jitter-sign" or "organic-noise-truncates")
+                {
+                    (string before, string after) = mutation switch
+                    {
+                        "relief-merges-any-groups" => (
+                            "return otherGroup != 0u && ((own >> 16) & 0xFFu) == otherGroup;",
+                            "return otherGroup != 0u;"),
+                        "background-ignores-occlusion" => (
+                            "        if (occluded)\n        {\n            return v;\n        }",
+                            "        if (false)\n        {\n            return v;\n        }"),
+                        "wall-variant-ignores-bottom" => (
+                            "bool hasBottom = (cornerSideMask & 8u) != 0u;",
+                            "bool hasBottom = false;"),
+                        "node-edge-jitter-sign" => (
+                            "if (ctl && ctr) return int2(0, -ry);",
+                            "if (ctl && ctr) return int2(0, ry);"),
+                        _ => (
+                            "return ((value << 1) + (d * d) / 2u) / (d * d);",
+                            "return (value << 1) / (d * d);"),
+                    };
+                    candidateLoader = candidateLoader.Replace(before, after, StringComparison.Ordinal);
+                    if (candidateLoader == loader) return Fail($"{mutation} mutation is stale");
+                }
+
                 if (mutation == "ao-flat-contact")
                 {
                     candidateAo = candidateAo.Replace("contact * _TerrainAmbientOcclusionStrength", "_TerrainAmbientOcclusionStrength", StringComparison.Ordinal);
@@ -179,7 +242,7 @@ internal static class Program
                 Console.Error.Write(compile.StandardError);
                 if (compile.ExitCode != 0) return compile.ExitCode;
 
-                ProcessResult result = Run(executablePath, [], temporaryDirectory);
+                ProcessResult result = Run(executablePath, [worldDirectory], temporaryDirectory);
                 if (mutation is null)
                 {
                     Console.Out.Write(result.StandardOutput);
@@ -208,9 +271,11 @@ internal static class Program
         source = Regex.Replace(source, "^#.*$", string.Empty, RegexOptions.Multiline)
             .Replace("[unroll]", string.Empty, StringComparison.Ordinal)
             .Replace("[branch]", string.Empty, StringComparison.Ordinal)
+            .Replace("[loop]", string.Empty, StringComparison.Ordinal)
             .Replace("inout TerrainTileUvResult tile", "TerrainTileUvResult& tile", StringComparison.Ordinal)
             .Replace("out float2 nearestPosition", "float2& nearestPosition", StringComparison.Ordinal)
             .Replace("Texture2D<float4>", "Texture", StringComparison.Ordinal)
+            .Replace("StructuredBuffer<", "ShimBuffer<", StringComparison.Ordinal)
             .Replace("(TerrainCellVertex)0", "TerrainCellVertex{}", StringComparison.Ordinal);
         source = Regex.Replace(source, @"\(int2\)round\(([^)]+)\)", "make_int2(round($1))", RegexOptions.CultureInvariant);
         return Regex.Replace(source, @"\b(float[234]|int[23]|uint[23])\(", "make_$1(", RegexOptions.CultureInvariant);
@@ -243,7 +308,11 @@ internal static class Program
         return 1;
     }
 
-    private static ProcessResult Run(string executable, IReadOnlyList<string> arguments, string workingDirectory)
+    private static ProcessResult Run(
+        string executable,
+        IReadOnlyList<string> arguments,
+        string workingDirectory,
+        params (string Name, string Value)[] environment)
     {
         var startInfo = new ProcessStartInfo(executable)
         {
@@ -253,6 +322,7 @@ internal static class Program
             UseShellExecute = false,
         };
         foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
+        foreach ((string name, string value) in environment) startInfo.Environment[name] = value;
         using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start {executable}.");
         Task<string> stdout = process.StandardOutput.ReadToEndAsync();
         Task<string> stderr = process.StandardError.ReadToEndAsync();

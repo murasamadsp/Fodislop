@@ -13,21 +13,6 @@ public sealed class TerrainMeshManager
     private static readonly int s_geometryCarrierPaddingWorldId =
         Shader.PropertyToID("_TerrainGeometryCarrierPaddingWorld");
 
-    // Раскладка вершины осталась только у накладки дверей: сам террейн
-    // рисуется мешем идентификаторов по текстурам данных клетки.
-    internal static readonly VertexAttributeDescriptor[] VertexLayout =
-    [
-        new(VertexAttribute.Position,  VertexAttributeFormat.Float32, 3),
-        new(VertexAttribute.Color,     VertexAttributeFormat.UNorm8,  4),
-        new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 2), // quad UV          16 → 4 bytes
-        new(VertexAttribute.TexCoord1, VertexAttributeFormat.Float16, 4), // atlasRect        16 → 8 bytes
-        new(VertexAttribute.TexCoord2, VertexAttributeFormat.Float16, 4), // tileSizeVec      16 → 8 bytes
-        new(VertexAttribute.TexCoord3, VertexAttributeFormat.Float32, 4), // worldPos: stays float32 (coords > 2048)
-        new(VertexAttribute.TexCoord4, VertexAttributeFormat.Float16, 4), // animData         16 → 8 bytes
-        new(VertexAttribute.TexCoord5, VertexAttributeFormat.Float16, 4), // anchorData       16 → 8 bytes
-        new(VertexAttribute.TexCoord6, VertexAttributeFormat.Float32, 4), // glowVec: stays float32 (packed RGB > 65504)
-    ];
-
     private readonly RenderTargetIdentifier[] _lightingFieldTargets = new RenderTargetIdentifier[2];
     private readonly RenderBufferLoadAction[] _lightingFieldLoads =
         [RenderBufferLoadAction.DontCare, RenderBufferLoadAction.DontCare];
@@ -151,12 +136,12 @@ public sealed class TerrainMeshManager
         // because ClearRenderTarget ignores scissor on Metal.
         // Поля покрывают всю сетку со смещением ноль; экранное смещение
         // возвращается сразу после, чтобы кадр камеры не съехал.
-        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, Vector4.zero);
+        commandBuffer.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, Vector4.zero);
         commandBuffer.SetGlobalVector(
             s_geometryCarrierPaddingWorldId,
             new Vector4(carrierPaddingWorld.x, carrierPaddingWorld.y, 0f, 0f));
         commandBuffer.DrawMesh(mesh, localToWorldMatrix, materials[0], 0, shaderPass);
-        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, screenViewOffset);
+        commandBuffer.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, screenViewOffset);
         commandBuffer.SetGlobalVector(s_geometryCarrierPaddingWorldId, Vector4.zero);
 
         commandBuffer.EndSample(sampleName);

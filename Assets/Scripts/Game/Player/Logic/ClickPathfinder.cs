@@ -3,39 +3,18 @@
 using System.Collections.Generic;
 using Kern.Core.Interfaces;
 using MinesServer.Data;
-using Kern.World;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Kern.Player.Logic;
 
 // Поиск маршрута для клик-движения (ЛКМ): A* по 4 направлениям.
-// Проходимая клетка стоит StepCost, сплошная ломаемая - DigCost (её придётся
-// бурить Bz-пакетом по дороге, это заметно дольше шага).
-// Непроходимы насовсем (маршрут их обходит, не бурит):
-//  - незагруженные клетки (шаг туда всё равно не провалидировать);
-//  - неломаемые буром породы: сплошные клетки без is_diggable в cells.json
-//    сервера - Черноскал, Красноскал, Гипноскал, Череп, Суперрадуга,
-//    Федеральный блок и пр. Флаг Breakable тут врёт: сервер ставит его и для
-//    is_destructible (бомба/падение), хотя буром такие клетки не взять;
-//  - паки и строительные блоки: BuildingWall/BuildingCorner,
-//    GreenBlock/YellowBlock/RedBlock, MilitaryBlock(Frame),
-//    QuadBlock, Support - зеркала WorldCellChecks.isPackBlock/isBuildingBlock.
-//    BuildingRoad тут НЕ блокер: это дорога внутри пака, по ней роботы
-//    ездят (в cells.json она isEmpty/passable, WASD на неё пускает) - клик
-//    по ней строит обычный маршрут по проходимости из данных клетки.
-//    BuildingDoor - отдельное правило: клик ПРЯМО по двери ведёт робота
-//    на неё (осознанный вход в пак), в маршрутах НАЧАТЫХ вне пака дверь
-//    обходится: проход через неё открывает окно пака, и случайное движение
-//    мышкой не должно его дёргать. Если робот уже стоит на паковой клетке
-//    (дверь или дорога пака) - это выход из пака: двери на маршруте
-//    разрешены, иначе из пака мышкой не выйти.
-// Клик по непроходимой клетке пака/стройблока ведёт робота к ближайшей
-// достижимой клетке рядом с целью (подойти к паку вплотную).
+// Вес входа в клетку — её кулдаун движения от сервера, в миллисекундах.
+// Проходимая клетка или та, которую сервер называет ломаемой (флаг Breakable,
+// её придётся бурить по дороге), входит в маршрут; остальное обходится.
+// Если цель недостижима, маршрут ведёт к ближайшей достигнутой клетке.
 public static class ClickPathfinder
 {
-    private const int StepCost = 1;
-    private const int DigCost = 24;
     private const int MaxExpandedNodes = 24000;
     private const int MaxPathLength = 2048;
 
@@ -68,27 +47,9 @@ public static class ClickPathfinder
             return null;
         }
 
-        // Клетка цели: >0 - обычный маршрут до неё (ломаемая сплошная тоже -
-        // бурим до неё); <0 и это пак/стройблок - ведём к ближайшей достижимой
-        // клетке рядом (подойти к паку); <0 у неломаемой породы или
-        // незагруженной клетки - маршрута нет. Дверь пака разрешена только
-        // как явная цель клика (allowBuildingDoor: true).
-        CellType targetCell = storage.GetCell(target.x, target.y);
-        int targetCost = CellCost(targetCell, mapDataProvider, allowBuildingDoor: true);
-        // Клик по двери: вход в пак осознанный - промежуточные двери на пути
-        // к ней тоже разрешены (двери бывают двухклеточными).
-        BlockDefinition targetDef = BlockRegistry.Get(targetCell);
-        bool targetIsDoor = targetDef.StructurePartType == "Door";
-        // Старт на паковой клетке (дверь или дорога пака): робот уже в паке -
-        // это ВЫХОД, а не вход. Двери на маршруте разрешены, иначе из пака
-        // мышкой не выйти (стоя на двери, наружу ведёт только соседняя дверь).
-        CellType startCell = storage.GetCell(start.x, start.y);
-        BlockDefinition startDef = BlockRegistry.Get(startCell);
-        bool startInPack = startDef.StructurePartType is "Door" or "Road";
-        if (targetCost < 0 && !targetDef.IsPackBlock && !targetDef.IsBuildingBlock)
-        {
-            return null;
-        }
+        // Эвристика — манхэттен на самый быстрый кулдаун: допустима, потому
+        // что ни один шаг не дешевле.
+        int minStepMs = Mathf.Max(1, Mathf.RoundToInt(mapDataProvider.GetMinMoveCooldown() * 1000f));
 
         int startIndex = start.y * width + start.x;
         int targetIndex = target.y * width + target.x;
@@ -103,13 +64,13 @@ public static class ClickPathfinder
 
         cameFrom[startIndex] = -1;
         costSoFar[startIndex] = 0;
-        open.Push(Heuristic(start, target), 0, startIndex);
+        open.Push(Heuristic(start, target, minStepMs), 0, startIndex);
 
         int expanded = 0;
         bool found = false;
 
         // Ближайшая к цели достигнутая клетка: если сама цель непроходима
-        // (клик по паку), маршрут строится до неё.
+        // (закрыта), маршрут строится до неё.
         int bestNode = startIndex;
         int bestH = int.MaxValue;
 
@@ -124,7 +85,7 @@ public static class ClickPathfinder
             }
 
             var currentPosition = new Vector2Int(current % width, current / width);
-            int currentH = Heuristic(currentPosition, target);
+            int currentH = Heuristic(currentPosition, target, minStepMs);
             if (currentH < bestH)
             {
                 bestH = currentH;
@@ -161,16 +122,8 @@ public static class ClickPathfinder
                         continue;
                     }
 
-                    // Соседние клетки: дверь пака проходима ТОЛЬКО когда она
-                    // сама - цель маршрута (прямой клик по двери), когда цель
-                    // тоже дверь (двухклеточные двери) или когда робот уже
-                    // стоит на паковой клетке (выход из пака). Иначе дверь -
-                    // обход: проход через неё открывает окно пака, случайные
-                    // маршруты не должны дёргать его при движении мышкой.
                     int neighbor = ny * width + nx;
-                    bool neighborIsTarget = neighbor == targetIndex;
-                    bool allowDoor = neighborIsTarget || targetIsDoor || startInPack;
-                    int cellCost = CellCost(storage, mapDataProvider, nx, ny, allowBuildingDoor: allowDoor);
+                    int cellCost = CellCostMs(storage.GetCell(nx, ny), mapDataProvider);
                     if (cellCost < 0)
                     {
                         continue;
@@ -186,12 +139,12 @@ public static class ClickPathfinder
                     cameFrom[neighbor] = current;
 
                     var neighborPos = new Vector2Int(nx, ny);
-                    open.Push(newCost + Heuristic(neighborPos, target), newCost, neighbor);
+                    open.Push(newCost + Heuristic(neighborPos, target, minStepMs), newCost, neighbor);
                 }
             }
         }
 
-        // Нашли цель - идём до неё; не нашли (клик по паку) - до ближайшей
+        // Нашли цель - идём до неё; не нашли - до ближайшей
         // достигнутой клетки. Если и старт - ближайшая, пути нет.
         int finalNode = found ? targetIndex : bestNode;
         if (finalNode == startIndex)
@@ -216,56 +169,26 @@ public static class ClickPathfinder
         return path.Count > 0 ? path : null;
     }
 
-    // Стоимость входа в клетку: -1 непроходимо насовсем (обход), StepCost -
-    // можно идти, DigCost - сплошная ломаемая (бурим по дороге).
-    // allowBuildingDoor: дверь пака проходима только когда она сама - цель
-    // клика; в любых других маршрутах она обходится (иначе мышинное движение
-    // по КД проваливалось бы в пак и открывало его окно).
-    private static int CellCost(IWorldDataStorage storage, IMapDataProvider mapDataProvider, int x, int y, bool allowBuildingDoor)
+    // Вес входа в клетку в миллисекундах; -1 — клетка в маршрут не входит.
+    private static int CellCostMs(CellType cell, IMapDataProvider mapDataProvider)
     {
-        return CellCost(storage.GetCell(x, y), mapDataProvider, allowBuildingDoor);
+        if (cell is CellType.Unloaded or CellType.Pregener)
+        {
+            return -1;
+        }
+
+        CellConfigurationPacket config = mapDataProvider.GetCellConfig(cell);
+        if (!PlayerMovementValidator.IsPassable(cell, config) &&
+            !config.Properties.HasFlag(CellConfigProperties.Breakable))
+        {
+            return -1;
+        }
+
+        return Mathf.Max(1, Mathf.RoundToInt(mapDataProvider.GetMoveCooldown(cell) * 1000f));
     }
 
-    private static int CellCost(CellType cell, IMapDataProvider mapDataProvider, bool allowBuildingDoor)
-    {
-        if (cell == CellType.Unloaded)
-        {
-            return -1;
-        }
-
-        BlockDefinition def = BlockRegistry.Get(cell);
-
-        // Паки и строительные блоки: бурением не убираются - только обход.
-        if (def.IsPackBlock || def.IsBuildingBlock)
-        {
-            return -1;
-        }
-
-        // Дверь пака: только как явная цель клика, иначе - обход.
-        if (def.StructurePartType == "Door" && !allowBuildingDoor)
-        {
-            return -1;
-        }
-
-        if (PlayerMovementValidator.IsPassable(cell, mapDataProvider.GetCellConfig(cell)))
-        {
-            return StepCost;
-        }
-
-        // Буром берутся только копаемые клетки из конфигурации.
-        if (!def.Diggable || !mapDataProvider.GetCellConfig(cell).Properties.HasFlag(CellConfigProperties.Breakable))
-        {
-            return -1;
-        }
-
-        return DigCost;
-    }
-
-    private static int Heuristic(Vector2Int from, Vector2Int to)
-    {
-        // Манхэттен * StepCost: допустимая эвристика (бурение только дороже).
-        return (Mathf.Abs(from.x - to.x) + Mathf.Abs(from.y - to.y)) * StepCost;
-    }
+    private static int Heuristic(Vector2Int from, Vector2Int to, int minStepMs) =>
+        (Mathf.Abs(from.x - to.x) + Mathf.Abs(from.y - to.y)) * minStepMs;
 
     // Компактная бинарная куча по f (затем g) - в netstandard 2.1 нет PriorityQueue.
     private sealed class MinHeap

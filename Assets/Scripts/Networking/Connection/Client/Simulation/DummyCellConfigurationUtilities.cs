@@ -13,8 +13,35 @@ internal static class DummyCellConfigurationUtilities
     public static BlockDefinition GetBlockDefinition(CellType type) =>
         BlockRegistry.Get(type);
 
-    public static int GetCrystalBasketIndex(CellType cell) =>
-        BlockRegistry.Get(cell).CrystalBasketIndex;
+    // Правило экономики сервера, а не свойство блока: добыча кристалла кладёт
+    // его в корзину, слот — номер CrystalType в BasketPacket.
+    public static CrystalType GetMinedCrystal(CellType cell) => cell switch
+    {
+        CellType.Green => CrystalType.Green,
+        CellType.Blue => CrystalType.Blue,
+        CellType.Red => CrystalType.Red,
+        CellType.Violet => CrystalType.Violet,
+        CellType.White => CrystalType.White,
+        CellType.Cyan => CrystalType.Cyan,
+        _ => CrystalType.Unknown,
+    };
+
+    // Правило сервера: части пака (стена, угол, дверь) стыкуются друг с
+    // другом как одна группа автотайла.
+    public static byte[][] CreateTileGroups()
+    {
+        var pack = new List<byte>();
+        foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
+        {
+            if (def.StructurePart is CellStructurePart.Wall or CellStructurePart.Corner or CellStructurePart.Door)
+            {
+                pack.Add((byte)type);
+            }
+        }
+
+        pack.Sort();
+        return [pack.ToArray()];
+    }
 
     public static CellConfigurationPacket[] CreateCellConfigurations()
     {
@@ -30,24 +57,10 @@ internal static class DummyCellConfigurationUtilities
                 props |= CellConfigProperties.Passable;
             }
 
-            if (def.Breakable)
+            // Правило сервера: ломается всё непроходимое, кроме построек.
+            if (!def.Passable && def.StructurePart == CellStructurePart.None)
             {
                 props |= CellConfigProperties.Breakable;
-            }
-
-            if (def.CastsShadow)
-            {
-                props |= CellConfigProperties.DropsShadow;
-            }
-
-            if (def.ReceivesShadow)
-            {
-                props |= CellConfigProperties.ReceivesShadow;
-            }
-
-            if (def.BlendWithNeighbors)
-            {
-                props |= CellConfigProperties.Blending;
             }
 
             if (def.EmitsLight)
@@ -55,24 +68,26 @@ internal static class DummyCellConfigurationUtilities
                 props |= CellConfigProperties.Glowing;
             }
 
-            int color = DummyMapColors.Get(i);
-            if (!string.IsNullOrWhiteSpace(def.MapColorHex) &&
-                !string.Equals(def.MapColorHex, "Auto", StringComparison.OrdinalIgnoreCase) &&
-                UnityEngine.ColorUtility.TryParseHtmlString(def.MapColorHex, out UnityEngine.Color parsedColor))
-            {
-                UnityEngine.Color32 c32 = (UnityEngine.Color32)parsedColor;
-                color = unchecked((int)(((uint)c32.a << 24) | ((uint)c32.r << 16) | ((uint)c32.g << 8) | c32.b));
-            }
-
             configs[i] = new CellConfigurationPacket
             {
                 Properties = props,
-                Distortion = def.MeshDistortion,
-                Animation = def.ShaderEffect,
-                AnimationSpeed = def.ShaderEffectSpeed,
-                FrameOffset = def.ShaderEffectPhaseOffset,
-                ReliefGroup = def.TerrainSeamGroupId,
-                Color = color,
+                Distortion = def.Shape switch
+                {
+                    CellShape.Flat => CellDistortionType.Neutral,
+                    CellShape.Organic => CellDistortionType.Cause,
+                    _ => CellDistortionType.Block,
+                },
+                // Мигание и мерцание — анимации сервера, со сдвигом фазы в кадр.
+                Animation = def.Surface switch
+                {
+                    CellSurface.Blinking => CellAnimationType.Blinking,
+                    CellSurface.Shimmer => CellAnimationType.Shimmer,
+                    _ => CellAnimationType.None,
+                },
+                AnimationSpeed = def.SurfaceSpeed,
+                FrameOffset = (byte)(def.Surface is CellSurface.Blinking or CellSurface.Shimmer ? 1 : 0),
+                ReliefGroup = def.RimGroup,
+                Color = DummyMapColors.Get(i),
             };
         }
 
@@ -85,11 +100,8 @@ internal static class DummyCellConfigurationUtilities
         var speeds = new Dictionary<CellType, ushort>(BlockRegistry.Blocks.Count);
         foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
         {
-            ushort speed = def.MoveCooldownMs > 0
-                ? def.MoveCooldownMs
-                : (ushort)(def.Passable ? 20 : 100);
-
-            speeds[type] = speed;
+            // Правило сервера: по проходимому — быстро, по остальному — медленно.
+            speeds[type] = (ushort)(def.Passable ? 20 : 100);
         }
 
         return speeds;

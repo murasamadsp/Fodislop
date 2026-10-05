@@ -9,18 +9,18 @@ namespace Kern.World.Terrain;
 // to the rectangular background, even when it came from foreground map data.
 internal static class TerrainCellLayers
 {
-    public static CellType ResolveBackground(
-        CellType foreground, CellType propagated, CellConfigProperties properties)
+    // Что лежит под клеткой. Пол лежит сам на себе, проходимая часть пака —
+    // на дороге, всё остальное — на обычной земле.
+    public static CellType ResolveBackground(CellType foreground, CellConfigProperties properties)
     {
-        if (foreground == CellType.Empty)
+        if (foreground == CellType.Unloaded || (properties & CellConfigProperties.Passable) == 0)
         {
             return CellType.Empty;
         }
 
-        bool building = MapCellConfigCatalog.GetVisualProperties(foreground).IsBuilding;
-        return building && (properties & CellConfigProperties.Passable) != 0
+        return MapCellConfigCatalog.GetVisualProperties(foreground).IsBuilding
             ? CellType.Road
-            : propagated;
+            : foreground;
     }
 
     public static bool TryGetType(

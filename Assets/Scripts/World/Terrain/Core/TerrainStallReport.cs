@@ -26,8 +26,6 @@ public readonly record struct TerrainStallFrame(
     int UploadRectCount,
     long UploadTexels,
     float StageMs,
-    float StageCopyMs,
-    float StageApplyMs,
     int UploadStrips,
     float PlanMs,
     float DimensionsMs,
@@ -55,11 +53,8 @@ public enum TerrainBuildStepKind
 public readonly record struct TerrainWorkerCost(
     TerrainBuildStepKind Kind,
     float CacheMs,
-    float PrecalculateMs,
-    float FloodFillMs,
     float MeshMs,
     float ScrollMs,
-    float WarmupMs,
     float FillMs,
     int FilledCells,
     float QuadMs,
@@ -175,15 +170,14 @@ public sealed class TerrainStallReport : IFrameEventSource
             $"процесс {frame.ProcessMs:F1} (кэш {totals.CacheMs:F1} · атласы {totals.AtlasMs:F1}) · " +
             $"выгрузка {frame.UploadMs:F1} · прочее {totalMs - accounted:F1} · " +
             $"[выгрузка: {(frame.UploadRectCount == 0 ? "целиком" : frame.UploadRectCount + " прямоуг.")} " +
-            $"{frame.UploadTexels} текселей · набивка {frame.StageMs:F1} " +
-            $"(строки {frame.StageCopyMs:F1} · загрузка {frame.StageApplyMs:F1}) · " +
-            $"полосок {frame.UploadStrips}] · " +
+            $"{frame.UploadTexels} слоёв клетки · SetData {frame.StageMs:F1} · " +
+            $"вызовов {frame.UploadStrips}] · " +
             $"заплаток {frame.DirtyRectCount} на {frame.DirtyArea} клеток · " +
             $"[фон, вне кадра: последний шаг " +
             $"{StepLabel(worker.Kind, frame.ScrollDelta)} · " +
             $"{worker.ElapsedMs:F1} мс на потоке, до показа {worker.LatencyMs:F1} мс · " +
-            $"кэш {worker.CacheMs:F1} · предрасчёт {worker.PrecalculateMs:F1} · заливка фона {worker.FloodFillMs:F1} · тексели {worker.MeshMs:F1} " +
-            $"(кольца {worker.ScrollMs:F1} · прогрев {worker.WarmupMs:F1} · заливка {worker.FillMs:F1} на {worker.FilledCells} клеток; " +
+            $"кэш {worker.CacheMs:F1} · тексели {worker.MeshMs:F1} " +
+            $"(кольца {worker.ScrollMs:F1} · заливка {worker.FillMs:F1} на {worker.FilledCells} клеток; " +
             $"сумма по потокам: квады {worker.QuadMs:F1} · упаковка {worker.PackMs:F1})] · " +
             $"всего: полных {totals.FullPopulates}, заплаток {totals.Patches}, чанков {totals.ChunkLoads}";
     }

@@ -20,15 +20,6 @@ public sealed class MapCellConfigCatalog
     public static CellVisualProperties GetVisualProperties(CellType type) =>
         CellVisualProtocolRegistry.Current.Get(type);
 
-    public static bool CanRoundCorners(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).CanRoundCorners;
-
-    public static bool IsRoad(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).IsRoad;
-
-    public static bool IsContinuousBed(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).IsContinuousBed;
-
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {
         ValidateCellConfigurations(configurations);
@@ -64,6 +55,25 @@ public sealed class MapCellConfigCatalog
         {
             _cellMoveSpeeds[entry.Key] = entry.Value;
         }
+    }
+
+    public float GetMinMoveCooldown()
+    {
+        int min = int.MaxValue;
+        foreach (ushort speed in _cellMoveSpeeds.Values)
+        {
+            if (speed > 0 && speed < min)
+            {
+                min = speed;
+            }
+        }
+
+        if (min == int.MaxValue)
+        {
+            throw new InvalidOperationException("Movement cooldowns were not received from the server.");
+        }
+
+        return min / 1000f;
     }
 
     public float GetMoveCooldown(CellType cellType)
