@@ -33,7 +33,7 @@ internal static class DummyCellConfigurationUtilities
         var pack = new List<byte>();
         foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
         {
-            if (def.StructurePart is CellStructurePart.Wall or CellStructurePart.Corner or CellStructurePart.Door)
+            if (def.Shape is CellShape.Wall or CellShape.Corner or CellShape.Door)
             {
                 pack.Add((byte)type);
             }
@@ -57,8 +57,8 @@ internal static class DummyCellConfigurationUtilities
                 props |= CellConfigProperties.Passable;
             }
 
-            // Правило сервера: ломается всё непроходимое, кроме построек.
-            if (!def.Passable && def.StructurePart == CellStructurePart.None)
+            // Правило сервера: ломается всё непроходимое, кроме частей пака.
+            if (!def.Passable && def.Shape is not (CellShape.Wall or CellShape.Corner or CellShape.Door))
             {
                 props |= CellConfigProperties.Breakable;
             }

@@ -202,7 +202,7 @@ namespace Kern.World.Terrain
 
         // 4. Декали подмешиваются после базовой цветовой анимации.
         public const float GroundDecalStrength = 0.35f;
-        public const float StoneDecalStrength = 0.7f;
+        public const float RockDecalStrength = 0.7f;
         public const float DecalPlacementOffset = 0.5f;
         public const uint GroundDecalPlacementPercent = 24u;
 

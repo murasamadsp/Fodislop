@@ -94,7 +94,7 @@ int _TerrainOrganicVerticalSeed;
 // Правила декалей земли и камня (TerrainCellData.PackDecal): процент 0-6,
 // зерно 7-14, атлас камня 15.
 int _TerrainGroundDecalRule;
-int _TerrainStoneDecalRule;
+int _TerrainRockDecalRule;
 
 // Начало рисуемого окна внутри сетки. Экран рисует меш размером с видимое
 // окно, поле материалов — меш всей сетки со смещением ноль.
@@ -764,7 +764,7 @@ TerrainCellVertex LoadTerrainCellVertex(
     uint decalFamily = neighbourhood & 3u;
     uint decalRule = !foreground ? (uint)_TerrainGroundDecalRule
         : decalFamily == 1u ? (uint)_TerrainGroundDecalRule
-        : decalFamily == 2u ? (uint)_TerrainStoneDecalRule
+        : decalFamily == 2u ? (uint)_TerrainRockDecalRule
         : 0u;
     v.glowData = float4(
         (float)(type.b.x & 0xFFFFFFu),

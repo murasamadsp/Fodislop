@@ -30,7 +30,7 @@ CBUFFER_START(UnityPerMaterial)
     // свойствами материала. Блок один на все проходы, поэтому раскладку держит
     // этот файл, а не дисциплина копий.
     float _GroundDecalStrength;
-    float _StoneDecalStrength;
+    float _RockDecalStrength;
     float _DecalPlacementOffset;
     float _TerrainDebugDeltaContrast;
     float4 _FacetedGlintDirection;

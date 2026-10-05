@@ -81,7 +81,7 @@ public sealed class TerrainCellDataTests
             EmissionPower: 0.5f,
             Solid: true,
             ForegroundRoundable: false,
-            ForegroundDecal: TerrainDecalFamily.Stone,
+            ForegroundDecal: TerrainDecalFamily.Rock,
             IsBuildingWall: false,
             IsBuildingCorner: true,
             OpaqueInOwnAtlas: true,
@@ -155,7 +155,7 @@ public sealed class TerrainCellDataTests
     public void DecalRulesLandOnTheirBits()
     {
         // камень: 30 | 7 << 7 | атлас камня 1 << 15.
-        Assert.That(TerrainCellData.PackDecal(TerrainDecalCatalog.StoneRule), Is.EqualTo(0x839Eu));
+        Assert.That(TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule), Is.EqualTo(0x839Eu));
         // земля: доля из конфига, зерно — CellType.Empty.
         Assert.That(
             TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule),

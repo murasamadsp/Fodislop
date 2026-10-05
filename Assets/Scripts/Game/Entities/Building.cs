@@ -7,7 +7,6 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
 using Kern.Game.Managers;
-using Kern.Networking.Buildings;
 using Kern.Rendering.PostProcessing;
 using Kern.World;
 using Kern.World.Terrain;
@@ -128,7 +127,6 @@ namespace Kern.Game
                 new Rect(0, 0, buildingTexture.width, buildingTexture.height),
                 new Vector2(0.5f, 0.5f),
                 RenderingConstants.CELL_SIZE);
-            ApplyRoofOffset();
             EnsureBatchHandles();
             _entityBatchRenderer.SetSprite(_buildingBatchHandle!, _buildingSprite);
             _buildingBatchHandle!.SetEnabled(true);
@@ -217,24 +215,6 @@ namespace Kern.Game
             float xOffset = (packWidth / (RenderingConstants.CELL_SIZE * 2f)) + 0.1f;
             _clanTransform.localPosition = new Vector3(xOffset, -0.5f, 0);
             _clanBatchHandle?.MarkTransformDirty();
-        }
-
-        private void ApplyRoofOffset()
-        {
-            if (_visualTransform == null ||
-                _buildingType == null ||
-                !BuildingTemplates.TryGet(_buildingType.Value, out PackBuilding? building) ||
-                building == null)
-            {
-                return;
-            }
-
-            Vector2 center = building.RoofCenterOffsetCells;
-            _visualTransform.localPosition = new Vector3(
-                center.x * ProjectRuntimeContracts.World.CellSize,
-                -center.y * ProjectRuntimeContracts.World.CellSize,
-                0f);
-            _buildingBatchHandle?.MarkTransformDirty();
         }
 
         private void EnsureBatchHandles()

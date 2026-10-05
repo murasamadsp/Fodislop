@@ -18,7 +18,7 @@ public sealed class ETagCalculatorTests
     }
 
     [Test]
-    public void Calculate_KnownInput_ReturnsCorrectMd5HexString()
+    public void Calculate_KnownInput_ReturnsCorrectMD5HEXString()
     {
         // MD5("hello") = 5d41402abc4b2a76b9719d911017c592
         byte[] input = Encoding.UTF8.GetBytes("hello");

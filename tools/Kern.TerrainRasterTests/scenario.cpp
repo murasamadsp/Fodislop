@@ -167,6 +167,40 @@ static float displacedRim(float2 p, float4 xs, float4 ys, float packed)
 
 // Кайма: три стороны, верх не затемняется никогда, дно падения 0.125, и
 // координата несущего прямоугольника не должна выводить её из диапазона.
+// Круглый блок: координата контура — UV тайла, сплошные соседи — флаги света.
+static float roundRim(float2 p, float packed, int solidMask)
+{
+    TerrainSurfaceInputs surface{};
+    surface.cellSample=p;
+    surface.contourUV=p;
+    surface.cornersX=float4{0,1,1,0};
+    surface.cornersY=float4{0,0,1,1};
+    surface.packedContour=packed;
+    surface.packedLightingFlags=(float)solidMask;
+    return TerrainReliefRim(surface);
+}
+
+// Кайма круглого блока идёт по дуге силуэта, а не по сторонам клетки: точка
+// у дуги на диагонали далеко от сторон, но обязана темнеть; сторона той же
+// поверхности, к которой силуэт прирастает, края не имеет.
+static void checkRoundReliefRim()
+{
+    const float saved = _ReliefRimDistanceScale;
+    _ReliefRimDistanceScale = 8.0f;
+    const int roundable = 1;
+    float allForeign = packReliefMask(0, roundable, 0);
+    if(roundRim(float2{0.846f, 0.846f}, allForeign, 0) >= 0.5f)
+        throw std::runtime_error("Relief rim does not follow the round block silhouette");
+    if(roundRim(float2{0.5f, 0.5f}, allForeign, 0) < 0.99f)
+        throw std::runtime_error("Relief rim darkens the middle of a round block");
+    float sameTop = packReliefMask(1, roundable, 0);
+    if(roundRim(float2{0.5f, 0.98f}, sameTop, 1) < 0.99f)
+        throw std::runtime_error("Relief rim darkens a round block side merged with the same surface");
+    if(roundRim(float2{0.5f, 0.98f}, allForeign, 1) >= 0.5f)
+        throw std::runtime_error("Relief rim missing on a round block side facing a foreign surface");
+    _ReliefRimDistanceScale = saved;
+}
+
 static void checkReliefRim()
 {
     _TerrainReliefRimEnabled = 1.0f;
@@ -298,16 +332,17 @@ static void checkReliefRim()
     // Флаги контура и маска диагональных соседей меняются от клетки к клетке,
     // и если бы код рельефа стоял не на своём месте, кайма то появлялась бы,
     // то исчезала по соседству, которое к ней отношения не имеет. Здесь
-    // прогоняются все 16 масок против всех 32 комбинаций младших битов.
+    // прогоняются все 16 масок против всех 16 масок диагональных соседей.
+    // Флаг контура сюда не входит: круглый блок кладёт кайму по своему
+    // силуэту, и это проверяет checkRoundReliefRim.
     {
         const float2 sideProbes[4] = {nearTop, nearLeft, nearBottom, nearRight};
         for(int reliefMask = 0; reliefMask <= 0x0F; ++reliefMask)
         {
             float clean = packReliefMask(reliefMask, 0, 0);
-            for(int contourFlags = 0; contourFlags <= 1; ++contourFlags)
             for(int solidDiagonal = 0; solidDiagonal <= 0x0F; ++solidDiagonal)
             {
-                float packed = packReliefMask(reliefMask, contourFlags, solidDiagonal);
+                float packed = packReliefMask(reliefMask, 0, solidDiagonal);
                 for(int side = 0; side < 4; ++side)
                 {
                     float expected = rim(sideProbes[side], clean);
@@ -315,8 +350,7 @@ static void checkReliefRim()
                     if(std::fabs(expected - actual) > 1e-5f)
                         throw std::runtime_error(
                             "Relief code does not survive the packed word: mask=" +
-                            std::to_string(reliefMask) + " flags=" +
-                            std::to_string(contourFlags) + " diagonal=" +
+                            std::to_string(reliefMask) + " diagonal=" +
                             std::to_string(solidDiagonal) + " side=" +
                             std::to_string(side) + " expected=" +
                             std::to_string(expected) + " actual=" +
@@ -688,7 +722,7 @@ static long checkWorld(const std::string& path)
     _TerrainOrganicHorizontalSeed = (int)readValue<uint>(in);
     _TerrainOrganicVerticalSeed = (int)readValue<uint>(in);
     _TerrainGroundDecalRule = (int)readValue<uint>(in);
-    _TerrainStoneDecalRule = (int)readValue<uint>(in);
+    _TerrainRockDecalRule = (int)readValue<uint>(in);
     int originX = readValue<int>(in);
     int originY = readValue<int>(in);
     int ringWidth = readValue<int>(in);
@@ -965,6 +999,7 @@ int runChecks(const char* worldDirectory)
     checkOrganicSignedDistance();
     checkFlatCellDistance();
     checkReliefRim();
+    checkRoundReliefRim();
     checkAmbientOcclusionFloor();
     std::cout << "HLSL shim displaced autotile UV continuity, geometry quantization, phase and AO geometry edge passed.\n";
     return 0;

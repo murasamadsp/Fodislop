@@ -156,7 +156,6 @@ namespace Kern.Core
             builder.RegisterEntryPoint<GameManager>().AsSelf();
             RegisterManager<VFXPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
             builder.Register<BuildingManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
-            builder.RegisterEntryPoint<PackPlacementPreview>().AsSelf();
             builder.Register<RobotManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldEntityBatchRenderer>(builder, "Rendering");
 

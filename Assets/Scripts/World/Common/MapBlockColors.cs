@@ -68,14 +68,14 @@ public static class MapBlockColors
     {
         foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
         {
-            if (TryParseHexColor32(def.MapColorHex, out Color32 color))
+            if (TryParseHEXColor32(def.MapColorHEX, out Color32 color))
             {
                 Set((byte)type, color.r, color.g, color.b, color.a);
             }
         }
     }
 
-    private static bool TryParseHexColor32(string? hex, out Color32 color)
+    private static bool TryParseHEXColor32(string? hex, out Color32 color)
     {
         color = default;
         if (string.IsNullOrEmpty(hex))

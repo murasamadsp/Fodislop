@@ -24,7 +24,7 @@ internal sealed class TerrainCellOracle(
     Func<uint, TerrainTypeRow> typeOf,
     uint[] tileDescriptors,
     uint groundDecalRule,
-    uint stoneDecalRule,
+    uint rockDecalRule,
     int worldHeight,
     bool organicEdges,
     uint horizontalSeed,
@@ -181,7 +181,7 @@ internal sealed class TerrainCellOracle(
         float packedFlags = lightingFlags + BitConverter.Int32BitsToSingle(unchecked((int)type.BY));
         uint decalRule = !foreground ? groundDecalRule
             : (near & 3u) == 1 ? groundDecalRule
-            : (near & 3u) == 2 ? stoneDecalRule
+            : (near & 3u) == 2 ? rockDecalRule
             : 0u;
 
         uint organic = 0;

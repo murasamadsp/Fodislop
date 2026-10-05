@@ -159,6 +159,9 @@ public class MapCellConfigCatalogFuzzTests
     [TestCase(CellType.Empty, CellShape.Flat)]
     [TestCase(CellType.Rock, CellShape.Organic)]
     [TestCase(CellType.Boulder1, CellShape.Square)]
+    [TestCase(CellType.BuildingWall, CellShape.Wall)]
+    [TestCase(CellType.BuildingCorner, CellShape.Corner)]
+    [TestCase(CellType.BuildingDoor, CellShape.Door)]
     public void Shape_DocumentedTypes(CellType type, CellShape expected)
     {
         Assert.That(MapCellConfigCatalog.GetVisualProperties(type).Shape, Is.EqualTo(expected));

@@ -8,7 +8,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         _PrismaticFlowMap ("X Crystal Phase Vectors", 2D) = "black" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
         _TerrainDecalAtlas ("Terrain Decal Atlas", 2D) = "black" {}
-        _TerrainDecalStoneAtlas ("Terrain Decal Stone Atlas", 2D) = "black" {}
+        _TerrainDecalRockAtlas ("Terrain Decal Rock Atlas", 2D) = "black" {}
         _ShimmerColor ("Shimmer Color", Color) = (0,0,0,0)
         _FlowScale ("Flow Scale", Vector) = (0,0,0,0)
         _ShimmerSpeedScale ("Shimmer Speed Scale", Float) = 0
@@ -22,7 +22,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         // Авторский вид поверхности: значения приезжают из TerrainConfigHolder
         // свойствами материала, дефолт здесь — те же числа.
         _GroundDecalStrength ("Ground Decal Strength", Float) = 0.35
-        _StoneDecalStrength ("Stone Decal Strength", Float) = 0.7
+        _RockDecalStrength ("Rock Decal Strength", Float) = 0.7
         _DecalPlacementOffset ("Decal Placement Offset", Float) = 0.5
         _TerrainDebugDeltaContrast ("Terrain Debug Delta Contrast", Float) = 128
         _FacetedGlintDirection ("Faceted Glint Direction", Vector) = (0.62,0.38,0,0)

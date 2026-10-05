@@ -4,8 +4,8 @@
 TEXTURE2D(_TerrainDecalAtlas);
 SAMPLER(sampler_TerrainDecalAtlas);
 
-TEXTURE2D(_TerrainDecalStoneAtlas);
-SAMPLER(sampler_TerrainDecalStoneAtlas);
+TEXTURE2D(_TerrainDecalRockAtlas);
+SAMPLER(sampler_TerrainDecalRockAtlas);
 
 float2 TerrainTransformDecalUV(float2 uv, uint rotation, bool mirror)
 {
@@ -32,7 +32,7 @@ float2 TerrainTransformDecalUV(float2 uv, uint rotation, bool mirror)
     return uv;
 }
 
-// Бит 12 (= 4096) кодирует «использовать stone-атлас».
+// Бит 12 (= 4096) кодирует «использовать rock-атлас».
 // Биты 0..10 — variant/rotation/mirror/offsetX/offsetY — идентичны ground.
 // Ground-код доходит до 2048, поэтому бит 11 не свободен: он уже занят
 // старшей ground-декалью, и флаг на нём уводил бы её в чужой атлас.
@@ -41,11 +41,11 @@ static const uint STONE_ATLAS_BIT = 4096u;
 // Ground-декали — пыль по полу: только осветляют и лишь на треть. Силу
 // приносит свойство _GroundDecalStrength.
 
-// Stone-декали лежат на красноскале и черноскале — очень тёмной основе.
+// Rock-декали лежат на красноскале и черноскале — очень тёмной основе.
 // Там одно осветление на трети силы давало прибавку в пару единиц из 255:
 // трещину нельзя было нарисовать трещиной. Поэтому у камня hard light:
 // тёмный пиксель атласа затемняет (трещина), светлый осветляет (скол, блик
-// руды), серый 0.5 нейтрален — и сила своя, свойство _StoneDecalStrength.
+// руды), серый 0.5 нейтрален — и сила своя, свойство _RockDecalStrength.
 
 float3 TerrainDecalHardLight(float3 baseColor, float3 decal)
 {
@@ -62,7 +62,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
     }
 
     uint rawCode   = (uint)round(packedPlacement);
-    bool useStone  = (rawCode & STONE_ATLAS_BIT) != 0u;
+    bool useRock  = (rawCode & STONE_ATLAS_BIT) != 0u;
     uint code      = (rawCode & ~STONE_ATLAS_BIT) - 1u;
 
     uint variant   = code & 15u;
@@ -82,11 +82,11 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
     float2 atlasUV = pixel / float2(512.0, 32.0);
 
     half4 decal;
-    if (useStone)
+    if (useRock)
     {
         decal = SAMPLE_TEXTURE2D_LOD(
-            _TerrainDecalStoneAtlas,
-            sampler_TerrainDecalStoneAtlas,
+            _TerrainDecalRockAtlas,
+            sampler_TerrainDecalRockAtlas,
             atlasUV,
             0);
     }
@@ -99,10 +99,10 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
             0);
     }
 
-    if (useStone)
+    if (useRock)
     {
         float3 hardLight = TerrainDecalHardLight(baseColor, decal.rgb);
-        return lerp(baseColor, hardLight, decal.a * _StoneDecalStrength);
+        return lerp(baseColor, hardLight, decal.a * _RockDecalStrength);
     }
 
     float3 screen = 1.0 - (1.0 - baseColor) * (1.0 - decal.rgb);

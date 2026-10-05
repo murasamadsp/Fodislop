@@ -5,7 +5,7 @@ using MinesServer.Data;
 namespace Kern.World.Terrain;
 
 /// <summary>Где и с какой частотой ставится декаль; Percent == 0 — нигде.</summary>
-public readonly record struct TerrainDecalRule(uint Percent, uint Seed, bool StoneAtlas);
+public readonly record struct TerrainDecalRule(uint Percent, uint Seed, bool RockAtlas);
 
 public static class TerrainDecalCatalog
 {
@@ -14,23 +14,23 @@ public static class TerrainDecalCatalog
     // Доля клеток камня, получающих декаль. Порог сравнивается с хэшем
     // клетки, поэтому подъём доли только добавляет декали, не трогая уже
     // стоящие.
-    private const uint StonePlacementPercent = 30;
+    private const uint RockPlacementPercent = 30;
 
     // Бит 12 (= 4096) в упаковке сигнализирует шейдеру использовать
-    // _TerrainDecalStoneAtlas вместо основного _TerrainDecalAtlas.
+    // _TerrainDecalRockAtlas вместо основного _TerrainDecalAtlas.
     // Именно 12, а не 11: раскладка упирается ровно в 2048
     // (1 + 15 + (3 << 4) + 64 + (3 << 7) + (3 << 9)), поэтому бит 11
     // выставлялся бы у самой старшей декали.
-    private const int StoneAtlasBit = 1 << 12;
+    private const int RockAtlasBit = 1 << 12;
 
     // Декаль земли и камня одним правилом: процент, зерно хэша и атлас.
     // Правило лежит в строке типа, и шейдер ставит декаль тем же хэшем, что
     // и Place, — поэтому сама декаль в данных клетки не хранится.
     public static readonly TerrainDecalRule GroundRule =
-        new(TerrainConfigHolder.GroundDecalPlacementPercent, (uint)CellType.Empty, StoneAtlas: false);
+        new(TerrainConfigHolder.GroundDecalPlacementPercent, (uint)CellType.Empty, RockAtlas: false);
 
-    public static readonly TerrainDecalRule StoneRule =
-        new(StonePlacementPercent, Seed: 7u, StoneAtlas: true);
+    public static readonly TerrainDecalRule RockRule =
+        new(RockPlacementPercent, Seed: 7u, RockAtlas: true);
 
     // Фон — земля под любым загруженным типом; передний план — по семье из
     // cells.json (decalFamily).
@@ -47,7 +47,7 @@ public static class TerrainDecalCatalog
     public static TerrainDecalRule RuleOf(TerrainDecalFamily family) => family switch
     {
         TerrainDecalFamily.Ground => GroundRule,
-        TerrainDecalFamily.Stone => StoneRule,
+        TerrainDecalFamily.Rock => RockRule,
         _ => default,
     };
 
@@ -74,7 +74,7 @@ public static class TerrainDecalCatalog
         int offsetY = (int)((hash >> 14) & 3u);
         int packed = 1 + variant + (rotation << 4) + (mirror << 6) +
             (offsetX << 7) + (offsetY << 9);
-        return rule.StoneAtlas ? packed | StoneAtlasBit : packed;
+        return rule.RockAtlas ? packed | RockAtlasBit : packed;
     }
 
     private static uint Hash(int worldX, int serverY, uint seed)

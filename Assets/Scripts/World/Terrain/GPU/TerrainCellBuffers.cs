@@ -34,7 +34,7 @@ public sealed class TerrainCellBuffers : IDisposable
     public static readonly int OrganicHorizontalSeedId = Shader.PropertyToID("_TerrainOrganicHorizontalSeed");
     public static readonly int OrganicVerticalSeedId = Shader.PropertyToID("_TerrainOrganicVerticalSeed");
     public static readonly int GroundDecalRuleId = Shader.PropertyToID("_TerrainGroundDecalRule");
-    public static readonly int StoneDecalRuleId = Shader.PropertyToID("_TerrainStoneDecalRule");
+    public static readonly int RockDecalRuleId = Shader.PropertyToID("_TerrainRockDecalRule");
     public static readonly int DistortionModeId = Shader.PropertyToID("_TerrainDistortionMode");
     public static readonly int DistortionId = Shader.PropertyToID("_TerrainDistortion");
 
@@ -273,7 +273,7 @@ public sealed class TerrainCellBuffers : IDisposable
         Shader.SetGlobalInteger(OrganicHorizontalSeedId, (int)TerrainConfigHolder.OrganicEdgeHorizontalSeed);
         Shader.SetGlobalInteger(OrganicVerticalSeedId, (int)TerrainConfigHolder.OrganicEdgeVerticalSeed);
         Shader.SetGlobalInteger(GroundDecalRuleId, (int)TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule));
-        Shader.SetGlobalInteger(StoneDecalRuleId, (int)TerrainCellData.PackDecal(TerrainDecalCatalog.StoneRule));
+        Shader.SetGlobalInteger(RockDecalRuleId, (int)TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule));
     }
 
     public void Dispose()

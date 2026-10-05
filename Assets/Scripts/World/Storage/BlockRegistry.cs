@@ -77,8 +77,7 @@ public sealed class BlockRegistry : IBlockRegistry
                 DecalFamily = ParseEnum(raw.DecalFamily, TerrainDecalFamily.None, cellName),
                 RimGroup = raw.RimGroup,
                 Shape = ParseEnum(raw.Shape, CellShape.Flat, cellName),
-                StructurePart = ParseEnum(raw.StructurePartType, CellStructurePart.None, cellName),
-                MapColorHex = raw.MapColorHex,
+                MapColorHEX = raw.MapColorHEX,
             };
 
             result[cellType] = def;
@@ -161,10 +160,7 @@ public sealed class BlockRegistry : IBlockRegistry
 
         public string? Shape { get; set; }
 
-        // 5. Постройки и интерактивные зоны
-        public string? StructurePartType { get; set; }
-
-        // 6. Карта
-        public string? MapColorHex { get; set; }
+        // 5. Карта
+        public string? MapColorHEX { get; set; }
     }
 }

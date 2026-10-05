@@ -104,12 +104,12 @@ public sealed class TerrainTextureAnimationPlayModeTests
         Texture2D atlas = CreateTwoFrameAtlas();
         material.SetTexture("_TerrainAtlas0", atlas);
         material.SetTexture("_TerrainDecalAtlas", CreateSolidTexture(Color.clear));
-        material.SetTexture("_TerrainDecalStoneAtlas", CreateSolidTexture(Color.clear));
+        material.SetTexture("_TerrainDecalRockAtlas", CreateSolidTexture(Color.clear));
         material.SetTexture("_FlowMap", CreateSolidTexture(Color.gray));
         material.SetTexture("_PrismaticFlowMap", CreateSolidTexture(Color.gray));
         material.SetFloat("_AlphaCutoff", 0.01f);
         material.SetFloat("_GroundDecalStrength", 0f);
-        material.SetFloat("_StoneDecalStrength", 0f);
+        material.SetFloat("_RockDecalStrength", 0f);
 
         Mesh mesh = Own(CreateTerrainAnimationQuad());
         // Атлас 4×4 с двумя кадрами по половине высоты; тайл — полатласа.
@@ -186,12 +186,12 @@ public sealed class TerrainTextureAnimationPlayModeTests
         Texture2D lavaAtlas = CreateSolidTexture(new Color(0.9f, 0.12f, 0.015f, 1f));
         material.SetTexture("_TerrainAtlas0", lavaAtlas);
         material.SetTexture("_TerrainDecalAtlas", CreateSolidTexture(Color.clear));
-        material.SetTexture("_TerrainDecalStoneAtlas", CreateSolidTexture(Color.clear));
+        material.SetTexture("_TerrainDecalRockAtlas", CreateSolidTexture(Color.clear));
         material.SetTexture("_FlowMap", CreateSolidTexture(Color.gray));
         material.SetTexture("_PrismaticFlowMap", CreateSolidTexture(Color.gray));
         material.SetFloat("_AlphaCutoff", 0.01f);
         material.SetFloat("_GroundDecalStrength", 0f);
-        material.SetFloat("_StoneDecalStrength", 0f);
+        material.SetFloat("_RockDecalStrength", 0f);
 
         Mesh mesh = Own(CreateTerrainAnimationQuad());
         // Лава: профиль расплава, мировая клетка (4, 4) — фаза потока от неё.

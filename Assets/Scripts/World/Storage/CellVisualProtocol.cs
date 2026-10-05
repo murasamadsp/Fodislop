@@ -51,8 +51,7 @@ public sealed class LegacyCellVisualProtocol : ICellVisualProtocol
                     CellSurface.Prismatic => TerrainAnimationProfile.PrismaticCrystal,
                     _ => TerrainAnimationProfile.Default,
                 },
-                def.SurfacePalette,
-                def.StructurePart);
+                def.SurfacePalette);
         }
 
         return properties;

@@ -29,11 +29,8 @@ public readonly record struct BlockDefinition
 
     public CellShape Shape { get; init; } = CellShape.Flat;
 
-    // 5. Постройки и интерактивные зоны
-    public CellStructurePart StructurePart { get; init; } = CellStructurePart.None;
-
-    // 6. Карта
-    public string? MapColorHex { get; init; } = null;
+    // 5. Карта
+    public string? MapColorHEX { get; init; } = null;
 
     public BlockDefinition()
     {

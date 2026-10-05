@@ -162,7 +162,7 @@ public static class TerrainCellData
 
     // Правило декали
     private const int DecalSeedShift = 7;
-    private const uint DecalStoneFlag = 1u << 15;
+    private const uint DecalRockFlag = 1u << 15;
 
     public static TerrainCell PackCell(CellType foregroundType, CellType backgroundType) =>
         new((ushort)((byte)foregroundType | ((byte)backgroundType << BackgroundTypeShift)));
@@ -272,7 +272,7 @@ public static class TerrainCellData
 
         return rule.Percent |
             (rule.Seed << DecalSeedShift) |
-            (rule.StoneAtlas ? DecalStoneFlag : 0u);
+            (rule.RockAtlas ? DecalRockFlag : 0u);
     }
 
     // Доля свечения — дробная часть флагов света: шейдер складывает её с

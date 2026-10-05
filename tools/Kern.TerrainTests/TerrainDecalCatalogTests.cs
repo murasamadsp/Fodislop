@@ -14,8 +14,8 @@ public sealed class TerrainDecalCatalogTests
     // Семья — из cells.json. Камень — только красно- и черноскал: атлас
     // нарисован под их гамму.
     [TestCase(CellType.Empty, TerrainDecalFamily.Ground)]
-    [TestCase(CellType.RedRock, TerrainDecalFamily.Stone)]
-    [TestCase(CellType.BlackRock, TerrainDecalFamily.Stone)]
+    [TestCase(CellType.RedRock, TerrainDecalFamily.Rock)]
+    [TestCase(CellType.BlackRock, TerrainDecalFamily.Rock)]
     [TestCase(CellType.Rock, TerrainDecalFamily.None)]
     [TestCase(CellType.WhiteSand, TerrainDecalFamily.None)]
     [TestCase(CellType.Road, TerrainDecalFamily.None)]
@@ -27,13 +27,13 @@ public sealed class TerrainDecalCatalogTests
     }
 
     [Test]
-    public void GetSurfaceRule_GroundUnderEveryBackgroundAndStoneOnRedAndBlackRock()
+    public void GetSurfaceRule_GroundUnderEveryBackgroundAndRockOnRedAndBlackRock()
     {
         Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Empty, isBackground: false), Is.EqualTo(TerrainDecalCatalog.GroundRule));
         Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Rock, isBackground: true), Is.EqualTo(TerrainDecalCatalog.GroundRule));
         Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.RedRock, isBackground: true), Is.EqualTo(TerrainDecalCatalog.GroundRule));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.RedRock, isBackground: false), Is.EqualTo(TerrainDecalCatalog.StoneRule));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.BlackRock, isBackground: false), Is.EqualTo(TerrainDecalCatalog.StoneRule));
+        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.RedRock, isBackground: false), Is.EqualTo(TerrainDecalCatalog.RockRule));
+        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.BlackRock, isBackground: false), Is.EqualTo(TerrainDecalCatalog.RockRule));
         Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Rock, isBackground: false), Is.EqualTo(default(TerrainDecalRule)));
         Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Unloaded, isBackground: true), Is.EqualTo(default(TerrainDecalRule)));
     }
@@ -42,18 +42,18 @@ public sealed class TerrainDecalCatalogTests
     public void Place_IsDeterministicAndSparse()
     {
         int ground = 0;
-        int stone = 0;
+        int rock = 0;
         const int sampleSize = 4096;
         for (int i = 0; i < sampleSize; i++)
         {
-            int first = TerrainDecalCatalog.Place(TerrainDecalCatalog.StoneRule, i, i * 17);
-            Assert.That(TerrainDecalCatalog.Place(TerrainDecalCatalog.StoneRule, i, i * 17), Is.EqualTo(first));
+            int first = TerrainDecalCatalog.Place(TerrainDecalCatalog.RockRule, i, i * 17);
+            Assert.That(TerrainDecalCatalog.Place(TerrainDecalCatalog.RockRule, i, i * 17), Is.EqualTo(first));
             Assert.That(first == 0 || (first & 4096) != 0, Is.True, "камень — в своём атласе");
-            stone += first > 0 ? 1 : 0;
+            rock += first > 0 ? 1 : 0;
             ground += TerrainDecalCatalog.Place(TerrainDecalCatalog.GroundRule, i, i * 17) > 0 ? 1 : 0;
         }
 
-        Assert.That(stone, Is.InRange(sampleSize * 26 / 100, sampleSize * 34 / 100));
+        Assert.That(rock, Is.InRange(sampleSize * 26 / 100, sampleSize * 34 / 100));
         Assert.That(ground, Is.InRange(sampleSize * 20 / 100, sampleSize * 28 / 100));
     }
 
