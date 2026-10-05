@@ -45,7 +45,9 @@ namespace Kern.UI.HUD.Player.View
         private Kern.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
         private readonly PlayerHUDSkeletonPulse _skeletonPulse = new();
         private PlayerHUDModeController? _modeController;
+        private VisualElement? _hudContent;
         private TemplateContainer? _hudRoot;
+        private bool _isVisible = true;
 
         private Label? _nicknameLabel;
         private Label? _levelLabel;
@@ -107,6 +109,19 @@ namespace Kern.UI.HUD.Player.View
         public void EnsureInitialized()
         {
             TryStartInitialization();
+        }
+
+        public void SetVisible(bool visible)
+        {
+            _isVisible = visible;
+            if (_hudContent != null)
+            {
+                SetDisplayed(_hudContent, visible);
+            }
+            else if (_hudRoot != null)
+            {
+                SetDisplayed(_hudRoot, visible);
+            }
         }
 
         protected void Update()
@@ -314,6 +329,9 @@ namespace Kern.UI.HUD.Player.View
             UILayoutTier.Attach(tree);
             _hudRoot = tree;
             root.Add(tree);
+
+            _hudContent = tree.Q<VisualElement>("HUDContent") ?? _hudRoot;
+            SetDisplayed(_hudContent, _isVisible);
 
             UILocalizer.Apply(tree, _loc);
 

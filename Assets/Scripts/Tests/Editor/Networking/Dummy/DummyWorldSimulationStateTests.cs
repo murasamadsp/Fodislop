@@ -145,11 +145,11 @@ public sealed class DummyWorldSimulationStateTests
         BlockDefinition green = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Green);
         Assert.That(green.Passable, Is.False);
         Assert.That(green.Shape, Is.EqualTo(CellShape.Organic));
-        Assert.That(green.MapColorHex, Is.EqualTo("#08D764"));
+        Assert.That(green.MapColorHEX, Is.EqualTo("#08D764"));
 
         BlockDefinition road = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Road);
         Assert.That(road.Passable, Is.True);
-        Assert.That(road.MapColorHex, Is.EqualTo("#444444"));
+        Assert.That(road.MapColorHEX, Is.EqualTo("#444444"));
         Assert.That(road.DecalFamily, Is.EqualTo(TerrainDecalFamily.None));
 
         BlockDefinition buildingRoad = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.BuildingRoad);

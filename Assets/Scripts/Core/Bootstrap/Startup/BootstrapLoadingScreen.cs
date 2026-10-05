@@ -46,15 +46,34 @@ namespace Kern.Core
                 return;
             }
 
+            EnsureVisualElements();
+            _bootstrap.TransitionChanged += OnTransitionChanged;
+            _localization.RegisterLocalizable(this);
+            _initialized = true;
+            Hide();
+        }
+
+        private void EnsureVisualElements()
+        {
             UIDocument document = GetComponent<UIDocument>();
             document.sortingOrder = 200;
+            if (!document.enabled)
+            {
+                document.enabled = true;
+            }
+
+            VisualElement root = document.rootVisualElement;
+            if (_overlay != null && root.Contains(_overlay))
+            {
+                return;
+            }
+
+            root.Clear();
+            root.pickingMode = PickingMode.Ignore;
             VisualTreeAsset asset = Resources.Load<VisualTreeAsset>(
                 ProjectRuntimeContracts.ResourcePaths.BootstrapLoadingScreenUxml)
                 ?? throw new System.InvalidOperationException("Required UI resource 'UI/Menus/BootstrapLoadingScreen' was not found.");
 
-            VisualElement root = document.rootVisualElement;
-            root.Clear();
-            root.pickingMode = PickingMode.Ignore;
             VisualElement tree = asset.CloneTree();
             tree.AddToClassList("ui-fullscreen");
             tree.pickingMode = PickingMode.Ignore;
@@ -63,11 +82,6 @@ namespace Kern.Core
             UILocalizer.Apply(tree, _localization);
             _overlay = tree.Q<VisualElement>("BootstrapLoadingOverlay");
             _phase = tree.Q<Label>("BootstrapLoadingPhase");
-
-            _bootstrap.TransitionChanged += OnTransitionChanged;
-            _localization.RegisterLocalizable(this);
-            _initialized = true;
-            Hide();
         }
 
         public void ApplyLocalizedText()
@@ -106,19 +120,8 @@ namespace Kern.Core
                 case SceneTransitionPhase.StartupReady:
                 case SceneTransitionPhase.PresentationReady:
                 case SceneTransitionPhase.CleaningPrevious:
-                    // Промежуточные фазы экран не трогают: он уже показан и
-                    // ждёт терминальной. Ветки перечислены поимённо, а не
-                    // отброшены через default, чтобы новая фаза перечисления
-                    // ломала компиляцию здесь, а не оставляла экран висеть
-                    // навсегда, если окажется терминальной.
                     break;
                 default:
-                    // Только сообщение. Исключение оборвало бы сам переход
-                    // сцен, а слепой Hide убрал бы экран посреди загрузки,
-                    // показав недостроенную сцену. Обе терминальные фазы
-                    // перечислены выше, значит новая почти наверняка
-                    // промежуточная — для неё «ничего не делать» и есть
-                    // правильное поведение.
                     Debug.LogError(
                         $"[BootstrapLoadingScreen] Фаза перехода {status.Phase} не разобрана; " +
                         "если она терминальная, экран загрузки останется висеть. " +
@@ -129,9 +132,6 @@ namespace Kern.Core
 
         private void Show(string sceneName)
         {
-            // The MainMenu -> MainGame transition is owned entirely by the MainMenu
-            // descent screen and loader (LoaderContainer with descent animation & phase steps).
-            // Do not show the generic bootstrap overlay over it.
             if (string.Equals(
                     sceneName,
                     ProjectRuntimeContracts.SceneNames.MainGame,
@@ -141,14 +141,10 @@ namespace Kern.Core
                 return;
             }
 
+            EnsureVisualElements();
             if (_phase != null)
             {
                 _phase.text = $"{_localization.Get("network.connecting")} {sceneName}";
-            }
-
-            if (TryGetComponent<UIDocument>(out var doc) && !doc.enabled)
-            {
-                doc.enabled = true;
             }
 
             UIState.Show(_overlay);
@@ -165,20 +161,11 @@ namespace Kern.Core
             {
                 _overlay.pickingMode = PickingMode.Ignore;
             }
-
-            if (TryGetComponent<UIDocument>(out var doc) && doc.enabled)
-            {
-                doc.enabled = false;
-            }
         }
 
         public void ShowDirect(string message)
         {
-            if (TryGetComponent<UIDocument>(out var doc) && !doc.enabled)
-            {
-                doc.enabled = true;
-            }
-
+            EnsureVisualElements();
             if (_phase != null)
             {
                 _phase.text = message;
@@ -193,6 +180,7 @@ namespace Kern.Core
 
         public void SetPhaseText(string message)
         {
+            EnsureVisualElements();
             if (_phase != null)
             {
                 _phase.text = message;

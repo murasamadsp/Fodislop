@@ -31,9 +31,53 @@ namespace Kern.AssetPipeline
             new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, string> _resolvedPathsCache =
             new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, byte[]> _rawBytesCache =
+            new(StringComparer.OrdinalIgnoreCase);
 
         private string? _textureFolderPath;
         private bool _folderInitialized;
+
+        private void StoreInRawBytesCache(string normalizedFilename, byte[] bytes, string? fullPath = null)
+        {
+            _rawBytesCache[normalizedFilename] = bytes;
+
+            string ext = Path.GetExtension(normalizedFilename);
+            if (!string.IsNullOrEmpty(ext))
+            {
+                string withoutExt = normalizedFilename.Substring(0, normalizedFilename.Length - ext.Length);
+                _rawBytesCache.TryAdd(withoutExt, bytes);
+            }
+            else if (!string.IsNullOrEmpty(fullPath))
+            {
+                string fullExt = Path.GetExtension(fullPath);
+                if (!string.IsNullOrEmpty(fullExt))
+                {
+                    string withExt = normalizedFilename + fullExt;
+                    _rawBytesCache.TryAdd(withExt, bytes);
+                }
+            }
+        }
+
+        private void StoreInTextureCache(string normalizedFilename, Texture2D texture)
+        {
+            _textureCache[normalizedFilename] = texture;
+
+            string ext = Path.GetExtension(normalizedFilename);
+            if (!string.IsNullOrEmpty(ext))
+            {
+                string withoutExt = normalizedFilename.Substring(0, normalizedFilename.Length - ext.Length);
+                _textureCache.TryAdd(withoutExt, texture);
+            }
+            else if (_resolvedPathsCache.TryGetValue(normalizedFilename, out string? fullPath) && !string.IsNullOrEmpty(fullPath))
+            {
+                string fullExt = Path.GetExtension(fullPath);
+                if (!string.IsNullOrEmpty(fullExt))
+                {
+                    string withExt = normalizedFilename + fullExt;
+                    _textureCache.TryAdd(withExt, texture);
+                }
+            }
+        }
 
         /// <param name="filename">The texture filename (e.g. "cells/1.png", "clan/4.png").</param>
         /// <returns>Loaded Texture2D.</returns>
@@ -101,6 +145,7 @@ namespace Kern.AssetPipeline
                     normalizedFilename,
                     texture);
                 cacheOwnsTexture = ReferenceEquals(storedTexture, texture);
+                StoreInTextureCache(normalizedFilename, storedTexture);
                 return storedTexture;
             }
             finally
@@ -144,6 +189,12 @@ namespace Kern.AssetPipeline
             CancellationToken cancellationToken = default)
         {
             string normalizedFilename = NormalizeRelativeTexturePath(filename);
+
+            if (_rawBytesCache.TryGetValue(normalizedFilename, out byte[]? cachedBytes))
+            {
+                return cachedBytes;
+            }
+
             if (!_folderInitialized)
             {
                 InitializeTextureFolderPath();
@@ -201,13 +252,14 @@ namespace Kern.AssetPipeline
                 offset += bytesRead;
             }
 
+            StoreInRawBytesCache(normalizedFilename, buffer, fullPath);
             return buffer;
         }
 
         private string? ResolveTextureFullPath(string filename)
         {
             string normalizedFilename = NormalizeRelativeTexturePath(filename);
-            return _runtimeAssetPaths.FindTextureFile(normalizedFilename);
+            return _runtimeAssetPaths?.FindTextureFile(normalizedFilename);
         }
 
         private static string NormalizeRelativeTexturePath(string filename)
@@ -244,7 +296,7 @@ namespace Kern.AssetPipeline
 
         private void InitializeTextureFolderPath()
         {
-            if (_folderInitialized)
+            if (_folderInitialized || _runtimeAssetPaths == null)
             {
                 return;
             }
@@ -266,6 +318,7 @@ namespace Kern.AssetPipeline
             // must not invalidate those live Unity objects.
             _textureCache.Clear();
             _resolvedPathsCache.Clear();
+            _rawBytesCache.Clear();
 
             if (_enableDebugLogging)
             {
@@ -277,20 +330,141 @@ namespace Kern.AssetPipeline
         {
             ClearCache();
         }
+
         public bool HasTexture(string filename)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                return false;
+            }
+
+            string normalizedFilename;
+            try
+            {
+                normalizedFilename = NormalizeRelativeTexturePath(filename);
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (_rawBytesCache.ContainsKey(normalizedFilename) || _textureCache.ContainsKey(normalizedFilename))
+            {
+                return true;
+            }
+
             if (!_folderInitialized)
             {
                 InitializeTextureFolderPath();
             }
 
-            var path = ResolveTextureFullPath(filename);
+            var path = ResolveTextureFullPath(normalizedFilename);
             return !string.IsNullOrEmpty(path) && File.Exists(path);
+        }
+
+        public async UniTask PreloadTexturesAsync(
+            IReadOnlyList<string> filenames,
+            CancellationToken cancellationToken = default)
+        {
+            if (filenames == null || filenames.Count == 0)
+            {
+                return;
+            }
+
+            if (!_folderInitialized)
+            {
+                InitializeTextureFolderPath();
+            }
+
+            var toDecode = new List<(string Name, byte[] Data)>();
+
+            foreach (string filename in filenames)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (string.IsNullOrWhiteSpace(filename))
+                {
+                    continue;
+                }
+
+                string normalized;
+                try
+                {
+                    normalized = NormalizeRelativeTexturePath(filename);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (_rawBytesCache.TryGetValue(normalized, out byte[]? cachedBytes))
+                {
+                    if (!_textureCache.ContainsKey(normalized))
+                    {
+                        toDecode.Add((normalized, cachedBytes));
+                    }
+
+                    continue;
+                }
+
+                byte[]? data = await LoadTextureFromStorage(normalized, cancellationToken);
+                if (data != null && data.Length > 0 && !_textureCache.ContainsKey(normalized))
+                {
+                    toDecode.Add((normalized, data));
+                }
+            }
+
+            if (toDecode.Count == 0 || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await UniTask.SwitchToMainThread(cancellationToken);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            const long frameBudgetMs = 4;
+
+            for (int i = 0; i < toDecode.Count; i++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                var (texName, rawBytes) = toDecode[i];
+                if (_textureCache.ContainsKey(texName))
+                {
+                    continue;
+                }
+
+                Texture2D texture;
+                using (s_decodeMarker.Auto())
+                {
+                    texture = DecodeTexture(texName, rawBytes);
+                }
+
+                texture.name = texName;
+                RuntimeTextureFactory.ApplySampling(
+                    texture,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+
+                StoreInTextureCache(texName, texture);
+
+                if (stopwatch.ElapsedMilliseconds >= frameBudgetMs && !Application.isBatchMode)
+                {
+                    await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+                    stopwatch.Restart();
+                }
+            }
         }
 
         public string GetCacheStats()
         {
-            return $"Texture Cache: {_textureCache.Count} entries, Folder: {_textureFolderPath}";
+            return $"Texture Cache: {_textureCache.Count} textures, {_rawBytesCache.Count} raw entries, Folder: {_textureFolderPath}";
         }
     }
 }

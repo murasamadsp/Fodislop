@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "com.fmod.fmod-for-unity-2-03": "2.3.14",
+    "com.fmod.fmod-for-unity-2-03": "file:com.fmod.fmod-for-unity-2-03",
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.ide.rider": "3.0.40",
     "com.unity.inputsystem": "1.20.0",

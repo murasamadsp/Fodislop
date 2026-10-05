@@ -32,20 +32,15 @@ namespace Kern.UI.Inventory
         // Цифровые клавиши 1–9 выбирают предмет по позиции в OrderedTypes.
         private const int NUM_ORDERED_SELECT_KEYS = 9;
 
-        [Inject]
-        private UIDocument _doc = null!;
-        [Inject]
-        private IInventoryModel _model = null!;
-        [Inject]
-        private IItemCatalog _catalog = null!;
-        [Inject]
-        private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
-        [Inject]
-        private ILocalizationService _loc = null!;
-        [Inject]
-        private UIInputManager _uiInput = null!;
+        [Inject] private UIDocument _doc = null!;
+        [Inject] private IInventoryModel _model = null!;
+        [Inject] private IItemCatalog _catalog = null!;
+        [Inject] private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        [Inject] private ILocalizationService _loc = null!;
+        [Inject] private UIInputManager _uiInput = null!;
 
         private readonly Dictionary<ItemType, List<VisualElement>> _cellElements = new();
+        private TemplateContainer? _inventoryRoot;
         private Button? _inventoryButton;
         private VisualElement? _hotbarSlots;
         private VisualElement? _fullSlots;
@@ -53,6 +48,14 @@ namespace Kern.UI.Inventory
         private bool _isInventoryOpen;
         private InventoryTooltipController? _tooltipController;
         private bool _initialized;
+
+        public void SetVisible(bool visible)
+        {
+            if (_inventoryRoot != null)
+            {
+                _inventoryRoot.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+        }
 
         protected void Start()
         {
@@ -240,6 +243,7 @@ namespace Kern.UI.Inventory
             if (uxml != null)
             {
                 TemplateContainer tree = uxml.Instantiate();
+                _inventoryRoot = tree;
                 tree.AddToClassList("ui-fullscreen");
                 tree.pickingMode = PickingMode.Ignore;
                 root.Add(tree);

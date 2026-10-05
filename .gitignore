@@ -36,6 +36,7 @@ Generated\ Files/
 [Bb]uild[Ll]og.*
 *.VisualState.xml
 TestResult.xml
+test-results*.xml
 nunit-*.xml
 [Dd]ebugPS/
 [Rr]eleasePS/

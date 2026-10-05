@@ -38,7 +38,8 @@ public sealed class PacketHandler(
     MissionProcessor mission,
     MissionArrowProcessor missionArrow,
     ConnectionProcessor connection,
-    AuthTokenProcessor authToken) : IStartable, IDisposable
+    AuthTokenProcessor authToken,
+    ClientConfigProcessor clientConfig) : IStartable, IDisposable
 {
     private readonly INetworkService _networkService = networkService;
     private readonly WorldInitProcessor _worldInit = worldInit;
@@ -57,6 +58,7 @@ public sealed class PacketHandler(
     private readonly MissionArrowProcessor _missionArrow = missionArrow;
     private readonly ConnectionProcessor _connection = connection;
     private readonly AuthTokenProcessor _authToken = authToken;
+    private readonly ClientConfigProcessor _clientConfig = clientConfig;
     private readonly List<Action> _unsubscribers = [];
 
     public bool IsSubscribed { get; private set; }
@@ -142,6 +144,7 @@ public sealed class PacketHandler(
         On<AuthTokenPacket>(_authToken.Process);
         On<OpenURLPacket>(packet => ExternalUrlOpener.TryOpen(packet.URL, nameof(PacketHandler)));
         On<MissionArrowPacket>(_missionArrow.Process);
+        On<ClientConfigPacket>(_clientConfig.Process);
 
         IsSubscribed = true;
     }

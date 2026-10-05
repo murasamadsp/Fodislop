@@ -55,6 +55,7 @@ namespace Kern.Core
         [SerializeField] private Volume _postProcessVolume = null!;
         [SerializeField] private PlayerMovementController _playerMovement = null!;
         [SerializeField] private List<ManagerBinding> _managerBindings = new();
+        private bool _isGameUIActive = true;
 
         public Transform ServicesRoot => _servicesRoot;
         public IReadOnlyList<ManagerBinding> ManagerBindings => _managerBindings;
@@ -153,6 +154,7 @@ namespace Kern.Core
             builder.Register<ConnectionProcessor>(Lifetime.Singleton);
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
+            builder.Register<ClientConfigProcessor>(Lifetime.Singleton);
             builder.RegisterEntryPoint<GameManager>().AsSelf();
             RegisterManager<VFXPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
             builder.Register<BuildingManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
@@ -274,21 +276,18 @@ namespace Kern.Core
                   Keyboard.current.leftCommandKey.isPressed || Keyboard.current.rightCommandKey.isPressed) &&
                  Keyboard.current.uKey.wasPressedThisFrame))
             {
-                SetGameUIActive(!_uiDocument.enabled);
+                SetGameUIActive(!_isGameUIActive);
             }
         }
 
         public void SetGameUIActive(bool active)
         {
-            if (_uiDocument != null)
-            {
-                if (_uiDocument.rootVisualElement != null)
-                {
-                    _uiDocument.rootVisualElement.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
-                    _uiDocument.rootVisualElement.pickingMode = active ? PickingMode.Position : PickingMode.Ignore;
-                }
+            _isGameUIActive = active;
 
-                _uiDocument.enabled = active;
+            if (_uiDocument != null && _uiDocument.rootVisualElement != null)
+            {
+                _uiDocument.rootVisualElement.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+                _uiDocument.rootVisualElement.pickingMode = active ? PickingMode.Position : PickingMode.Ignore;
             }
 
             if (_floatingUIRoot != null)

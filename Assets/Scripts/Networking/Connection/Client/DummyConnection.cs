@@ -61,7 +61,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         IRuntimeDebugSettings debugSettings,
         IOfflineScenarioSettings scenarioSettings,
         DummyWorldMapSource worldMaps,
-        IDummyClock clock)
+        IDummyClock clock,
+        IRuntimeAssetPaths? assetPaths = null)
         : this(
             textureStorage,
             itemCatalog,
@@ -70,7 +71,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             scenarioSettings,
             (IDummyWorldMapSource)worldMaps,
             new DummyTokenStore(),
-            clock)
+            clock,
+            assetPaths)
     {
     }
 
@@ -82,7 +84,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         IOfflineScenarioSettings scenarioSettings,
         IDummyWorldMapSource worldMaps,
         DummyTokenStore tokenStore,
-        IDummyClock clock)
+        IDummyClock clock,
+        IRuntimeAssetPaths? assetPaths = null)
     {
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _textureStorage = textureStorage;
@@ -179,7 +182,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _teleportPositions,
             SendPacket,
             LoopAlive,
-            _blockSpawner);
+            _blockSpawner,
+            assetPaths);
     }
 
     private string PlayerName => _authSession.PlayerName;

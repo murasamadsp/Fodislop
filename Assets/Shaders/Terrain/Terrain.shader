@@ -707,32 +707,45 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     clip(-1.0);
                 }
 
-                float2 opacityCellPosition = geometryDistance < 0.0
-                    ? closestGeometryPosition
-                    : surface.cellSample;
-                int atlasSlot = (int)round(input.atlasIndex);
-                float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(atlasSlot);
-                float2 geometryTileUv = TerrainResolveGeometryTileUV(
-                    input.uv,
-                    opacityCellPosition,
-                    input.geometryCornersX,
-                    input.geometryCornersY,
-                    input.uvBits,
-                    input.packedData.x);
-                half4 albedoTexel = SampleTerrainLightingFieldAlbedoTexel(
-                    geometryTileUv,
-                    opacityCellPosition,
-                    input.subAtlasRect,
-                    input.tileSizeUV,
-                    input.worldPos,
-                    input.animData,
-                    input.packedData,
-                    atlasSlot,
-                    atlasTexelSize,
-                    carrierPixelWidth);
-                if (albedoTexel.a < _AlphaCutoff)
+                bool hasVariableGeometry = surface.anchored > 0.5;
+                bool isAnimated = surface.animationProfile != 0 ||
+                    input.animData.x > 0.5 ||
+                    input.tileSizeUV.z > 1.5;
+                // Блоки с переменной геометрией и анимацией непрозрачны по
+                // физической массе. На границе клетки (или при выносе точки в
+                // несущий паддинг AO) выборка атласа на нулевом времени срывается
+                // в прозрачный тексель из-за оборачивания координат листа,
+                // что срубает внешний спад AO. Пропускаем альфа-тест для таких блоков.
+                bool skipAlphaClip = hasVariableGeometry && isAnimated;
+                if (!skipAlphaClip)
                 {
-                    clip(-1.0);
+                    float2 opacityCellPosition = geometryDistance < 0.0
+                        ? closestGeometryPosition
+                        : surface.cellSample;
+                    int atlasSlot = (int)round(input.atlasIndex);
+                    float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(atlasSlot);
+                    float2 geometryTileUv = TerrainResolveGeometryTileUV(
+                        input.uv,
+                        opacityCellPosition,
+                        input.geometryCornersX,
+                        input.geometryCornersY,
+                        input.uvBits,
+                        input.packedData.x);
+                    half4 albedoTexel = SampleTerrainLightingFieldAlbedoTexel(
+                        geometryTileUv,
+                        opacityCellPosition,
+                        input.subAtlasRect,
+                        input.tileSizeUV,
+                        input.worldPos,
+                        input.animData,
+                        input.packedData,
+                        atlasSlot,
+                        atlasTexelSize,
+                        carrierPixelWidth);
+                    if (albedoTexel.a < _AlphaCutoff)
+                    {
+                        clip(-1.0);
+                    }
                 }
 
                 float contact = 1.0 - smoothstep(

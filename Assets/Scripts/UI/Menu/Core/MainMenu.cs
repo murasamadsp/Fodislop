@@ -92,6 +92,10 @@ namespace Kern.UI
 
                 _root = doc.rootVisualElement;
                 _root.pickingMode = PickingMode.Ignore;
+                if (!_root.Contains(_tree))
+                {
+                    _root.Add(_tree);
+                }
                 SubscribeEvents();
                 SubscribeWindowVisibility();
                 _sceneryPresenter.Bind(_tree);

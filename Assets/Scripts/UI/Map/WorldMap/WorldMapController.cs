@@ -204,8 +204,8 @@ namespace Kern.UI
 
         private void SetHudVisible(bool visible)
         {
-            _playerHud.enabled = visible;
-            _inventory.enabled = visible;
+            _playerHud.SetVisible(visible);
+            _inventory.SetVisible(visible);
         }
     }
 }

@@ -1,0 +1,155 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using Kern.Audio.Core;
+using Kern.Core.Interfaces;
+using Kern.Networking.Processors;
+using MinesServer.Data;
+using MinesServer.Networking.Server.Packets.Information;
+using MinesServer.Networking.Shared.Packets;
+using NUnit.Framework;
+using UnityEngine;
+
+namespace Kern.Tests.Networking;
+
+[TestFixture]
+public class ClientConfigProcessorTests
+{
+    private StubTextureStorageService _textureStorage = null!;
+    private StubAsyncOperationSupervisor _supervisor = null!;
+    private StubAudioSystem _audio = null!;
+    private ClientConfigProcessor _processor = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _textureStorage = new StubTextureStorageService();
+        _supervisor = new StubAsyncOperationSupervisor();
+        _audio = new StubAudioSystem();
+        _processor = new ClientConfigProcessor(_textureStorage, _supervisor, _audio);
+    }
+
+    [Test]
+    public void Process_SoundConfig_SetsBusVolumes()
+    {
+        var soundConfig = new SoundConfigPacket(
+            128,
+            new Dictionary<string, byte>
+            {
+                ["sfx"] = 200,
+                ["music"] = 100,
+            });
+        var packet = new ClientConfigPacket(
+            soundConfig,
+            RendererMode.Default,
+            Array.Empty<StringPairPacket>(),
+            Array.Empty<string>());
+
+        _processor.Process(packet);
+
+        Assert.That(_audio.BusVolumes[AudioBusType.Master], Is.EqualTo(128 / 255f).Within(0.001f));
+        Assert.That(_audio.BusVolumes[AudioBusType.SFX], Is.EqualTo(200 / 255f).Within(0.001f));
+        Assert.That(_audio.BusVolumes[AudioBusType.Music], Is.EqualTo(100 / 255f).Within(0.001f));
+    }
+
+    [Test]
+    public void Process_UnrenderedTextures_RunsPreloadOperation()
+    {
+        var packet = new ClientConfigPacket(
+            new SoundConfigPacket(255, new Dictionary<string, byte>()),
+            RendererMode.Default,
+            Array.Empty<StringPairPacket>(),
+            ["Cells/1.png", "Cells/2.png", "Skin/bee.png"]);
+
+        _processor.Process(packet);
+
+        Assert.That(_supervisor.LastOperationName, Is.EqualTo("preload_textures"));
+        Assert.That(_textureStorage.PreloadedLists.Count, Is.EqualTo(1));
+        Assert.That(_textureStorage.PreloadedLists[0], Is.EquivalentTo(new[] { "Cells/1.png", "Cells/2.png", "Skin/bee.png" }));
+    }
+
+    [Test]
+    public void Process_EmptyTextures_DoesNotRunPreload()
+    {
+        var packet = new ClientConfigPacket(
+            new SoundConfigPacket(255, new Dictionary<string, byte>()),
+            RendererMode.Default,
+            Array.Empty<StringPairPacket>(),
+            Array.Empty<string>());
+
+        _processor.Process(packet);
+
+        Assert.That(_supervisor.LastOperationName, Is.Null);
+        Assert.That(_textureStorage.PreloadedLists.Count, Is.EqualTo(0));
+    }
+
+    private sealed class StubTextureStorageService : ITextureStorageService
+    {
+        public List<IReadOnlyList<string>> PreloadedLists { get; } = new();
+
+        public event Action<string> OnTextureLoaded
+        {
+            add { }
+            remove { }
+        }
+
+        public bool HasTexture(string filename) => false;
+
+        public UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default) =>
+            UniTask.FromResult<Texture2D?>(null);
+
+        public UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default) =>
+            UniTask.FromResult<byte[]?>(null);
+
+        public UniTask PreloadTexturesAsync(IReadOnlyList<string> filenames, CancellationToken cancellationToken = default)
+        {
+            PreloadedLists.Add(filenames);
+            return UniTask.CompletedTask;
+        }
+    }
+
+    private sealed class StubAsyncOperationSupervisor : IAsyncOperationSupervisor
+    {
+        public string? LastOperationName { get; private set; }
+        public int ActiveCount => 0;
+
+        public void Run(string operationName, Func<CancellationToken, UniTask> operation)
+        {
+            LastOperationName = operationName;
+            operation(CancellationToken.None).Forget();
+        }
+
+        public UniTask StopAsync(CancellationToken cancellationToken = default) => UniTask.CompletedTask;
+    }
+
+    private sealed class StubAudioSystem : IAudioSystem
+    {
+        public Dictionary<AudioBusType, float> BusVolumes { get; } = new();
+
+        public bool IsInitialized => true;
+        public bool IsDegraded => false;
+
+        public IAudioPlaybackHandle? Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null) => null;
+        public IAudioPlaybackHandle? PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null) => null;
+        public IAudioPlaybackHandle? PlayAt(string eventName, Vector3 worldPosition, AudioLayer? layer = null, float? volume = null) => null;
+        public IAudioPlaybackHandle? Play2D(string eventName, AudioLayer? layer = null, float? volume = null) => null;
+
+        public float GetBusVolume(AudioBusType type) =>
+            BusVolumes.TryGetValue(type, out float vol) ? vol : 1f;
+
+        public void SetBusVolume(AudioBusType type, float volume)
+        {
+            BusVolumes[type] = volume;
+        }
+
+        public void StopBus(AudioBusType type, float fadeOut = 0f)
+        {
+        }
+
+        public UniTask WaitUntilBanksReadyAsync(CancellationToken cancellationToken = default) =>
+            UniTask.CompletedTask;
+    }
+}

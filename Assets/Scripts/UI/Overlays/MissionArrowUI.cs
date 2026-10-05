@@ -83,7 +83,7 @@ namespace Kern.UI
             }
 
             VisualElement root = _doc.rootVisualElement;
-            VisualElement? layoutRoot = root.Q("PlayerHUDRoot");
+            VisualElement? layoutRoot = root.Q("HUDContent") ?? root.Q("PlayerHUDRoot");
             if (layoutRoot == null)
             {
                 if (!_layoutSubscriptionActive)

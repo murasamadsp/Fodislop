@@ -10,6 +10,14 @@
     bottom: 0;
 }
 
+.hud-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
 .hud-top-pill-container {
     position: absolute;
     top: var(--space-4);
