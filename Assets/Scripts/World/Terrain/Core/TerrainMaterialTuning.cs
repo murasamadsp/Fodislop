@@ -23,8 +23,8 @@ internal static class TerrainMaterialTuning
         Shader.PropertyToID("_ReliefRimFalloff");
     private static readonly int s_groundDecalStrengthPropertyId =
         Shader.PropertyToID("_GroundDecalStrength");
-    private static readonly int s_stoneDecalStrengthPropertyId =
-        Shader.PropertyToID("_StoneDecalStrength");
+    private static readonly int s_rockDecalStrengthPropertyId =
+        Shader.PropertyToID("_RockDecalStrength");
     private static readonly int s_decalPlacementOffsetPropertyId =
         Shader.PropertyToID("_DecalPlacementOffset");
     private static readonly int s_terrainDebugDeltaContrastPropertyId =
@@ -95,7 +95,7 @@ internal static class TerrainMaterialTuning
             s_reliefRimFalloffPropertyId,
             TerrainConfigHolder.ReliefRimFalloff);
         material.SetFloat(s_groundDecalStrengthPropertyId, TerrainConfigHolder.GroundDecalStrength);
-        material.SetFloat(s_stoneDecalStrengthPropertyId, TerrainConfigHolder.StoneDecalStrength);
+        material.SetFloat(s_rockDecalStrengthPropertyId, TerrainConfigHolder.RockDecalStrength);
         material.SetFloat(s_decalPlacementOffsetPropertyId, TerrainConfigHolder.DecalPlacementOffset);
         material.SetFloat(
             s_terrainDebugDeltaContrastPropertyId,

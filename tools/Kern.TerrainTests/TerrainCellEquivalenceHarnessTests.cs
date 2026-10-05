@@ -56,7 +56,7 @@ public sealed class TerrainCellEquivalenceHarnessTests
             type => world.Rows[type],
             TerrainCellData.PackTileDescriptors(),
             TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule),
-            TerrainCellData.PackDecal(TerrainDecalCatalog.StoneRule),
+            TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule),
             WorldHeight,
             style == TerrainDistortionStyle.Organic,
             TerrainConfigHolder.OrganicEdgeHorizontalSeed,
@@ -129,7 +129,7 @@ public sealed class TerrainCellEquivalenceHarnessTests
         writer.Write(TerrainConfigHolder.OrganicEdgeHorizontalSeed);
         writer.Write(TerrainConfigHolder.OrganicEdgeVerticalSeed);
         writer.Write(TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule));
-        writer.Write(TerrainCellData.PackDecal(TerrainDecalCatalog.StoneRule));
+        writer.Write(TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule));
         writer.Write(OriginX);
         writer.Write(OriginY);
         writer.Write(ringWidth);

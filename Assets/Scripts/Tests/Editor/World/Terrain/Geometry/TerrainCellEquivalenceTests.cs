@@ -83,7 +83,7 @@ public sealed class TerrainCellEquivalenceTests
             type => rows[type],
             TerrainCellData.PackTileDescriptors(),
             TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule),
-            TerrainCellData.PackDecal(TerrainDecalCatalog.StoneRule),
+            TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule),
             TerrainTestWorld.WorldHeight,
             style == TerrainDistortionStyle.Organic,
             TerrainConfigHolder.OrganicEdgeHorizontalSeed,

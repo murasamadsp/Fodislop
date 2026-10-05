@@ -25,7 +25,7 @@ public interface ITextureService
     Texture2D? PrismaticFlowMapTexture { get; }
     Texture2D? FlowMapTexture { get; }
     Texture2D? TerrainDecalAtlasTexture { get; }
-    Texture2D? TerrainDecalStoneAtlasTexture { get; }
+    Texture2D? TerrainDecalRockAtlasTexture { get; }
     IReadOnlyList<IAtlasDescriptor> GetAllAtlases();
     string GetCacheStats();
     void FlushDirtyAtlases();

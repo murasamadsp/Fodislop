@@ -2,15 +2,12 @@
 
 using System.Collections.Generic;
 using MinesServer.Data;
-using UnityEngine;
 
 namespace Kern.Networking.Buildings
 {
     public sealed class NC : PackBuilding
     {
         public override PackType Type => PackType.Science;
-
-        public override Vector2 RoofCenterOffsetCells => new(0f, 1f);
 
         public override IEnumerable<((int X, int Y) Pos, CellType Cell)> CellsToPlace()
         {

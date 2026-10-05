@@ -22,7 +22,8 @@ reads (at most 28), the ID-mesh corner index order, and the real
 (`ExportWorldsForHlslShim`): every vertex attribute must equal the frozen CPU
 reference (`TerrainQuadBuilder.FillQuad` in the test tree), including the
 view-offset and door-overlay addresses. Shader mutations of the relief,
-occlusion, pack-wall, node jitter sign and organic noise rounding rules must fail, displaced autotile UV continuity at a shared
+occlusion, pack-wall, node jitter sign, organic noise rounding and round-block
+rim rules must fail (the round-block rim must follow the round silhouette), displaced autotile UV continuity at a shared
 edge, and contact AO shape sensitivity at
 8/16/32/64 texels per cell. It verifies AO carrier padding and checks the
 signed-distance edge helper against axis-aligned and diagonal distance oracles.

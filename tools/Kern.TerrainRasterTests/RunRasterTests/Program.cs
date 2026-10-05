@@ -15,6 +15,7 @@ internal static class Program
         "wall-variant-ignores-bottom",
         "node-edge-jitter-sign",
         "organic-noise-truncates",
+        "round-rim-follows-cell-sides",
     ];
 
     public static int Main()
@@ -165,6 +166,7 @@ internal static class Program
                 string candidateLoader = loader;
                 string candidateGeometry = terrainGeometry;
                 string candidateAo = ao;
+                string candidateRim = rim;
 
                 if (mutation == "double-quantize-fragments")
                 {
@@ -214,6 +216,15 @@ internal static class Program
                     if (candidateLoader == loader) return Fail($"{mutation} mutation is stale");
                 }
 
+                if (mutation == "round-rim-follows-cell-sides")
+                {
+                    candidateRim = candidateRim.Replace(
+                        "    if (KernTerrainIsRoundable(surface.packedContour))\n    {\n        // У круглого блока",
+                        "    if (false)\n    {\n        // У круглого блока",
+                        StringComparison.Ordinal);
+                    if (candidateRim == rim) return Fail("round-rim-follows-cell-sides mutation is stale");
+                }
+
                 if (mutation == "ao-flat-contact")
                 {
                     candidateAo = candidateAo.Replace("contact * _TerrainAmbientOcclusionStrength", "_TerrainAmbientOcclusionStrength", StringComparison.Ordinal);
@@ -234,7 +245,7 @@ internal static class Program
                     .Replace("SamplerState", "int", StringComparison.Ordinal);
                 string source = shim + extra + aoShim + terrainUniforms + Translate(
                     terrainGeometryContract + candidateGeometry + candidateLoader + lighting +
-                    contour + quantizeUv + rim + terrainGeometryUv + candidateAo) + scenario;
+                    contour + quantizeUv + candidateRim + terrainGeometryUv + candidateAo) + scenario;
                 File.WriteAllText(cppPath, source);
 
                 ProcessResult compile = Run("clang++", ["-std=c++20", "-O2", "-ffp-contract=off", cppPath, "-o", executablePath], temporaryDirectory);

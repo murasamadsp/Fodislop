@@ -51,7 +51,7 @@ namespace Kern.World
         public Texture2D? PrismaticFlowMapTexture => _auxiliaryAssets.PrismaticFlowMapTexture;
         public Texture2D? FlowMapTexture => _auxiliaryAssets.FlowMapTexture;
         public Texture2D? TerrainDecalAtlasTexture => _auxiliaryAssets.TerrainDecalAtlasTexture;
-        public Texture2D? TerrainDecalStoneAtlasTexture => _auxiliaryAssets.TerrainDecalStoneAtlasTexture;
+        public Texture2D? TerrainDecalRockAtlasTexture => _auxiliaryAssets.TerrainDecalRockAtlasTexture;
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
         private readonly CellTextureRetryTracker _retryTracker = new();
         private readonly SemaphoreSlim _textureLoadSlots = new(

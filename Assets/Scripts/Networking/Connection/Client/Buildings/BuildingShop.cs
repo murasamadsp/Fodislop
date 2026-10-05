@@ -2,14 +2,11 @@
 
 using System.Collections.Generic;
 using MinesServer.Data;
-using UnityEngine;
 
 namespace Kern.Networking.Buildings;
 public sealed class BuildingShop : PackBuilding
 {
     public override PackType Type => PackType.BombShop;
-
-    public override Vector2 RoofCenterOffsetCells => new(0f, 0f);
 
     public override IEnumerable<((int X, int Y) Pos, CellType Cell)> CellsToPlace()
     {

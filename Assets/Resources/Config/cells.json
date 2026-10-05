@@ -6,7 +6,6 @@
     "surface": "Plain",
     "decalFamily": "Ground",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#000000"
   },
   "BackgroundWithLightTraces": {
@@ -16,7 +15,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#0F0B03"
   },
   "BackgroundWithHeavyTraces": {
@@ -26,7 +24,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#1D1912"
   },
   "Road": {
@@ -36,7 +33,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#444444"
   },
   "GoldenRoad": {
@@ -46,7 +42,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#554422"
   },
   "PolymerRoad": {
@@ -56,7 +51,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#3C4854"
   },
   "BuildingRoad": {
@@ -66,7 +60,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Road",
     "mapColorHex": "#383430"
   },
   "VolcanoBackground": {
@@ -76,7 +69,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#280C06"
   },
   "Gate": {
@@ -86,7 +78,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#441111"
   },
   "TeleportBlock": {
@@ -96,17 +87,15 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#328798"
   },
   "BuildingDoor": {
     "passable": true,
     "emitsLight": false,
-    "shape": "Square",
+    "shape": "Door",
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Door",
     "mapColorHex": "#440000"
   },
   "WhiteSand": {
@@ -116,7 +105,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#CCCCCC"
   },
   "DarkWhiteSand": {
@@ -126,7 +114,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#DDDDDD"
   },
   "RustySand": {
@@ -136,7 +123,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#FFCCCC"
   },
   "DarkRustySand": {
@@ -146,7 +132,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#FFDDDD"
   },
   "BlackSand": {
@@ -156,7 +141,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#AAAAAA"
   },
   "DarkBlackSand": {
@@ -166,7 +150,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#BBBBBB"
   },
   "BlueSand": {
@@ -176,7 +159,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#70A0B7"
   },
   "DarkBlueSand": {
@@ -186,7 +168,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#70BBCF"
   },
   "YellowSand": {
@@ -196,7 +177,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#DBD17D"
   },
   "DarkYellowSand": {
@@ -206,7 +186,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#B5A839"
   },
   "MilitaryBlockSand": {
@@ -216,7 +195,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#116666"
   },
   "Boulder1": {
@@ -226,7 +204,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#C1BBBB"
   },
   "Boulder2": {
@@ -236,7 +213,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#BBC1BB"
   },
   "Boulder3": {
@@ -246,7 +222,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#BBBBC1"
   },
   "BlackBoulder1": {
@@ -256,7 +231,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#FF616B"
   },
   "BlackBoulder2": {
@@ -266,7 +240,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#FF6B61"
   },
   "BlackBoulder3": {
@@ -276,7 +249,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#FF6B6B"
   },
   "MetalBoulder1": {
@@ -286,7 +258,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#FFBBFB"
   },
   "MetalBoulder2": {
@@ -296,7 +267,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#BFF1FB"
   },
   "MetalBoulder3": {
@@ -306,7 +276,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#CFCBF1"
   },
   "DeepMagmaBoulder": {
@@ -316,7 +285,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#F3F198"
   },
   "Lava": {
@@ -326,7 +294,6 @@
     "surface": "Molten",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#FF5A00"
   },
   "GrayAcid": {
@@ -337,7 +304,6 @@
     "surfaceSpeed": 5,
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#B89933"
   },
   "PurpleAcid": {
@@ -348,7 +314,6 @@
     "surfaceSpeed": 50,
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#B888BB"
   },
   "PassiveAcid": {
@@ -358,7 +323,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#47D764"
   },
   "LivingActiveAcid": {
@@ -368,7 +332,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#B8FF22"
   },
   "CorrosiveActiveAcid": {
@@ -378,7 +341,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 1,
-    "structurePartType": "None",
     "mapColorHex": "#B8FF44"
   },
   "Box": {
@@ -388,7 +350,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#EEEEEE"
   },
   "QuadBlock": {
@@ -398,7 +359,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Block",
     "mapColorHex": "#FFFFFF"
   },
   "Support": {
@@ -408,7 +368,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Block",
     "mapColorHex": "#65967E"
   },
   "MilitaryBlockFrame": {
@@ -418,7 +377,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Block",
     "mapColorHex": "#184848"
   },
   "MilitaryBlock": {
@@ -428,7 +386,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Block",
     "mapColorHex": "#115555"
   },
   "GreenBlock": {
@@ -438,7 +395,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Block",
     "mapColorHex": "#4CBF00"
   },
   "YellowBlock": {
@@ -448,7 +404,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Block",
     "mapColorHex": "#D0CE00"
   },
   "FedBlock": {
@@ -458,7 +413,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#999988"
   },
   "RedBlock": {
@@ -468,27 +422,24 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Block",
     "mapColorHex": "#C60000"
   },
   "BuildingCorner": {
     "passable": false,
     "emitsLight": false,
-    "shape": "Square",
+    "shape": "Corner",
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Corner",
     "mapColorHex": "#334400"
   },
   "BuildingWall": {
     "passable": false,
     "emitsLight": false,
-    "shape": "Square",
+    "shape": "Wall",
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "Wall",
     "mapColorHex": "#888888"
   },
   "Skull": {
@@ -498,7 +449,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#AAA596"
   },
   "XGreen": {
@@ -509,7 +459,6 @@
     "surfacePalette": 1,
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#6586F7"
   },
   "XBlue": {
@@ -520,7 +469,6 @@
     "surfacePalette": 2,
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#F75243"
   },
   "XRed": {
@@ -531,7 +479,6 @@
     "surfacePalette": 3,
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#65FFFF"
   },
   "XCyan": {
@@ -542,7 +489,6 @@
     "surfacePalette": 5,
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#84EEF7"
   },
   "XViolet": {
@@ -553,7 +499,6 @@
     "surfacePalette": 4,
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#FF87E7"
   },
   "DeepTurquoiseRock": {
@@ -563,7 +508,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#28A0A0"
   },
   "DeepRainbowRock": {
@@ -573,7 +517,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#C878DC"
   },
   "AcidRock": {
@@ -583,7 +526,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#646215"
   },
   "Pearl": {
@@ -593,7 +535,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#774444"
   },
   "DeepLazuriteSand": {
@@ -603,7 +544,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#224499"
   },
   "HypnoRock": {
@@ -613,7 +553,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#AAFFFF"
   },
   "SuperRainbow": {
@@ -623,7 +562,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#FFB4FF"
   },
   "Red": {
@@ -633,7 +571,6 @@
     "surface": "Faceted",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#FF0000"
   },
   "Violet": {
@@ -643,7 +580,6 @@
     "surface": "Faceted",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#FF00FF"
   },
   "White": {
@@ -653,7 +589,6 @@
     "surface": "Faceted",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#EEEEFF"
   },
   "Cyan": {
@@ -663,7 +598,6 @@
     "surface": "Faceted",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#00FFFF"
   },
   "AliveCyan": {
@@ -673,7 +607,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#65FFFF"
   },
   "AliveRed": {
@@ -683,7 +616,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#FF3333"
   },
   "AliveViol": {
@@ -693,7 +625,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#FF65FF"
   },
   "AliveBlack": {
@@ -703,7 +634,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#2265FF"
   },
   "AliveWhite": {
@@ -713,7 +643,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#EEFEFF"
   },
   "AliveRainbow": {
@@ -723,8 +652,15 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#EEFEFF"
+  },
+  "IridescentBackground": {
+    "passable": false,
+    "emitsLight": false,
+    "shape": "Flat",
+    "surface": "Plain",
+    "decalFamily": "None",
+    "rimGroup": 0
   },
   "AliveBlue": {
     "passable": false,
@@ -733,7 +669,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 3,
-    "structurePartType": "None",
     "mapColorHex": "#1111FF"
   },
   "DeepObsidianRock": {
@@ -743,7 +678,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#2E2A36"
   },
   "DeepStripedRock": {
@@ -753,7 +687,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#B45A8C"
   },
   "HeavyRock": {
@@ -763,7 +696,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#D39FA6"
   },
   "GoldenRock": {
@@ -773,7 +705,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#E3BF78"
   },
   "DeepRock": {
@@ -783,7 +714,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#A38848"
   },
   "GRock": {
@@ -793,7 +723,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#339978"
   },
   "Rock": {
@@ -803,7 +732,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 6,
-    "structurePartType": "None",
     "mapColorHex": "#8551A6"
   },
   "Green": {
@@ -813,7 +741,6 @@
     "surface": "Faceted",
     "decalFamily": "None",
     "rimGroup": 6,
-    "structurePartType": "None",
     "mapColorHex": "#08D764"
   },
   "Blue": {
@@ -823,7 +750,6 @@
     "surface": "Faceted",
     "decalFamily": "None",
     "rimGroup": 6,
-    "structurePartType": "None",
     "mapColorHex": "#0000FF"
   },
   "BlackRock": {
@@ -831,9 +757,8 @@
     "emitsLight": false,
     "shape": "Organic",
     "surface": "Plain",
-    "decalFamily": "Stone",
+    "decalFamily": "Rock",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#777777"
   },
   "LivingBlackRock": {
@@ -843,7 +768,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#387641"
   },
   "RedRock": {
@@ -851,9 +775,8 @@
     "emitsLight": false,
     "shape": "Organic",
     "surface": "Plain",
-    "decalFamily": "Stone",
+    "decalFamily": "Rock",
     "rimGroup": 5,
-    "structurePartType": "None",
     "mapColorHex": "#AA7777"
   },
   "Unloaded": {
@@ -863,7 +786,6 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#00000080"
   },
   "Pregener": {
@@ -873,7 +795,15 @@
     "surface": "Plain",
     "decalFamily": "None",
     "rimGroup": 0,
-    "structurePartType": "None",
     "mapColorHex": "#00000080"
+  },
+  "CorruptedHypnoRock": {
+    "passable": false,
+    "emitsLight": true,
+    "shape": "Organic",
+    "surface": "Plain",
+    "decalFamily": "None",
+    "rimGroup": 3,
+    "mapColorHex": "#AAFFFF"
   }
 }

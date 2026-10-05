@@ -16,7 +16,7 @@ public sealed class TerrainMaterialManager
     private static readonly int s_prismaticFlowMapPropertyId = Shader.PropertyToID("_PrismaticFlowMap");
     private static readonly int s_flowMapPropertyId = Shader.PropertyToID("_FlowMap");
     private static readonly int s_terrainDecalAtlasPropertyId = Shader.PropertyToID("_TerrainDecalAtlas");
-    private static readonly int s_terrainDecalStoneAtlasPropertyId = Shader.PropertyToID("_TerrainDecalStoneAtlas");
+    private static readonly int s_terrainDecalRockAtlasPropertyId = Shader.PropertyToID("_TerrainDecalRockAtlas");
     private static readonly int s_flowScalePropertyId = Shader.PropertyToID("_FlowScale");
     private static readonly int s_shimmerSpeedScalePropertyId = Shader.PropertyToID("_ShimmerSpeedScale");
     private static readonly int s_pulseSpeedScalePropertyId = Shader.PropertyToID("_PulseSpeedScale");
@@ -224,7 +224,7 @@ public sealed class TerrainMaterialManager
         SetTextureIfChanged(material, s_flowMapPropertyId, textureService.FlowMapTexture);
         SetTextureIfChanged(material, s_prismaticFlowMapPropertyId, textureService.PrismaticFlowMapTexture);
         SetTextureIfChanged(material, s_terrainDecalAtlasPropertyId, textureService.TerrainDecalAtlasTexture);
-        SetTextureIfChanged(material, s_terrainDecalStoneAtlasPropertyId, textureService.TerrainDecalStoneAtlasTexture);
+        SetTextureIfChanged(material, s_terrainDecalRockAtlasPropertyId, textureService.TerrainDecalRockAtlasTexture);
     }
 
     private static void SetTextureIfChanged(Material material, int propertyId, Texture? texture)

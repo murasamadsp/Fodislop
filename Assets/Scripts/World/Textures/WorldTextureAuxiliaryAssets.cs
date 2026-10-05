@@ -14,9 +14,9 @@ namespace Kern.World
         private readonly TerrainDecalAtlasLoader _decalLoader = new(
             "terrain-decals.png",
             "load_terrain_decal_atlas");
-        private readonly TerrainDecalAtlasLoader _decalStoneLoader = new(
-            "terrain-decals-stone.png",
-            "load_terrain_decal_stone_atlas");
+        private readonly TerrainDecalAtlasLoader _decalRockLoader = new(
+            "terrain-decals-rock.png",
+            "load_terrain_decal_rock_atlas");
 
         private Texture2D? _prismaticFlowMapTexture;
         private Texture2D? _flowMapTexture;
@@ -24,7 +24,7 @@ namespace Kern.World
         public Texture2D? PrismaticFlowMapTexture => _prismaticFlowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
         public Texture2D? TerrainDecalAtlasTexture => _decalLoader.AtlasTexture;
-        public Texture2D? TerrainDecalStoneAtlasTexture => _decalStoneLoader.AtlasTexture;
+        public Texture2D? TerrainDecalRockAtlasTexture => _decalRockLoader.AtlasTexture;
 
         public void Initialize(
             ITextureStorageService textureStorage,
@@ -34,7 +34,7 @@ namespace Kern.World
             _prismaticFlowMapTexture = WorldTextureGenerator.CreatePrismaticFlowMap();
             RegenerateFlowMap();
             _decalLoader.StartLoad(textureStorage, operations, notifyTextureLoaded);
-            _decalStoneLoader.StartLoad(textureStorage, operations, notifyTextureLoaded);
+            _decalRockLoader.StartLoad(textureStorage, operations, notifyTextureLoaded);
         }
 
         public void RegenerateFlowMap()
@@ -52,7 +52,7 @@ namespace Kern.World
             _prismaticFlowMapTexture = null;
 
             _decalLoader.Dispose();
-            _decalStoneLoader.Dispose();
+            _decalRockLoader.Dispose();
         }
 
         private static void DestroyTexture(Texture2D? texture)

@@ -169,27 +169,8 @@ TerrainSurfaceInputs BuildTerrainSurfaceInputs(
 
 // Shade each exposed side independently. Distances use the rendered polygon,
 // including the quantized organic bend points, so the bevel follows distortion.
-float TerrainReliefBevel(TerrainSurfaceInputs surface)
+float TerrainReliefSideBevel(TerrainSurfaceInputs surface, int foreignSides)
 {
-    if (_TerrainReliefRimEnabled < 0.5)
-    {
-        return 1.0;
-    }
-
-    int reliefCode = KernTerrainReliefCode(surface.packedContour);
-    if (reliefCode == 0)
-    {
-        return 1.0;
-    }
-
-    // Code stores the foreign-side mask inverted, plus one; zero means no bevel.
-    int foreignSides = (~(reliefCode - 1)) & 0x0F;
-    int concaveCorners = KernTerrainReliefCornerMask(surface.packedContour);
-    if (foreignSides == 0 && concaveCorners == 0)
-    {
-        return 1.0;
-    }
-
     bool isOrganic = surface.packedOrganicEdges > 0.5;
     float4 organicBends = isOrganic
         ? TerrainOrganicGeometryBends(surface.packedOrganicEdges)
@@ -214,6 +195,61 @@ float TerrainReliefBevel(TerrainSurfaceInputs surface)
         float influence = saturate(1.0 - distanceToSide * _ReliefRimDistanceScale);
         float sideShade = 1.0 - _ReliefRimFalloff * influence * influence;
         bevel *= sideShade * sideShade * sideShade;
+    }
+
+    return bevel;
+}
+
+// Кайма рельефа: стороны с чужой поверхностью и вогнутые углы.
+float TerrainReliefBevel(TerrainSurfaceInputs surface)
+{
+    if (_TerrainReliefRimEnabled < 0.5)
+    {
+        return 1.0;
+    }
+
+    int reliefCode = KernTerrainReliefCode(surface.packedContour);
+    if (reliefCode == 0)
+    {
+        return 1.0;
+    }
+
+    // Code stores the foreign-side mask inverted, plus one; zero means no bevel.
+    int foreignSides = (~(reliefCode - 1)) & 0x0F;
+    int concaveCorners = KernTerrainReliefCornerMask(surface.packedContour);
+    if (foreignSides == 0 && concaveCorners == 0)
+    {
+        return 1.0;
+    }
+
+    float bevel = 1.0;
+    if (KernTerrainIsRoundable(surface.packedContour))
+    {
+        // У круглого блока край — дуга, а не стороны клетки: кайма идёт
+        // вдоль силуэта. За стороной той же поверхности силуэт продолжается
+        // соседом, поэтому там края нет.
+        float2 uv = QuantizeTerrainFaceUV(surface.contourUV);
+        float2 p = uv - 0.5;
+        // Силуэт обрезан клеткой: диск радиуса _RoundableCornerRadius
+        // выходит за её стороны.
+        float edge = max(
+            -TerrainRoundableSignedDistance(uv, surface.packedLightingFlags),
+            TerrainSignedDistanceToBox(p, float2(0.0, 0.0), float2(0.5, 0.5)));
+        // Продолжение — полоса шириной в клетку от её середины до соседа:
+        // перекрытие с силуэтом не даёт объединению занизить расстояние до
+        // края внутри клетки, а ширина не скрывает чужую боковую сторону.
+        int sameSides = (~foreignSides) & 0x0F;
+        if ((sameSides & 1) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.0, 0.75), float2(0.5, 0.75)));
+        if ((sameSides & 2) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(-0.75, 0.0), float2(0.75, 0.5)));
+        if ((sameSides & 4) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.0, -0.75), float2(0.5, 0.75)));
+        if ((sameSides & 8) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.75, 0.0), float2(0.75, 0.5)));
+        float influence = saturate(1.0 + edge * _ReliefRimDistanceScale);
+        float shade = 1.0 - _ReliefRimFalloff * influence * influence;
+        bevel = shade * shade * shade;
+    }
+    else
+    {
+        bevel = TerrainReliefSideBevel(surface, foreignSides);
     }
 
     [branch]
