@@ -1,11 +1,10 @@
 {
   "dependencies": {
     "com.fmod.fmod-for-unity-2-03": {
-      "version": "2.3.14",
+      "version": "file:com.fmod.fmod-for-unity-2-03",
       "depth": 0,
-      "source": "registry",
-      "dependencies": {},
-      "url": "https://packages.unity.com"
+      "source": "embedded",
+      "dependencies": {}
     },
     "com.netpyoung.webp": {
       "version": "https://github.com/netpyoung/unity.webp.git?path=unity_project/Assets/unity.webp#9818db6327e09d399bf4fb84da4ed19f03b565b4",

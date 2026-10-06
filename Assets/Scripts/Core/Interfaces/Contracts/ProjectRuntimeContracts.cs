@@ -121,6 +121,11 @@ public static class ProjectRuntimeContracts
         public const string RadialMenuUxml = "UI/Gameplay/RadialMenu";
         public const string PauseMenuUxml = "UI/Overlays/PauseMenu";
         public const string MinimapUxml = "UI/Gameplay/Minimap";
+
+        // Рамка облака локального чата. Границы 9-slice берутся из самого
+        // спрайта (spriteBorder в импортере), поэтому путь — единственное, что
+        // задаётся здесь: числа границ в коде не дублируются.
+        public const string LocalChatBubbleSprite = "UI/Sprites/LocalChatBubble";
     }
 
     public static class SceneNames

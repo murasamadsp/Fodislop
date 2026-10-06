@@ -1,0 +1,14 @@
+{
+  "name": "com.fmod.fmod-for-unity-2-03",
+  "version": "2.3.14",
+  "description": "FMOD is an end-to-end solution for adding sound and music to any game. Build adaptive audio using the FMOD Studio authoring tool and play it in-game using the FMOD Engine.",
+  "displayName": "FMOD for Unity (2.03) - UPM",
+  "author": "FMOD",
+  "unity": "2022.3",
+  "unityRelease": "0f1",
+  "changelogUrl": "https://fmod.com/docs/2.03/api/welcome-revision-history.html",
+  "documentationUrl": "https://fmod.com/docs/2.03/unity/welcome.html",
+  "license": "Refer to LICENSE.txt file",
+  "licensesUrl": "https://fmod.com/legal",
+  "_fingerprint": "8e83ebf187ca95458be5677807da8d92a733e483"
+}

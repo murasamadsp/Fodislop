@@ -14,6 +14,35 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
 {
     private const string TAG = "[WorldLabels]";
 
+    // Рамка облака — спрайт LocalChatBubble с 9-slice, границы которого лежат в
+    // самом ассете (spriteBorder в импортере) и потому в коде не повторяются.
+    // У Single-спрайта Unity читает именно spriteBorder, а не border из массива
+    // spriteSheet, где стояло 1 px сверху: полоса растяжения захватывала бы
+    // скругления, и на двухстрочном облаке углы вытянулись бы в эллипс.
+    private const string BubbleSpritePath = ProjectRuntimeContracts.ResourcePaths.LocalChatBubbleSprite;
+
+    // Центр хвоста в исходном спрайте (32x32, хвост занимает x=7..9). Облако
+    // вешается за эту точку, а не за центр бокса: хвост заморожен в левом
+    // нерастяжимом тайле 9-slice и всегда стоит в 7..9 px от левого края, поэтому
+    // только так он оказывается над роботом, а тело облака уходит вправо.
+    private const float TailAnchorSourceX = 8f;
+
+    // Полупрозрачность рамки — как в оригинальном клиенте: белый тон с альфой
+    // 157/255 (LocalChat.prefab, m_Color = {1,1,1, a=0.6156863}).
+    //
+    // Тон задаётся здесь, а не в USS: background-image назначается кодом, и
+    // правило unity-background-image-tint-color без фона в USS не разрешалось —
+    // рамка оставалась непрозрачной. Тоном, а не альфой в ассете, чтобы PNG
+    // оставался белым и переиспользуемым.
+    private static readonly Color FrameTint = new(1f, 1f, 1f, 0.6156863f);
+
+    private const string BubbleClass = "world-label-chat";
+    private const string BubbleTextClass = "world-label-chat-text";
+    private const string NameClass = "world-label-name";
+
+    private static Sprite? _bubbleSprite;
+    private static bool _bubbleSpriteMissingLogged;
+
     private readonly List<Entry> _entries = [];
     private VisualElement? _root;
     private VisualElement? _container;
@@ -33,14 +62,88 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         }
 
         // Labels are a dynamic collection, not static screen structure.
-        var label = new Label { pickingMode = PickingMode.Ignore, enableRichText = false };
-        label.AddToClassList(kind == WorldLabelKind.ChatBubble
-            ? "world-label-chat"
-            : "world-label-name");
-        _container!.Add(label);
-        var entry = new Entry(this, label, kind);
+        //
+        // Облаку нужны два элемента, никнейму один. Рамка и текст в одном
+        // элементе означали бы, что высота обязана расти под перенос строк, а
+        // высота облака постоянна по эталону: постоянную высоту задаёт рамка, а
+        // текст лежит в ней вложенным и обрезается по ширине.
+        VisualElement frame;
+        Label label;
+        if (kind == WorldLabelKind.ChatBubble)
+        {
+            frame = new VisualElement { pickingMode = PickingMode.Ignore };
+            frame.AddToClassList(BubbleClass);
+            ApplyBubbleFrame(frame);
+            label = new Label { pickingMode = PickingMode.Ignore, enableRichText = false };
+            label.AddToClassList(BubbleTextClass);
+            frame.Add(label);
+        }
+        else
+        {
+            label = new Label { pickingMode = PickingMode.Ignore, enableRichText = false };
+            label.AddToClassList(NameClass);
+            frame = label;
+        }
+
+        _container!.Add(frame);
+        var entry = new Entry(this, frame, label, kind);
         _entries.Add(entry);
         return entry;
+    }
+
+    // Фон облака, его тон и границы 9-slice ставятся один раз на рамку: тайлы
+    // углов UI Toolkit рисует 1:1 из исходных 32 px.
+    private static void ApplyBubbleFrame(VisualElement frame)
+    {
+        if (_bubbleSprite == null && !_bubbleSpriteMissingLogged)
+        {
+            _bubbleSprite = Resources.Load<Sprite>(BubbleSpritePath);
+            if (_bubbleSprite == null)
+            {
+                // Молчаливая подмена на CSS-рамку спрятала бы дефект тем же
+                // способом, каким он появился: облако выглядело бы исправным.
+                _bubbleSpriteMissingLogged = true;
+                Debug.LogError($"{TAG} Missing Resources/{BubbleSpritePath} sprite for the chat bubble frame.");
+            }
+        }
+
+        if (_bubbleSprite == null)
+        {
+            return;
+        }
+
+        Sprite sprite = _bubbleSprite;
+        frame.style.backgroundImage = new StyleBackground(sprite);
+        frame.style.unityBackgroundImageTintColor = FrameTint;
+
+        // Границы 9-slice обязаны быть заданы явно. UI Toolkit не подхватывает
+        // sprite.border сам, а без них ScaleToFit вписывает весь спрайт в бокс
+        // целиком, сохраняя пропорции 1:1 и центрируя по горизонтали: облако
+        // растягивалось по вертикали, а по горизонтали оставалось квадратом с
+        // пустотами по бокам. Числа берутся из ассета, а не из кода, поэтому
+        // перерисовка хвоста или смена скругления не требует правок здесь.
+        Vector4 border = sprite.border;
+        frame.style.unitySliceLeft = (int)border.x;
+        frame.style.unitySliceBottom = (int)border.y;
+        frame.style.unitySliceRight = (int)border.z;
+        frame.style.unitySliceTop = (int)border.w;
+
+        // Фон тянется на весь бокс (100% 100%): нарезка 9-slice растягивает центральные
+        // полосы, оставляя угловые тайлы в натуральную величину.
+        //
+        // Прежний ScaleToFit (unityBackgroundScaleMode) в Unity 6 помечен
+        // устаревшим и игнорируется: спрайт вписывался в бокс целиком, и рамка не
+        // растягивалась ни по какой оси — отсюда и было «только до 4 символов».
+        // Contain/собственные пропорции оставили бы квадрат по центру.
+        frame.style.backgroundSize = new BackgroundSize(
+            Length.Percent(100f),
+            Length.Percent(100f));
+
+        // Масштабирование всего бокса transform'ом, а не кегля: тайлы 9-slice не
+        // масштабируются, и кегль, посчитанный отдельно от рамки, на отдалении
+        // отошёл бы от неё. Здесь origin в левом верхнем углу, чтобы визуальный
+        // бокс начинался ровно там, куда его ставит translate.
+        frame.style.transformOrigin = new TransformOrigin(Length.Percent(0f), Length.Percent(0f));
     }
 
     public void LateTick()
@@ -106,7 +209,11 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         _container = null;
     }
 
-    private sealed class Entry(WorldLabels owner, Label label, WorldLabelKind kind) : IWorldLabel
+    private sealed class Entry(
+        WorldLabels owner,
+        VisualElement frame,
+        Label label,
+        WorldLabelKind kind) : IWorldLabel
     {
         private const float PositionApplyEpsilonPx = 0.5f;
 
@@ -118,7 +225,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         private const float ScaleApplyEpsilon = 0.002f;
         private const string OffscreenClass = "world-label-offscreen";
 
-        public Label Label { get; } = label;
+        public VisualElement Frame { get; } = frame;
         public Vector3 Position { get; private set; }
         public bool Visible { get; private set; } = true;
 
@@ -130,33 +237,52 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         // переопределён, resolvedStyle отдаёт ровно то, что задано стилями,
         // и число 12 не дублируется в коде. Ноль означает «база ещё не
         // разложена» — тогда запись откладывается до следующего кадра.
+        //
+        // Это путь только никнейма: у него своя рамка нет, и кегль с тенью
+        // пересчитываются отдельно. Облаку база не нужна — оно пишет единственный
+        // style.scale, который USS не портит.
         private float _baseFontSize;
         private TextShadow _baseShadow;
-        private float _baseMaxWidth;
-        private float _basePaddingTop;
-        private float _basePaddingRight;
-        private float _basePaddingBottom;
-        private float _basePaddingLeft;
-        private float _baseBorderWidth;
-        private float _baseBorderRadius;
         private float _lastScale = -1f;
         private bool _sizeDirty;
 
-        public void SetText(string text) => Label.text = text;
+        public void SetText(string text) => label.text = text;
         public void SetPosition(Vector3 position) => Position = position;
         public void SetVisible(bool visible) => Visible = visible;
-        public void SetOpacity(float opacity) => Label.style.opacity = Mathf.Clamp01(opacity);
 
-        // Перевод метки в постоянный мировой размер: кегль, а с ним поля,
-        // рамка, скругление и предел ширины облака, умножаются на масштаб зума.
-        // Один размер на все стороны снимается с первой грани: USS задаёт
-        // border-* и border-radius одним значением, иначе рамка разъехалась бы.
+        // Прозрачность задаётся рамке: у облака текст лежит вложенным элементом,
+        // и гашение одного только текста оставило бы белый прямоугольник.
+        public void SetOpacity(float opacity) => Frame.style.opacity = Mathf.Clamp01(opacity);
+
+        // Перевод метки в постоянный мировой размер.
         //
-        // Облаку нужны и поля: без их пересчёта на сильном приближении текст
-        // вылезал бы на рамку, а на отдалении облако состояло бы в основном из
-        // полей. Нику, у которого рамки нет, достаточно кегля и тени.
+        // Облако масштабируется целиком, через style.scale на рамке: тайлы
+        // 9-slice рисуются в натуральную величину, поэтому масштабировать кегль
+        // отдельно от рамки нельзя — на отдалении текст отошёл бы от неё. Один
+        // множитель на весь бокс держит текст и хвост в одной пропорции при
+        // любом зуме, а кегль в раскладке остаётся базовым.
+        //
+        // Нику, у которого рамки нет, достаточно кегля и тени.
         public void ApplyScale(float scale)
         {
+            if (kind == WorldLabelKind.ChatBubble)
+            {
+                if (_lastScale > 0f && Mathf.Abs(scale - _lastScale) <= ScaleApplyEpsilon)
+                {
+                    return;
+                }
+
+                Frame.style.scale = new Scale(new Vector3(scale, scale, 1f));
+                _lastScale = scale;
+
+                // Смена масштаба меняет формулу смещения: якорь облака задан
+                // размером бокса и положением хвоста, то есть оба множителя в
+                // нём меняются. Пока ApplyVisible не пересчитал смещение по
+                // новому масштабу, запоминать позицию нельзя.
+                _sizeDirty = true;
+                return;
+            }
+
             if (_baseFontSize <= 0f && !TryCaptureBase())
             {
                 return;
@@ -167,74 +293,33 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
                 return;
             }
 
-            Label.style.fontSize = _baseFontSize * scale;
-            if (kind == WorldLabelKind.ChatBubble)
-            {
-                Label.style.maxWidth = _baseMaxWidth * scale;
-                Label.style.paddingTop = _basePaddingTop * scale;
-                Label.style.paddingRight = _basePaddingRight * scale;
-                Label.style.paddingBottom = _basePaddingBottom * scale;
-                Label.style.paddingLeft = _basePaddingLeft * scale;
-                Label.style.borderTopWidth = _baseBorderWidth * scale;
-                Label.style.borderRightWidth = _baseBorderWidth * scale;
-                Label.style.borderBottomWidth = _baseBorderWidth * scale;
-                Label.style.borderLeftWidth = _baseBorderWidth * scale;
-                Label.style.borderTopLeftRadius = _baseBorderRadius * scale;
-                Label.style.borderTopRightRadius = _baseBorderRadius * scale;
-                Label.style.borderBottomRightRadius = _baseBorderRadius * scale;
-                Label.style.borderBottomLeftRadius = _baseBorderRadius * scale;
-            }
-            else
-            {
-                TextShadow shadow = _baseShadow;
-                shadow.offset *= scale;
-                Label.style.textShadow = shadow;
-            }
+            label.style.fontSize = _baseFontSize * scale;
+            TextShadow shadow = _baseShadow;
+            shadow.offset *= scale;
+            label.style.textShadow = shadow;
 
             _lastScale = scale;
 
-            // Смена кегля меняет бокс, а якорь облака задан его размером:
-            // пересчёт смещения обязан повториться на кадре, где раскладка уже
-            // отдаёт новые width/height. Пока этого не случилось, смещение
-            // записано по старому размеру, и ApplyVisible его не запоминает.
+            // Смена кегля меняет бокс, а якорь задан его размером: пересчёт
+            // смещения обязан повториться на кадре, где раскладка уже отдаёт
+            // новые width/height. Пока этого не случилось, смещение записано по
+            // старому размеру, и ApplyVisible его не запоминает.
             _sizeDirty = true;
         }
 
+        // Только для никнейма: он масштабирует кегль и тень, и обе величины
+        // заданы в USS, поэтому база снимается до первой записи. Облаку база не
+        // нужна — оно пишет единственный style.scale и USS не портит.
         private bool TryCaptureBase()
         {
-            IResolvedStyle style = Label.resolvedStyle;
+            IResolvedStyle style = label.resolvedStyle;
             if (!IsResolved(style.fontSize) || style.fontSize <= 0f)
             {
                 return false;
             }
 
-            // maxWidth — единственное разрешённое значение метки, приходящее не
-            // как float, поэтому снимается через .value.
-            float maxWidth = style.maxWidth.value;
-            if (kind == WorldLabelKind.ChatBubble &&
-                (!IsResolved(maxWidth) || maxWidth <= 0f ||
-                 !IsResolved(style.paddingTop) || !IsResolved(style.paddingRight) ||
-                 !IsResolved(style.paddingBottom) || !IsResolved(style.paddingLeft) ||
-                 !IsResolved(style.borderLeftWidth) || !IsResolved(style.borderTopLeftRadius)))
-            {
-                return false;
-            }
-
-            // База записывается целиком или никак: частичная запись обнулила бы
-            // поля облака, и рамка схлопнулась бы в линию на первый же кадр.
             _baseFontSize = style.fontSize;
             _baseShadow = style.textShadow;
-            if (kind == WorldLabelKind.ChatBubble)
-            {
-                _baseMaxWidth = maxWidth;
-                _basePaddingTop = style.paddingTop;
-                _basePaddingRight = style.paddingRight;
-                _basePaddingBottom = style.paddingBottom;
-                _basePaddingLeft = style.paddingLeft;
-                _baseBorderWidth = style.borderLeftWidth;
-                _baseBorderRadius = style.borderTopLeftRadius;
-            }
-
             return true;
         }
 
@@ -276,19 +361,25 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
                 return;
             }
 
-            // translate двигает бокс целиком, поэтому угол привязки вычитается
-            // из его размера: облако висит нижним центром над роботом,
-            // никнейм — левым верхним углом от точки как есть.
+            // Облако вешается за хвост: нижняя грань визуального бокса идёт в
+            // верхнюю грань клетки робота, а по горизонтали облако сдвинуто так,
+            // чтобы точка хвоста встала в позицию робота. Размер бокса приходит
+            // из раскладки и потому ещё не домножен на масштаб зума, а хвост
+            // тайлом 9-slice не растягивается — оба множителя в формуле разные.
+            //
+            // Никнейм не масштабируется transform'ом и вешается левым верхним
+            // углом прямо в точку.
+            float scale = _lastScale > 0f ? _lastScale : 1f;
             Vector3 offset = kind == WorldLabelKind.ChatBubble
-                ? new Vector3(position.x - (size.x * 0.5f), position.y - size.y)
+                ? new Vector3(position.x - (TailAnchorSourceX * scale), position.y - (size.y * scale))
                 : position;
-            Label.style.translate = new Translate(offset.x, offset.y);
+            Frame.style.translate = new Translate(offset.x, offset.y);
             if (_sizeDirty)
             {
-                // Смещение только что посчитано по боксу прежнего кегля.
-                // Запоминать позицию нельзя: сдвига больше не будет, флаг
-                // positionChanged не поднимется, и якорь облака навсегда
-                // останется на старом размере. Следующий кадр повторяет
+                // Смещение только что посчитано по боксу прежнего кегля или
+                // прежнего масштаба. Запоминать позицию нельзя: сдвига больше не
+                // будет, флаг positionChanged не поднимется, и якорь облака
+                // навсегда останется на старом размере. Следующий кадр повторяет
                 // пересчёт по уже разложенному боксу.
                 _sizeDirty = false;
                 return;
@@ -312,7 +403,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         public void Dispose()
         {
             owner._entries.Remove(this);
-            Label.RemoveFromHierarchy();
+            Frame.RemoveFromHierarchy();
         }
 
         // Скрытие через visibility, а не через UIState.SetHidden с display:none.
@@ -320,7 +411,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         // NaN, и посчитать нижний центр больше нечем. visibility:hidden элемент
         // раскладывается, поэтому повторный показ всегда знает свой размер.
         private void SetOffscreen(bool offscreen) =>
-            Label.EnableInClassList(OffscreenClass, offscreen);
+            Frame.EnableInClassList(OffscreenClass, offscreen);
 
         private bool TryResolveSize(out Vector2 size)
         {
@@ -330,7 +421,9 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
                 return true;
             }
 
-            IResolvedStyle style = Label.resolvedStyle;
+            // Размер рамки, а не текста: якорь идёт по хвосту спрайта, и текст
+            // на него не влияет.
+            IResolvedStyle style = Frame.resolvedStyle;
             if (float.IsNaN(style.width) || float.IsNaN(style.height) ||
                 style.width <= 0f || style.height <= 0f)
             {
