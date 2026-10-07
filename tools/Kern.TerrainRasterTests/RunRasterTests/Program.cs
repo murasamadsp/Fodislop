@@ -69,15 +69,29 @@ internal static class Program
 
         string materialFieldPass = terrainShader[materialFieldPassAt..ambientOcclusionPassAt];
         string ambientOcclusionPass = terrainShader[ambientOcclusionPassAt..];
+        int ambientOcclusionFunctionAt = ambientOcclusionPass.IndexOf("half4 AmbientOcclusionFieldFrag", StringComparison.Ordinal);
+        if (ambientOcclusionFunctionAt < 0)
+        {
+            return Fail("Terrain AO fragment entry point is missing");
+        }
+
+        int ambientOcclusionFunctionEndAt = ambientOcclusionPass.IndexOf("ENDHLSL", ambientOcclusionFunctionAt, StringComparison.Ordinal);
+        if (ambientOcclusionFunctionEndAt < ambientOcclusionFunctionAt)
+        {
+            return Fail("Terrain AO fragment entry point is missing its HLSL block terminator");
+        }
+
+        string ambientOcclusionFunction = ambientOcclusionPass[ambientOcclusionFunctionAt..ambientOcclusionFunctionEndAt];
         if (materialFieldPass.Contains("TerrainGeometryCoverageForField", StringComparison.Ordinal) ||
             !ambientOcclusionPass.Contains("TerrainGeometrySignedDistance", StringComparison.Ordinal) ||
             !ambientOcclusionPass.Contains("if (exteriorDistance >= _TerrainAmbientOcclusionDistance)", StringComparison.Ordinal) ||
             !ambientOcclusionPass.Contains("_TerrainAmbientOcclusionDistance, exteriorDistance)", StringComparison.Ordinal) ||
             !ambientOcclusionPass.Contains("ColorMask R", StringComparison.Ordinal) ||
-            ambientOcclusionPass.Contains("TerrainAnimationSampling.hlsl", StringComparison.Ordinal) ||
-            ambientOcclusionPass.Contains("_PrismaticFlowMap", StringComparison.Ordinal))
+            ambientOcclusionFunction.Contains("SampleTerrainLightingFieldAlbedoTexel", StringComparison.Ordinal) ||
+            ambientOcclusionFunction.Contains("_AlphaCutoff", StringComparison.Ordinal) ||
+            ambientOcclusionFunction.Contains("_PrismaticFlowMap", StringComparison.Ordinal))
         {
-            return Fail("AO must write its single-channel red field without transport or flow-map dependencies");
+            return Fail("AO must derive its single-channel red field from geometry without atlas-alpha dependencies");
         }
 
         int debugAt = terrainShader.IndexOf("if (KernTerrainDebugActive())", StringComparison.Ordinal);

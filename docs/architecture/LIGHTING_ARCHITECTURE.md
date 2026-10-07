@@ -249,11 +249,12 @@ Terrain mesh lighting metadata has one encoder,
 and the receiver rule: every non-physical terrain surface receives AO, while
 physical foreground mass does not darken itself. AO uses one spatial source:
 the contact falloff field, sampled once at the receiver's transformed world position.
-That field is rasterized from the same displaced cell coverage as the visible
-terrain, including organic bends. Atlas alpha rejects transparent source texels;
-internal alpha holes do not yet have a distance-based contact falloff. The cell-neighbor
-mask is not combined into AO, so nominal grid directions cannot add shadows at
-locations where displaced geometry no longer touches the receiver.
+That field is rasterized from the same displaced cell geometry as the visible
+terrain, including organic bends. AO occupancy follows the cell polygon and does
+not sample atlas alpha: transparent pixels affect visible coverage, but they do
+not create extra AO geometry. The cell-neighbor mask is not combined into AO, so
+nominal grid directions cannot add shadows at locations where displaced geometry
+no longer touches the receiver.
 
 The lighting material field samples atlas albedo using the same geometry/UV
 resolver and filtering as the visible terrain, but pins animated atlas selection
@@ -265,9 +266,8 @@ relief remain part of the material-field albedo as spatially stable inputs. The
 material/glow fragment rejects absent polygon coverage and atlas alpha before
 applying decals. Expanded raster carriers cannot publish albedo or decal glow
 outside the visible material silhouette.
-The
-same fixed atlas frame supplies AO-field occupancy/cutout, so an animated atlas
-cannot make static contact occupancy blink on a field rebuild either.
+AO-field occupancy is independent of atlas frames and alpha, so animation or
+transparent texels cannot change static contact occupancy on a field rebuild.
 
 The displaced silhouette has one geometric predicate in
 `TerrainGeometry.hlsl`: four corner vertices for regular cells, or those corners
