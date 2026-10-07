@@ -1,7 +1,7 @@
 #ifndef KERN_TERRAIN_PRISMATIC_CRYSTAL_INCLUDED
 #define KERN_TERRAIN_PRISMATIC_CRYSTAL_INCLUDED
 
-// OpenMines CellRender: animType 5, cells 71..75. These are animation
+// OpenMines CellRender: cellAnimationType 5, cells 71..75. These are animation
 // colors, intentionally different from the crystals' minimap colors.
 float3 PrismaticCrystalTint(float paletteIndex)
 {
@@ -25,7 +25,7 @@ float2 PrismaticCrystalFlowUV(float2 serverCell, float2 localPosition)
     return pixelCenter / float2(10.0, 8.0);
 }
 
-// Equivalent to Unlit_TerrainShader.shader, animType == 5. Inputs/output
+// Equivalent to Unlit_TerrainShader.shader, prismatic crystal surface. Inputs/output
 // are in the original GAMMA working space; caller bridges the linear atlas.
 float3 EvaluatePrismaticCrystal(float3 baseColor, float3 flowSample, float paletteIndex, float phase)
 {

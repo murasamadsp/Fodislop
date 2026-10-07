@@ -80,10 +80,10 @@ namespace Kern.World
                     throw new InvalidOperationException(
                         "Required local surface texture 'perspective.png' could not be decoded.");
                 Texture2D redRockTexture = await textureStorage.GetTextureAsync(
-                    "Cells/117.png",
+                    "Cells/RedRock.png",
                     cancellationToken) ??
                     throw new InvalidOperationException(
-                        "Required local surface texture 'Cells/117.png' could not be decoded.");
+                        "Required local surface texture 'Cells/RedRock.png' could not be decoded.");
                 cancellationToken.ThrowIfCancellationRequested();
 
                 RuntimeTextureFactory.ApplySampling(

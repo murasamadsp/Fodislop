@@ -1,23 +1,21 @@
 #ifndef KERN_TERRAIN_ANIMATION_PROFILE_INCLUDED
 #define KERN_TERRAIN_ANIMATION_PROFILE_INCLUDED
 
-static const int KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL = 1;
-static const int KERN_TERRAIN_ANIMATION_PROFILE_MOLTEN_SURFACE = 2;
-static const int KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL = 3;
+#include "Assets/Shaders/Terrain/TerrainCellFormat.hlsl"
 
-bool TerrainAnimationUsesFlowMap(int animationType, int animationProfile)
+bool TerrainAnimationUsesFlowMap(int cellAnimationType, int cellSurfaceEffect)
 {
-    if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
+    if (cellSurfaceEffect == (int)KERN_TERRAIN_SURFACE_EFFECT_PRISMATIC)
     {
         return true;
     }
 
-    if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)
+    if (cellSurfaceEffect == (int)KERN_TERRAIN_SURFACE_EFFECT_FACETED)
     {
         return false;
     }
 
-    return animationType == 2;
+    return cellAnimationType == (int)KERN_TERRAIN_ANIMATION_TYPE_SHIMMER;
 }
 
 #endif

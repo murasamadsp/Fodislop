@@ -195,16 +195,16 @@ camera consumers inject the interface; they must not access UI singletons direct
 ### Lighting
 
 The active pipeline is GPU Radiance Cascades:
-`LightingMaterialField`/`EmissionField` → `SolveCascade` → `ResolveDirect` →
+`LightingMaterialField`/`GlowField` → `SolveCascade` → `ResolveDirect` →
 `SolveDiffuseBounce` → `CompositeLighting`. Legacy SDF, raymarch, AO-neighbor,
 blur, CPU sweep, readback, and runtime fallback paths must not return.
 
-The server `CellConfigProperties.Glowing` flag is the only emission source;
-emission color comes from `CellConfigurationPacket.Color`. Material RGB is albedo
+The server `CellConfigProperties.Glowing` flag is the only glow source;
+glow color comes from `CellConfigurationPacket.Color`. Material RGB is albedo
 for one diffuse bounce and alpha is physical occupancy. Beer–Lambert extinction,
 direct radiance, transmission, and AO remain separate quantities.
 
-AO is a persistent full-resolution `RHalf` field derived from occupancy. It is
+AO is a persistent full-resolution single-channel 8-bit field derived from occupancy. It is
 recomputed only after geometry revision, lighting-region/field-size changes, or
 AO-setting changes. Light-source movement does not invalidate AO.
 

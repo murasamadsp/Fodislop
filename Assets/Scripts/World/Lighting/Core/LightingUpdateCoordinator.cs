@@ -297,7 +297,7 @@ internal sealed class LightingUpdateCoordinator
                     commandBuffer,
                     worldRect,
                     cellSize,
-                    _resources.StaticEmissionField!,
+                    _resources.StaticGlowField!,
                     qualityMode,
                     debugView);
                 bool staticRadianceChanged = rebuildFields || !_state.HasStaticRadianceState;
@@ -385,6 +385,7 @@ internal sealed class LightingUpdateCoordinator
         {
             // A recording/execution failure cannot leave a swapped atlas marked current.
             LightingRuntimeInvalidation.ResetFieldAndRadiance(_state);
+            _resources.DynamicDistanceFieldValid = false;
             throw;
         }
         finally
@@ -463,7 +464,7 @@ internal sealed class LightingUpdateCoordinator
                 AllowPartialAmbientOcclusion = allowPartialAmbientOcclusion,
             },
             terrainGeometry,
-            _resources.StaticEmissionField!,
+            _resources.StaticGlowField!,
             _resources.StaticDirectTexture!);
         _executedStages.Clear();
         _executedStages.AddRange(result.ExecutedStages);

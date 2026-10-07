@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Kern.Core;
@@ -50,7 +51,8 @@ public sealed class LightingCostWindow : ToolWindow
     private static readonly string[] s_densityLabels = ["1", "2", "4", "8", "16", "32"];
     private static readonly string[] s_probeLabels = ["1", "2", "4", "8", "16"];
     private static readonly string[] s_staticAngleLabels = ["4", "8", "16", "32", "64"];
-    private static readonly string[] s_sampleLabels = ["1", "2", "4", "8", "16", "32", "64"];
+    private static readonly int[] s_sampleValues = [1, 2, 4, 6, 8, 12, 16, 32, 64];
+    private static readonly string[] s_sampleLabels = ["1", "2", "4", "6", "8", "12", "16", "32", "64"];
     private static readonly string[] s_emitterLabels = ["1×1", "2×2", "3×3", "4×4"];
     private static readonly string[] s_polarLabels = ["4", "8", "16", "32", "64", "128", "256", "512", "1024"];
     private static readonly string[] s_nearLabels = ["0.5", "1", "2", "4", "6", "8"];
@@ -119,11 +121,19 @@ public sealed class LightingCostWindow : ToolWindow
     {
         _fieldLimited = lighting.TextureDimensionLimited;
         _cascadeLimited = lighting.CascadeBudgetLimited;
+        Vector4 worldRect = lighting.WorldRect;
+        int aoWidth = Mathf.RoundToInt(worldRect.z / lighting.CellSize * LightingConfigHolder.AmbientOcclusionPixelsPerCell);
+        int aoHeight = Mathf.RoundToInt(worldRect.w / lighting.CellSize * LightingConfigHolder.AmbientOcclusionPixelsPerCell);
+        long aoBytes = (long)aoWidth * aoHeight;
         _fieldDetail =
             $"Перенос {lighting.FieldWidth}×{lighting.FieldHeight} при {lighting.EffectivePixelsPerCell:F2} пикс/клетку, " +
-            $"карта света {lighting.LightWidth}×{lighting.LightHeight}";
+            $"карта света {lighting.LightWidth}×{lighting.LightHeight} " +
+            $"({LightingQualityTuningController.LightPixelsPerCell} пикс/клетку); " +
+            $"AO R8 {aoWidth}×{aoHeight} ({LightingConfigHolder.AmbientOcclusionPixelsPerCell} пикс/клетку, фиксировано, " +
+            $"около {aoBytes / (1024f * 1024f):N0} МиБ)";
         _cascadeDetail = $"{lighting.CascadeCount} каскадов, шагов до {lighting.MaximumIntervalSteps}";
-        _atlasDetail = $"{lighting.AtlasEntryCount} записей, источников {lighting.DynamicLightCount}";
+        _atlasDetail = $"каскады: {lighting.AtlasEntryCount:N0}/{lighting.AtlasCapacity:N0} записей, " +
+            $"источников динамики {lighting.DynamicLightCount}";
         _probeDetail = $"Пробы/клетку: запрос {LightingQualityTuningController.CascadeProbePixelsPerCell}, " +
             $"фактически {lighting.EffectiveCascadeProbesPerCell:0.##}";
         int lightDensity = LightingQualityTuningController.LightPixelsPerCell;
@@ -135,9 +145,26 @@ public sealed class LightingCostWindow : ToolWindow
             _probeDetail += $". Статика грубее карты света в {lightDensity / probeDensity} раз: " +
                 "тени от светящихся блоков мягче теней от фонарей.";
         }
-        _dynamicDetail = $"Последний кадр: {_telemetry.LightingDynamicDispatchPixels:N0} пикселей, " +
-            $"{_telemetry.LightingPolarRayWorkUnits:N0} отсчётов веера. " +
-            "GPU-время отдельных этапов здесь недоступно.";
+        string transport = LightingQualityTuningController.DynamicTransportMode switch
+        {
+            DynamicLightingTransportMode.ExactDda => "точный DDA",
+            DynamicLightingTransportMode.AcceleratedUniformRegions => "DDA + uniform skip",
+            DynamicLightingTransportMode.JumpFloodSdfSphereTracing => "JFA SDF + sphere tracing",
+            _ => throw new ArgumentOutOfRangeException(),
+        };
+        string batching = LightingQualityTuningController.BatchDynamicLights ? "batch включён" : "batch выключен";
+        string applied = LightingQualityTuningController.IsDynamicExecutionModeApplied
+            ? "применён"
+            : "ожидает пересчёта";
+        string execution = _lighting?.ActiveGraphicsPreset == Kern.Rendering.GraphicsPreset.Standard
+            ? "не выполняется: пресет Standard отключает динамический свет"
+            : applied;
+        _dynamicDetail = $"Режим: {transport}, {batching} ({execution}). " +
+            $"Последний кадр: {_telemetry.LightingDynamicReceiverDispatchCount} dispatch-приёмников, " +
+            $"{_telemetry.LightingDynamicPolarDispatchCount} dispatch-вейеров, " +
+            $"дескрипторы {_telemetry.LightingDynamicBatchDescriptorBytes:N0} Б; " +
+            $"{_telemetry.LightingDynamicDispatchPixels:N0} пикселей и " +
+            $"{_telemetry.LightingPolarRayWorkUnits:N0} отсчётов веера. GPU-время отдельных этапов здесь недоступно.";
     }
 
     private void Recalculate()
@@ -202,23 +229,79 @@ public sealed class LightingCostWindow : ToolWindow
 
     private void DrawQualityTuning()
     {
+        ToolChrome.SectionHeader("АЛГОРИТМ ДИНАМИЧЕСКОГО СВЕТА");
+        if (_lighting?.ActiveGraphicsPreset == Kern.Rendering.GraphicsPreset.Standard)
+        {
+            ToolChrome.Banner(
+                "ПРЕСЕТ STANDARD ОТКЛЮЧАЕТ ДИНАМИЧЕСКИЙ СВЕТ · DDA / JFA СЕЙЧАС НЕ ВЫПОЛНЯЮТСЯ",
+                ToolTheme.Warning);
+        }
+        GUILayout.Label("Выбор действует сразу до конца сессии; при смене света пересчитывается.", MutedLabelStyle);
+        int transportMode = (int)LightingQualityTuningController.DynamicTransportMode;
+        int nextTransportMode = GUILayout.SelectionGrid(transportMode,
+            ["Точный DDA", "Однородные области", "SDF / JFA"], 3, ToolTheme.SegmentedButton);
+        if (nextTransportMode >= 0 && nextTransportMode != transportMode)
+        {
+            if (!_lighting.TrySetDynamicTransportMode(
+                (DynamicLightingTransportMode)nextTransportMode, out string rejection))
+            {
+                _applyMessage = rejection;
+            }
+            else
+            {
+                _applyMessage = string.Empty;
+            }
+        }
+        GUILayout.Label("Сравнивай режимы на одной сцене при одинаковых настройках и источниках света.", MutedLabelStyle);
+
+        bool batchDynamicLights = GUILayout.Toggle(
+            LightingQualityTuningController.BatchDynamicLights,
+            "Батчить несколько фонарей",
+            ToolTheme.SegmentedButton);
+        if (batchDynamicLights != LightingQualityTuningController.BatchDynamicLights)
+        {
+            LightingQualityTuningController.SetBatchDynamicLights(batchDynamicLights);
+        }
+        GUILayout.Label("Группирует совместимые compute dispatch’и; результат должен совпадать с серийным путём.",
+            MutedLabelStyle);
+        bool acceleratedTransport = LightingQualityTuningController.DynamicTransportMode ==
+            DynamicLightingTransportMode.AcceleratedUniformRegions;
+        bool sdfTransport = LightingQualityTuningController.DynamicTransportMode ==
+            DynamicLightingTransportMode.JumpFloodSdfSphereTracing;
+        string selectedTransport = acceleratedTransport
+            ? "DDA + проверка однородной области"
+            : sdfTransport ? "JFA SDF + sphere tracing у препятствий" : "точный DDA";
+        GUILayout.Label($"Выбрано: {selectedTransport}; " +
+            $"batch {(LightingQualityTuningController.BatchDynamicLights ? "включён" : "выключен")}; " +
+            (LightingQualityTuningController.IsDynamicExecutionModeApplied
+                ? "настройка принята движком"
+                : "ожидается следующий пересчёт"), MutedLabelStyle);
+        GUILayout.Label(acceleratedTransport
+            ? "Ускоряется только ближний луч в доказанно однородной области; на остальных участках работает DDA."
+            : sdfTransport
+                ? "JFA строит поле расстояний до занятых текселей; сфера проходит свободный воздух, затем точный DDA обрабатывает границу и материал."
+                : "Точный DDA проходит геометрию динамического света.", MutedLabelStyle);
+
+        GUILayout.Space(10f);
         ToolChrome.SectionHeader("КАЧЕСТВО СВЕТА · VISUAL TUNING");
-        GUILayout.Label("Мир и AO: 32×32 на клетку. Поля ниже задают отдельную сетку света. " +
+        GUILayout.Label("Мир и AO остаются в точной сетке 32×32 на клетку. Ниже настраиваются " +
+            "плотность переноса и карта света; плотность проб каскадов настраивается отдельно. " +
             "Выбери значения и нажми «Применить». Правка действует до конца сессии.", MutedLabelStyle);
+        DrawQualityApplyControls();
         if (_lighting?.ActiveGraphicsPreset == Kern.Rendering.GraphicsPreset.Standard)
         {
             GUILayout.Label("Сейчас «Стандарт»: рассчитывается только AO. Для оценки света выбери Overdrive.",
                 MutedLabelStyle);
         }
 
-        int field = DrawPowerOfTwo("Перенос: материал и эмиссия · пикс/клетку", _draft.FieldPixelsPerCell, s_densityLabels, 1);
+        int field = DrawPowerOfTwo("Перенос: материал и свечение · пикс/клетку", _draft.FieldPixelsPerCell, s_densityLabels, 1);
         _draft = _draft with
         {
             FieldPixelsPerCell = field,
             LightPixelsPerCell = System.Math.Min(field, _draft.LightPixelsPerCell),
             CascadeProbePixelsPerCell = System.Math.Min(field, _draft.CascadeProbePixelsPerCell),
         };
-        GUILayout.Label("Сетка, по которой идут лучи: альбедо, эмиссия, силуэты стен. Однородные клетки " +
+        GUILayout.Label("Сетка, по которой идут лучи: альбедо, свечение, силуэты стен. Однородные клетки " +
             "лучи проходят за один шаг, поэтому цена растёт в основном на краях и светящихся клетках.",
             MutedLabelStyle);
         _draft = _draft with
@@ -235,7 +318,8 @@ public sealed class LightingCostWindow : ToolWindow
             MaximumStaticCascadeDirections = DrawPowerOfTwo("Статика · предел направлений",
                 _draft.MaximumStaticCascadeDirections, s_staticAngleLabels, 4),
         };
-        GUILayout.Label("Плотность и направления применяются точно. Если атлас не вмещает запрос, " +
+        GUILayout.Label("Плотность и направления применяются точно. Если атлас или полный пересчёт " +
+            "превышает предел, " +
             "«Применить» покажет причину; автоматического снижения нет.",
             MutedLabelStyle);
 
@@ -250,15 +334,50 @@ public sealed class LightingCostWindow : ToolWindow
             MutedLabelStyle);
         _draft = _draft with
         {
-            DynamicAngularSampleCount = DrawPowerOfTwo("Динамика · выборок на пиксель",
-                _draft.DynamicAngularSampleCount, s_sampleLabels, 1),
+            DynamicAngularSampleCount = DrawDiscreteSamples("Динамика · выборок на пиксель",
+                _draft.DynamicAngularSampleCount, s_sampleLabels, s_sampleValues),
             DynamicEmitterPointsPerAxis = 1 + DrawEmitterIndex(),
             DynamicPolarDirectionCount = DrawPowerOfTwo("Динамика · углов веера на точку",
                 _draft.DynamicPolarDirectionCount, s_polarLabels, 4),
         };
         GUILayout.Label("Цена веера растёт с числом углов и квадратом числа точек по оси. " +
             "Длина луча и частота обновления сохраняются.", MutedLabelStyle);
+        if (_lighting != null && _lighting.CellSize > 0f)
+        {
+            Vector4 worldRect = _lighting.WorldRect;
+            int gridWidth = Mathf.RoundToInt(worldRect.z / _lighting.CellSize);
+            int gridHeight = Mathf.RoundToInt(worldRect.w / _lighting.CellSize);
+            long receiverSamples = (long)gridWidth * _draft.LightPixelsPerCell *
+                gridHeight * _draft.LightPixelsPerCell * _lighting.DynamicLightCount *
+                _draft.DynamicAngularSampleCount;
+            GUILayout.Label($"Верхняя оценка при полном покрытии карты: {receiverSamples:N0} " +
+                "пиксель-сэмплов приёмника (площадь карты × фонари × выборки). Это не замер GPU.",
+                MutedLabelStyle);
+        }
 
+        DrawQualityApplyControls();
+        if (GUILayout.Button("Копировать в VisualTuning"))
+        {
+            GUIUtility.systemCopyBuffer =
+                "public static readonly LightingQualityTuning DefaultQuality = new(\n" +
+                $"    FieldPixelsPerCell: {_draft.FieldPixelsPerCell},\n" +
+                $"    LightPixelsPerCell: {_draft.LightPixelsPerCell},\n" +
+                $"    CascadeProbePixelsPerCell: {_draft.CascadeProbePixelsPerCell},\n" +
+                $"    MaximumStaticCascadeDirections: {_draft.MaximumStaticCascadeDirections},\n" +
+                $"    DynamicNearCells: {_draft.DynamicNearCells.ToString("0.0###", CultureInfo.InvariantCulture)}f,\n" +
+                $"    DynamicAngularSampleCount: {_draft.DynamicAngularSampleCount},\n" +
+                $"    DynamicEmitterPointsPerAxis: {_draft.DynamicEmitterPointsPerAxis},\n" +
+                $"    DynamicPolarDirectionCount: {_draft.DynamicPolarDirectionCount});";
+            _applyMessage = "Блок скопирован. Вставь вместо DefaultQuality в VisualTuning.cs для сохранения.";
+        }
+        if (_applyMessage.Length > 0)
+        {
+            GUILayout.Label(_applyMessage, MutedLabelStyle);
+        }
+    }
+
+    private void DrawQualityApplyControls()
+    {
         using (ToolLayout.Horizontal())
         {
             if (GUILayout.Button("Применить") && _draft != LightingQualityTuningController.Current)
@@ -279,20 +398,6 @@ public sealed class LightingCostWindow : ToolWindow
                 _draft = LightingQualityTuningController.Current;
                 _applyMessage = string.Empty;
             }
-        }
-        if (GUILayout.Button("Копировать в VisualTuning"))
-        {
-            GUIUtility.systemCopyBuffer =
-                "public static readonly LightingQualityTuning DefaultQuality = new(\n" +
-                $"    FieldPixelsPerCell: {_draft.FieldPixelsPerCell},\n" +
-                $"    LightPixelsPerCell: {_draft.LightPixelsPerCell},\n" +
-                $"    CascadeProbePixelsPerCell: {_draft.CascadeProbePixelsPerCell},\n" +
-                $"    MaximumStaticCascadeDirections: {_draft.MaximumStaticCascadeDirections},\n" +
-                $"    DynamicNearCells: {_draft.DynamicNearCells.ToString("0.0###", CultureInfo.InvariantCulture)}f,\n" +
-                $"    DynamicAngularSampleCount: {_draft.DynamicAngularSampleCount},\n" +
-                $"    DynamicEmitterPointsPerAxis: {_draft.DynamicEmitterPointsPerAxis},\n" +
-                $"    DynamicPolarDirectionCount: {_draft.DynamicPolarDirectionCount});";
-            _applyMessage = "Блок скопирован. Вставь вместо DefaultQuality в VisualTuning.cs для сохранения.";
         }
         if (_applyMessage.Length > 0)
         {
@@ -321,6 +426,14 @@ public sealed class LightingCostWindow : ToolWindow
         }
         int selected = GUILayout.SelectionGrid(index, labels, 3, ToolTheme.SegmentedButton);
         return selected < 0 ? value : first << selected;
+    }
+
+    private static int DrawDiscreteSamples(string label, int value, string[] labels, int[] values)
+    {
+        GUILayout.Label(label, ToolTheme.WrappedLabel);
+        int selectedIndex = System.Array.IndexOf(values, value);
+        int selected = GUILayout.SelectionGrid(selectedIndex, labels, 3, ToolTheme.SegmentedButton);
+        return selected < 0 ? value : values[selected];
     }
 
     private void DrawCascadeRows()

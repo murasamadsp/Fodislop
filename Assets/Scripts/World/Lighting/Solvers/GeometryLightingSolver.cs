@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces.Diagnostics;
 using Unity.Profiling;
@@ -25,18 +26,18 @@ internal sealed class GeometryLightingSolver
         Vector4 worldRect)
     {
         commandBuffer.BeginSample("Kern.Lighting.MaterialField");
-        terrainGeometry.RenderMaterialEmissionFields(
+        terrainGeometry.RenderMaterialGlowFields(
             commandBuffer,
-            new Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext(
+            new Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext(
                 _resources.MaterialField!,
-                _resources.StaticEmissionField!,
+                _resources.StaticGlowField!,
                 worldRect));
         if (geometryRegistry.HasContributors)
         {
-            geometryRegistry.RenderMaterialEmissionFields(
+            geometryRegistry.RenderMaterialGlowFields(
                 commandBuffer,
                 _resources.MaterialField!,
-                _resources.StaticEmissionField!,
+                _resources.StaticGlowField!,
                 worldRect,
                 clearFields: false);
         }
@@ -52,37 +53,44 @@ internal sealed class GeometryLightingSolver
         Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor terrainGeometry,
         LightingGeometryRegistry geometryRegistry,
         Vector4 worldRect,
-        RectInt? rasterRect = null)
+        IReadOnlyList<RectInt>? rasterRects = null)
     {
         using var marker = s_aoRecordMarker.Auto();
         RenderTexture ambientOcclusionField = _resources.AmbientOcclusionField!;
-        RectInt rect = rasterRect ?? new RectInt(0, 0, ambientOcclusionField.width, ambientOcclusionField.height);
-        if (rect.width == 0 && rect.height == 0)
+        bool isPartial = rasterRects != null;
+        if (isPartial && rasterRects!.Count == 0)
         {
             return;
         }
 
-        if (rect.x < 0 || rect.y < 0 || rect.width <= 0 || rect.height <= 0 ||
-            rect.xMax > ambientOcclusionField.width || rect.yMax > ambientOcclusionField.height)
+        RectInt fullRect = new(0, 0, ambientOcclusionField.width, ambientOcclusionField.height);
+        if (isPartial)
         {
-            throw new System.ArgumentOutOfRangeException(nameof(rasterRect), "AO raster rectangle is outside its target.");
+            for (int i = 0; i < rasterRects!.Count; i++)
+            {
+                ValidateRasterRect(rasterRects[i], ambientOcclusionField);
+            }
         }
 
         commandBuffer.BeginSample("Kern.Lighting.AmbientOcclusionField");
-        commandBuffer.BeginSample(rasterRect.HasValue
+        commandBuffer.BeginSample(isPartial
             ? "Kern.Lighting.AmbientOcclusionField.Partial"
             : "Kern.Lighting.AmbientOcclusionField.Full");
         commandBuffer.DisableScissorRect();
         commandBuffer.SetRenderTarget(new RenderTargetIdentifier(ambientOcclusionField),
-            rasterRect.HasValue ? RenderBufferLoadAction.Load : RenderBufferLoadAction.DontCare,
+            isPartial ? RenderBufferLoadAction.Load : RenderBufferLoadAction.DontCare,
             RenderBufferStoreAction.Store);
-        if (rasterRect.HasValue)
+        if (isPartial)
         {
-            // Clear by rasterization: ClearRenderTarget ignores scissor on Metal.
-            // The loaded attachment preserves every pixel outside this viewport.
-            commandBuffer.SetViewport(new Rect(rect.x, rect.y, rect.width, rect.height));
-            commandBuffer.DrawProcedural(Matrix4x4.identity, _resources.AmbientOcclusionClearMaterial,
-                0, MeshTopology.Triangles, 3);
+            for (int i = 0; i < rasterRects!.Count; i++)
+            {
+                RectInt rect = rasterRects[i];
+                // Clear by rasterization: ClearRenderTarget ignores scissor on
+                // Metal. The loaded attachment preserves pixels outside each rect.
+                commandBuffer.SetViewport(new Rect(rect.x, rect.y, rect.width, rect.height));
+                commandBuffer.DrawProcedural(Matrix4x4.identity, _resources.AmbientOcclusionClearMaterial,
+                    0, MeshTopology.Triangles, 3);
+            }
         }
         else
         {
@@ -101,42 +109,86 @@ internal sealed class GeometryLightingSolver
             commandBuffer.EndSample("Kern.Lighting.AmbientOcclusionField.PrimeClearPipeline");
         }
 
-        commandBuffer.SetViewport(new Rect(0f, 0f, ambientOcclusionField.width, ambientOcclusionField.height));
-        commandBuffer.EnableScissorRect(new Rect(rect.x, rect.y, rect.width, rect.height));
-        terrainGeometry.RenderAmbientOcclusionField(
-            commandBuffer,
-            new Kern.Core.Interfaces.WorldLighting.LightingAmbientOcclusionContext(
-                ambientOcclusionField,
-                worldRect)
-            {
-                RasterRect = rasterRect,
-            });
-        if (geometryRegistry.HasContributors)
+        int drawCount = isPartial ? rasterRects!.Count : 1;
+        long rasterizedPixels = 0;
+        RectInt bounds = isPartial ? rasterRects![0] : fullRect;
+        for (int i = 0; i < drawCount; i++)
         {
-            geometryRegistry.RenderAmbientOcclusionField(
+            RectInt rect = isPartial ? rasterRects![i] : fullRect;
+            rasterizedPixels += (long)rect.width * rect.height;
+            if (i > 0)
+            {
+                bounds = Union(bounds, rect);
+            }
+
+            commandBuffer.SetViewport(new Rect(0f, 0f, ambientOcclusionField.width, ambientOcclusionField.height));
+            commandBuffer.EnableScissorRect(new Rect(rect.x, rect.y, rect.width, rect.height));
+            RectInt? contextRect = isPartial ? rect : null;
+            terrainGeometry.RenderAmbientOcclusionField(
                 commandBuffer,
-                ambientOcclusionField,
-                worldRect,
-                clearField: false,
-                rasterRect: rasterRect);
+                new Kern.Core.Interfaces.WorldLighting.LightingAmbientOcclusionContext(
+                    ambientOcclusionField,
+                    worldRect)
+                {
+                    RasterRect = contextRect,
+                });
+            if (geometryRegistry.HasContributors)
+            {
+                geometryRegistry.RenderAmbientOcclusionField(
+                    commandBuffer,
+                    ambientOcclusionField,
+                    worldRect,
+                    clearField: false,
+                    rasterRect: contextRect);
+            }
         }
 
         // Visible terrain samples mip zero around the transformed receiver.
         // Keeping exact displaced occupancy avoids carrier-shaped mip halos.
         commandBuffer.DisableScissorRect();
         commandBuffer.SetViewport(new Rect(0f, 0f, ambientOcclusionField.width, ambientOcclusionField.height));
-        commandBuffer.EndSample(rasterRect.HasValue
+        commandBuffer.EndSample(isPartial
             ? "Kern.Lighting.AmbientOcclusionField.Partial"
             : "Kern.Lighting.AmbientOcclusionField.Full");
         commandBuffer.EndSample("Kern.Lighting.AmbientOcclusionField");
-        FrameEventLog.Record($"AO: {(rasterRect.HasValue ? "частично" : "целиком")} " +
-            $"{rect.width}×{rect.height} ({(long)rect.width * rect.height} пикселей), " +
-            $"поле {ambientOcclusionField.width}×{ambientOcclusionField.height}, " +
-            $"clear: 1 draw, {(rasterRect.HasValue ? (long)rect.width * rect.height : 1L)} пикселей");
+        string clearCost = isPartial
+            ? drawCount == 1
+                ? $"прямоугольник {bounds.width}×{bounds.height} пикселей"
+                : $"{drawCount} прямоугольника, суммарно {rasterizedPixels} пикселей"
+            : $"всё поле {(long)ambientOcclusionField.width * ambientOcclusionField.height} пикселей + 1 прогревочный пиксель";
+        FrameEventLog.Record($"AO: {(isPartial ? "частично" : "целиком")} " +
+            $"границы {bounds.width}×{bounds.height}, обработано {rasterizedPixels} пикселей, " +
+            $"поле R8 {ambientOcclusionField.width}×{ambientOcclusionField.height}, " +
+            $"draws={drawCount}, очистка: {clearCost}");
+    }
+
+    private static void ValidateRasterRect(RectInt rect, RenderTexture field)
+    {
+        if (rect.x < 0 || rect.y < 0 || rect.width <= 0 || rect.height <= 0 ||
+            rect.xMax > field.width || rect.yMax > field.height)
+        {
+            throw new System.ArgumentOutOfRangeException(
+                nameof(rect),
+                "AO raster rectangle is outside its target.");
+        }
+    }
+
+    private static RectInt Union(RectInt left, RectInt right)
+    {
+        int minX = Mathf.Min(left.xMin, right.xMin);
+        int minY = Mathf.Min(left.yMin, right.yMin);
+        int maxX = Mathf.Max(left.xMax, right.xMax);
+        int maxY = Mathf.Max(left.yMax, right.yMax);
+        return new RectInt(minX, minY, maxX - minX, maxY - minY);
     }
 
     public void PrepareCaches(CommandBuffer commandBuffer, bool materialFieldRebuilt)
     {
+        if (materialFieldRebuilt)
+        {
+            _resources.DynamicDistanceFieldValid = false;
+        }
+
         ComputeShader compute = _resources.LightingCompute!;
         RenderTexture cellSolidMask = _resources.CellSolidMask!;
         int buildMaskKernel = _resources.BuildCellSolidMaskKernel;
@@ -156,11 +208,21 @@ internal sealed class GeometryLightingSolver
             _resources.SolveCascadeKernel,
             LightingComputeBinder.CleanCellPrefixId,
             _resources.CleanCellPrefix!);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            _resources.SolveDynamicLightingBatchKernel,
+            LightingComputeBinder.CleanCellPrefixId,
+            _resources.CleanCellPrefix!);
         commandBuffer.SetComputeTextureParam(
             compute,
             _resources.SolveDynamicLightingKernel,
             LightingComputeBinder.CellSolidMaskId,
             cellSolidMask);
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            _resources.SolveDynamicLightingKernel,
+            LightingComputeBinder.CleanCellPrefixId,
+            _resources.CleanCellPrefix!);
         commandBuffer.SetComputeTextureParam(
             compute,
             _resources.TraceDynamicPolarKernel,
@@ -231,6 +293,86 @@ internal sealed class GeometryLightingSolver
         _resources.GeometryCachesValid = true;
     }
 
+    public bool PrepareDynamicDistanceField(CommandBuffer commandBuffer)
+    {
+        if (LightingQualityTuningController.DynamicTransportMode !=
+            DynamicLightingTransportMode.JumpFloodSdfSphereTracing)
+        {
+            return false;
+        }
+
+        _resources.EnsureDynamicDistanceField();
+        if (_resources.DynamicDistanceFieldValid)
+        {
+            return false;
+        }
+
+        ComputeShader compute = _resources.LightingCompute!;
+        int width = _resources.FieldWidth;
+        int height = _resources.FieldHeight;
+        int seedKernel = _resources.SeedDynamicDistanceFieldKernel;
+        int jumpKernel = _resources.JumpFloodDynamicDistanceFieldKernel;
+        int resolveKernel = _resources.ResolveDynamicDistanceFieldKernel;
+        commandBuffer.BeginSample("Kern.Lighting.DynamicSdf.JumpFloodBuild");
+        commandBuffer.BeginSample("Kern.Lighting.DynamicSdf.Seed");
+        BindFieldTextures(commandBuffer, compute, seedKernel);
+        commandBuffer.SetComputeBufferParam(
+            compute, seedKernel, LightingComputeBinder.DynamicSdfSeedOutputId, _resources.DynamicDistanceSeedsA!);
+        commandBuffer.DispatchCompute(compute, seedKernel,
+            LightingComputeBinder.DispatchGroups(width), LightingComputeBinder.DispatchGroups(height), 1);
+        commandBuffer.EndSample("Kern.Lighting.DynamicSdf.Seed");
+
+        int jumpStep = 1;
+        int largestSide = width > height ? width : height;
+        while (jumpStep < largestSide)
+        {
+            jumpStep <<= 1;
+        }
+        jumpStep >>= 1;
+        ComputeBuffer source = _resources.DynamicDistanceSeedsA!;
+        ComputeBuffer destination = _resources.DynamicDistanceSeedsB!;
+        while (jumpStep >= 1)
+        {
+            commandBuffer.BeginSample("Kern.Lighting.DynamicSdf.JumpFloodPass");
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicSdfJumpStepId, jumpStep);
+            commandBuffer.SetComputeBufferParam(
+                compute, jumpKernel, LightingComputeBinder.DynamicSdfSeedInputId, source);
+            commandBuffer.SetComputeBufferParam(
+                compute, jumpKernel, LightingComputeBinder.DynamicSdfSeedOutputId, destination);
+            commandBuffer.DispatchCompute(compute, jumpKernel,
+                LightingComputeBinder.DispatchGroups(width), LightingComputeBinder.DispatchGroups(height), 1);
+            commandBuffer.EndSample("Kern.Lighting.DynamicSdf.JumpFloodPass");
+            (source, destination) = (destination, source);
+            jumpStep >>= 1;
+        }
+
+        // JFA+1 reduces nearest-seed errors at diagonal and narrow features.
+        commandBuffer.BeginSample("Kern.Lighting.DynamicSdf.JumpFloodPass");
+        commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicSdfJumpStepId, 1);
+        commandBuffer.SetComputeBufferParam(
+            compute, jumpKernel, LightingComputeBinder.DynamicSdfSeedInputId, source);
+        commandBuffer.SetComputeBufferParam(
+            compute, jumpKernel, LightingComputeBinder.DynamicSdfSeedOutputId, destination);
+        commandBuffer.DispatchCompute(compute, jumpKernel,
+            LightingComputeBinder.DispatchGroups(width), LightingComputeBinder.DispatchGroups(height), 1);
+        commandBuffer.EndSample("Kern.Lighting.DynamicSdf.JumpFloodPass");
+        source = destination;
+
+        commandBuffer.BeginSample("Kern.Lighting.DynamicSdf.Resolve");
+        commandBuffer.SetComputeBufferParam(
+            compute, resolveKernel, LightingComputeBinder.DynamicSdfSeedInputId, source);
+        commandBuffer.SetComputeTextureParam(
+            compute, resolveKernel, LightingComputeBinder.MaterialFieldId, _resources.MaterialField!);
+        commandBuffer.SetComputeTextureParam(
+            compute, resolveKernel, LightingComputeBinder.DynamicSdfOutputId, _resources.DynamicDistanceField!);
+        commandBuffer.DispatchCompute(compute, resolveKernel,
+            LightingComputeBinder.DispatchGroups(width), LightingComputeBinder.DispatchGroups(height), 1);
+        commandBuffer.EndSample("Kern.Lighting.DynamicSdf.Resolve");
+        commandBuffer.EndSample("Kern.Lighting.DynamicSdf.JumpFloodBuild");
+        _resources.DynamicDistanceFieldValid = true;
+        return true;
+    }
+
     private void BindFieldTextures(
         CommandBuffer commandBuffer,
         ComputeShader compute,
@@ -241,7 +383,7 @@ internal sealed class GeometryLightingSolver
             compute,
             kernel,
             _resources.MaterialField!,
-            _resources.StaticEmissionField!,
+            _resources.StaticGlowField!,
             _resources.LightingCounters);
     }
 }

@@ -13,6 +13,7 @@ internal sealed class DynamicLightingSolver
     private readonly LightingResourceManager _resources;
     private readonly DynamicLightManager _lightManager;
     private readonly DynamicLightTileCache _tileCache;
+    private readonly DynamicLightBatch _batch = new();
     private RectInt[] _lightRects = new RectInt[1];
     private DynamicLightTileCache.TileInfo[] _lightTileInfos = new DynamicLightTileCache.TileInfo[1];
     private Vector2Int[] _lightRaySizes = new Vector2Int[1];
@@ -47,6 +48,7 @@ internal sealed class DynamicLightingSolver
 
     public void Release()
     {
+        _batch.Release();
         _tileCache.Release();
         _previousLightCount = 0;
         _composedRects.Clear();
@@ -118,7 +120,7 @@ internal sealed class DynamicLightingSolver
             float brightest = Mathf.Max(
                 0f,
                 Mathf.Max(light.ColorIntensity.x, Mathf.Max(light.ColorIntensity.y, light.ColorIntensity.z)) *
-                    light.ColorIntensity.w) * LightingConfigHolder.EmissionScale;
+                    light.ColorIntensity.w) * LightingConfigHolder.GlowScale;
             RectInt rect = default;
             if (brightest > 0f)
             {
@@ -201,9 +203,10 @@ internal sealed class DynamicLightingSolver
         }
 
         _tileCache.AssignSlots(lightIds.Slice(0, count));
-        // Resize before evaluating cache validity: replacing this array loses
-        // every layer's optical depth, including unchanged source slots.
-        _tileCache.EnsurePolar(LightingQualityTuningController.DynamicPolarDirectionCount, longestRequestedRay);
+        // Defer polar allocation until the frame-wide work budget has selected
+        // each fan's effective angular width. Allocating authored maximum
+        // quality first wastes memory and can exceed texture limits even when
+        // this frame must be conservatively reduced.
         MarkLightsNeedingTrace(count, lights, lightIds);
 
         int widestRayFan = DynamicPolarWorkBudget.AllocateRayFans(
@@ -212,6 +215,10 @@ internal sealed class DynamicLightingSolver
             _lightNeedsTrace,
             _lightRaySizes,
             out int longestRay);
+
+        // Resize before evaluating cache validity: replacing this array loses
+        // every layer's optical depth, including unchanged source slots.
+        _tileCache.EnsurePolar(widestRayFan, longestRay);
 
         // Several lights on a retained atlas: patch only what changed. One
         // light writes DirectTexture directly; a replaced atlas or a static
@@ -293,8 +300,20 @@ internal sealed class DynamicLightingSolver
             LightingComputeBinder.DynamicPolarTextureSizeId,
             polarRays.width,
             polarRays.height);
-        int traceKernel = _resources.SolveDynamicLightingKernel;
-        BindFieldTextures(commandBuffer, traceKernel, _resources.StaticEmissionField!);
+        bool batchLights = (LightingComputeBinder.DiagnosticBatchedDynamicLights ||
+            LightingQualityTuningController.BatchDynamicLights) && count > 1;
+        int traceKernel = batchLights
+            ? _resources.SolveDynamicLightingBatchKernel
+            : _resources.SolveDynamicLightingKernel;
+        BindFieldTextures(commandBuffer, traceKernel, _resources.StaticGlowField!);
+        // GatherDynamicSource uses the clean-cell prefix for its uniform
+        // medium proof. Cache preparation runs only when geometry is rebuilt,
+        // while this dispatch can run on every moving-light frame.
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            traceKernel,
+            LightingComputeBinder.CleanCellPrefixId,
+            _resources.CleanCellPrefix!);
         commandBuffer.SetComputeBufferParam(compute, traceKernel, LightingComputeBinder.DynamicLightsId, _resources.DynamicLightBuffer!);
         commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.DynamicTilesId, tiles);
         commandBuffer.SetComputeTextureParam(compute, traceKernel, LightingComputeBinder.DynamicPolarInputId, polarRays);
@@ -308,13 +327,40 @@ internal sealed class DynamicLightingSolver
             traceKernel,
             LightingComputeBinder.CellSolidMaskId,
             _resources.CellSolidMask!);
-        int rayKernel = _resources.TraceDynamicPolarKernel;
+        int rayKernel = batchLights
+            ? _resources.TraceDynamicPolarBatchKernel
+            : _resources.TraceDynamicPolarKernel;
         ComputeBuffer horizon = _tileCache.Horizon!;
         int horizonStride = _tileCache.HorizonStride;
         commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicHorizonStrideId, horizonStride);
         commandBuffer.SetComputeBufferParam(compute, traceKernel, LightingComputeBinder.DynamicHorizonInputId, horizon);
         commandBuffer.SetComputeBufferParam(compute, rayKernel, LightingComputeBinder.DynamicHorizonId, horizon);
-        BindFieldTextures(commandBuffer, rayKernel, _resources.StaticEmissionField!);
+        BindFieldTextures(commandBuffer, rayKernel, _resources.StaticGlowField!);
+        commandBuffer.SetComputeIntParam(
+            compute,
+            LightingComputeBinder.LightingCountersEnabledId,
+            LightingComputeBinder.DiagnosticTransportCounters ? 1 : 0);
+        RenderTexture dynamicSdfInput = _resources.CellSolidMask!;
+        if (LightingQualityTuningController.DynamicTransportMode ==
+            DynamicLightingTransportMode.JumpFloodSdfSphereTracing)
+        {
+            RenderTexture? sdfField = _resources.DynamicDistanceField;
+            if (!_resources.DynamicDistanceFieldValid || sdfField == null)
+            {
+                throw new InvalidOperationException(
+                    "JFA sphere tracing was selected before its geometry distance field was built.");
+            }
+
+            dynamicSdfInput = sdfField;
+        }
+        // Runtime branching does not remove this resource from the compiled
+        // kernel signature. Bind a harmless existing field for exact DDA and
+        // uniform-region transport, where _DynamicSdfTransportEnabled is zero.
+        commandBuffer.SetComputeTextureParam(
+            compute,
+            rayKernel,
+            LightingComputeBinder.DynamicSdfInputId,
+            dynamicSdfInput);
         commandBuffer.SetComputeTextureParam(compute, rayKernel, LightingComputeBinder.DynamicPolarId, polarRays);
         commandBuffer.SetComputeBufferParam(compute, rayKernel, LightingComputeBinder.DynamicLightsId, _resources.DynamicLightBuffer!);
         commandBuffer.SetComputeTextureParam(
@@ -324,6 +370,7 @@ internal sealed class DynamicLightingSolver
             _resources.CellSolidMask!);
 
         _currentLightIds.Clear();
+        _batch.Begin();
         for (int lightIndex = 0; lightIndex < count; lightIndex++)
         {
             DynamicLightGPUData light = lights[lightIndex];
@@ -385,10 +432,20 @@ internal sealed class DynamicLightingSolver
                 // Slot identity owns cached optical depth and its horizon. An
                 // upload may reorder light indices without invalidating either.
                 // Every fan thread overwrites its own horizon entry: no clear.
-                commandBuffer.BeginSample("Kern.Lighting.DynamicPolar");
-                commandBuffer.DispatchCompute(compute, rayKernel,
-                    Mathf.CeilToInt(raySize.x / 64f), LightingComputeBinder.DynamicEmitterPointCount, 1);
-                commandBuffer.EndSample("Kern.Lighting.DynamicPolar");
+                if (!batchLights)
+                {
+                    commandBuffer.BeginSample("Kern.Lighting.DynamicPolar");
+                    string transportMarker = LightingQualityTuningController.DynamicTransportMode ==
+                        DynamicLightingTransportMode.JumpFloodSdfSphereTracing
+                        ? "Kern.Lighting.DynamicPolar.JfaSphereTrace"
+                        : "Kern.Lighting.DynamicPolar.DdaTrace";
+                    commandBuffer.BeginSample(transportMarker);
+                    commandBuffer.DispatchCompute(compute, rayKernel,
+                        Mathf.CeilToInt(raySize.x / 64f), LightingComputeBinder.DynamicEmitterPointCount, 1);
+                    commandBuffer.EndSample(transportMarker);
+                    commandBuffer.EndSample("Kern.Lighting.DynamicPolar");
+                    telemetry.LightingDynamicPolarDispatchCount++;
+                }
                 _tileCache.MarkPolarTraced(slot, raySize);
                 polarRayWorkUnits += (long)raySize.x * LightingComputeBinder.DynamicEmitterPointCount * raySize.y;
             }
@@ -398,16 +455,32 @@ internal sealed class DynamicLightingSolver
             commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.DynamicDispatchSizeId, rect.width, rect.height);
             commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.DynamicTileOffsetId, tileOffset.x, tileOffset.y);
             commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicLightIndexId, lightIndex);
-            commandBuffer.BeginSample("Kern.Lighting.DynamicReceiverTrace");
-            commandBuffer.DispatchCompute(
-                compute,
-                traceKernel,
-                LightingComputeBinder.DispatchGroups(rect.width),
-                LightingComputeBinder.DispatchGroups(rect.height),
-                1);
-            commandBuffer.EndSample("Kern.Lighting.DynamicReceiverTrace");
+            if (batchLights)
+            {
+                _batch.Add(new DynamicLightBatch.WorkItem(rect, raySize, lightIndex, slot), tracePolar);
+            }
+            else
+            {
+                commandBuffer.BeginSample("Kern.Lighting.DynamicReceiverTrace");
+                commandBuffer.DispatchCompute(
+                    compute,
+                    traceKernel,
+                    LightingComputeBinder.DispatchGroups(rect.width),
+                    LightingComputeBinder.DispatchGroups(rect.height),
+                    1);
+                commandBuffer.EndSample("Kern.Lighting.DynamicReceiverTrace");
+                telemetry.LightingDynamicReceiverDispatchCount++;
+            }
             _tileCache.MarkTraced(slot, light.PositionRadius, light.ColorIntensity, rect);
             telemetry.LightingDynamicTraceCount++;
+        }
+
+        if (batchLights)
+        {
+            _batch.Record(commandBuffer, compute, rayKernel, traceKernel);
+            telemetry.LightingDynamicPolarDispatchCount += _batch.PolarDispatchCount;
+            telemetry.LightingDynamicReceiverDispatchCount += _batch.ReceiverDispatchCount;
+            telemetry.LightingDynamicBatchDescriptorBytes += _batch.UploadedBytes;
         }
 
         // Lights gone since the last solve leave their old area to recompose.
@@ -579,14 +652,14 @@ internal sealed class DynamicLightingSolver
     private void BindFieldTextures(
         CommandBuffer commandBuffer,
         int kernel,
-        RenderTexture emissionField)
+        RenderTexture glowField)
     {
         LightingComputeBinder.BindFieldTextures(
             commandBuffer,
             _resources.LightingCompute!,
             kernel,
             _resources.MaterialField!,
-            emissionField,
+            glowField,
             _resources.LightingCounters);
     }
 }

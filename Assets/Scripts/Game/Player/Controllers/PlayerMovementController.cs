@@ -392,7 +392,11 @@ namespace Kern.Player.Logic
                 }
             }
 
-            OnPlayerMoved?.Invoke(oldPos, Position);
+            if (oldPos != Position)
+            {
+                OnPlayerMoved?.Invoke(oldPos, Position);
+            }
+
             if (teleport)
             {
                 // Респаун/ТП: маршрут до старой цели теряет смысл.
@@ -445,7 +449,17 @@ namespace Kern.Player.Logic
             }
 
             Vector2 moveInput = _input.MoveInput;
-            if (_awaitingMoveConfirmation || moveInput == Vector2.zero)
+            if (moveInput != Vector2.zero && _clickPath != null)
+            {
+                CancelClickPath();
+            }
+
+            if (_awaitingMoveConfirmation)
+            {
+                return;
+            }
+
+            if (moveInput == Vector2.zero)
             {
                 // Ручного ввода нет - ведём робота по клик-маршруту (ЛКМ).
                 if (_clickPath != null)
@@ -454,12 +468,6 @@ namespace Kern.Player.Logic
                 }
 
                 return;
-            }
-
-            // Ручной ввод перебивает маршрут.
-            if (_clickPath != null)
-            {
-                CancelClickPath();
             }
 
             Vector2Int direction = PlayerMovementMath.InputToDirection(moveInput);
@@ -565,6 +573,15 @@ namespace Kern.Player.Logic
 
             if (isPassable || _ignoreCollision)
             {
+                _robot.TargetAngle = PlayerMovementMath.DirectionToAngle(direction);
+                _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(
+                    targetServerX,
+                    targetServerY,
+                    mapDataProvider.WorldHeight,
+                    transform.position.z);
+                Vector2Int oldPos = Position;
+                Position = targetPosition;
+                OnPlayerMoved?.Invoke(oldPos, Position);
                 _lastMoveTime = Time.time;
                 _awaitingMoveConfirmation = true;
                 _networkService?.SendAction(new MovePacket(targetServerX, targetServerY));

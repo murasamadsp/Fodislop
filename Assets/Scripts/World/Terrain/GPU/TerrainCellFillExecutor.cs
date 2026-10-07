@@ -219,14 +219,14 @@ namespace Kern.World.Terrain
             // Классификация клетки: дверь ли она (накладка) и смещена ли.
             long quadStart = System.Diagnostics.Stopwatch.GetTimestamp();
             CellType type = sources.CellCache.GetCell(x + 1, y + 1).Type;
-            bool door = MapCellConfigCatalog.GetVisualProperties(type).IsBuildingDoor;
+            bool door = BlockRegistry.Get(type).Outline == CellOutline.Door;
             quadTicks = System.Diagnostics.Stopwatch.GetTimestamp() - quadStart;
 
             // Смещённая искажающая клетка: признак того, что реальная карта
             // дала геометрию, а не плоскую сетку.
             if (countAnchoredForeground &&
                 type != CellType.Unloaded &&
-                TerrainVertexDistortionCalculator.IsCause(sources.CellCache.GetCellData(x + 1, y + 1)) &&
+                TerrainVertexDistortionCalculator.IsWavy(sources.CellCache.GetCellData(x + 1, y + 1)) &&
                 TerrainVertexDistortionCalculator.ComputeNode(
                     sources.CellCache, sources.Distortion, x, y, sources.WorldWidth, sources.WorldHeight) !=
                     TerrainVertexOffset.Zero)

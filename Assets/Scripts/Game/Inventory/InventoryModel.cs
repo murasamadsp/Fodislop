@@ -18,7 +18,7 @@ namespace Kern.Game.Inventory;
 /// the currently selected item, and forwards client-to-server selection
 /// commands through <see cref="INetworkService"/>.
 /// </summary>
-public class InventoryModel : IInventoryModel, IInventoryState
+public class InventoryModel : IInventoryModel, IInventoryState, IBatchAwareProcessor
 {
     [Inject]
     private INetworkService _networkService = null!;
@@ -27,9 +27,42 @@ public class InventoryModel : IInventoryModel, IInventoryState
     private readonly Dictionary<ItemType, ItemData> _items = new();
 
     private ItemType? _selectedItem;
+    private int _batchDepth;
+    private bool _hasPendingItemsChanged;
 
     public event Action? OnItemsChanged;
     public event Action<ItemType?>? OnSelectedChanged;
+
+    public void BeginBatch()
+    {
+        _batchDepth++;
+    }
+
+    public void EndBatch()
+    {
+        if (_batchDepth <= 0)
+        {
+            return;
+        }
+
+        _batchDepth--;
+        if (_batchDepth == 0 && _hasPendingItemsChanged)
+        {
+            _hasPendingItemsChanged = false;
+            OnItemsChanged?.Invoke();
+        }
+    }
+
+    private void NotifyItemsChanged()
+    {
+        if (_batchDepth > 0)
+        {
+            _hasPendingItemsChanged = true;
+            return;
+        }
+
+        OnItemsChanged?.Invoke();
+    }
 
     public IReadOnlyList<ItemType> OrderedTypes => _order;
 
@@ -83,7 +116,7 @@ public class InventoryModel : IInventoryModel, IInventoryState
         }
 
         ClearSelectionIfVanished();
-        OnItemsChanged?.Invoke();
+        NotifyItemsChanged();
     }
 
     public void MergeChanges(IDictionary<ItemType, long> changes)
@@ -130,7 +163,7 @@ public class InventoryModel : IInventoryModel, IInventoryState
 
         if (shouldInvalidate)
         {
-            OnItemsChanged?.Invoke();
+            NotifyItemsChanged();
         }
     }
 
@@ -143,7 +176,7 @@ public class InventoryModel : IInventoryModel, IInventoryState
 
         data.Name = name;
         data.Description = description;
-        OnItemsChanged?.Invoke();
+        NotifyItemsChanged();
     }
 
     public void Select(ItemType type)
@@ -158,7 +191,7 @@ public class InventoryModel : IInventoryModel, IInventoryState
             _selectedItem = type;
             MoveToFront(type);
             OnSelectedChanged?.Invoke(type);
-            OnItemsChanged?.Invoke();
+            NotifyItemsChanged();
         }
 
         if (_networkService == null)

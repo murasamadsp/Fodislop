@@ -17,9 +17,10 @@ namespace Kern.World.Lighting;
 internal static class LightingAmbientOcclusionUpdatePolicy
 {
     // A cell edit changes its one-cell neighbourhood. Displaced geometry extends
-    // less than half a cell and contact reach is 0.75 cells: ceil(1 + 0.5 + 0.75).
+    // less than half a cell and contact reach is 0.8 cells: ceil(1 + 0.5 + 0.8).
     // Keep the complete support, including old geometry that must be erased.
     internal const int SupportHaloCells = 3;
+    internal const int MaximumPartialRasterRects = 8;
 
     public static bool CanUpdatePartially(
         LightingRuntimeState state,
@@ -36,7 +37,7 @@ internal static class LightingAmbientOcclusionUpdatePolicy
             state.ActiveRegionInvalidations.Count > 0;
     }
 
-    public static RectInt ResolveRasterRect(
+    public static IReadOnlyList<RectInt> ResolveRasterRects(
         IReadOnlyList<RectInt> dirtyRegions,
         RectInt fieldWorldCells,
         int pixelsPerCell,
@@ -47,10 +48,7 @@ internal static class LightingAmbientOcclusionUpdatePolicy
             throw new ArgumentOutOfRangeException(nameof(fieldWorldCells));
         }
 
-        long minX = fieldWorldCells.xMax;
-        long minY = fieldWorldCells.yMax;
-        long maxX = fieldWorldCells.xMin;
-        long maxY = fieldWorldCells.yMin;
+        var rasterRects = new List<RectInt>(Math.Min(dirtyRegions.Count, MaximumPartialRasterRects + 1));
         foreach (RectInt region in dirtyRegions)
         {
             if (region.width <= 0 || region.height <= 0)
@@ -67,30 +65,78 @@ internal static class LightingAmbientOcclusionUpdatePolicy
                 continue;
             }
 
-            minX = Math.Min(minX, left);
-            minY = Math.Min(minY, bottom);
-            maxX = Math.Max(maxX, right);
-            maxY = Math.Max(maxY, top);
+            int pixelWidth = checked((int)((right - left) * pixelsPerCell));
+            int pixelHeight = checked((int)((top - bottom) * pixelsPerCell));
+            int bottomUpY = checked((int)((bottom - fieldWorldCells.yMin) * pixelsPerCell));
+            // A top-down render target addresses bottom-up field row y as
+            // height - 1 - y. Flip only the row of each support rectangle.
+            int pixelY = rowsTopDown
+                ? checked(fieldWorldCells.height * pixelsPerCell - bottomUpY - pixelHeight)
+                : bottomUpY;
+            rasterRects.Add(new RectInt(
+                checked((int)((left - fieldWorldCells.xMin) * pixelsPerCell)),
+                pixelY,
+                pixelWidth,
+                pixelHeight));
         }
 
-        if (maxX <= minX || maxY <= minY)
+        MergePixelFreeUnions(rasterRects);
+        rasterRects.Sort(static (left, right) =>
         {
-            return default;
+            int rowOrder = left.y.CompareTo(right.y);
+            return rowOrder != 0 ? rowOrder : left.x.CompareTo(right.x);
+        });
+
+        if (rasterRects.Count > MaximumPartialRasterRects)
+        {
+            RectInt bounds = rasterRects[0];
+            for (int i = 1; i < rasterRects.Count; i++)
+            {
+                bounds = Union(bounds, rasterRects[i]);
+            }
+
+            rasterRects.Clear();
+            rasterRects.Add(bounds);
         }
 
-        int pixelWidth = checked((int)((maxX - minX) * pixelsPerCell));
-        int pixelHeight = checked((int)((maxY - minY) * pixelsPerCell));
-        int bottomUpY = checked((int)((minY - fieldWorldCells.yMin) * pixelsPerCell));
-        // A top-down render target addresses bottom-up field row y as
-        // height - 1 - y. Flip the rectangle so it matches the field transform
-        // that wrote the geometry and the scissor that limits the redraw.
-        int pixelY = rowsTopDown
-            ? checked(fieldWorldCells.height * pixelsPerCell - bottomUpY - pixelHeight)
-            : bottomUpY;
-        return new RectInt(
-            checked((int)((minX - fieldWorldCells.xMin) * pixelsPerCell)),
-            pixelY,
-            pixelWidth,
-            pixelHeight);
+        return rasterRects;
+    }
+
+    private static void MergePixelFreeUnions(List<RectInt> rects)
+    {
+        for (int i = 0; i < rects.Count; i++)
+        {
+            bool merged;
+            do
+            {
+                merged = false;
+                for (int j = i + 1; j < rects.Count; j++)
+                {
+                    RectInt union = Union(rects[i], rects[j]);
+                    long unionArea = (long)union.width * union.height;
+                    long separateArea = ((long)rects[i].width * rects[i].height) +
+                        ((long)rects[j].width * rects[j].height);
+                    if (unionArea > separateArea)
+                    {
+                        continue;
+                    }
+
+                    rects[i] = union;
+                    rects.RemoveAt(j);
+                    merged = true;
+                    break;
+                }
+            }
+            while (merged);
+        }
+    }
+
+    private static RectInt Union(RectInt left, RectInt right)
+    {
+        int minX = Math.Min(left.xMin, right.xMin);
+        int minY = Math.Min(left.yMin, right.yMin);
+        int maxX = Math.Max(left.xMax, right.xMax);
+        int maxY = Math.Max(left.yMax, right.yMax);
+        return new RectInt(minX, minY, maxX - minX, maxY - minY);
     }
 }

@@ -39,9 +39,8 @@
     <Compile Include="../../Assets/Scripts/World/Common/CoordinateUtils.cs" Link="Game/CoordinateUtils.cs" />
     <!-- Старый формат вершины — точка отсчёта для сравнения с буфером клеток. -->
     <Compile Include="../../Assets/Scripts/Tests/Editor/World/Terrain/Reference/TerrainVertex.cs" Link="Reference/TerrainVertex.cs" />
-    <Compile Include="../../Assets/Scripts/World/Terrain/GPU/TerrainCellPacker.cs" Link="Game/TerrainCellPacker.cs" />
-    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainCellLayers.cs" Link="Game/TerrainCellLayers.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/GPU/TerrainCellData.cs" Link="Game/TerrainCellData.cs" />
+    <Compile Include="../../Assets/Scripts/World/Terrain/GPU/TerrainCellFormat.cs" Link="Game/TerrainCellFormat.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/GPU/TerrainCellTypeSet.cs" Link="Game/TerrainCellTypeSet.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/GPU/TerrainDirtyRegion.cs" Link="Game/TerrainDirtyRegion.cs" />
     <Compile Include="../../Assets/Scripts/World/Terrain/Cache/DirtyRectSet.cs" Link="Game/DirtyRectSet.cs" />
@@ -63,10 +62,7 @@
     <Compile Include="../../Assets/Scripts/World/Common/Contracts/CellVisualProtocol.cs" Link="Game/CellVisualProtocolContracts.cs" />
     <Compile Include="../../Assets/Scripts/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
     <Compile Include="../../Assets/Scripts/World/Storage/BlockRegistry.cs" Link="Game/BlockRegistry.cs" />
-    <Compile Include="../../Assets/Scripts/World/Storage/CellVisualProtocol.cs" Link="Game/CellVisualProtocol.cs" />
     <Compile Include="../../Assets/Scripts/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
     <!-- Каталоги типов: FillQuad опрашивает их на каждый квад. -->
-    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainDecalCatalog.cs" Link="Game/TerrainDecalCatalog.cs" />
-    <Compile Include="../../Assets/Scripts/World/Terrain/Mesh/TerrainAnimationProfile.cs" Link="Game/TerrainAnimationProfile.cs" />
   </ItemGroup>
 </Project>

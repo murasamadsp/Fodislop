@@ -16,8 +16,6 @@ public interface ITextureService
     AtlasCoordinate GetCellTextureCoordinate(CellType cellType);
     Vector4 GetCellFrameRect(CellType cellType);
     int GetAnimationFrameCount(CellType cellType);
-    int GetFrameSize(CellType cellType);
-    float GetAnimationSpeedForCell(CellType cellType);
     UniTask<AtlasCoordinate> GetCellTextureCoordinate(
         CellType cellType,
         int globalX,

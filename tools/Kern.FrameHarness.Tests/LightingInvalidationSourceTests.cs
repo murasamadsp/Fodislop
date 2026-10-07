@@ -217,7 +217,7 @@ public sealed class LightingInvalidationSourceTests
         {
             [Flags] public enum LightingFeatureFlags { StaticRC = 1, DynamicLights = 2 }
             public static class LightingConfigHolder
-            { public static float EmissionScale => 1; public static LightingFeatureFlags EnabledFeatures => LightingFeatureFlags.StaticRC | LightingFeatureFlags.DynamicLights; public static int AmbientOcclusionPixelsPerCell => 8; }
+            { public static float GlowScale => 1; public static LightingFeatureFlags EnabledFeatures => LightingFeatureFlags.StaticRC | LightingFeatureFlags.DynamicLights; public static int AmbientOcclusionPixelsPerCell => 8; }
             public static class LightingQualityTuningController { public const int FieldPixelsPerCell = 32; }
             public static class LightingComputeBinder
             {
@@ -225,17 +225,18 @@ public sealed class LightingInvalidationSourceTests
                 public static bool UpdateInvisibleDynamicRadiance(int sources) => false;
                 public static void BindSharedParameters(CommandBuffer c, object shader, int width, int height,
                     int lightWidth, int lightHeight, Vector4 rect,
-                    float cell, LightingEngine.DebugView view, RenderTexture material, RenderTexture emission,
+                    float cell, LightingEngine.DebugView view, RenderTexture material, RenderTexture glow,
                     int solve, int resolve, int composite, int gridWidth, int gridHeight) { }
             }
             internal sealed class LightingResourceManager
             {
+                public bool DynamicDistanceFieldValid { get; set; }
                 public CommandBuffer LightingCommandBuffer = new();
                 public void EnsureReanchorFields() { } public void EnsureReanchorChangeBinding() { }
                 public ComputeBuffer ReanchorChanges = new();
                 public RenderTexture ReanchorMaterial = new();
-                public RenderTexture ReanchorEmission = new();
-                public RenderTexture StaticEmissionField = new(); public RenderTexture StaticDirectTexture = new();
+                public RenderTexture ReanchorGlow = new();
+                public RenderTexture StaticGlowField = new(); public RenderTexture StaticDirectTexture = new();
                 public ComputeBuffer DynamicLightBuffer = new(); public RenderTexture DirectTexture = new();
                 public object LightingCompute => new(); public RenderTexture MaterialField => new();
                 public int FieldWidth => 64; public int FieldHeight => 64; public int LightWidth => 64; public int LightHeight => 64; public int CellGridWidth => 64; public int CellGridHeight => 64;
@@ -259,9 +260,10 @@ public sealed class LightingInvalidationSourceTests
             internal sealed class LightingGeometryRegistry { public ulong GeometryRevision => 1; }
             internal sealed class GeometryLightingSolver
             {
-                public void RecordAmbientOcclusionField(CommandBuffer c, Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor g, LightingGeometryRegistry r, Vector4 rect, RectInt? rasterRect = null) { }
+                public void RecordAmbientOcclusionField(CommandBuffer c, Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor g, LightingGeometryRegistry r, Vector4 rect, IReadOnlyList<RectInt>? rasterRects = null) { }
                 public void RecordMaterialField(CommandBuffer c, Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor g, LightingGeometryRegistry r, Vector4 rect) { }
                 public void PrepareCaches(CommandBuffer c, bool materialFieldRebuilt) { }
+                public bool PrepareDynamicDistanceField(CommandBuffer c) => false;
             }
             internal sealed class StaticLightingSolver
             {

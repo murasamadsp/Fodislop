@@ -14,8 +14,15 @@ public sealed class PlayerStatsProcessor(IPlayerStats stats) :
     IPacketProcessor<BasketPacket>,
     IPacketProcessor<MaxDepthPacket>,
     IPacketProcessor<DailyBonusStatePacket>,
-    IPacketProcessor<SkillProgressPacket>
+    IPacketProcessor<SkillProgressPacket>,
+    IBatchAwareProcessor
 {
+    private readonly IBatchAwareProcessor? _batchStats = stats as IBatchAwareProcessor;
+
+    public void BeginBatch() => _batchStats?.BeginBatch();
+
+    public void EndBatch() => _batchStats?.EndBatch();
+
     public void Process(LevelPacket packet) => stats.SetLevel(packet.Level);
 
     public void Process(HealthPacket packet) => stats.SetHealth(packet.Current, packet.Max);

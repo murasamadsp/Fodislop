@@ -187,6 +187,25 @@ public class InventoryProcessorTests
         Assert.IsFalse(_model.HasSelectedItem);
     }
 
+    [Test]
+    public void BeginBatch_EndBatch_CoalescesMultipleInventoryChangesIntoSingleOnItemsChanged()
+    {
+        int itemsChangedCount = 0;
+        _model.OnItemsChanged += () => itemsChangedCount++;
+
+        _processor.BeginBatch();
+        _processor.Process(new InventoryPacket(new Dictionary<ItemType, long> { { ItemType.Rem, 1 } }));
+        _processor.Process(new InventoryPacket(new Dictionary<ItemType, long> { { ItemType.Battery, 5 } }));
+        _processor.Process(new SelectItemPacket(ItemType.Rem, "Custom Rem", "Custom Desc", 0, 0, 0, false, new BitArray(8)));
+        Assert.AreEqual(0, itemsChangedCount);
+
+        _processor.EndBatch();
+        Assert.AreEqual(1, itemsChangedCount);
+        Assert.AreEqual(1, _model.GetQuantity(ItemType.Rem));
+        Assert.AreEqual(5, _model.GetQuantity(ItemType.Battery));
+        Assert.AreEqual("Custom Rem", _model.GetItem(ItemType.Rem)?.Name);
+    }
+
     private sealed class StubItemCatalog(IEnumerable<ItemType> knownTypes) : IItemCatalog
     {
         public IEnumerable<ItemType> AllTypes => knownTypes;

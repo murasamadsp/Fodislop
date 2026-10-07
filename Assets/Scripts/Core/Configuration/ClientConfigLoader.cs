@@ -20,8 +20,8 @@ namespace Kern.Core;
 // проверить на временной папке, без MonoBehaviour и persistentDataPath.
 internal sealed class ClientConfigLoader
 {
-    private const int ReliefRimSourceSchemaVersion = 31;
-    private const int ReliefRimSchemaVersion = 32;
+    private const int RimSourceSchemaVersion = 31;
+    private const int RimSchemaVersion = 32;
     private const int DistortionStyleSchemaVersion = 33;
     private const int PresetPairSchemaVersion = 34;
     private const int BloomStyleSchemaVersion = 35;
@@ -29,6 +29,7 @@ internal sealed class ClientConfigLoader
     private const int AggressionKeySchemaVersion = 37;
     private const int HdrSwitchPendingSchemaVersion = 38;
     private const int PeakBrightnessFromDisplaySchemaVersion = 39;
+    private const int TerrainNamesSchemaVersion = 40;
 
     private readonly ClientConfigRepository _repository;
     private readonly ClientConfigValidator _validator;
@@ -106,11 +107,11 @@ internal sealed class ClientConfigLoader
 
     private static void MigrateSchema31To32(ClientConfig config)
     {
-        // Schema 31 predates TerrainSettings.EnableReliefRim. The field was
-        // introduced enabled, so migration must make that intent explicit
+        // Schema 31 predates TerrainSettings.EnableRim (then EnableReliefRim).
+        // The field was introduced enabled, so migration must make that intent explicit
         // instead of accepting JsonUtility's CLR default for a missing bool.
-        config.Terrain.EnableReliefRim = true;
-        config.SchemaVersion = ReliefRimSchemaVersion;
+        config.Terrain.EnableRim = true;
+        config.SchemaVersion = RimSchemaVersion;
     }
 
     private static void MigrateSchema32To33(ClientConfig config, string sourceJson)
@@ -188,20 +189,20 @@ internal sealed class ClientConfigLoader
             schema = 31;
         }
 
-        if (schema == ReliefRimSourceSchemaVersion)
+        if (schema == RimSourceSchemaVersion)
         {
             MigrateSchema31To32(config);
-            schema = ReliefRimSchemaVersion;
+            schema = RimSchemaVersion;
         }
-        else if (schema < ReliefRimSourceSchemaVersion)
+        else if (schema < RimSourceSchemaVersion)
         {
             // Older terrain schemas receive the authored default for this new
             // boolean instead of JsonUtility's implicit false value.
-            config.Terrain.EnableReliefRim = true;
-            schema = ReliefRimSchemaVersion;
+            config.Terrain.EnableRim = true;
+            schema = RimSchemaVersion;
         }
 
-        if (schema == ReliefRimSchemaVersion)
+        if (schema == RimSchemaVersion)
         {
             MigrateSchema32To33(config, sourceJson);
             schema = DistortionStyleSchemaVersion;
@@ -251,6 +252,20 @@ internal sealed class ClientConfigLoader
             schema = PeakBrightnessFromDisplaySchemaVersion;
         }
 
+        // 39 -> 40: поля террейна переименованы — EnableReliefRim → EnableRim,
+        // *Emission* → *Glow*, PulseSpeedScale → BlinkingSpeedScale. Схемы
+        // 22–39 хранили их под старыми именами в секции Terrain; старее 22 —
+        // плоско, их уже перенёс MigrateFlatVisualsToSections.
+        if (schema == PeakBrightnessFromDisplaySchemaVersion)
+        {
+            if (sourceSchemaVersion >= 22)
+            {
+                MigrateTerrainNames(config, sourceJson);
+            }
+
+            schema = TerrainNamesSchemaVersion;
+        }
+
         config.SchemaVersion = schema;
     }
 
@@ -266,13 +281,13 @@ internal sealed class ClientConfigLoader
         {
             FlowScale = legacy.TerrainFlowScale,
             ShimmerSpeedScale = legacy.TerrainShimmerSpeedScale,
-            PulseSpeedScale = legacy.TerrainPulseSpeedScale,
+            BlinkingSpeedScale = legacy.TerrainPulseSpeedScale,
             ShimmerColor = legacy.TerrainShimmerColor,
             EnableDistortion = legacy.EnableTerrainDistortion,
-            TransitEmissionColor = legacy.TransitEmissionColor,
-            TransitEmissionStrength = legacy.TransitEmissionStrength,
-            PerspectiveEmissionColor = legacy.PerspectiveEmissionColor,
-            PerspectiveEmissionStrength = legacy.PerspectiveEmissionStrength,
+            TransitGlowColor = legacy.TransitEmissionColor,
+            TransitGlowStrength = legacy.TransitEmissionStrength,
+            PerspectiveGlowColor = legacy.PerspectiveEmissionColor,
+            PerspectiveGlowStrength = legacy.PerspectiveEmissionStrength,
             SurfaceOccupancy = legacy.SurfaceOccupancy,
         };
         config.Effects = new EffectSettings
@@ -283,6 +298,68 @@ internal sealed class ClientConfigLoader
         };
         SettingSchema.Clamp(config.Terrain);
         SettingSchema.Clamp(config.Effects);
+    }
+
+    private static void MigrateTerrainNames(ClientConfig config, string sourceJson)
+    {
+        LegacyTerrainNames39? legacy = JsonUtility.FromJson<LegacyTerrainNames39>(sourceJson);
+        if (legacy?.Terrain == null)
+        {
+            return;
+        }
+
+        LegacyTerrain39 terrain = legacy.Terrain;
+        if (Has(sourceJson, nameof(LegacyTerrain39.EnableReliefRim)))
+        {
+            config.Terrain.EnableRim = terrain.EnableReliefRim;
+        }
+
+        if (Has(sourceJson, nameof(LegacyTerrain39.PulseSpeedScale)))
+        {
+            config.Terrain.BlinkingSpeedScale = terrain.PulseSpeedScale;
+        }
+
+        if (Has(sourceJson, nameof(LegacyTerrain39.TransitEmissionColor)))
+        {
+            config.Terrain.TransitGlowColor = terrain.TransitEmissionColor;
+        }
+
+        if (Has(sourceJson, nameof(LegacyTerrain39.TransitEmissionStrength)))
+        {
+            config.Terrain.TransitGlowStrength = terrain.TransitEmissionStrength;
+        }
+
+        if (Has(sourceJson, nameof(LegacyTerrain39.PerspectiveEmissionColor)))
+        {
+            config.Terrain.PerspectiveGlowColor = terrain.PerspectiveEmissionColor;
+        }
+
+        if (Has(sourceJson, nameof(LegacyTerrain39.PerspectiveEmissionStrength)))
+        {
+            config.Terrain.PerspectiveGlowStrength = terrain.PerspectiveEmissionStrength;
+        }
+
+        SettingSchema.Clamp(config.Terrain);
+
+        static bool Has(string json, string field) =>
+            json.IndexOf($"\"{field}\"", StringComparison.Ordinal) >= 0;
+    }
+
+    [Serializable]
+    private sealed class LegacyTerrainNames39
+    {
+        public LegacyTerrain39? Terrain = default;
+    }
+
+    [Serializable]
+    private sealed class LegacyTerrain39
+    {
+        public bool EnableReliefRim = default;
+        public float PulseSpeedScale = default;
+        public Color TransitEmissionColor = default;
+        public float TransitEmissionStrength = default;
+        public Color PerspectiveEmissionColor = default;
+        public float PerspectiveEmissionStrength = default;
     }
 
     [Serializable]

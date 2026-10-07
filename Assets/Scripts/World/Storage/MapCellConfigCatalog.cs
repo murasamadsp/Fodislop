@@ -17,9 +17,6 @@ public sealed class MapCellConfigCatalog
     private readonly Dictionary<CellType, int> _cellToTileGroup = new();
     private readonly Dictionary<CellType, ushort> _cellMoveSpeeds = new();
 
-    public static CellVisualProperties GetVisualProperties(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type);
-
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {
         ValidateCellConfigurations(configurations);
@@ -117,7 +114,7 @@ public sealed class MapCellConfigCatalog
 
     /// <summary>
     /// Разрешает цвет клетки для мини-карты, большой карты и fallback-текстуры
-    /// рельефа.
+    /// террейна.
     ///
     /// Палитра клиента — источник правды. Сервер цвета не присылает: в
     /// <c>CellConfigurationPacket.Color</c> он кладёт <c>0xFFFFFFFF</c> для всех
@@ -163,18 +160,6 @@ public sealed class MapCellConfigCatalog
     {
         var config = GetCellConfig(cellType);
         return (int)config.FrameOffset * RenderingConstants.CELL_SIZE;
-    }
-
-    public byte GetAnimationSpeed(CellType cellType)
-    {
-        var config = GetCellConfig(cellType);
-        return config.AnimationSpeed;
-    }
-
-    public bool HasAnimation(CellType cellType)
-    {
-        var config = GetCellConfig(cellType);
-        return config.Animation != CellAnimationType.None;
     }
 
     public void Reset()

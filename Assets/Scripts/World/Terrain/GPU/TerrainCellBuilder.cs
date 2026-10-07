@@ -20,7 +20,7 @@ public sealed class TerrainCellBuilder : IDisposable
     private float _cellSize;
     private int _worldWidth;
     private int _worldHeight;
-    private int _distortionMode;
+    private int _distortionStyle;
     private bool _doorsTouched;
 
     internal int LastFullBuildAnchoredForegroundCellCount =>
@@ -202,7 +202,7 @@ public sealed class TerrainCellBuilder : IDisposable
     public void Commit(int originX, int originY)
     {
         _buffers.Apply();
-        _buffers.BindGlobals(_cellSize, originX, originY, _worldWidth, _worldHeight, _distortionMode);
+        _buffers.BindGlobals(_cellSize, originX, originY, _worldWidth, _worldHeight, _distortionStyle);
     }
 
     public void Dispose()
@@ -221,7 +221,7 @@ public sealed class TerrainCellBuilder : IDisposable
 
         _worldWidth = sources.WorldWidth;
         _worldHeight = sources.WorldHeight;
-        _distortionMode = TerrainCellData.DistortionMode(sources.Distortion);
+        _distortionStyle = TerrainCellData.DistortionStyleOf(sources.Distortion);
         return true;
     }
 
@@ -260,7 +260,7 @@ public sealed class TerrainCellBuilder : IDisposable
 
     private bool RefreshMarginCell(TerrainCellSources sources, int minX, int minY, int x, int y)
     {
-        TerrainCell cell = TerrainCellPacker.PackMargin(sources, x, y);
+        TerrainCell cell = TerrainCellPacker.PackCell(sources, x, y);
         if (_buffers.GetCell(minX + x, minY + y) == cell)
         {
             return false;
@@ -272,7 +272,7 @@ public sealed class TerrainCellBuilder : IDisposable
 
     // Таблица типов обновляется в конце каждой сборки, после прогрева
     // метаданных: строка типа — то же, что сборка квада взяла из его конфига
-    // (ResolveTypeSurface), и вид типа, приехавший с текстурой, доходит до
+    // (ResolveTypeFields), и вид типа, приехавший с текстурой, доходит до
     // всех его клеток в той же публикации. Тип без разрешённой метаданности
     // оставляет прежнюю строку: перезапись нулём стёрла бы вид, который ещё
     // может быть на экране.
@@ -286,7 +286,7 @@ public sealed class TerrainCellBuilder : IDisposable
                 _buffers.SetType(
                     type,
                     TerrainCellData.PackType(
-                        TerrainCellPacker.ResolveTypeSurface(type, in metadata, sources.Atlases)));
+                        TerrainCellPacker.ResolveTypeFields(type, in metadata, sources.Atlases)));
             }
         }
     }

@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using Kern.Core;
+using Kern.World;
 using Kern.World.Terrain;
 using MinesServer.Data;
 using NUnit.Framework;
@@ -41,7 +42,7 @@ public sealed class TerrainCellEquivalenceTests
             {
                 if (x < 0 || y < 0 || x == Width || y == Height)
                 {
-                    cells[(OriginX + x, OriginY + y)] = TerrainCellPacker.PackMargin(sources, x, y);
+                    cells[(OriginX + x, OriginY + y)] = TerrainCellPacker.PackCell(sources, x, y);
                     continue;
                 }
 
@@ -66,13 +67,15 @@ public sealed class TerrainCellEquivalenceTests
         }
 
         var rows = new TerrainTypeRow[TerrainCellData.TypeCount];
+        // Как TerrainCellBuffers: строка без метаданных (Unloaded их не
+        // получает) несёт только cells.json.
         for (int index = 0; index < rows.Length; index++)
         {
-            if (index != 0 && sources.MetadataLookup.TryGet((CellType)index, out CellMetadata metadata))
-            {
-                rows[index] = TerrainCellData.PackType(
-                    TerrainCellPacker.ResolveTypeSurface((CellType)index, in metadata, sources.Atlases));
-            }
+            var type = (CellType)index;
+            rows[index] = TerrainCellData.PackType(
+                type != CellType.Unloaded && sources.MetadataLookup.TryGet(type, out CellMetadata metadata)
+                    ? TerrainCellPacker.ResolveTypeFields(type, in metadata, sources.Atlases)
+                    : TerrainCellPacker.ResolveTypeFields(type, default, System.Array.Empty<Kern.Core.Interfaces.IAtlasDescriptor>()));
         }
 
         var oracle = new TerrainCellOracle(
@@ -81,7 +84,9 @@ public sealed class TerrainCellEquivalenceTests
                 sources.CellCache, distortion, gx - OriginX, uy - OriginY,
                 TerrainTestWorld.WorldWidth, TerrainTestWorld.WorldHeight),
             type => rows[type],
+            slot => sources.Atlases[slot].Size,
             TerrainCellData.PackTileDescriptors(),
+            (uint)BlockRegistry.UnderlayType,
             TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule),
             TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule),
             TerrainTestWorld.WorldHeight,

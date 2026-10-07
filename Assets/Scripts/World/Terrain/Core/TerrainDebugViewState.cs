@@ -15,14 +15,14 @@ namespace Kern.World.Terrain;
 public enum TerrainDebugView
 {
     Off = 0,
-    ReliefRim = 1,
+    Rim = 1,
     ForeignSides = 2,
     Coverage = 3,
     Layer = 4,
     Anchored = 5,
     CellLocal = 6,
-    ReliefGroup = 7,
-    ContinuousSheet = 8,
+    RimMass = 7,
+    WorldTextureAnchor = 8,
     AmbientOcclusion = 9,
     BackgroundTileIdentity = 10,
     FacetedGlint = 11,
@@ -59,14 +59,14 @@ public static class TerrainDebugViewState
     public static string Describe(TerrainDebugView view) => view switch
     {
         TerrainDebugView.Off => "Обычный вид",
-        TerrainDebugView.ReliefRim => "Кайма рельефа",
+        TerrainDebugView.Rim => "Кайма",
         TerrainDebugView.ForeignSides => "Чужие стороны",
         TerrainDebugView.Coverage => "Силуэт клетки",
         TerrainDebugView.Layer => "Слой",
         TerrainDebugView.Anchored => "Смещённые клетки",
         TerrainDebugView.CellLocal => "Координата в клетке",
-        TerrainDebugView.ReliefGroup => "Рельефная группа",
-        TerrainDebugView.ContinuousSheet => "Сплошной лист",
+        TerrainDebugView.RimMass => "Группа каймы",
+        TerrainDebugView.WorldTextureAnchor => "Текстура по миру",
         TerrainDebugView.AmbientOcclusion => "AO: вклад в террейн",
         TerrainDebugView.BackgroundTileIdentity => "Уникальные тайлы фона",
         TerrainDebugView.FacetedGlint => "Глинт фасеток",
@@ -83,14 +83,14 @@ public static class TerrainDebugViewState
     public static string Legend(TerrainDebugView view) => view switch
     {
         TerrainDebugView.Off => "Термы террейна не подменяются.",
-        TerrainDebugView.ReliefRim =>
+        TerrainDebugView.Rim =>
             "Зелёное — фаска не затемняет пиксель, красное — максимальное " +
             "затемнение. Это геометрический множитель после анимации и декалей. " +
             "Фиолетовое — фаска выключена настройкой.",
         TerrainDebugView.ForeignSides =>
             "Красный — чужой сосед сверху, зелёный — снизу, синий — слева, " +
             "жёлтый — справа. Цветной передний план обрезан по силуэту; " +
-            "серое — подложка или клетка без рельефной группы.",
+            "серое — подложка или клетка без массы каймы.",
         TerrainDebugView.Coverage =>
             "Бирюзовое — передний план внутри контура, малиновое — вырезанная " +
             "часть его несущего прямоугольника, серое — подложка.",
@@ -103,9 +103,9 @@ public static class TerrainDebugViewState
         TerrainDebugView.CellLocal =>
             "Красный — X внутри клетки, зелёный — Y. Цвет ограничен " +
             "видимым контуром клетки.",
-        TerrainDebugView.ReliefGroup =>
-            "Оттенок — код рельефа. Чёрно-синее — клетка без группы.",
-        TerrainDebugView.ContinuousSheet =>
+        TerrainDebugView.RimMass =>
+            "Оттенок — код каймы. Чёрно-синее — клетка без группы.",
+        TerrainDebugView.WorldTextureAnchor =>
             "Бирюзовое — клетка адресует лист целиком по мировой координате; " +
             "тёмное — тайл на клетку.",
         TerrainDebugView.AmbientOcclusion =>

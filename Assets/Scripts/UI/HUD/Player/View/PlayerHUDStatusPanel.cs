@@ -2,8 +2,8 @@
 
 using System;
 using System.Collections.Generic;
+using Kern.Core.Interfaces;
 using Kern.Core.Models;
-using Kern.UI.HUD.Player.Model;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -22,7 +22,7 @@ public sealed class PlayerHUDStatusPanel
         _statusPanel = root.Q<VisualElement>("StatusPanel");
     }
 
-    public void Rebuild(PlayerStatsModel? stats)
+    public void Rebuild(IPlayerStats? stats)
     {
         if (_statusPanel == null || stats == null)
         {

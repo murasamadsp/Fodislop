@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
-[StructLayout(LayoutKind.Explicit, Size = 80)]
+[StructLayout(LayoutKind.Explicit, Size = 96)]
 public struct TerrainVertex
 {
     // ── Float32 ────────────────────────────────────── offset  bytes
@@ -16,11 +16,7 @@ public struct TerrainVertex
     [FieldOffset(12)] public ushort UV0x;          // 12     2
     [FieldOffset(14)] public ushort UV0y;          // 14     2
 
-    // ── Float16 raw storage — UV1 ─────────────────
-    [FieldOffset(16)] public ushort UV1x;          // 16     2
-    [FieldOffset(18)] public ushort UV1y;          // 18     2
-    [FieldOffset(20)] public ushort UV1z;          // 20     2
-    [FieldOffset(22)] public ushort UV1w;          // 22     2
+    // 16..23 свободны: прямоугольник атласа (UV1) — float, ниже.
 
     // ── Float16 raw storage — UV2 ─────────────────
     [FieldOffset(24)] public ushort UV2x;          // 24     2
@@ -45,17 +41,17 @@ public struct TerrainVertex
 
     // ── Float32 (packed RGB color reaches 16 777 215) ──
     [FieldOffset(64)] public Vector4 UV6;          // 64    16
+
+    // ── Float32: прямоугольник кадра в атласе (пиксели × тексель — точно) ──
+    [FieldOffset(80)] public Vector4 UV1;          // 80    16
     //                                             ───────────
-    //                                             total   80
+    //                                             total   96
 
     // ── Write-only properties: float → half ───────────────
 
     public void CopySurfaceFrom(in TerrainVertex source)
     {
-        UV1x = source.UV1x;
-        UV1y = source.UV1y;
-        UV1z = source.UV1z;
-        UV1w = source.UV1w;
+        UV1 = source.UV1;
         UV2x = source.UV2x;
         UV2y = source.UV2y;
         UV2z = source.UV2z;
@@ -74,17 +70,6 @@ public struct TerrainVertex
         {
             UV0x = H(value.x);
             UV0y = H(value.y);
-        }
-    }
-
-    public Vector4 UV1
-    {
-        set
-        {
-            UV1x = H(value.x);
-            UV1y = H(value.y);
-            UV1z = H(value.z);
-            UV1w = H(value.w);
         }
     }
 

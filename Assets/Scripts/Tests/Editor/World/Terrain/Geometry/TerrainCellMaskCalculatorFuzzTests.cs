@@ -16,65 +16,65 @@ public class TerrainCellMaskCalculatorFuzzTests
     [TestCase(255, 255)]
     [TestCase(0, 255)]
     [TestCase(128, 128)]
-    public void CalculateReliefMask_AlwaysFitsInFourBits(int data, int neighbor)
+    public void CalculateRimMask_AlwaysFitsInFourBits(int data, int neighbor)
     {
-        byte mask = TerrainCellMaskCalculator.CalculateReliefMask(
-            new CachedCellData { ReliefGroup = (byte)data },
-            new CachedCellData { ReliefGroup = (byte)neighbor },
-            new CachedCellData { ReliefGroup = (byte)neighbor },
-            new CachedCellData { ReliefGroup = (byte)neighbor },
-            new CachedCellData { ReliefGroup = (byte)neighbor });
+        byte mask = TerrainCellMaskCalculator.CalculateRimMask(
+            new CachedCellData { RimMass = (byte)data },
+            new CachedCellData { RimMass = (byte)neighbor },
+            new CachedCellData { RimMass = (byte)neighbor },
+            new CachedCellData { RimMass = (byte)neighbor },
+            new CachedCellData { RimMass = (byte)neighbor });
         Assert.That(mask, Is.InRange(0, 15), $"data={data}, neighbor={neighbor}");
     }
 
     [Test]
-    public void CalculateReliefMask_SameGroup_ProducesFullMask()
+    public void CalculateRimMask_SameGroup_ProducesFullMask()
     {
-        var c = new CachedCellData { ReliefGroup = 5 };
-        byte mask = TerrainCellMaskCalculator.CalculateReliefMask(c, c, c, c, c);
+        var c = new CachedCellData { RimMass = 5 };
+        byte mask = TerrainCellMaskCalculator.CalculateRimMask(c, c, c, c, c);
         Assert.That(mask, Is.EqualTo(15));
     }
 
-    // Бит ставится только на равенстве: рельефная группа — семья, а не
+    // Бит ставится только на равенстве: масса каймы — семья, а не
     // высота. Раньше сравнение было порядковым, и шов между двумя семьями
     // рисовался лишь с той стороны, где номер больше.
     [Test]
-    public void CalculateReliefMask_ForeignNeighbors_ProduceZero()
+    public void CalculateRimMask_ForeignNeighbors_ProduceZero()
     {
-        var center = new CachedCellData { ReliefGroup = 5 };
-        var higher = new CachedCellData { ReliefGroup = 7 };
-        var lower = new CachedCellData { ReliefGroup = 3 };
+        var center = new CachedCellData { RimMass = 5 };
+        var higher = new CachedCellData { RimMass = 7 };
+        var lower = new CachedCellData { RimMass = 3 };
         Assert.That(
-            TerrainCellMaskCalculator.CalculateReliefMask(center, higher, higher, higher, higher),
+            TerrainCellMaskCalculator.CalculateRimMask(center, higher, higher, higher, higher),
             Is.EqualTo(0));
         Assert.That(
-            TerrainCellMaskCalculator.CalculateReliefMask(center, lower, lower, lower, lower),
+            TerrainCellMaskCalculator.CalculateRimMask(center, lower, lower, lower, lower),
             Is.EqualTo(0));
     }
 
     // Обе стороны шва обязаны видеть друг друга чужими, иначе кайму рисует
     // одна клетка из двух и граница выглядит смещённой на полклетки.
     [Test]
-    public void CalculateReliefMask_ForeignPairIsSymmetric()
+    public void CalculateRimMask_ForeignPairIsSymmetric()
     {
-        var crystal = new CachedCellData { ReliefGroup = 3 };
-        var rock = new CachedCellData { ReliefGroup = 5 };
-        byte fromCrystal = TerrainCellMaskCalculator.CalculateReliefMask(
+        var crystal = new CachedCellData { RimMass = 3 };
+        var rock = new CachedCellData { RimMass = 5 };
+        byte fromCrystal = TerrainCellMaskCalculator.CalculateRimMask(
             crystal, rock, crystal, crystal, crystal);
-        byte fromRock = TerrainCellMaskCalculator.CalculateReliefMask(
+        byte fromRock = TerrainCellMaskCalculator.CalculateRimMask(
             rock, rock, rock, crystal, rock);
         Assert.That(fromCrystal & 1, Is.EqualTo(0), "кристалл не считает породу своей");
         Assert.That(fromRock & 4, Is.EqualTo(0), "порода не считает кристалл своим");
     }
 
-    // Клетка без рельефа не обводится ничем: у неё нет семьи, и кайма по
+    // Клетка без каймы не обводится ничем: у неё нет семьи, и кайма по
     // всем четырём сторонам залила бы пол сеткой.
     [Test]
-    public void CalculateReliefMask_NoReliefGroup_ProducesZero()
+    public void CalculateRimMask_NoRimMass_ProducesZero()
     {
-        var ground = new CachedCellData { ReliefGroup = 0 };
+        var ground = new CachedCellData { RimMass = 0 };
         Assert.That(
-            TerrainCellMaskCalculator.CalculateReliefMask(ground, ground, ground, ground, ground),
+            TerrainCellMaskCalculator.CalculateRimMask(ground, ground, ground, ground, ground),
             Is.EqualTo(0));
     }
 
@@ -88,9 +88,9 @@ public class TerrainCellMaskCalculatorFuzzTests
     }
 
     [Test]
-    public void CalculateSolidBoundaryMask_AlwaysFitsInFourBits()
+    public void CalculateForegroundSidesMask_AlwaysFitsInFourBits()
     {
-        byte mask = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
+        byte mask = TerrainCellMaskCalculator.CalculateForegroundSidesMask(
             new CachedCellData(), new CachedCellData(), new CachedCellData(), new CachedCellData());
         Assert.That(mask, Is.InRange(0, 15));
     }

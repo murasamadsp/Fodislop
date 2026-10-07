@@ -10,6 +10,7 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Game.Managers;
 using Kern.Networking;
+using Kern.Networking.Connection;
 using MinesServer.Networking.Connection.Client;
 using NUnit.Framework;
 using UnityEngine;
@@ -105,6 +106,41 @@ public sealed class SceneTransitionPlayModeTests
         Assert.That(gameManager, Is.Not.Null);
         Assert.That(gameManager.IsWorldLoaded, Is.True);
         Assert.That(SceneManager.GetSceneByName("MainMenu").isLoaded, Is.False);
+    }
+
+    [UnityTest]
+    [Timeout(90_000)]
+    public IEnumerator MainGameWorldInitializationTimeout_DisconnectsStaleTransport()
+    {
+        yield return Await(_bootstrap.TransitionAsync("MainMenu"), PlayModeHarness.UITimeoutSeconds);
+
+        ConnectionManager connection = _bootstrap.Container.Resolve<ConnectionManager>();
+        IOfflineScenarioSettings scenario = _bootstrap.Container.Resolve<IOfflineScenarioSettings>();
+        scenario.Scenario = OfflineScenario.WorldInitializationTimeout;
+
+        UniTask transition = _bootstrap.TransitionAsync("MainGame").Preserve();
+        float deadline = Time.realtimeSinceStartup + 40f;
+        while (!transition.Status.IsCompleted() && Time.realtimeSinceStartup < deadline)
+        {
+            yield return null;
+        }
+
+        Assert.That(transition.Status.IsCompleted(), Is.True, "MainGame transition did not honor its timeout.");
+        Exception? failure = null;
+        try
+        {
+            transition.GetAwaiter().GetResult();
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        Assert.That(failure, Is.TypeOf<TimeoutException>());
+        Assert.That(connection.Connection, Is.Null,
+            "A failed MainGame candidate must not leave a connected transport with a lost WorldInit packet.");
+        Assert.That(_bootstrap.CurrentSceneName, Is.EqualTo("MainMenu"));
+        scenario.Scenario = OfflineScenario.HappyPath;
     }
 
     [UnityTest]

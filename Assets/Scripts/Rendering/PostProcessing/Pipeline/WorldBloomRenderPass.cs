@@ -21,16 +21,16 @@ namespace Kern.Rendering.PostProcessing
     internal sealed class WorldBloomRenderPass : ScriptableRenderPass2D, IDisposable
     {
         private static readonly int s_worldLightRectId = Shader.PropertyToID("_WorldLightRect");
-        private static readonly int s_worldEmissionTextureId = Shader.PropertyToID("_WorldEmissionTexture");
+        private static readonly int s_worldGlowTextureId = Shader.PropertyToID("_WorldGlowTexture");
         private static readonly int s_sceneId = Shader.PropertyToID("_Scene");
-        private static readonly int s_emissionId = Shader.PropertyToID("_Emission");
+        private static readonly int s_glowId = Shader.PropertyToID("_Glow");
         private static readonly int s_sourceId = Shader.PropertyToID("_Source");
         private static readonly int s_baseId = Shader.PropertyToID("_Base");
         private static readonly int s_outputId = Shader.PropertyToID("_Output");
         private static readonly int s_sizeId = Shader.PropertyToID("_OutputSize");
         private static readonly int s_sourceUvId = Shader.PropertyToID("_SourceUv");
         private static readonly int s_texelId = Shader.PropertyToID("_SourceTexelSize");
-        private static readonly int s_emissionUvId = Shader.PropertyToID("_EmissionUv");
+        private static readonly int s_glowUvId = Shader.PropertyToID("_GlowUv");
         private static readonly int s_thresholdId = Shader.PropertyToID("_Threshold");
         private static readonly int s_kneeId = Shader.PropertyToID("_SoftKnee");
         private static readonly int s_radiusId = Shader.PropertyToID("_Radius");
@@ -96,7 +96,7 @@ namespace Kern.Rendering.PostProcessing
             public float Intensity;
             public EntityId CameraId;
             public bool DebugBloom;
-            public Vector4 EmissionUv;
+            public Vector4 GlowUv;
             public int TextureCount;
             public long TextureBytes;
             public PostProcessWorkload Workload = null!;
@@ -195,14 +195,14 @@ namespace Kern.Rendering.PostProcessing
             Vector4 lightRect = Shader.GetGlobalVector(s_worldLightRectId);
             if (lightRect.z <= 0 || lightRect.w <= 0)
             {
-                throw new InvalidOperationException("World bloom requires a coherent emission world rectangle.");
+                throw new InvalidOperationException("World bloom requires a coherent glow world rectangle.");
             }
-            Vector4 emissionUv = new(layout.WorldRect.z / lightRect.z, layout.WorldRect.w / lightRect.w,
+            Vector4 glowUv = new(layout.WorldRect.z / lightRect.z, layout.WorldRect.w / lightRect.w,
                 (layout.WorldRect.x - lightRect.x) / lightRect.z, (layout.WorldRect.y - lightRect.y) / lightRect.w);
             if (LightingFieldOrientation.RowsTopDown)
             {
-                emissionUv.y = -emissionUv.y;
-                emissionUv.w = 1f - emissionUv.w;
+                glowUv.y = -glowUv.y;
+                glowUv.w = 1f - glowUv.w;
             }
 
             PostProcessRuntimeState.RecordDiagnosticPass(camera.camera, false);
@@ -230,7 +230,7 @@ namespace Kern.Rendering.PostProcessing
                 frame.Tint = new Vector4(tint.r, tint.g, tint.b, tint.a);
                 frame.Intensity = bloom.active && bloom.IsActive() ? bloom.intensity.value : 0f;
                 frame.DebugBloom = debugBloom;
-                frame.EmissionUv = emissionUv;
+                frame.GlowUv = glowUv;
                 frame.TextureCount = textureCount;
                 frame.TextureBytes = bytes;
                 frame.CameraId = camera.camera.GetEntityId();
@@ -303,18 +303,18 @@ namespace Kern.Rendering.PostProcessing
             CommandBuffer cmd = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
             // This field is produced outside RenderGraph, before camera rendering.
             // Borrow it for this recording call; never cache a texture/RTHandle.
-            Texture emission = Shader.GetGlobalTexture(s_worldEmissionTextureId)
-                ?? throw new InvalidOperationException("World emission publication is missing.");
+            Texture glow = Shader.GetGlobalTexture(s_worldGlowTextureId)
+                ?? throw new InvalidOperationException("World glow publication is missing.");
             Observe(cmd, "before", data.SceneColor, data.Scene, data.CameraId);
             cmd.SetComputeFloatParam(data.Shader, s_thresholdId, data.Threshold);
             cmd.SetComputeFloatParam(data.Shader, s_kneeId, data.Knee);
             cmd.SetComputeFloatParam(data.Shader, s_radiusId, data.Radius);
             cmd.SetComputeFloatParam(data.Shader, s_scatterId, data.Scatter);
             cmd.SetComputeVectorParam(data.Shader, s_tintId, data.Tint);
-            cmd.SetComputeVectorParam(data.Shader, s_emissionUvId, data.EmissionUv);
+            cmd.SetComputeVectorParam(data.Shader, s_glowUvId, data.GlowUv);
             SetupLevel(cmd, data, data.Levels[0], data.Scene);
             cmd.SetComputeTextureParam(data.Shader, data.PrefilterKernel, s_sceneId, data.SceneColor);
-            cmd.SetComputeTextureParam(data.Shader, data.PrefilterKernel, s_emissionId, emission);
+            cmd.SetComputeTextureParam(data.Shader, data.PrefilterKernel, s_glowId, glow);
             cmd.BeginSample(s_prefilter);
             Dispatch(cmd, data, data.PrefilterKernel, data.Levels[0], data.Down[0]);
             cmd.EndSample(s_prefilter);

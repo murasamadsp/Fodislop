@@ -16,10 +16,20 @@ internal static class LightingComputeBinder
     // detail here so a cell-space policy cannot be mistaken for a dispatch
     // threshold.
     public const int ThreadGroupSize = 8;
+    // Diagnostic-only per-ray histograms; offsets and bin count mirror the
+    // constants declared beside _LightingCounters in WorldLighting.compute.
+    public const int DynamicTraversalHistogramBins = 4096;
+    public const int DynamicTraversalDdaHistogramOffset = 4;
+    public const int DynamicTraversalSdfHistogramOffset = DynamicTraversalDdaHistogramOffset + DynamicTraversalHistogramBins;
+    public const int DynamicTraversalTotalHistogramOffset = DynamicTraversalSdfHistogramOffset + DynamicTraversalHistogramBins;
+    public const int LightingCounterCount = DynamicTraversalTotalHistogramOffset + DynamicTraversalHistogramBins;
     internal static bool DiagnosticTransportCounters { get; set; }
     // Explicit differential-test reference; never selected by frame cost.
     internal static bool DiagnosticTexelTraversalReference { get; set; }
     internal static bool DiagnosticVectorPolarReference { get; set; }
+    // Opt-in candidate; enabling production requires the transport A/B gates.
+    internal static bool DiagnosticUniformSourceTraversal { get; set; }
+    internal static bool DiagnosticBatchedDynamicLights { get; set; }
 
     // Equal RGB extinction has one exact optical depth. Radiance/source color
     // remains RGB HDR; only this redundant transport quantity is scalar.
@@ -38,7 +48,7 @@ internal static class LightingComputeBinder
     }
 
     public static readonly int MaterialFieldId = Shader.PropertyToID("_MaterialField");
-    public static readonly int EmissionFieldId = Shader.PropertyToID("_EmissionField");
+    public static readonly int GlowFieldId = Shader.PropertyToID("_GlowField");
     public static readonly int RadianceAtlasId = Shader.PropertyToID("_RadianceAtlas");
     public static readonly int RadianceAtlasInputId = Shader.PropertyToID("_RadianceAtlasInput");
     public static readonly int RadianceAtlasOutputId = Shader.PropertyToID("_RadianceAtlasOutput");
@@ -55,7 +65,7 @@ internal static class LightingComputeBinder
     public static readonly int AmbientColorId = Shader.PropertyToID("_AmbientColor");
     public static readonly int EmptyExtinctionRGBId = Shader.PropertyToID("_EmptyExtinctionRGB");
     public static readonly int SolidExtinctionRGBId = Shader.PropertyToID("_SolidExtinctionRGB");
-    public static readonly int EmissionScaleId = Shader.PropertyToID("_EmissionScale");
+    public static readonly int GlowScaleId = Shader.PropertyToID("_GlowScale");
     public static readonly int MaximumLightMultiplierId = Shader.PropertyToID("_MaximumLightMultiplier");
     public static readonly int SurfaceReflectionReachId =
         Shader.PropertyToID("_SurfaceReflectionReachCells");
@@ -124,6 +134,11 @@ internal static class LightingComputeBinder
     public static readonly int CleanCellRowsId = Shader.PropertyToID("_CleanCellRows");
     public static readonly int CleanCellPrefixOutputId = Shader.PropertyToID("_CleanCellPrefixOutput");
     public static readonly int CleanCellPrefixId = Shader.PropertyToID("_CleanCellPrefix");
+    public static readonly int DynamicSdfInputId = Shader.PropertyToID("_DynamicSdfInput");
+    public static readonly int DynamicSdfSeedInputId = Shader.PropertyToID("_DynamicSdfSeedInput");
+    public static readonly int DynamicSdfSeedOutputId = Shader.PropertyToID("_DynamicSdfSeedOutput");
+    public static readonly int DynamicSdfOutputId = Shader.PropertyToID("_DynamicSdfOutput");
+    public static readonly int DynamicSdfJumpStepId = Shader.PropertyToID("_DynamicSdfJumpStep");
     public static readonly int DynamicHorizonBaseId = Shader.PropertyToID("_DynamicHorizonBase");
     public static readonly int DynamicHorizonStrideId = Shader.PropertyToID("_DynamicHorizonStride");
     public static readonly int DynamicPolarInputId = Shader.PropertyToID("_DynamicPolarInput");
@@ -240,7 +255,7 @@ internal static class LightingComputeBinder
         ComputeShader compute,
         int kernel,
         RenderTexture materialField,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         ComputeBuffer? lightingCounters = null)
     {
         commandBuffer.SetComputeTextureParam(
@@ -251,8 +266,8 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeTextureParam(
             compute,
             kernel,
-            EmissionFieldId,
-            emissionField);
+            GlowFieldId,
+            glowField);
         if (lightingCounters != null)
         {
             BindLightingCounters(commandBuffer, compute, kernel, lightingCounters);
@@ -270,7 +285,7 @@ internal static class LightingComputeBinder
         float cellSize,
         LightingEngine.DebugView debugView,
         RenderTexture materialField,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         int solveCascadeKernel,
         int resolveDirectKernel,
         int compositeLightingKernel,
@@ -305,7 +320,7 @@ internal static class LightingComputeBinder
             compute,
             TransportSolidThresholdId,
             LightingConfigHolder.TransportSolidThreshold);
-        commandBuffer.SetComputeFloatParam(compute, EmissionScaleId, LightingConfigHolder.EmissionScale);
+        commandBuffer.SetComputeFloatParam(compute, GlowScaleId, LightingConfigHolder.GlowScale);
         commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierId, LightingConfigHolder.MaximumLightMultiplier);
         commandBuffer.SetComputeFloatParam(
             compute,
@@ -326,6 +341,15 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeIntParam(compute, LightingCountersEnabledId, 0);
         commandBuffer.SetComputeIntParam(compute, "_UniformCellTraversalEnabled",
             DiagnosticTexelTraversalReference ? 0 : 1);
+        commandBuffer.SetComputeIntParam(compute, "_UniformSourceTraversalEnabled",
+            DiagnosticUniformSourceTraversal ||
+            LightingQualityTuningController.DynamicTransportMode == DynamicLightingTransportMode.AcceleratedUniformRegions
+                ? 1
+                : 0);
+        commandBuffer.SetComputeIntParam(compute, "_DynamicSdfTransportEnabled",
+            LightingQualityTuningController.DynamicTransportMode == DynamicLightingTransportMode.JumpFloodSdfSphereTracing
+                ? 1
+                : 0);
         commandBuffer.SetComputeFloatParam(compute, CellSizeId, cellSize);
         commandBuffer.SetComputeFloatParam(
             compute,
@@ -341,9 +365,9 @@ internal static class LightingComputeBinder
             EnableBilinearFixId,
             LightingConfigHolder.EnableBilinearFix ? 1 : 0);
 
-        BindFieldTextures(commandBuffer, compute, solveCascadeKernel, materialField, emissionField);
-        BindFieldTextures(commandBuffer, compute, resolveDirectKernel, materialField, emissionField);
-        BindFieldTextures(commandBuffer, compute, compositeLightingKernel, materialField, emissionField);
+        BindFieldTextures(commandBuffer, compute, solveCascadeKernel, materialField, glowField);
+        BindFieldTextures(commandBuffer, compute, resolveDirectKernel, materialField, glowField);
+        BindFieldTextures(commandBuffer, compute, compositeLightingKernel, materialField, glowField);
     }
 
     public static int ResolveCascadeScrollDelta(int cellDelta, int fieldSize, int cellGridSize, int probeSpacing)

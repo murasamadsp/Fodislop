@@ -3,7 +3,7 @@
 
 #include "TerrainLightingData.hlsl"
 
-Texture2D<float4> _WorldAmbientOcclusionTexture;
+Texture2D<float> _WorldAmbientOcclusionTexture;
 SamplerState sampler_WorldAmbientOcclusionTexture;
 // Row order of every lighting field; owned by LightingFieldOrientation.
 int _KernFieldRowsTopDown;
@@ -25,7 +25,7 @@ float KernSampleTerrainAmbientOcclusion(float2 worldPosition, float4 worldLightR
     float contact = _WorldAmbientOcclusionTexture.SampleLevel(
         sampler_WorldAmbientOcclusionTexture,
         saturate(uv),
-        0.0).a;
+        0.0);
     return saturate(contact * _TerrainAmbientOcclusionStrength);
 }
 

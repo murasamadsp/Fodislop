@@ -62,6 +62,14 @@ public class StatusProcessorTests
         public event Action? PacketBatchStarted { add { } remove { } }
         public event Action? PacketBatchCompleted { add { } remove { } }
 
+        public void BeginBatch()
+        {
+        }
+
+        public void EndBatch()
+        {
+        }
+
         public bool SentPong { get; private set; }
 
         public void Subscribe<T>(Action<T> handler)

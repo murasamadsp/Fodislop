@@ -54,7 +54,7 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
-    public void CalculateMoveCooldown_WithCtrlPressed_UsesEmptyTileCooldown()
+    public void CalculateMoveCooldown_WithCtrlPressed_UsesMinServerCooldown()
     {
         var mapProvider = new StubMapDataProvider(normalCooldown: 0.5f, emptyCooldown: 0.1f);
 
@@ -90,7 +90,7 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
-    public void CalculateMoveCooldown_UnloadedCell_UsesEmptyTileCooldown()
+    public void CalculateMoveCooldown_UnloadedCell_UsesMinServerCooldown()
     {
         var mapProvider = new StubMapDataProvider(normalCooldown: 0.5f, emptyCooldown: 0.1f);
 
@@ -104,7 +104,7 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
-    public void CalculateMoveCooldown_PregenerCell_UsesEmptyTileCooldown()
+    public void CalculateMoveCooldown_PregenerCell_UsesMinServerCooldown()
     {
         var mapProvider = new StubMapDataProvider(normalCooldown: 0.5f, emptyCooldown: 0.1f);
 
@@ -118,10 +118,10 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
-    public void IsPassable_EmptyCell_AlwaysReturnsTrue()
+    public void IsPassable_EmptyCell_FollowsServerFlag()
     {
         var nonPassableConfig = new CellConfigurationPacket(CellConfigProperties.None, (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
-        Assert.IsTrue(PlayerMovementValidator.IsPassable(CellType.Empty, nonPassableConfig));
+        Assert.IsFalse(PlayerMovementValidator.IsPassable(CellType.Empty, nonPassableConfig));
     }
 
     [Test]
@@ -311,6 +311,8 @@ public class PlayerMovementValidatorTests
         public bool IsInitialized() => true;
         public string GetWorldCodeName() => "test";
         public void EnsureEditorInitialized() { }
+        public void BeginRegionBatch() { }
+        public void EndRegionBatch() { }
     }
 
     private sealed class StubWorldLayer : IWorldLayer<CellType>

@@ -13,13 +13,14 @@ using UnityEngine.Rendering;
 namespace Kern.World.Lighting;
 internal sealed class LightingResourceManager
 {
+    private const long MaximumDynamicSdfBuildWorkUnits = 200_000_000;
     // Authored transport quality is independent of field density and camera
     // coverage. Cost estimates are diagnostics, never an automatic LOD.
     private static int MaximumStaticCascadeDirections => LightingQualityTuningController.MaximumStaticCascadeDirections;
 
     private readonly CascadeBufferManager _buffers = new();
     private RenderTexture? _materialField;
-    private RenderTexture? _staticEmissionField;
+    private RenderTexture? _staticGlowField;
     private RenderTexture? _directTexture;
     private RenderTexture? _staticDirectTexture;
     private RenderTexture? _lightmapTexture;
@@ -27,6 +28,9 @@ internal sealed class LightingResourceManager
     private RenderTexture? _surfaceAirCache;
     private ComputeBuffer? _cleanCellRows;
     private ComputeBuffer? _cleanCellPrefix;
+    private RenderTexture? _dynamicDistanceField;
+    private ComputeBuffer? _dynamicDistanceSeedsA;
+    private ComputeBuffer? _dynamicDistanceSeedsB;
     private RenderTexture? _ambientOcclusionField;
     private Material? _ambientOcclusionClearMaterial;
     private GraphicsQualitySettings _allocatedQuality;
@@ -36,12 +40,12 @@ internal sealed class LightingResourceManager
     private bool _allocatedCascadeBudgetLimited;
 
     private RenderTexture? _reanchorMaterial;
-    private RenderTexture? _reanchorEmission;
+    private RenderTexture? _reanchorGlow;
     private ComputeBuffer? _reanchorRows;
     private ComputeBuffer? _reanchorChanges;
 
     public RenderTexture? ReanchorMaterial => _reanchorMaterial;
-    public RenderTexture? ReanchorEmission => _reanchorEmission;
+    public RenderTexture? ReanchorGlow => _reanchorGlow;
     public ComputeBuffer? ReanchorRows => _reanchorRows;
     public ComputeBuffer? ReanchorChanges => _reanchorChanges;
 
@@ -71,8 +75,8 @@ internal sealed class LightingResourceManager
         ReleaseReanchorFields();
         _reanchorMaterial = LightingTexturePool.CreateTexture(FieldWidth, FieldHeight,
             RenderTextureFormat.ARGB32, false, FilterMode.Point, "Lighting.ReanchorMaterial");
-        _reanchorEmission = LightingTexturePool.CreateTexture(FieldWidth, FieldHeight,
-            RenderTextureFormat.ARGBHalf, false, FilterMode.Point, "Lighting.ReanchorEmission");
+        _reanchorGlow = LightingTexturePool.CreateTexture(FieldWidth, FieldHeight,
+            RenderTextureFormat.ARGBHalf, false, FilterMode.Point, "Lighting.ReanchorGlow");
         _reanchorRows = new ComputeBuffer(checked(FieldWidth * FieldHeight), sizeof(uint));
         _reanchorChanges = new ComputeBuffer(checked(FieldWidth * FieldHeight), sizeof(uint));
     }
@@ -80,7 +84,7 @@ internal sealed class LightingResourceManager
     private void ReleaseReanchorFields()
     {
         LightingTexturePool.ReleaseTexture(ref _reanchorMaterial);
-        LightingTexturePool.ReleaseTexture(ref _reanchorEmission);
+        LightingTexturePool.ReleaseTexture(ref _reanchorGlow);
         _reanchorRows?.Release();
         _reanchorRows = null;
         _reanchorChanges?.Release();
@@ -91,7 +95,7 @@ internal sealed class LightingResourceManager
     public ComputeShader? LightingCompute { get; private set; }
     public CommandBuffer? LightingCommandBuffer { get; private set; }
     public RenderTexture? MaterialField => _materialField;
-    public RenderTexture? StaticEmissionField => _staticEmissionField;
+    public RenderTexture? StaticGlowField => _staticGlowField;
     public RenderTexture? DirectTexture => _directTexture;
     public RenderTexture? StaticDirectTexture => _staticDirectTexture;
     public RenderTexture? LightmapTexture => _lightmapTexture;
@@ -110,6 +114,10 @@ internal sealed class LightingResourceManager
     // Summed-area table of cells that are not clean air; scratch rows + result.
     public ComputeBuffer? CleanCellRows => _cleanCellRows;
     public ComputeBuffer? CleanCellPrefix => _cleanCellPrefix;
+    public RenderTexture? DynamicDistanceField => _dynamicDistanceField;
+    public ComputeBuffer? DynamicDistanceSeedsA => _dynamicDistanceSeedsA;
+    public ComputeBuffer? DynamicDistanceSeedsB => _dynamicDistanceSeedsB;
+    public bool DynamicDistanceFieldValid { get; set; }
     public RenderTexture? AmbientOcclusionField => _ambientOcclusionField;
     public Material AmbientOcclusionClearMaterial => _ambientOcclusionClearMaterial ??
         throw new InvalidOperationException("AO rectangle clear material has not been initialized.");
@@ -147,6 +155,8 @@ internal sealed class LightingResourceManager
     public int SolveDynamicLightingKernel { get; private set; }
     public int ComposeDynamicLightingKernel { get; private set; }
     public int TraceDynamicPolarKernel { get; private set; }
+    public int TraceDynamicPolarBatchKernel { get; private set; }
+    public int SolveDynamicLightingBatchKernel { get; private set; }
     public int ClearDynamicDirectKernel { get; private set; }
     public int ResolveDirectKernel { get; private set; }
     public int ResolveTransmissionDebugKernel { get; private set; }
@@ -155,6 +165,9 @@ internal sealed class LightingResourceManager
     public int BuildSurfaceAirCacheKernel { get; private set; }
     public int BuildCleanCellRowsKernel { get; private set; }
     public int BuildCleanCellColumnsKernel { get; private set; }
+    public int SeedDynamicDistanceFieldKernel { get; private set; }
+    public int JumpFloodDynamicDistanceFieldKernel { get; private set; }
+    public int ResolveDynamicDistanceFieldKernel { get; private set; }
     public int FieldWidth { get; private set; }
     public int FieldHeight { get; private set; }
     // Receiver lattice of static/dynamic direct, surface cache and lightmap.
@@ -188,6 +201,8 @@ internal sealed class LightingResourceManager
         SolveDynamicLightingKernel = loaded.SolveDynamicLightingKernel;
         ComposeDynamicLightingKernel = loaded.ComposeDynamicLightingKernel;
         TraceDynamicPolarKernel = loaded.TraceDynamicPolarKernel;
+        TraceDynamicPolarBatchKernel = loaded.TraceDynamicPolarBatchKernel;
+        SolveDynamicLightingBatchKernel = loaded.SolveDynamicLightingBatchKernel;
         ClearDynamicDirectKernel = loaded.ClearDynamicDirectKernel;
         ResolveDirectKernel = loaded.ResolveDirectKernel;
         ResolveTransmissionDebugKernel = loaded.ResolveTransmissionDebugKernel;
@@ -196,6 +211,9 @@ internal sealed class LightingResourceManager
         BuildSurfaceAirCacheKernel = loaded.BuildSurfaceAirCacheKernel;
         BuildCleanCellRowsKernel = loaded.Compute.FindKernel("BuildCleanCellRows");
         BuildCleanCellColumnsKernel = loaded.Compute.FindKernel("BuildCleanCellColumns");
+        SeedDynamicDistanceFieldKernel = loaded.SeedDynamicDistanceFieldKernel;
+        JumpFloodDynamicDistanceFieldKernel = loaded.JumpFloodDynamicDistanceFieldKernel;
+        ResolveDynamicDistanceFieldKernel = loaded.ResolveDynamicDistanceFieldKernel;
         LightingShaderValidator.ValidateGPURequirements();
         LightingShaderValidator.ValidateTerrainFieldPasses(LightingTexturePool.DestroyLightingObject);
         LightingFieldOrientationValidator.EnsureValidated();
@@ -219,6 +237,12 @@ internal sealed class LightingResourceManager
 
     private static int AmbientOcclusionScale(int gridWidth, int gridHeight)
     {
+        if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.R8))
+        {
+            throw new NotSupportedException(
+                $"The active graphics device does not support the required single-channel AO target ({RenderTextureFormat.R8}).");
+        }
+
         const int scale = LightingConfigHolder.AmbientOcclusionPixelsPerCell;
         int width = checked(gridWidth * scale);
         int height = checked(gridHeight * scale);
@@ -255,7 +279,7 @@ internal sealed class LightingResourceManager
         _ambientOcclusionField = LightingTexturePool.CreateTexture(
             width,
             height,
-            RenderTextureFormat.ARGB32,
+            RenderTextureFormat.R8,
             randomWrite: false,
             FilterMode.Point,
             "_LightingAmbientOcclusionField",
@@ -268,20 +292,32 @@ internal sealed class LightingResourceManager
         return true;
     }
 
-    public void ValidateRequestedQuality(LightingQualityTuning quality, in GraphicsQualitySettings settings)
+    public void ValidateRequestedQuality(
+        LightingQualityTuning quality,
+        in GraphicsQualitySettings settings,
+        int activeDynamicLightCount)
     {
         if (CellGridWidth <= 0 || CellGridHeight <= 0)
         {
             throw new InvalidOperationException("Дождись готовности мирового поля перед применением качества.");
         }
         LightingResourceLayout.Validate(CellGridWidth, CellGridHeight, quality, settings, new List<CascadeLayout>());
+        DynamicPolarWorkBudget.ValidateWorstCaseQuality(
+            checked(CellGridWidth * quality.LightPixelsPerCell),
+            checked(CellGridHeight * quality.LightPixelsPerCell),
+            quality,
+            Math.Min(activeDynamicLightCount, settings.LightingMaximumLightCount));
     }
 
-    public bool TryApplyQualityTuning(LightingQualityTuning quality, in GraphicsQualitySettings settings, out string rejection)
+    public bool TryApplyQualityTuning(
+        LightingQualityTuning quality,
+        in GraphicsQualitySettings settings,
+        int activeDynamicLightCount,
+        out string rejection)
     {
         try
         {
-            ValidateRequestedQuality(quality, settings);
+            ValidateRequestedQuality(quality, settings, activeDynamicLightCount);
             LightingQualityTuningController.Apply(quality);
             rejection = string.Empty;
             return true;
@@ -386,16 +422,16 @@ internal sealed class LightingResourceManager
             fieldHeight,
             RenderTextureFormat.ARGB32,
             randomWrite: false,
-            FilterMode.Bilinear,
+            FilterMode.Point,
             "_LightingMaterialField",
             useMipMap: false);
-        _staticEmissionField = LightingTexturePool.CreateTexture(
+        _staticGlowField = LightingTexturePool.CreateTexture(
             fieldWidth,
             fieldHeight,
             RenderTextureFormat.ARGBHalf,
             randomWrite: false,
             FilterMode.Bilinear,
-            "_StaticEmissionField",
+            "_StaticGlowField",
             useMipMap: false);
         _directTexture = LightingTexturePool.CreateTexture(
             lightWidth,
@@ -441,7 +477,7 @@ internal sealed class LightingResourceManager
         _ambientOcclusionField = LightingTexturePool.CreateTexture(
             ambientOcclusionWidth,
             ambientOcclusionHeight,
-            RenderTextureFormat.ARGB32,
+            RenderTextureFormat.R8,
             randomWrite: false,
             FilterMode.Point,
             "_LightingAmbientOcclusionField",
@@ -491,7 +527,7 @@ internal sealed class LightingResourceManager
         Registry.LightHeight = LightHeight;
 
         Registry.Geometry.Material = _materialField;
-        Registry.Geometry.StaticEmission = _staticEmissionField;
+        Registry.Geometry.StaticGlow = _staticGlowField;
         Registry.Geometry.CellSolidMask = _cellSolidMask;
         Registry.Geometry.SurfaceAirCache = _surfaceAirCache;
         Registry.Geometry.AmbientOcclusion = _ambientOcclusionField;
@@ -518,7 +554,7 @@ internal sealed class LightingResourceManager
     {
         ReleaseReanchorFields();
         LightingTexturePool.ReleaseTexture(ref _materialField);
-        LightingTexturePool.ReleaseTexture(ref _staticEmissionField);
+        LightingTexturePool.ReleaseTexture(ref _staticGlowField);
         LightingTexturePool.ReleaseTexture(ref _directTexture);
         LightingTexturePool.ReleaseTexture(ref _staticDirectTexture);
         LightingTexturePool.ReleaseTexture(ref _lightmapTexture);
@@ -527,6 +563,7 @@ internal sealed class LightingResourceManager
         _cleanCellRows = null;
         _cleanCellPrefix?.Release();
         _cleanCellPrefix = null;
+        ReleaseDynamicDistanceField();
         LightingTexturePool.ReleaseTexture(ref _surfaceAirCache);
         LightingTexturePool.ReleaseTexture(ref _ambientOcclusionField);
         GeometryCachesValid = false;
@@ -539,6 +576,83 @@ internal sealed class LightingResourceManager
         AmbientOcclusionWidth = 0;
         AmbientOcclusionHeight = 0;
         Cascades.Clear();
+    }
+
+    public void EnsureDynamicDistanceField()
+    {
+        if (_dynamicDistanceField != null &&
+            _dynamicDistanceField.width == FieldWidth &&
+            _dynamicDistanceField.height == FieldHeight &&
+            _dynamicDistanceSeedsA != null &&
+            _dynamicDistanceSeedsB != null)
+        {
+            return;
+        }
+
+        if (!SystemInfo.SupportsRandomWriteOnRenderTextureFormat(RenderTextureFormat.RFloat))
+        {
+            throw new NotSupportedException("JFA sphere tracing requires random-write RFloat support.");
+        }
+
+        ValidateDynamicDistanceFieldRequest(FieldWidth, FieldHeight);
+
+        ReleaseDynamicDistanceField();
+        int texelCount = checked(FieldWidth * FieldHeight);
+        long allocationBytes = checked((long)texelCount * (sizeof(float) + sizeof(uint) * 2));
+        MemoryAllocationGuard.Require("Dynamic JFA distance field", allocationBytes);
+        try
+        {
+            _dynamicDistanceField = LightingTexturePool.CreateTexture(
+                FieldWidth,
+                FieldHeight,
+                RenderTextureFormat.RFloat,
+                randomWrite: true,
+                FilterMode.Point,
+                "_DynamicDistanceField",
+                useMipMap: false);
+            _dynamicDistanceSeedsA = new ComputeBuffer(texelCount, sizeof(uint), ComputeBufferType.Structured);
+            _dynamicDistanceSeedsB = new ComputeBuffer(texelCount, sizeof(uint), ComputeBufferType.Structured);
+            DynamicDistanceFieldValid = false;
+        }
+        catch
+        {
+            ReleaseDynamicDistanceField();
+            throw;
+        }
+    }
+
+    public static void ValidateDynamicDistanceFieldRequest(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), "JFA requires a non-empty transport field.");
+        }
+
+        int largestSide = Math.Max(width, height);
+        int jumpPasses = 1;
+        for (int jump = 1; jump < largestSide; jump = checked(jump << 1))
+        {
+            jumpPasses++;
+        }
+
+        long texelCount = checked((long)width * height);
+        long workUnits = checked(texelCount * (jumpPasses * 9L + 9L));
+        if (workUnits > MaximumDynamicSdfBuildWorkUnits)
+        {
+            throw new InvalidOperationException(
+                $"JFA distance-field build requires {workUnits:N0} neighbor checks; " +
+                $"limit is {MaximumDynamicSdfBuildWorkUnits:N0}. Reduce transport-map density before selecting SDF.");
+        }
+    }
+
+    public void ReleaseDynamicDistanceField()
+    {
+        LightingTexturePool.ReleaseTexture(ref _dynamicDistanceField);
+        _dynamicDistanceSeedsA?.Release();
+        _dynamicDistanceSeedsA = null;
+        _dynamicDistanceSeedsB?.Release();
+        _dynamicDistanceSeedsB = null;
+        DynamicDistanceFieldValid = false;
     }
 
     public void EnsurePersistentBuffers(long atlasDimension, int maximumLightCount) =>

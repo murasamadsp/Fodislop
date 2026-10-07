@@ -1,9 +1,9 @@
 #ifndef KERN_GEOMETRY_FIELD_HLSL
 #define KERN_GEOMETRY_FIELD_HLSL
 
-// Утилиты для работы с material/emission полями.
+// Утилиты для работы с material/glow полями.
 //
-// READS: _MaterialField, _EmissionField
+// READS: _MaterialField, _GlowField
 // WRITES: ничего
 // MUST NOT: знать о каскадах и источниках
 

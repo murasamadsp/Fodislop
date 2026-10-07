@@ -15,7 +15,7 @@
 // corridors keep their full reach while receivers behind walls are skipped.
 //
 // `origin` is a receiver centre in transport texels.
-bool DynamicHorizonContains(float2 origin, DynamicLight light)
+bool DynamicHorizonContains(float2 origin, DynamicLight light, DynamicTraceContext context)
 {
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     float2 texelsPerCell = 1.0 / cellsPerPixel;
@@ -34,7 +34,7 @@ bool DynamicHorizonContains(float2 origin, DynamicLight light)
         float spread = 0.75 * max(texelsPerCell.x, texelsPerCell.y);
         float halfWidth = asin(saturate(spread / max(radius, 1e-3)));
         float angle = atan2(offset.y, offset.x);
-        int directions = _DynamicPolarSize.x;
+        int directions = context.polarSize.x;
         float rayStep = PI2 / float(directions);
         // PolarTransmission blends ray floor(a/step - 0.5) and the next one.
         int first = (int)floor((angle - halfWidth) / rayStep - 0.5);
@@ -50,7 +50,7 @@ bool DynamicHorizonContains(float2 origin, DynamicLight light)
             for (int emitter = 0; emitter < points; emitter++)
             {
                 horizon = max(horizon,
-                    _DynamicHorizonInput[_DynamicHorizonBase + emitter * _DynamicHorizonStride + (int)index]);
+                    _DynamicHorizonInput[context.horizonBase + emitter * _DynamicHorizonStride + (int)index]);
             }
         }
         // One stored row of radial interpolation beyond the horizon.
@@ -59,23 +59,22 @@ bool DynamicHorizonContains(float2 origin, DynamicLight light)
     return contains;
 }
 
-[numthreads(8, 8, 1)]
-void SolveDynamicLighting(uint3 dispatchId : SV_DispatchThreadID)
+void SolveDynamicReceiver(uint3 dispatchId, DynamicTraceContext context)
 {
-    if (any(int2(dispatchId.xy) >= _DynamicDispatchSize))
+    if (any(int2(dispatchId.xy) >= context.receiverSize))
     {
         return;
     }
 
     // Receivers are light-lattice texels; transport runs on the field lattice.
-    int2 pixel = _DynamicDispatchOrigin + int2(dispatchId.xy);
+    int2 pixel = context.receiverOrigin + int2(dispatchId.xy);
     if (any(pixel < 0) || any(pixel >= _LightSize))
     {
         return;
     }
 
     float2 origin = LightPxCenterToFieldPx(pixel);
-    DynamicLight light = _DynamicLights[_DynamicLightIndex];
+    DynamicLight light = _DynamicLights[context.lightIndex];
 
     if (_WriteDynamicDirect == 0 && _DynamicTilesScalarRadiance != 0)
     {
@@ -86,9 +85,9 @@ void SolveDynamicLighting(uint3 dispatchId : SV_DispatchThreadID)
         light.colorIntensity.rgb = float3(peak, peak, peak);
     }
     float3 radiance = 0.0;
-    if (DynamicHorizonContains(origin, light))
+    if (DynamicHorizonContains(origin, light, context))
     {
-        radiance = DynamicRadianceFromPolar(origin, light, _DynamicAngularSampleCount);
+        radiance = DynamicRadianceFromPolar(origin, light, _DynamicAngularSampleCount, context);
     }
 
     if (_WriteDynamicDirect != 0)
@@ -97,8 +96,20 @@ void SolveDynamicLighting(uint3 dispatchId : SV_DispatchThreadID)
     }
     else
     {
-        _DynamicTiles[int3(_DynamicTileOffset + int2(dispatchId.xy), _DynamicReachIndex)] = float4(radiance, 1.0);
+        _DynamicTiles[int3(context.tileOffset + int2(dispatchId.xy), context.slot)] = float4(radiance, 1.0);
     }
+}
+
+[numthreads(8, 8, 1)]
+void SolveDynamicLighting(uint3 dispatchId : SV_DispatchThreadID)
+{
+    SolveDynamicReceiver(dispatchId, SerialDynamicTraceContext());
+}
+
+[numthreads(8, 8, 1)]
+void SolveDynamicLightingBatch(uint3 dispatchId : SV_DispatchThreadID)
+{
+    SolveDynamicReceiver(dispatchId, BatchedDynamicTraceContext(dispatchId.z));
 }
 
 [numthreads(8, 8, 1)]

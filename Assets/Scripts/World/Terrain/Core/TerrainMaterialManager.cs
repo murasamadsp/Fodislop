@@ -19,7 +19,7 @@ public sealed class TerrainMaterialManager
     private static readonly int s_terrainDecalRockAtlasPropertyId = Shader.PropertyToID("_TerrainDecalRockAtlas");
     private static readonly int s_flowScalePropertyId = Shader.PropertyToID("_FlowScale");
     private static readonly int s_shimmerSpeedScalePropertyId = Shader.PropertyToID("_ShimmerSpeedScale");
-    private static readonly int s_pulseSpeedScalePropertyId = Shader.PropertyToID("_PulseSpeedScale");
+    private static readonly int s_blinkingSpeedScalePropertyId = Shader.PropertyToID("_BlinkingSpeedScale");
     private static readonly int s_shimmerColorPropertyId = Shader.PropertyToID("_ShimmerColor");
     private static readonly int s_worldLightTexturePropertyId = Shader.PropertyToID("_WorldLightTexture");
     private static readonly int s_worldLightRectPropertyId = Shader.PropertyToID("_WorldLightRect");
@@ -59,7 +59,7 @@ public sealed class TerrainMaterialManager
         {
             material.SetVector(s_flowScalePropertyId, config.Terrain.FlowScale);
             material.SetFloat(s_shimmerSpeedScalePropertyId, config.Terrain.ShimmerSpeedScale);
-            material.SetFloat(s_pulseSpeedScalePropertyId, config.Terrain.PulseSpeedScale);
+            material.SetFloat(s_blinkingSpeedScalePropertyId, config.Terrain.BlinkingSpeedScale);
             material.SetColor(s_shimmerColorPropertyId, config.Terrain.ShimmerColor);
             // Вид поверхности авторский: декали, кайма, глинт и
             // призматик берут числа из TerrainConfigHolder.
@@ -182,7 +182,7 @@ public sealed class TerrainMaterialManager
         RequireShaderProperties(material);
         material.SetVector(s_flowScalePropertyId, clientConfig.Terrain.FlowScale);
         material.SetFloat(s_shimmerSpeedScalePropertyId, clientConfig.Terrain.ShimmerSpeedScale);
-        material.SetFloat(s_pulseSpeedScalePropertyId, clientConfig.Terrain.PulseSpeedScale);
+        material.SetFloat(s_blinkingSpeedScalePropertyId, clientConfig.Terrain.BlinkingSpeedScale);
         material.SetColor(s_shimmerColorPropertyId, clientConfig.Terrain.ShimmerColor);
         // Вид поверхности авторский: декали, кайма, глинт и
         // призматик берут числа из TerrainConfigHolder.
@@ -317,7 +317,7 @@ public sealed class TerrainMaterialManager
             "_TerrainDecalAtlas",
             "_FlowScale",
             "_ShimmerSpeedScale",
-            "_PulseSpeedScale",
+            "_BlinkingSpeedScale",
             "_ShimmerColor",
         ];
         foreach (string propertyName in requiredProperties)

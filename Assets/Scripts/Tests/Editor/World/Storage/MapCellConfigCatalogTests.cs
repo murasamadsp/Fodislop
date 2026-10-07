@@ -232,7 +232,7 @@ public class MapCellConfigCatalogTests
     }
 
     [Test]
-    public void AnimationProperties_QueriesCorrectly()
+    public void AnimationFrameHeight_QueriesCorrectly()
     {
         var catalog = new MapCellConfigCatalog();
         var configs = new[]
@@ -243,12 +243,7 @@ public class MapCellConfigCatalogTests
 
         catalog.LoadConfigurations(configs, null);
 
-        Assert.IsFalse(catalog.HasAnimation((CellType)0));
-        Assert.AreEqual(0, catalog.GetAnimationSpeed((CellType)0));
         Assert.AreEqual(0, catalog.GetAnimationFrameHeight((CellType)0));
-
-        Assert.IsTrue(catalog.HasAnimation((CellType)1));
-        Assert.AreEqual(5, catalog.GetAnimationSpeed((CellType)1));
         Assert.AreEqual(3 * RenderingConstants.CELL_SIZE, catalog.GetAnimationFrameHeight((CellType)1));
     }
 

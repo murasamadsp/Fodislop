@@ -752,9 +752,9 @@ public sealed class TerrainLightingExchangeTests
     {
         public ulong LightingGeometryRevision => 1;
 
-        public void RenderMaterialEmissionFields(
+        public void RenderMaterialGlowFields(
             CommandBuffer commandBuffer,
-            in LightingMaterialEmissionContext context)
+            in LightingMaterialGlowContext context)
         {
         }
 

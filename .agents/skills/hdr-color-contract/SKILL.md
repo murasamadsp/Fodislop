@@ -4,7 +4,7 @@ description: >-
   Kern HDR/color pipeline contract: scene-referred linear working space, paper white units, radiance
   format rules, URP output transform ownership, DisplayFinal perceptual/linear space, UI brightness,
   HDR calibration screen, safe-start HDR switch, and HDROutputController usage. Use when touching
-  lighting shaders, emission, bloom, tonemapping, post-processing, color grading, LUT, display output,
+  lighting shaders, glow, bloom, tonemapping, post-processing, color grading, LUT, display output,
   UI colors, calibration, or any code with DisplaySettings / HDROutput / PaperWhite / Tonemapping /
   CompositeFinal / DisplayFinal / VisualTuning. Triggers on: saturate on radiance, clamp color,
   sRGB in shader, UNorm light buffer, ARGBHalf, paper white, HDROutputReconciler, VisualTuning,
@@ -21,9 +21,9 @@ The working color space of the scene is linear, scene-referred, with no upper bo
 
 ## Prohibitions (each silently kills HDR)
 
-- **FORBIDDEN** to cap radiance from above: `saturate`, `clamp(x, 0, 1)`, `min(x, 1.0)` on scene color, lighting, emission, bloom. `saturate` is permitted only on values that are by definition in 0..1: albedo, alpha, masks, coefficients, coordinates.
+- **FORBIDDEN** to cap radiance from above: `saturate`, `clamp(x, 0, 1)`, `min(x, 1.0)` on scene color, lighting, glow, bloom. `saturate` is permitted only on values that are by definition in 0..1: albedo, alpha, masks, coefficients, coordinates.
 - **FORBIDDEN** to apply gamma or sRGB encoding inside lighting shaders. Textures flagged sRGB are decoded by the GPU once, at sample time, and nowhere else.
-- **FORBIDDEN** to store radiance in UNorm format. Everything carrying light uses `ARGBHalf` or higher (`_RadianceDirect`, `_RadianceBounce`, `_WorldLightTexture`, `_StaticEmissionField`). `ARGB32` is allowed only for masks and coefficients (`_LightingMaterialField`, AO).
+- **FORBIDDEN** to store radiance in UNorm format. Everything carrying light uses `ARGBHalf` or higher (`_RadianceDirect`, `_RadianceBounce`, `_WorldLightTexture`, `_StaticGlowField`). `ARGB32` is allowed only for masks and coefficients (`_LightingMaterialField`, AO).
 - **FORBIDDEN** to treat HDR as a separate artistic render ("take an SDR image and multiply by brightness"). SDR and HDR are one scene-referred master with different output transforms applied at the final step.
 
 ## Output transform

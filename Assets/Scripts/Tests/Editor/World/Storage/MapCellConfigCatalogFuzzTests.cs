@@ -97,17 +97,6 @@ public class MapCellConfigCatalogFuzzTests
     }
 
     [Test]
-    public void HasAnimation_TrueOnlyWhenAnimationNotNone()
-    {
-        var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations(Configs(
-            (CellType.Empty, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.None, 0, 0, 0, 0)),
-            (CellType.Rock, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 5, 0, 0, 0))), null);
-        Assert.That(catalog.HasAnimation(CellType.Empty), Is.False);
-        Assert.That(catalog.HasAnimation(CellType.Rock), Is.True);
-    }
-
-    [Test]
     public void GetAnimationFrameHeight_FrameOffsetTimesCellSize()
     {
         var catalog = new MapCellConfigCatalog();
@@ -115,15 +104,6 @@ public class MapCellConfigCatalogFuzzTests
             (CellType.Empty, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 5, 3, 0, 0))), null);
         int frameHeight = catalog.GetAnimationFrameHeight(CellType.Empty);
         Assert.That(frameHeight, Is.EqualTo(3 * 32));
-    }
-
-    [Test]
-    public void GetAnimationSpeed_ReturnsConfigValue()
-    {
-        var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations(Configs(
-            (CellType.Empty, new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.Blinking, 7, 0, 0, 0))), null);
-        Assert.That(catalog.GetAnimationSpeed(CellType.Empty), Is.EqualTo((byte)7));
     }
 
     [Test]
@@ -153,20 +133,6 @@ public class MapCellConfigCatalogFuzzTests
         Assert.That(c.b, Is.EqualTo(0x20 / 255f).Within(0.001f));
         Assert.That(c.a, Is.EqualTo(1f));
     }
-
-    [TestCase(CellType.WhiteSand, CellShape.Round)]
-    [TestCase(CellType.Lava, CellShape.Round)]
-    [TestCase(CellType.Empty, CellShape.Flat)]
-    [TestCase(CellType.Rock, CellShape.Organic)]
-    [TestCase(CellType.Boulder1, CellShape.Square)]
-    [TestCase(CellType.BuildingWall, CellShape.Wall)]
-    [TestCase(CellType.BuildingCorner, CellShape.Corner)]
-    [TestCase(CellType.BuildingDoor, CellShape.Door)]
-    public void Shape_DocumentedTypes(CellType type, CellShape expected)
-    {
-        Assert.That(MapCellConfigCatalog.GetVisualProperties(type).Shape, Is.EqualTo(expected));
-    }
-
 
     private static CellConfigurationPacket MakeConfig(CellType type, CellAnimationType anim, byte animSpeed)
     {

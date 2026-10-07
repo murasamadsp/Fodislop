@@ -166,7 +166,7 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(cellData, Does.Contain("float2 node00 = TerrainNodeCells(TerrainNode(gridX, unityY,"));
         Assert.That(cellGeometry, Does.Not.Contain("Quantize("));
         Assert.That(geometry, Does.Contain("TerrainGeometryRawCorner"));
-        Assert.That(cellData, Does.Contain("occluded = occluded && TerrainSolidMassCell(neighbourTraits[m]);"));
+        Assert.That(cellData, Does.Contain("occluded = occluded && TerrainOpaqueMassCell(neighbourRows[m]);"));
         Assert.That(cellData, Does.Contain("bool anchored = foreground && foregroundAnchored;"));
         Assert.That(terrain, Does.Contain("applyGeometry = input.isForeground"));
         Assert.That(cellData, Does.Contain("v.atlasIndex = -1.0"));

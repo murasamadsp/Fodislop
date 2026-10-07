@@ -23,6 +23,28 @@ public static class LightingFrameDumper
         public long maximumStaticCascadeRayWorkUnits;
         public int fieldWidth;
         public int fieldHeight;
+        public int lightWidth;
+        public int lightHeight;
+        public int atlasCapacity;
+        public int atlasEntryCount;
+        public string dynamicTransportMode = "";
+        public bool batchDynamicLights;
+        public bool dynamicExecutionModeApplied;
+        public int fieldPixelsPerCell;
+        public int lightPixelsPerCell;
+        public int cascadeProbePixelsPerCell;
+        public int maximumStaticCascadeDirections;
+        public float dynamicNearCells;
+        public int dynamicAngularSampleCount;
+        public int dynamicEmitterPointsPerAxis;
+        public int dynamicPolarDirectionCount;
+        public int ambientOcclusionPixelsPerCell;
+        public float emptyExtinctionMultiplier;
+        public float solidExtinctionMultiplier;
+        public float surfaceReflectionReachCells;
+        public float dynamicLightIntensity;
+        public float maximumLightMultiplier;
+        public long maximumDynamicPolarRayWorkUnits;
         public int ambientOcclusionWidth;
         public int ambientOcclusionHeight;
         public int cellGridWidth;
@@ -31,7 +53,7 @@ public static class LightingFrameDumper
         public float cellSize;
         public Color ambientColor;
         public float ambientIntensity;
-        public float emissionScale;
+        public float glowScale;
         public Color emptyExtinctionRGB;
         public Color solidExtinctionRGB;
         public string enabledFeatures = "";
@@ -65,8 +87,12 @@ public static class LightingFrameDumper
         public int ddaSegments;
         public long ddaTexelVisits;
         public int cascadeMergeSamples;
+        public long dynamicSdfSamples;
         public int activeDynamicLights;
         public int dynamicTraceCount;
+        public int dynamicPolarDispatchCount;
+        public int dynamicReceiverDispatchCount;
+        public int dynamicBatchDescriptorBytes;
         public long dynamicDispatchPixels;
         public long dynamicComposePixels;
         public long compositeDispatchPixels;
@@ -173,6 +199,28 @@ public static class LightingFrameDumper
             maximumStaticCascadeRayWorkUnits = LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits,
             fieldWidth = resources.FieldWidth,
             fieldHeight = resources.FieldHeight,
+            lightWidth = resources.LightWidth,
+            lightHeight = resources.LightHeight,
+            atlasCapacity = resources.Cascade.AtlasCapacity,
+            atlasEntryCount = resources.Cascade.AtlasEntryCount,
+            dynamicTransportMode = LightingQualityTuningController.DynamicTransportMode.ToString(),
+            batchDynamicLights = LightingQualityTuningController.BatchDynamicLights,
+            dynamicExecutionModeApplied = LightingQualityTuningController.IsDynamicExecutionModeApplied,
+            fieldPixelsPerCell = LightingQualityTuningController.FieldPixelsPerCell,
+            lightPixelsPerCell = LightingQualityTuningController.LightPixelsPerCell,
+            cascadeProbePixelsPerCell = LightingQualityTuningController.CascadeProbePixelsPerCell,
+            maximumStaticCascadeDirections = LightingQualityTuningController.MaximumStaticCascadeDirections,
+            dynamicNearCells = LightingQualityTuningController.DynamicNearCells,
+            dynamicAngularSampleCount = LightingQualityTuningController.DynamicAngularSampleCount,
+            dynamicEmitterPointsPerAxis = LightingQualityTuningController.DynamicEmitterPointsPerAxis,
+            dynamicPolarDirectionCount = LightingQualityTuningController.DynamicPolarDirectionCount,
+            ambientOcclusionPixelsPerCell = LightingConfigHolder.AmbientOcclusionPixelsPerCell,
+            emptyExtinctionMultiplier = LightingConfigHolder.EmptyExtinctionMultiplier,
+            solidExtinctionMultiplier = LightingConfigHolder.SolidExtinctionMultiplier,
+            surfaceReflectionReachCells = LightingConfigHolder.SurfaceReflectionReachCells,
+            dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity,
+            maximumLightMultiplier = LightingConfigHolder.MaximumLightMultiplier,
+            maximumDynamicPolarRayWorkUnits = LightingConfigHolder.MaximumDynamicPolarRayWorkUnits,
             ambientOcclusionWidth = resources.Geometry.AmbientOcclusionWidth,
             ambientOcclusionHeight = resources.Geometry.AmbientOcclusionHeight,
             cellGridWidth = resources.Geometry.CellGridWidth,
@@ -181,7 +229,7 @@ public static class LightingFrameDumper
             cellSize = cellSize,
             ambientColor = LightingConfigHolder.AmbientColor,
             ambientIntensity = LightingConfigHolder.AmbientIntensity,
-            emissionScale = LightingConfigHolder.EmissionScale,
+            glowScale = LightingConfigHolder.GlowScale,
             emptyExtinctionRGB = LightingConfigHolder.EmptyExtinctionRGB,
             solidExtinctionRGB = LightingConfigHolder.SolidExtinctionRGB,
             enabledFeatures = LightingConfigHolder.EnabledFeatures.ToString(),
@@ -204,6 +252,9 @@ public static class LightingFrameDumper
             cascadeMergeSamples = telemetry.LightingCascadeMergeSamples,
             activeDynamicLights = telemetry.ActiveDynamicLights,
             dynamicTraceCount = telemetry.LightingDynamicTraceCount,
+            dynamicPolarDispatchCount = telemetry.LightingDynamicPolarDispatchCount,
+            dynamicReceiverDispatchCount = telemetry.LightingDynamicReceiverDispatchCount,
+            dynamicBatchDescriptorBytes = telemetry.LightingDynamicBatchDescriptorBytes,
             dynamicDispatchPixels = telemetry.LightingDynamicDispatchPixels,
             dynamicComposePixels = telemetry.LightingDynamicComposePixels,
             compositeDispatchPixels = telemetry.LightingCompositeDispatchPixels,
@@ -261,7 +312,7 @@ public static class LightingFrameDumper
 
         // 3. Textures Dump
         SaveRenderTexture(resources.Geometry.Material, Path.Combine(dir, "MaterialField.png"));
-        SaveRenderTexture(resources.Geometry.StaticEmission, Path.Combine(dir, "StaticEmissionField.png"));
+        SaveRenderTexture(resources.Geometry.StaticGlow, Path.Combine(dir, "StaticGlowField.png"));
         SaveRenderTexture(resources.Geometry.CellSolidMask, Path.Combine(dir, "CellSolidMask.png"));
         SaveRenderTexture(resources.Geometry.AmbientOcclusion, Path.Combine(dir, "AmbientOcclusionField.png"));
         SaveRenderTexture(resources.Direct.Static, Path.Combine(dir, "StaticDirect.png"));
@@ -326,11 +377,12 @@ public static class LightingFrameDumper
 
         try
         {
-            var values = new uint[3];
-            lightingCounters.GetData(values);
+            var values = new uint[4];
+            lightingCounters.GetData(values, 0, 0, values.Length);
             counters.ddaSegments = (int)Math.Min(values[0], int.MaxValue);
             counters.ddaTexelVisits = values[1];
             counters.cascadeMergeSamples = (int)Math.Min(values[2], int.MaxValue);
+            counters.dynamicSdfSamples = values[3];
         }
         catch (Exception exception)
         {

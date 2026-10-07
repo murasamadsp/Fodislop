@@ -86,6 +86,8 @@ public sealed class ServerVFXEvent : IServerWorldEffect
     private Sprite[]? _animationFrames;
     private Sprite? _ownedStaticSprite;
     private Sprite? _flightSprite;
+    private bool _ownedStaticSpriteShared;
+    private bool _flightSpriteShared;
     private int _currentFrame;
     private float _frameTimer;
     private float _frameDuration = 0.1f;
@@ -116,6 +118,7 @@ public sealed class ServerVFXEvent : IServerWorldEffect
     private ISceneObjectFactory _sceneObjects = null!;
     private readonly List<GameObject> _digitObjects = [];
     private readonly List<WorldEntityBatchRenderer.SpriteHandle> _digitHandles = [];
+    private readonly List<Sprite> _digitSprites = [];
     private float _digitRowOffset;
     private float _digitStep;
     private bool _digitsLingering;
@@ -432,12 +435,22 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         Sprite? sprite = await TryLoadCrystalSpriteAsync("vfx/crystal", token);
         if (token.IsCancellationRequested)
         {
+            if (sprite != null)
+            {
+                UnityEngine.Object.Destroy(sprite);
+            }
+
             return false;
         }
 
         sprite ??= await TryLoadCrystalSpriteAsync($"Crys/{_parsedParams.CrystalColorLetter}.png", token);
         if (token.IsCancellationRequested)
         {
+            if (sprite != null)
+            {
+                UnityEngine.Object.Destroy(sprite);
+            }
+
             return false;
         }
 
@@ -475,11 +488,12 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     private async UniTask StartFlightWithProceduralCrystalAsync(CancellationToken token)
     {
-        var sprite = Sprite.Create(
-            CreateProceduralCrystalTexture(),
-            new Rect(0, 0, ProceduralCrystalSize, ProceduralCrystalSize),
-            new Vector2(0.5f, 0.5f),
-            RenderingConstants.PIXELS_PER_UNIT);
+        Sprite sprite = _batchRenderer.GetOrCreateOwnedSprite(
+            $"ProceduralCrystal/{CrystalColorKey(_parsedParams.CrystalColorLetter)}",
+            CreateProceduralCrystalTexture,
+            ProceduralCrystalSize,
+            ProceduralCrystalSize);
+        _flightSpriteShared = true;
         await ConfigureFlightAsync(sprite, token);
     }
 
@@ -488,10 +502,6 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         _flightSprite = sprite;
         _flightMode = true;
         _maxLifetime = FlightDurationSeconds + LabelLingerSeconds + 1f;
-
-        Debug.Log($"[ServerVFXEvent] Crystal flight: cell {_sourceX}:{_sourceY}, bot {_targetBotId}, " +
-                  $"sprite '{(sprite.texture != null ? sprite.texture.name : "?")}', amount {_parsedParams.CrystalCount}, " +
-                  $"crystalScale {CrystalScale}.");
 
         StartFlight();
         await CreateCrystalDigitsAsync(token);
@@ -538,6 +548,7 @@ public sealed class ServerVFXEvent : IServerWorldEffect
                 new Rect(cellIndex * cell, 0f, cell, sheet.height),
                 new Vector2(0.5f, 0.5f),
                 RenderingConstants.PIXELS_PER_UNIT);
+            _digitSprites.Add(digitSprite);
 
             GameObject go = _sceneObjects.Create($"CrystalDigit_{i}", RuntimeOwner.VFX);
             go.transform.position = basePosition + (Vector3.right * (_digitStep * i));
@@ -568,6 +579,16 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         _ => new Color(0.35f, 0.90f, 0.45f),
     };
 
+    private static string CrystalColorKey(string letter) => letter switch
+    {
+        "b" => "b",
+        "r" => "r",
+        "v" => "v",
+        "w" => "w",
+        "c" => "c",
+        _ => "g",
+    };
+
     // Маркер запрета установки пака: опциональный ассет "VFX/placedeny"
     // (тот же конвейер: анимация → статичная текстура → Effekseer), иначе
     // процедурный красный круг с чертой — как в легаси-клиенте.
@@ -588,8 +609,21 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     private void StartProceduralDenyMarker()
     {
-        // Формат — RGBA32 sRGB (linear: false): спрайт попадает в мировой
-        // атлас батч-рендерера, который требует совпадения graphicsFormat.
+        _ownedStaticSprite = _batchRenderer.GetOrCreateOwnedSprite(
+            "ProceduralDenyMarker",
+            CreateProceduralDenyTexture,
+            DenyMarkerSize,
+            DenyMarkerSize);
+        _ownedStaticSpriteShared = true;
+        _slot?.SetColor(Color.white);
+        _slot?.SetSprite(_ownedStaticSprite);
+        _slot?.SetEnabled(true);
+        _isAnimated = false;
+        _maxLifetime = 0.7f;
+    }
+
+    private static Texture2D CreateProceduralDenyTexture()
+    {
         Texture2D texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             DenyMarkerSize,
             DenyMarkerSize,
@@ -617,17 +651,7 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
         texture.SetPixels32(pixels);
         texture.Apply(updateMipmaps: false);
-
-        _ownedStaticSprite = Sprite.Create(
-            texture,
-            new Rect(0f, 0f, DenyMarkerSize, DenyMarkerSize),
-            new Vector2(0.5f, 0.5f),
-            RenderingConstants.PIXELS_PER_UNIT);
-        _slot?.SetColor(Color.white);
-        _slot?.SetSprite(_ownedStaticSprite);
-        _slot?.SetEnabled(true);
-        _isAnimated = false;
-        _maxLifetime = 0.7f;
+        return texture;
     }
 
     private Texture2D CreateProceduralCrystalTexture()
@@ -928,6 +952,11 @@ public sealed class ServerVFXEvent : IServerWorldEffect
             _slot = null;
         }
 
+        for (int i = 0; i < _digitHandles.Count; i++)
+        {
+            _batchRenderer.UnregisterSprite(_digitHandles[i]);
+        }
+
         for (int i = 0; i < _digitObjects.Count; i++)
         {
             if (_digitObjects[i] != null)
@@ -936,16 +965,25 @@ public sealed class ServerVFXEvent : IServerWorldEffect
             }
         }
 
+        for (int i = 0; i < _digitSprites.Count; i++)
+        {
+            if (_digitSprites[i] != null)
+            {
+                UnityEngine.Object.Destroy(_digitSprites[i]);
+            }
+        }
+
         _digitObjects.Clear();
         _digitHandles.Clear();
+        _digitSprites.Clear();
 
-        if (_ownedStaticSprite != null)
+        if (_ownedStaticSprite != null && !_ownedStaticSpriteShared)
         {
             UnityEngine.Object.Destroy(_ownedStaticSprite);
             _ownedStaticSprite = null;
         }
 
-        if (_flightSprite != null)
+        if (_flightSprite != null && !_flightSpriteShared)
         {
             UnityEngine.Object.Destroy(_flightSprite);
             _flightSprite = null;

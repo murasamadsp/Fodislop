@@ -7,8 +7,8 @@ struct AoTexture
     {
         level=std::move(base);
     }
-    float4 SampleLevel(int sampler, float2 uv, float) const
+    float SampleLevel(int sampler, float2 uv, float) const
     {
-        return level.SampleLevel(sampler,uv,0);
+        return level.SampleLevel(sampler,uv,0).x;
     }
 };

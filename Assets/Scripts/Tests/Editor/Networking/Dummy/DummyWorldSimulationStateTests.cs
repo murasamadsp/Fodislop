@@ -143,25 +143,25 @@ public sealed class DummyWorldSimulationStateTests
         Assert.That(DummyCellConfigurationUtilities.GetMinedCrystal(CellType.Road), Is.EqualTo(CrystalType.Unknown));
 
         BlockDefinition green = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Green);
-        Assert.That(green.Passable, Is.False);
-        Assert.That(green.Shape, Is.EqualTo(CellShape.Organic));
-        Assert.That(green.MapColorHEX, Is.EqualTo("#08D764"));
+        Assert.That(green.IsPassable, Is.False);
+        Assert.That(green.Outline, Is.EqualTo(CellOutline.Wavy));
+        Assert.That(green.MapColor, Is.EqualTo(new Color32(0x08, 0xD7, 0x64, 0xFF)));
 
         BlockDefinition road = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Road);
-        Assert.That(road.Passable, Is.True);
-        Assert.That(road.MapColorHEX, Is.EqualTo("#444444"));
-        Assert.That(road.DecalFamily, Is.EqualTo(TerrainDecalFamily.None));
+        Assert.That(road.IsPassable, Is.True);
+        Assert.That(road.MapColor, Is.EqualTo(new Color32(0x44, 0x44, 0x44, 0xFF)));
+        Assert.That(road.DecalAtlas, Is.EqualTo(CellDecalAtlas.None));
 
         BlockDefinition buildingRoad = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.BuildingRoad);
-        Assert.That(buildingRoad.Shape, Is.EqualTo(CellShape.Square));
+        Assert.That(buildingRoad.Outline, Is.EqualTo(CellOutline.Rigid));
 
         BlockDefinition lava = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.Lava);
-        Assert.That(lava.Shape, Is.EqualTo(CellShape.Round));
-        Assert.That(lava.Surface, Is.EqualTo(CellSurface.Molten));
+        Assert.That(lava.Outline, Is.EqualTo(CellOutline.Round));
+        Assert.That(lava.SurfaceEffect, Is.EqualTo(CellSurfaceEffect.Molten));
 
         BlockDefinition xgreen = DummyCellConfigurationUtilities.GetBlockDefinition(CellType.XGreen);
-        Assert.That(xgreen.Surface, Is.EqualTo(CellSurface.Prismatic));
-        Assert.That(xgreen.SurfacePalette, Is.EqualTo(1));
+        Assert.That(xgreen.SurfaceEffect, Is.EqualTo(CellSurfaceEffect.Prismatic));
+        Assert.That(xgreen.SurfaceEffectPalette, Is.EqualTo(1));
 
         byte[][] tileGroups = DummyCellConfigurationUtilities.CreateTileGroups();
         Assert.That(tileGroups.Length, Is.EqualTo(1));

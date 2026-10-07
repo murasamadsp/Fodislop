@@ -268,7 +268,9 @@ internal static class MapStorageDiskWriter
                        FileShare.None))
             {
                 source.CopyTo(destination);
-                destination.Flush(flushToDisk: true);
+                // Flush managed buffers to OS file system cache without blocking
+                // on physical drive sync (F_FULLFSYNC on macOS), preventing main thread stalls.
+                destination.Flush(flushToDisk: false);
             }
 
             if (File.Exists(destinationPath))

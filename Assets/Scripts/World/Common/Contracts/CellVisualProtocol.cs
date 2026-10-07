@@ -1,77 +1,67 @@
 #nullable enable
 
-using MinesServer.Data;
-
 namespace Kern.World;
 
-// Декаль переднего плана: земля (атлас земли, доля из TerrainConfigHolder)
-// или камень (атлас красно-чёрного камня, 30%). Фон всегда получает землю.
-public enum TerrainDecalFamily : byte
+// Группа декали типа: земля (атлас земли, доля из TerrainConfigHolder)
+// или камень (атлас красно-чёрного камня, 30%); номера — KERN_TERRAIN_DECAL_ATLAS_*.
+public enum CellDecalAtlas : byte
 {
     None = 0,
     Ground = 1,
     Rock = 2,
 }
 
-public enum TerrainAnimationProfile : byte
+// Слой, в котором рисуется клетка.
+//   Foreground — передний план: непроходим, даёт тень, под ним подложка;
+//   Background — фон: проходим, лежит сам на себе;
+//   Underlay   — подложка: фон, который лежит под каждым передним планом.
+//                Ровно один тип.
+public enum CellDrawLayer : byte
 {
-    Default = 0,
-    PrismaticCrystal = 1,
-    MoltenSurface = 2,
-    FacetedCrystal = 3,
+    Foreground = 0,
+    Background = 1,
+    Underlay = 2,
 }
 
-// Поверхность клетки — одна анимация на тип.
-//   Plain     — неподвижная текстура;
-//   Blinking  — мигание (скорость — SurfaceSpeed);
-//   Shimmer   — мерцание (скорость — SurfaceSpeed);
+// Откуда клетка берёт координаты текстуры; номера — KERN_TERRAIN_TEXTURE_ANCHOR_*.
+//   Cell  — своя картинка на клетку (тайл);
+//   World — кусок общей картинки по мировой позиции: соседние клетки
+//           читаются одним камнем без швов.
+public enum CellTextureAnchor : byte
+{
+    Cell = 0,
+    World = 1,
+}
+
+// Цветовая поверхность клетки; номера — KERN_TERRAIN_SURFACE_EFFECT_*. Анимация
+// текстуры (мигание, мерцание, радуга) — отдельное поле, CellAnimationType.
+//   Plain     — цвет текстуры как есть;
 //   Molten    — расплав (лава);
 //   Faceted   — грани кристалла;
-//   Prismatic — радужный кристалл (палитра — SurfacePalette).
-public enum CellSurface : byte
+//   Prismatic — радужный кристалл (палитра — SurfaceEffectPalette).
+public enum CellSurfaceEffect : byte
 {
     Plain = 0,
-    Blinking = 1,
-    Shimmer = 2,
-    Molten = 3,
-    Faceted = 4,
-    Prismatic = 5,
+    Molten = 1,
+    Faceted = 2,
+    Prismatic = 3,
 }
 
-// Форма клетки — одна на все её геометрические решения.
-//   Flat    — плоский пол: не искажается, лежит под остальным;
-//   Organic — органическая порода: рваный край, двигает узлы сетки;
-//   Square  — жёсткий квадрат: не искажается и держит соседние узлы;
-//   Round   — круглая капля (пески, лава, кислоты): жёсткая, как Square,
-//             но клетку целиком не закрывает;
-//   Wall, Corner, Door — стена, угол и дверь пака: жёсткие, как Square;
-//             стена выбирает картинку по соседним углам, дверь рисуется
-//             отдельным слоем поверх.
-public enum CellShape : byte
+// Контур клетки — её край и как он ведёт себя в сетке; номера —
+// KERN_TERRAIN_OUTLINE_*. Узлы сетки гнутся, только если рядом есть Wavy.
+//   Pliant — квадрат, края гнутся вслед за соседями;
+//   Wavy   — квадрат, сам гнёт свои края и узлы вокруг;
+//   Rigid  — квадрат с прямыми краями: держит узлы, соседи его не гнут;
+//   Round  — капля (пески, лава, кислоты): клетку целиком не закрывает, держит;
+//   Wall, Corner, Door — стена, угол и дверь пака, держат: стена выбирает
+//            картинку по соседним углам, дверь рисуется отдельным слоем поверх.
+public enum CellOutline : byte
 {
-    Flat = 0,
-    Organic = 1,
-    Square = 2,
+    Pliant = 0,
+    Wavy = 1,
+    Rigid = 2,
     Round = 3,
     Wall = 4,
     Corner = 5,
     Door = 6,
-}
-
-public readonly record struct CellVisualProperties(
-    CellShape Shape,
-    TerrainDecalFamily DecalFamily = TerrainDecalFamily.None,
-    TerrainAnimationProfile SurfaceProfile = TerrainAnimationProfile.Default,
-    byte PaletteIndex = 0)
-{
-    public bool IsRound => Shape == CellShape.Round;
-    public bool IsBuildingWall => Shape == CellShape.Wall;
-    public bool IsBuildingCorner => Shape == CellShape.Corner;
-    public bool IsBuildingDoor => Shape == CellShape.Door;
-    public bool IsBuilding => Shape is CellShape.Wall or CellShape.Corner or CellShape.Door;
-}
-
-public interface ICellVisualProtocol
-{
-    CellVisualProperties Get(CellType type);
 }

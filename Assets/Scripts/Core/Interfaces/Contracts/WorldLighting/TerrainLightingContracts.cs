@@ -11,11 +11,11 @@ public interface ILightingGeometryContributor
     ulong LightingGeometryRevision { get; }
 
     /// <summary>
-    /// Records albedo/occupancy and emission fields for this call. Texture
+    /// Records albedo/occupancy and glow fields for this call. Texture
     /// handles and command-buffer state are borrowed and MUST NOT be retained or
     /// changed outside the supplied render phase.
     /// </summary>
-    void RenderMaterialEmissionFields(CommandBuffer commandBuffer, in LightingMaterialEmissionContext context);
+    void RenderMaterialGlowFields(CommandBuffer commandBuffer, in LightingMaterialGlowContext context);
 
     /// <summary>
     /// Records displaced geometry occupancy only. The target is a single-channel
@@ -24,14 +24,15 @@ public interface ILightingGeometryContributor
     void RenderAmbientOcclusionField(CommandBuffer commandBuffer, in LightingAmbientOcclusionContext context);
 }
 
-/// <summary>Material/emission targets borrowed for one call; WorldRect is a positive extent in Unity world units.</summary>
-public readonly record struct LightingMaterialEmissionContext(
+/// <summary>Material/glow targets borrowed for one call; WorldRect is a positive extent in Unity world units.</summary>
+public readonly record struct LightingMaterialGlowContext(
     RenderTexture MaterialField,
-    RenderTexture EmissionField,
+    RenderTexture GlowField,
     Vector4 WorldRect);
 
 /// <summary>
-/// Single AO occupancy target borrowed for one call; WorldRect is a positive extent in Unity world units.
+/// Single-channel R8 AO occupancy target borrowed for one call; occupancy is stored in the red channel.
+/// WorldRect is a positive extent in Unity world units.
 /// Lighting binds and clears the target. Contributors must preserve its contents and draw only
 /// inside RasterRect, a half-open rectangle in render-target pixels using the target's own row
 /// origin (see <see cref="LightingFieldOrientation"/>).
@@ -92,8 +93,8 @@ public enum TerrainLightingChannels
     None = 0,
     Occupancy = 1 << 0,
     Material = 1 << 1,
-    Emission = 1 << 2,
-    All = Occupancy | Material | Emission,
+    Glow = 1 << 2,
+    All = Occupancy | Material | Glow,
 }
 
 public enum TerrainLightingChangeKind

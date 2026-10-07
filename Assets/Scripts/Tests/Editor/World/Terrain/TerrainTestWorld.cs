@@ -140,7 +140,7 @@ public sealed class TerrainTestWorld
                 CellType.BuildingWall or CellType.BuildingDoor => CellDistortionType.Block,
                 _ => CellDistortionType.Neutral,
             };
-            byte reliefGroup = type switch
+            byte rimMass = type switch
             {
                 CellType.Rock => 1,
                 CellType.RedRock => 4,
@@ -153,7 +153,7 @@ public sealed class TerrainTestWorld
                 AnimationSpeed: 0,
                 FrameOffset: 0,
                 Color: unchecked((int)0xFF204060),
-                reliefGroup);
+                rimMass);
         }
 
         public float GetMoveCooldown(CellType cellType) => 0f;
@@ -231,9 +231,6 @@ public sealed class TerrainTestWorld
 
         public int GetAnimationFrameCount(CellType cellType) => 1;
 
-        public int GetFrameSize(CellType cellType) => 32;
-
-        public float GetAnimationSpeedForCell(CellType cellType) => 0f;
 
         public UniTask<AtlasCoordinate> GetCellTextureCoordinate(
             CellType cellType,
@@ -316,6 +313,14 @@ public sealed class TerrainTestWorld
         {
         }
 #endif
+
+        public void BeginRegionBatch()
+        {
+        }
+
+        public void EndRegionBatch()
+        {
+        }
     }
 
     private sealed class FakeLayer : IWorldLayer<CellType>

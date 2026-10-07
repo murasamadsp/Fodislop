@@ -11,8 +11,8 @@ public interface IRegionBatchStorage
     void EndRegionBatch();
 }
 
-    public interface IWorldDataStorage
-    {
+public interface IWorldDataStorage : IRegionBatchStorage
+{
         event System.Action<int, int>? CellChanged;
         event System.Action<int, int, int, int>? RegionChanged;
 

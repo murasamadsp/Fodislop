@@ -38,6 +38,15 @@ internal static class LightingResourceLayout
                 $"проб/клетку и {quality.MaximumStaticCascadeDirections} направлениях; предел {maximumEntries}. " +
                 "Выбери качество транспорта явно.");
         }
+
+        long rayWork = CascadeCostCalculator.EstimateRayWorkUnits(candidate);
+        if (rayWork > LightingConfigHolder.MaximumStaticCascadeRayWorkUnits)
+        {
+            throw new InvalidOperationException(
+                $"Статическое освещение требует {rayWork:N0} единиц работы на полный пересчёт; " +
+                $"предел {LightingConfigHolder.MaximumStaticCascadeRayWorkUnits:N0}. " +
+                "Уменьши плотность поля, проб каскадов или предел направлений и примени настройки явно.");
+        }
     }
 
 }

@@ -23,7 +23,7 @@ public static class PlayerMovementValidator
         bool ignoreCollision)
     {
         float cooldown = isCtrlPressed || currentCellType is CellType.Unloaded or CellType.Pregener
-            ? mapDataProvider.GetMoveCooldown(CellType.Empty)
+            ? mapDataProvider.GetMinMoveCooldown()
             : mapDataProvider.GetMoveCooldown(currentCellType);
 
         if (ignoreCollision)
@@ -37,8 +37,7 @@ public static class PlayerMovementValidator
     public static bool IsPassable(CellType cellType, in CellConfigurationPacket cellConfig)
     {
         return cellType is not (CellType.Unloaded or CellType.Pregener) &&
-               (cellType == CellType.Empty ||
-                ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable));
+               ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
     }
 
     public static bool TryEvaluateStep(

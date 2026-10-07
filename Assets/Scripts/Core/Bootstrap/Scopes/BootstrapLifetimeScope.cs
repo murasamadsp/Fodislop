@@ -242,6 +242,24 @@ namespace Kern.Core
             {
                 ticket.Fail(ex);
                 _currentSceneName = previousScene?.name;
+                if (string.Equals(sceneName, ProjectRuntimeContracts.SceneNames.MainGame, StringComparison.Ordinal))
+                {
+                    // The connection and DummyConnection outlive the candidate
+                    // scene. If world initialization times out, keeping that
+                    // transport alive would make the next Connect() a no-op
+                    // after its WorldInit packet was already lost with this scope.
+                    try
+                    {
+                        _connectionManager.Disconnect();
+                    }
+                    catch (Exception disconnectException)
+                    {
+                        Debug.LogError(
+                            $"[Bootstrap] Failed to disconnect after '{sceneName}' transition failure: " +
+                            disconnectException);
+                    }
+                }
+
                 // LoadSceneAsync can finish loading the scene and then a later
                 // step (scene lookup, ticket attach, activation, or readiness)
                 // can fail before candidateScene is assigned. Recover the

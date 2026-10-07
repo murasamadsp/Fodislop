@@ -125,7 +125,7 @@ public sealed class PlayerHUDBasketView
         }
     }
 
-    public void Refresh(PlayerStatsModel stats)
+    public void Refresh(IPlayerStats stats)
     {
         for (int i = 0; i < _basketCrystalFills.Count && i < stats.BasketContents.Length; i++)
         {

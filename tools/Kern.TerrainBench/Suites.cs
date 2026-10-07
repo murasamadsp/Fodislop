@@ -839,9 +839,10 @@ public static class Suites
                 CellType type = types[i];
                 for (int layer = 0; layer < 2; layer++)
                 {
-                    sink += MapCellConfigCatalog.GetVisualProperties(type).IsRound ? 1 : 0;
-                    sink += TerrainDecalCatalog.GetFamily(type) == TerrainDecalFamily.Ground ? 1 : 0;
-                    sink += (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
+                    BlockDefinition block = BlockRegistry.Get(type);
+                    sink += block.Outline == CellOutline.Round ? 1 : 0;
+                    sink += block.DecalAtlas == CellDecalAtlas.Ground ? 1 : 0;
+                    sink += (int)block.SurfaceEffect;
                 }
             }
 
@@ -854,9 +855,10 @@ public static class Suites
         for (int value = 0; value < 65536; value++)
         {
             var type = (CellType)value;
-            roundable[value] = MapCellConfigCatalog.GetVisualProperties(type).IsRound;
-            ground[value] = TerrainDecalCatalog.GetFamily(type) == TerrainDecalFamily.Ground;
-            profile[value] = (int)TerrainAnimationProfileCatalog.Get(type, 1f).Profile;
+            BlockDefinition block = BlockRegistry.Get(type);
+            roundable[value] = block.Outline == CellOutline.Round;
+            ground[value] = block.DecalAtlas == CellDecalAtlas.Ground;
+            profile[value] = (int)block.SurfaceEffect;
         }
 
         runner.Run("та же выборка из таблицы по типу", () =>
@@ -1000,13 +1002,12 @@ public static class Suites
         public void PackCell(TerrainVertex[] vertices, int x, int y, int width, int height) =>
             PackCellAt(vertices, x, y, x, y, width, height);
 
-        // Упаковка клетки: типы обоих слоёв — всё, что клетка хранит.
+        // Упаковка клетки: её тип — всё, что клетка хранит.
         public void PackCellAt(TerrainVertex[] vertices, int x, int y, int ringX, int ringY, int width, int height)
         {
             int first = ((x * height) + y) * 8;
             Cells[(ringY * width) + ringX] = TerrainCellData.PackCell(
-                CellType.Rock,
-                vertices[first].UV3.w != 0f ? CellType.Empty : CellType.Road);
+                vertices[first].UV3.w != 0f ? CellType.Rock : CellType.Road);
         }
 
         public void CopyAllTo(byte[] target) =>

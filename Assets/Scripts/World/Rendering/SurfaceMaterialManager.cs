@@ -19,8 +19,8 @@ public sealed class SurfaceMaterialManager
     private const float PerspectiveReferencePixelsPerCell = 30f;
 
     private static readonly int s_baseMapId = Shader.PropertyToID("_BaseMap");
-    private static readonly int s_emissionColorId = Shader.PropertyToID("_EmissionColor");
-    private static readonly int s_emissionStrengthId = Shader.PropertyToID("_EmissionStrength");
+    private static readonly int s_glowColorId = Shader.PropertyToID("_GlowColor");
+    private static readonly int s_glowStrengthId = Shader.PropertyToID("_GlowStrength");
     private static readonly int s_occupancyId = Shader.PropertyToID("_Occupancy");
     private static readonly int s_baseMapTileCountId = Shader.PropertyToID("_BaseMapTileCount");
     private static readonly int s_worldSizeId = Shader.PropertyToID("_WorldSize");
@@ -40,8 +40,8 @@ public sealed class SurfaceMaterialManager
 
     public Material CreateSurfaceMaterial(
         Texture2D texture,
-        Color emissionColor,
-        float emissionStrength,
+        Color glowColor,
+        float glowStrength,
         float occupancy,
         Vector2 baseMapTileCount,
         Vector2 worldSize,
@@ -63,8 +63,8 @@ public sealed class SurfaceMaterialManager
         RequireShaderProperties(material);
         ApplySurfaceFieldThreshold();
         material.SetTexture(s_baseMapId, texture);
-        material.SetColor(s_emissionColorId, emissionColor);
-        material.SetFloat(s_emissionStrengthId, emissionStrength);
+        material.SetColor(s_glowColorId, glowColor);
+        material.SetFloat(s_glowStrengthId, glowStrength);
         material.SetFloat(s_occupancyId, occupancy);
         material.SetVector(
             s_baseMapTileCountId,
@@ -96,12 +96,12 @@ public sealed class SurfaceMaterialManager
 
     public void ApplyMaterialConfig(
         Material material,
-        Color emissionColor,
-        float emissionStrength,
+        Color glowColor,
+        float glowStrength,
         float occupancy)
     {
-        material.SetColor(s_emissionColorId, emissionColor);
-        material.SetFloat(s_emissionStrengthId, emissionStrength);
+        material.SetColor(s_glowColorId, glowColor);
+        material.SetFloat(s_glowStrengthId, glowStrength);
         material.SetFloat(s_occupancyId, occupancy);
     }
 
@@ -143,8 +143,8 @@ public sealed class SurfaceMaterialManager
         string[] requiredProperties =
         [
             "_BaseMap",
-            "_EmissionColor",
-            "_EmissionStrength",
+            "_GlowColor",
+            "_GlowStrength",
             "_Occupancy",
             "_BaseMapTileCount",
             "_WorldSize",

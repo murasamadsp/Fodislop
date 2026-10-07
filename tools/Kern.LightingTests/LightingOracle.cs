@@ -20,16 +20,16 @@ internal static class LightingOracle
     private static void RunSingleTorch()
     {
         float[,] material = new float[Size, Size];
-        float[,] emission = new float[Size, Size];
+        float[,] glow = new float[Size, Size];
         for (int y = 15; y < 17; y++)
         {
             for (int x = 15; x < 17; x++)
             {
-                emission[y, x] = 16f;
+                glow[y, x] = 16f;
             }
         }
 
-        float[,] radiance = Trace(material, emission);
+        float[,] radiance = Trace(material, glow);
         Check(radiance[16, 16] > 10f, "center torch is bright");
         Check(MathF.Abs(radiance[5, 5] - radiance[5, 26]) < 1e-3f, "horizontal symmetry");
         Check(MathF.Abs(radiance[5, 5] - radiance[26, 5]) < 1e-3f, "vertical symmetry");
@@ -41,23 +41,23 @@ internal static class LightingOracle
     private static void RunDiagonalOcclusion()
     {
         float[,] material = new float[Size, Size];
-        float[,] emission = new float[Size, Size];
+        float[,] glow = new float[Size, Size];
         material[10, 10] = 1f;
         material[11, 11] = 1f;
-        emission[9, 9] = 16f;
-        float[,] radiance = Trace(material, emission);
+        glow[9, 9] = 16f;
+        float[,] radiance = Trace(material, glow);
         Check(radiance[12, 12] < radiance[9, 9] * .05f, "diagonal contact occlusion");
     }
 
     private static void RunMultipleEmitters()
     {
         float[,] material = new float[Size, Size];
-        float[,] emission = new float[Size, Size];
-        emission[6, 6] = 8f;
-        emission[6, 25] = 8f;
-        emission[25, 6] = 8f;
-        emission[25, 25] = 8f;
-        float[,] radiance = Trace(material, emission);
+        float[,] glow = new float[Size, Size];
+        glow[6, 6] = 8f;
+        glow[6, 25] = 8f;
+        glow[25, 6] = 8f;
+        glow[25, 25] = 8f;
+        float[,] radiance = Trace(material, glow);
         Check(radiance[16, 16] > 0f, "multiple emitters reach center");
         Check(MathF.Abs(radiance[16, 10] - radiance[16, 21]) < 1e-3f, "multiple emitter symmetry");
     }
@@ -65,7 +65,7 @@ internal static class LightingOracle
     private static void RunCorridor()
     {
         float[,] material = new float[Size, Size];
-        float[,] emission = new float[Size, Size];
+        float[,] glow = new float[Size, Size];
         for (int y = 0; y < Size; y++)
         {
             material[y, 16] = 1f;
@@ -73,9 +73,9 @@ internal static class LightingOracle
 
         material[15, 16] = 0f;
         material[16, 16] = 0f;
-        emission[15, 5] = 16f;
-        emission[16, 5] = 16f;
-        float[,] radiance = Trace(material, emission);
+        glow[15, 5] = 16f;
+        glow[16, 5] = 16f;
+        float[,] radiance = Trace(material, glow);
         Check(radiance[16, 24] > radiance[5, 24] * 10f, "corridor aperture");
         Check(radiance[5, 24] < .01f, "corridor shadow");
     }
@@ -83,7 +83,7 @@ internal static class LightingOracle
     private static void RunLightNearWall()
     {
         float[,] material = new float[Size, Size];
-        float[,] emission = new float[Size, Size];
+        float[,] glow = new float[Size, Size];
         for (int y = 14; y < 18; y++)
         {
             for (int x = 14; x < 18; x++)
@@ -92,8 +92,8 @@ internal static class LightingOracle
             }
         }
 
-        emission[16, 11] = 16f;
-        float[,] radiance = Trace(material, emission);
+        glow[16, 11] = 16f;
+        float[,] radiance = Trace(material, glow);
         for (int y = 14; y < 18; y++)
         {
             for (int x = 14; x < 18; x++)
@@ -105,7 +105,7 @@ internal static class LightingOracle
         Check(radiance[16, 20] < .01f, "dynamic light shadow behind wall");
     }
 
-    private static float[,] Trace(float[,] material, float[,] emission)
+    private static float[,] Trace(float[,] material, float[,] glow)
     {
         var result = new float[Size, Size];
         const int rays = 180;
@@ -140,9 +140,9 @@ internal static class LightingOracle
                             break;
                         }
 
-                        if (emission[sampleY, sampleX] > 0f)
+                        if (glow[sampleY, sampleX] > 0f)
                         {
-                            total += emission[sampleY, sampleX] * transmittance;
+                            total += glow[sampleY, sampleX] * transmittance;
                             transmittance *= .5f;
                         }
 

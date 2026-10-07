@@ -15,12 +15,12 @@ internal static class TerrainMaterialTuning
         Shader.PropertyToID("_OrganicBendPivot");
     private static readonly int s_roundableCornerRadiusPropertyId =
         Shader.PropertyToID("_RoundableCornerRadius");
-    private static readonly int s_reliefRimDistanceScalePropertyId =
-        Shader.PropertyToID("_ReliefRimDistanceScale");
-    private static readonly int s_reliefRimQuantizationEnabledPropertyId =
-        Shader.PropertyToID("_ReliefRimQuantizationEnabled");
-    private static readonly int s_reliefRimFalloffPropertyId =
-        Shader.PropertyToID("_ReliefRimFalloff");
+    private static readonly int s_rimDistanceScalePropertyId =
+        Shader.PropertyToID("_RimDistanceScale");
+    private static readonly int s_rimQuantizationEnabledPropertyId =
+        Shader.PropertyToID("_RimQuantizationEnabled");
+    private static readonly int s_rimFalloffPropertyId =
+        Shader.PropertyToID("_RimFalloff");
     private static readonly int s_groundDecalStrengthPropertyId =
         Shader.PropertyToID("_GroundDecalStrength");
     private static readonly int s_rockDecalStrengthPropertyId =
@@ -86,14 +86,14 @@ internal static class TerrainMaterialTuning
             s_roundableCornerRadiusPropertyId,
             TerrainConfigHolder.RoundableCornerRadiusCells);
         material.SetFloat(
-            s_reliefRimDistanceScalePropertyId,
-            TerrainConfigHolder.ReliefRimDistanceScale);
+            s_rimDistanceScalePropertyId,
+            TerrainConfigHolder.RimDistanceScale);
         material.SetFloat(
-            s_reliefRimQuantizationEnabledPropertyId,
-            TerrainConfigHolder.ReliefRimQuantizationEnabled ? 1f : 0f);
+            s_rimQuantizationEnabledPropertyId,
+            TerrainConfigHolder.RimQuantizationEnabled ? 1f : 0f);
         material.SetFloat(
-            s_reliefRimFalloffPropertyId,
-            TerrainConfigHolder.ReliefRimFalloff);
+            s_rimFalloffPropertyId,
+            TerrainConfigHolder.RimFalloff);
         material.SetFloat(s_groundDecalStrengthPropertyId, TerrainConfigHolder.GroundDecalStrength);
         material.SetFloat(s_rockDecalStrengthPropertyId, TerrainConfigHolder.RockDecalStrength);
         material.SetFloat(s_decalPlacementOffsetPropertyId, TerrainConfigHolder.DecalPlacementOffset);

@@ -4,11 +4,24 @@ using System;
 
 namespace Kern.World.Lighting;
 
+public enum DynamicLightingTransportMode
+{
+    ExactDda,
+    AcceleratedUniformRegions,
+    JumpFloodSdfSphereTracing,
+}
+
 /// <summary>Lighting-owned session settings; applying data does not run terrain or GPU work.</summary>
 public static class LightingQualityTuningController
 {
     public static LightingQualityTuning Current { get; private set; } = LightingConfigHolder.DefaultQuality;
     public static ulong Revision { get; private set; }
+    public static DynamicLightingTransportMode DynamicTransportMode { get; private set; }
+    public static bool BatchDynamicLights { get; private set; }
+    public static ulong DynamicExecutionModeRevision { get; private set; }
+    public static ulong AppliedDynamicExecutionModeRevision { get; private set; }
+    public static bool IsDynamicExecutionModeApplied =>
+        AppliedDynamicExecutionModeRevision == DynamicExecutionModeRevision;
 
     static LightingQualityTuningController()
     {
@@ -34,6 +47,43 @@ public static class LightingQualityTuningController
         ulong revision = checked(Revision + 1);
         Current = quality;
         Revision = revision;
+    }
+
+    public static void SetDynamicTransportMode(DynamicLightingTransportMode mode)
+    {
+        if (!Enum.IsDefined(typeof(DynamicLightingTransportMode), mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mode));
+        }
+
+        if (mode == DynamicTransportMode)
+        {
+            return;
+        }
+
+        DynamicTransportMode = mode;
+        DynamicExecutionModeRevision = checked(DynamicExecutionModeRevision + 1);
+    }
+
+    public static void SetBatchDynamicLights(bool enabled)
+    {
+        if (enabled == BatchDynamicLights)
+        {
+            return;
+        }
+
+        BatchDynamicLights = enabled;
+        DynamicExecutionModeRevision = checked(DynamicExecutionModeRevision + 1);
+    }
+
+    internal static void MarkDynamicExecutionModeApplied(ulong revision)
+    {
+        if (revision > DynamicExecutionModeRevision)
+        {
+            throw new ArgumentOutOfRangeException(nameof(revision));
+        }
+
+        AppliedDynamicExecutionModeRevision = revision;
     }
 
     public static void Validate(LightingQualityTuning quality)

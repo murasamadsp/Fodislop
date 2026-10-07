@@ -26,9 +26,9 @@ public sealed class TerrainSettings
     public float ShimmerSpeedScale = TerrainConfigHolder.ShimmerSpeedScale;
 
     [SettingRange(0f, 10f)]
-    [SettingLabel("settings.world.pulse_speed")]
-    [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainMaterialManager.PulseSpeedScale")]
-    public float PulseSpeedScale = TerrainConfigHolder.PulseSpeedScale;
+    [SettingLabel("settings.world.blinking_speed")]
+    [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainMaterialManager.BlinkingSpeedScale")]
+    public float BlinkingSpeedScale = TerrainConfigHolder.BlinkingSpeedScale;
 
     [SettingLabel("settings.world.shimmer_color")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]
@@ -52,33 +52,33 @@ public sealed class TerrainSettings
     [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainBuildPipeline.DistortionStyle")]
     public TerrainDistortionStyle DistortionStyle = TerrainDistortionStyle.Organic;
 
-    // Тумблер каймы рельефа: затемнения к границам чужой рельефной семьи.
+    // Тумблер каймы: затемнения к границам чужой семьи каймы.
     // Выключенная кайма не убирает ни маску, ни транспорт — шейдер просто
     // перестаёт на неё умножать, поэтому переключение стоит кадра.
-    [SettingUnbounded("Тумблер каймы рельефа на границах семей.")]
-    [SettingLabel("settings.world.relief_rim")]
+    [SettingUnbounded("Тумблер каймы на границах семей.")]
+    [SettingLabel("settings.world.rim")]
     [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainRenderer.ApplyClientConfig")]
-    public bool EnableReliefRim = true;
+    public bool EnableRim = true;
 
-    [SettingLabel("settings.world.surface_emission_color")]
+    [SettingLabel("settings.world.surface_glow_color")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]
     [SettingConsumer(SettingConsumerTarget.SurfaceRenderer, "SurfaceRenderer._materialManager.ApplyMaterialConfig")]
-    public Color TransitEmissionColor = TerrainConfigHolder.TransitEmissionColor;
+    public Color TransitGlowColor = TerrainConfigHolder.TransitGlowColor;
 
     [SettingRange(0f, 8f)]
-    [SettingLabel("settings.world.surface_emission")]
+    [SettingLabel("settings.world.surface_glow")]
     [SettingConsumer(SettingConsumerTarget.SurfaceRenderer, "SurfaceRenderer._materialManager.ApplyMaterialConfig")]
-    public float TransitEmissionStrength = TerrainConfigHolder.TransitEmissionStrength;
+    public float TransitGlowStrength = TerrainConfigHolder.TransitGlowStrength;
 
     [SettingLabel("settings.world.far_surface_color")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]
     [SettingConsumer(SettingConsumerTarget.SurfaceRenderer, "SurfaceRenderer._materialManager.ApplyMaterialConfig")]
-    public Color PerspectiveEmissionColor = TerrainConfigHolder.PerspectiveEmissionColor;
+    public Color PerspectiveGlowColor = TerrainConfigHolder.PerspectiveGlowColor;
 
     [SettingRange(0f, 8f)]
-    [SettingLabel("settings.world.far_surface_emission")]
+    [SettingLabel("settings.world.far_surface_glow")]
     [SettingConsumer(SettingConsumerTarget.SurfaceRenderer, "SurfaceRenderer._materialManager.ApplyMaterialConfig")]
-    public float PerspectiveEmissionStrength = TerrainConfigHolder.PerspectiveEmissionStrength;
+    public float PerspectiveGlowStrength = TerrainConfigHolder.PerspectiveGlowStrength;
 
     [SettingRange(0f, 1f)]
     [SettingConsumer(SettingConsumerTarget.SurfaceRenderer, "SurfaceRenderer._materialManager.ApplyMaterialConfig")]

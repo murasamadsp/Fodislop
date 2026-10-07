@@ -29,9 +29,9 @@ public sealed class AnimationContainerDecoderTests
     [TestCase("vfx/bz", 16, 480, 16, 32, 15, 15f)]
     [TestCase("VFX/death.png", 64, 2496, 64, 64, 39, 40f)]
     [TestCase("VFX/destroy", 1, 1, 1, 1, 1, 0f)]
-    [TestCase("cells/66.png", 32, 192, 32, 32, 6, 5f)]
-    [TestCase("cells/67", 32, 192, 32, 32, 6, 5f)]
-    [TestCase("cells/90.png", 32, 128, 32, 32, 4, 4f)]
+    [TestCase("cells/GrayAcid.png", 32, 192, 32, 32, 6, 5f)]
+    [TestCase("cells/PurpleAcid", 32, 192, 32, 32, 6, 5f)]
+    [TestCase("cells/Box.png", 32, 128, 32, 32, 4, 4f)]
     public void TryGetAnimationConfig_KnownAnimations_ReturnsExpectedValues(
         string filename,
         int width,
@@ -154,14 +154,14 @@ public sealed class AnimationContainerDecoderTests
     [Test]
     public void DecodeAnimationSprites_ActualPngCell_SuccessfullyDecodes()
     {
-        string cellPath = Path.Combine(Application.dataPath, "Textures", "Cells", "90.png");
+        string cellPath = Path.Combine(Application.dataPath, "Textures", "Cells", "Box.png");
         if (!File.Exists(cellPath))
         {
             Assert.Ignore($"Asset not found at {cellPath}");
         }
 
         byte[] bytes = File.ReadAllBytes(cellPath);
-        var result = AssetCacheDecoder.DecodeAnimationSprites(bytes, "Cells/90");
+        var result = AssetCacheDecoder.DecodeAnimationSprites(bytes, "Cells/Box");
 
         Assert.That(result.Sprites, Is.Not.Null);
         Assert.That(result.Sprites.Length, Is.EqualTo(4));

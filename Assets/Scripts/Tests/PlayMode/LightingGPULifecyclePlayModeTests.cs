@@ -10,6 +10,7 @@ using Kern.Game;
 using Kern.Player;
 using Kern.Rendering;
 using Kern.World.Lighting;
+using Kern.World.Lighting.Diagnostics;
 using Kern.World.Terrain;
 using MinesServer.Data;
 using UnityEngine.Rendering;
@@ -35,7 +36,7 @@ public sealed class LightingGPULifecyclePlayModeTests
     private static readonly HashSet<string> s_lightingTargetNames =
     [
         "_LightingMaterialField",
-        "_StaticEmissionField",
+        "_StaticGlowField",
         "_RadianceDirect",
         "_RadianceDirectStatic",
         "_WorldLightTexture",
@@ -45,7 +46,7 @@ public sealed class LightingGPULifecyclePlayModeTests
         "_DynamicRayDepth",
         "_LightingAmbientOcclusionField",
         "Lighting.ReanchorMaterial",
-        "Lighting.ReanchorEmission",
+        "Lighting.ReanchorGlow",
     ];
 
     private FrameBenchmarkPlayModeTests.NativeBenchmarkResolution? _subcellResolution;
@@ -88,6 +89,8 @@ public sealed class LightingGPULifecyclePlayModeTests
             or nameof(VisualTuning_RebuildsFieldsAndRetainsStationarySources)
             or nameof(StationarySource_ReanchorMatchesFreshTransport)
             or nameof(OutsideFieldSource_KeepsCompleteEmitter)
+            or nameof(DynamicOnlyFrame_RebindsCleanCellPrefixAfterGeometryCachesAreWarm)
+            or nameof(UniformSourceTraversal_PreservesContinuousEmitterAndGeometryChanges)
             or nameof(PolarDepth_EqualExtinctionPreservesColoredHDRRadiance))
         {
 #if UNITY_EDITOR
@@ -210,6 +213,52 @@ public sealed class LightingGPULifecyclePlayModeTests
     }
 
     [UnityTest]
+    public IEnumerator DynamicOnlyFrame_RebindsCleanCellPrefixAfterGeometryCachesAreWarm()
+    {
+        LightingEngine lighting = PlayModeHarness.RequireInGame<LightingEngine>();
+        _walkingProbeCamera = PlayModeHarness.RequireInGame<IGameplayCamera>().Camera;
+        _walkingProbeCameraPosition = _walkingProbeCamera.transform.position;
+        _walkingProbeOrthographicSize = _walkingProbeCamera.orthographicSize;
+        _walkingProbeAspect = _walkingProbeCamera.aspect;
+        _walkingProbeFollow = PlayModeHarness.RequireInGame<CameraFollow>();
+        _walkingProbeFollowWasEnabled = _walkingProbeFollow.enabled;
+        _walkingProbeFollow.enabled = false;
+        yield return SelectAndSettle(GraphicsPreset.Overdrive);
+        yield return PlayModeHarness.Frames(3);
+
+        Vector3 cameraPosition = _walkingProbeCamera.transform.position;
+        _walkingProbeLightRegistered = true;
+        for (int update = 0; update < 2; update++)
+        {
+            ulong previousSolveCount = lighting.SolveCount;
+            lighting.SetDynamicLight(
+                WalkingProbeLightId,
+                new Vector2(cameraPosition.x + 2f + update * 2f, cameraPosition.y + 1f),
+                Color.white,
+                1f);
+
+            yield return PlayModeHarness.WaitUntil(
+                () => lighting.SolveCount > previousSolveCount &&
+                      lighting.Journal.GetRecent(8).Any(record =>
+                          record.FrameIndex >= previousSolveCount &&
+                          record.Reason == "Dynamic lights updated"),
+                5f,
+                $"Dynamic-only lighting update {update + 1} did not complete.");
+
+            InvalidationFrameRecord record = lighting.Journal.GetRecent(8).First(frame =>
+                frame.FrameIndex >= previousSolveCount && frame.Reason == "Dynamic lights updated");
+            string[] executedPasses = record.ExecutedPasses.Take(record.ExecutedCount).ToArray();
+            Assert.That(executedPasses, Does.Contain("DynamicLighting"));
+            if (update == 1)
+            {
+                Assert.That(executedPasses, Does.Not.Contain("GeometryCache"),
+                    "The second update must reuse warmed geometry caches and exercise per-dispatch bindings.");
+                Assert.That(executedPasses, Does.Not.Contain("MaterialField"));
+            }
+        }
+    }
+
+    [UnityTest]
     public IEnumerator CyclingPresets_RecreatesTargetsWithoutLeakingThem()
     {
         LightingEngine lighting = PlayModeHarness.RequireInGame<LightingEngine>();
@@ -259,7 +308,7 @@ public sealed class LightingGPULifecyclePlayModeTests
                     foreach (RenderTexture field in new[]
                     {
                         lighting.GPUResources.Geometry.Material!,
-                        lighting.GPUResources.Geometry.StaticEmission!,
+                        lighting.GPUResources.Geometry.StaticGlow!,
                         lighting.GPUResources.Direct.Static!,
                         lighting.GPUResources.Direct.Dynamic!,
                         lighting.GPUResources.Output.Lightmap!,
@@ -474,6 +523,163 @@ public sealed class LightingGPULifecyclePlayModeTests
     }
 
     [UnityTest]
+    [Timeout(300_000)]
+    public IEnumerator UniformSourceTraversal_PreservesContinuousEmitterAndGeometryChanges()
+    {
+        bool originalCandidate = LightingComputeBinder.DiagnosticUniformSourceTraversal;
+        bool originalBatching = LightingComputeBinder.DiagnosticBatchedDynamicLights;
+        DynamicLightingTransportMode originalTransport = LightingQualityTuningController.DynamicTransportMode;
+        bool originalConfiguredBatching = LightingQualityTuningController.BatchDynamicLights;
+        bool originalTransportCounters = LightingComputeBinder.DiagnosticTransportCounters;
+        LightingQualityTuning originalQuality = LightingQualityTuningController.Current;
+        try
+        {
+            LightingComputeBinder.DiagnosticUniformSourceTraversal = false;
+            foreach (DynamicLightingTransportMode transportMode in new[]
+            {
+                DynamicLightingTransportMode.AcceleratedUniformRegions,
+                DynamicLightingTransportMode.JumpFloodSdfSphereTracing,
+            })
+            {
+                foreach (bool batchLights in new[] { false, true })
+                {
+                    LightingQualityTuningController.SetDynamicTransportMode(transportMode);
+                    LightingQualityTuningController.SetBatchDynamicLights(batchLights);
+                    LightingComputeBinder.DiagnosticTransportCounters = true;
+                    _walkingProbeLighting = PlayModeHarness.RequireInGame<LightingEngine>();
+                    yield return SelectAndSettle(GraphicsPreset.Overdrive);
+                    yield return PlayModeHarness.WaitUntil(
+                        () => _walkingProbeLighting.IsGPUPipelineInitialized &&
+                              _walkingProbeLighting.HasDiagnosticTransportCounterBuffer,
+                        30f,
+                        "Lighting GPU counters were not allocated before the traversal probe.");
+                    _walkingProbeLighting.DiagnosticTransportCounterBuffer.SetData(
+                        new uint[LightingComputeBinder.LightingCounterCount]);
+                    int[] densities = transportMode == DynamicLightingTransportMode.JumpFloodSdfSphereTracing
+                        ? [2]
+                        : [2, 4];
+                    foreach (int density in densities)
+                    {
+                        LightingQualityTuningController.Apply(new LightingQualityTuning(
+                            density,
+                            density,
+                            Mathf.Min(originalQuality.CascadeProbePixelsPerCell, density),
+                            originalQuality.MaximumStaticCascadeDirections,
+                            originalQuality.DynamicNearCells,
+                            originalQuality.DynamicAngularSampleCount,
+                            originalQuality.DynamicEmitterPointsPerAxis,
+                            originalQuality.DynamicPolarDirectionCount));
+                        yield return OutsideFieldSource_KeepsCompleteEmitter();
+                        uint[] transportCounters = new uint[0];
+                        bool countersRead = false;
+                        AsyncGPUReadback.Request(_walkingProbeLighting!.DiagnosticTransportCounterBuffer, request =>
+                        {
+                            Assert.That(request.hasError, Is.False, "Dynamic traversal counter readback failed.");
+                            transportCounters = request.GetData<uint>().ToArray();
+                            countersRead = true;
+                        });
+                        yield return PlayModeHarness.WaitUntil(
+                            () => countersRead, 10f, "Dynamic traversal counters did not arrive.");
+                        Assert.That(transportCounters.Length,
+                            Is.EqualTo(LightingComputeBinder.LightingCounterCount));
+                        (double ddaMean, int ddaP95, int ddaMaximum) = SummarizeTraversalHistogram(
+                            transportCounters,
+                            LightingComputeBinder.DynamicTraversalDdaHistogramOffset);
+                        (double sdfMean, int sdfP95, int sdfMaximum) = SummarizeTraversalHistogram(
+                            transportCounters,
+                            LightingComputeBinder.DynamicTraversalSdfHistogramOffset);
+                        (double totalMean, int totalP95, int totalMaximum) = SummarizeTraversalHistogram(
+                            transportCounters,
+                            LightingComputeBinder.DynamicTraversalTotalHistogramOffset);
+                        TestContext.WriteLine(
+                            $"transport={transportMode}; batch={batchLights}; density={density}; " +
+                            $"DDA avg/P95/max={ddaMean:F2}/{ddaP95}/{ddaMaximum}; " +
+                            $"SDF avg/P95/max={sdfMean:F2}/{sdfP95}/{sdfMaximum}; " +
+                            $"combined avg/P95/max={totalMean:F2}/{totalP95}/{totalMaximum}; " +
+                            $"ddaVisits={transportCounters[1]}; sdfSamples={transportCounters[3]}");
+                        if (transportMode == DynamicLightingTransportMode.JumpFloodSdfSphereTracing)
+                        {
+                            Assert.That(transportCounters[3], Is.GreaterThan(0),
+                                "JFA mode was selected but production polar rays never sampled the SDF.");
+                        }
+                        else
+                        {
+                            Assert.That(transportCounters[3], Is.Zero,
+                                "A non-SDF transport mode unexpectedly sampled the SDF.");
+                        }
+                        // Each density/mode owns a fresh fixture; restore camera
+                        // and robot states before the next fixture snapshots them.
+                        _walkingProbeFollow!.enabled = _walkingProbeFollowWasEnabled;
+                        _walkingProbeCamera!.transform.position = _walkingProbeCameraPosition;
+                        _walkingProbeCamera.orthographicSize = _walkingProbeOrthographicSize;
+                        _walkingProbeCamera.aspect = _walkingProbeAspect ??
+                            throw new System.InvalidOperationException("Uniform-source fixture did not capture the camera aspect.");
+                        for (int index = 0; index < _subcellRobots!.Length; index++)
+                        {
+                            if (_subcellRobots[index] != null)
+                            {
+                                _subcellRobots[index].enabled = _subcellRobotEnabled![index];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            LightingComputeBinder.DiagnosticUniformSourceTraversal = originalCandidate;
+            LightingComputeBinder.DiagnosticBatchedDynamicLights = originalBatching;
+            LightingQualityTuningController.SetDynamicTransportMode(originalTransport);
+            LightingQualityTuningController.SetBatchDynamicLights(originalConfiguredBatching);
+            LightingComputeBinder.DiagnosticTransportCounters = originalTransportCounters;
+            LightingQualityTuningController.Apply(originalQuality);
+        }
+    }
+
+    private static (double Mean, int P95, int Maximum) SummarizeTraversalHistogram(
+        uint[] counters,
+        int offset)
+    {
+        long rayCount = 0;
+        long weightedSteps = 0;
+        for (int steps = 0; steps < LightingComputeBinder.DynamicTraversalHistogramBins; steps++)
+        {
+            uint rays = counters[offset + steps];
+            rayCount += rays;
+            weightedSteps += (long)rays * steps;
+        }
+
+        if (rayCount == 0)
+        {
+            return (0d, 0, 0);
+        }
+
+        long percentileTarget = (rayCount * 95 + 99) / 100;
+        long cumulative = 0;
+        int p95 = 0;
+        int maximum = 0;
+        bool percentileFound = false;
+        for (int steps = 0; steps < LightingComputeBinder.DynamicTraversalHistogramBins; steps++)
+        {
+            uint rays = counters[offset + steps];
+            if (rays == 0)
+            {
+                continue;
+            }
+
+            maximum = steps;
+            cumulative += rays;
+            if (!percentileFound && cumulative >= percentileTarget)
+            {
+                p95 = steps;
+                percentileFound = true;
+            }
+        }
+
+        return ((double)weightedSteps / rayCount, p95, maximum);
+    }
+
+    [UnityTest]
     [Timeout(120_000)]
     public IEnumerator OutsideFieldSource_KeepsCompleteEmitter()
     {
@@ -507,8 +713,8 @@ public sealed class LightingGPULifecyclePlayModeTests
         surface.SetTexture("_BaseMap", white);
         surface.SetVector("_BaseMapTileCount", Vector4.one);
         surface.SetVector("_WorldSize", Vector4.one);
-        surface.SetColor("_EmissionColor", Color.black);
-        surface.SetFloat("_EmissionStrength", 0f);
+        surface.SetColor("_GlowColor", Color.black);
+        surface.SetFloat("_GlowStrength", 0f);
         surface.SetFloat("_Occupancy", 0f);
         var mesh = new Mesh
         {
@@ -518,7 +724,13 @@ public sealed class LightingGPULifecyclePlayModeTests
             uv2 = [Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero],
             triangles = [0, 1, 2, 0, 2, 3],
         };
-        fixture.transform.position = _walkingProbeCamera.transform.position;
+        // Field rasters use a dedicated orthographic projection with a narrow
+        // z slab around the world plane; copying the camera's z=-10 clips the
+        // production mesh even though it is visible to the gameplay camera.
+        fixture.transform.position = new Vector3(
+            _walkingProbeCamera.transform.position.x,
+            _walkingProbeCamera.transform.position.y,
+            0f);
         fixture.AddComponent<MeshFilter>().sharedMesh = mesh;
         MeshRenderer renderer = fixture.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = surface;
@@ -529,10 +741,20 @@ public sealed class LightingGPULifecyclePlayModeTests
         try
         {
             yield return SelectAndSettle(GraphicsPreset.Overdrive);
+            LightingQualityTuning transportQuality = LightingQualityTuningController.Current;
+            LightingQualityTuningController.Apply(new LightingQualityTuning(
+                transportQuality.FieldPixelsPerCell,
+                transportQuality.LightPixelsPerCell,
+                transportQuality.CascadeProbePixelsPerCell,
+                transportQuality.MaximumStaticCascadeDirections,
+                transportQuality.DynamicNearCells,
+                8,
+                transportQuality.DynamicEmitterPointsPerAxis,
+                transportQuality.DynamicPolarDirectionCount));
             Vector4 rect = lighting.WorldRect;
             RenderTexture direct = lighting.GPUResources.Direct.Dynamic!;
             float density = direct.width * lighting.CellSize / rect.z;
-            Assert.That(density, Is.EqualTo(32f));
+            Assert.That(density, Is.EqualTo((float)LightingQualityTuningController.LightPixelsPerCell));
             int px = Mathf.FloorToInt((_walkingProbeCamera.transform.position.x - rect.x) / rect.z * direct.width);
             int py = Mathf.FloorToInt((_walkingProbeCamera.transform.position.y - rect.y) / rect.w * direct.height);
             Vector2 receiver = new(rect.x / lighting.CellSize + (px + 0.5f) / density,
@@ -559,9 +781,9 @@ public sealed class LightingGPULifecyclePlayModeTests
                 for (int channel = 0; channel < 3; channel++)
                 {
                     double expected = AirSquareRadiance(source.x, receiver.x, extinction[channel],
-                        8.0 * LightingConfigHolder.EmissionScale * (channel == 0 ? 1.0 : channel == 1 ? 0.5 : 0.25));
+                        8.0 * LightingConfigHolder.GlowScale * (channel == 0 ? 1.0 : channel == 1 ? 0.5 : 0.25));
                     float measured = Mathf.HalfToFloat(values[channel]);
-                    Assert.That(expected, Is.GreaterThan(0.000001), "The oracle observed an invisible source.");
+                    Assert.That(expected, Is.GreaterThan(0.0000001), "The oracle observed an invisible source.");
                     Assert.That(measured, Is.EqualTo(expected).Within(expected * 0.03 + 0.0000001),
                         $"Full emitter at field offset {offset}, channel {channel} changed with the transport boundary.");
                     TestContext.WriteLine($"outsideEmitter: offset={offset}; channel={channel}; measured={measured:R}; expected={expected:R}");
@@ -619,7 +841,7 @@ public sealed class LightingGPULifecyclePlayModeTests
                         for (int source = 0; source < positions.Length; source++)
                         {
                             expected += AirSquareRadiance(positions[source].x, receiver.x, extinction[channel],
-                                intensities[source] * LightingConfigHolder.EmissionScale * colors[source][channel]);
+                                intensities[source] * LightingConfigHolder.GlowScale * colors[source][channel]);
                         }
                         float measured = Mathf.HalfToFloat(values[channel]);
                         Assert.That(expected, Is.GreaterThan(1.0), "The multi-source oracle must exercise HDR radiance.");
@@ -627,6 +849,35 @@ public sealed class LightingGPULifecyclePlayModeTests
                             "Neutral-medium cache changed the independent colored-source HDR integral.");
                         TestContext.WriteLine($"coloredSourceSum: format={tiles.format}; reordered={comparison > 0}; " +
                             $"channel={channel}; measured={measured:R}; expected={expected:R}");
+                    }
+                }
+            }
+            if (LightingComputeBinder.DiagnosticUniformSourceTraversal ||
+                LightingQualityTuningController.DynamicTransportMode == DynamicLightingTransportMode.AcceleratedUniformRegions)
+            {
+                foreach (int id in additionalIds) { lighting.RemoveDynamicLight(id); }
+                Vector2 source = receiver - new Vector2(2.5f, 0f);
+                lighting.SetDynamicLight(additionalIds[0], source, Color.white, 8f);
+                // Actual production material raster and contributor revision:
+                // air -> occupied -> air must rebuild the geometry proof before
+                // the unchanged source is solved against the new medium.
+                foreach (float occupancy in new[] { 0f, 1f, 0f })
+                {
+                    surface.SetFloat("_Occupancy", occupancy);
+                    contributor.LightingGeometryRevision++;
+                    yield return PlayModeHarness.Frames(5);
+                    Assert.That(lighting.WorldRect, Is.EqualTo(rect));
+                    Color medium = occupancy == 0f ? extinction :
+                        LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier;
+                    ushort[] values = null!;
+                    yield return ReadHalfRegion(direct, px, py, 1, 1, data => values = data);
+                    for (int channel = 0; channel < 3; channel++)
+                    {
+                        double expected = AirSquareRadiance(source.x, receiver.x, medium[channel],
+                            8.0 * LightingConfigHolder.GlowScale);
+                        Assert.That(Mathf.HalfToFloat(values[channel]),
+                            Is.EqualTo(expected).Within(expected * 0.002 + 0.00001),
+                            $"Uniform-source cache revision {contributor.LightingGeometryRevision}, occupancy {occupancy}.");
                     }
                 }
             }
@@ -680,8 +931,8 @@ public sealed class LightingGPULifecyclePlayModeTests
         surface.SetTexture("_BaseMap", white);
         surface.SetVector("_BaseMapTileCount", Vector4.one);
         surface.SetVector("_WorldSize", Vector4.one);
-        surface.SetColor("_EmissionColor", Color.black);
-        surface.SetFloat("_EmissionStrength", 0f);
+        surface.SetColor("_GlowColor", Color.black);
+        surface.SetFloat("_GlowStrength", 0f);
         surface.SetFloat("_Occupancy", 1f);
         var mesh = new Mesh
         {
@@ -765,8 +1016,8 @@ public sealed class LightingGPULifecyclePlayModeTests
     {
         public ulong LightingGeometryRevision => 1;
 
-        public void RenderMaterialEmissionFields(CommandBuffer commands,
-            in Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext context)
+        public void RenderMaterialGlowFields(CommandBuffer commands,
+            in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context)
         {
             commands.ClearRenderTarget(false, true, Color.clear);
             commands.DrawMesh(mesh, transform.localToWorldMatrix, material, 0, material.FindPass("LightingMaterialField"));
@@ -806,10 +1057,10 @@ public sealed class LightingGPULifecyclePlayModeTests
     private sealed class UniformAirContributor(Mesh mesh, Material material, Transform transform)
         : Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor
     {
-        public ulong LightingGeometryRevision => 1;
+        public ulong LightingGeometryRevision { get; set; } = 1;
 
-        public void RenderMaterialEmissionFields(CommandBuffer commands,
-            in Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext context)
+        public void RenderMaterialGlowFields(CommandBuffer commands,
+            in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context)
         {
             commands.ClearRenderTarget(false, true, Color.clear);
             commands.DrawMesh(mesh, transform.localToWorldMatrix, material, 0, material.FindPass("LightingMaterialField"));
@@ -873,7 +1124,7 @@ public sealed class LightingGPULifecyclePlayModeTests
             foreach (RenderTexture field in new[]
             {
                 lighting.GPUResources.Geometry.Material!,
-                lighting.GPUResources.Geometry.StaticEmission!,
+                lighting.GPUResources.Geometry.StaticGlow!,
                 lighting.GPUResources.Direct.Static!,
                 lighting.GPUResources.Direct.Dynamic!,
                 lighting.GPUResources.Output.Lightmap!,
@@ -1287,7 +1538,7 @@ public sealed class LightingGPULifecyclePlayModeTests
                 double exitY = 0.5 / System.Math.Abs(dy);
                 double distance = System.Math.Min(exitX, exitY);
                 double extinction = LightingConfigHolder.EmptyExtinctionMultiplier;
-                expected += LightingConfigHolder.EmissionScale *
+                expected += LightingConfigHolder.GlowScale *
                     (1 - System.Math.Exp(-extinction * distance)) / (1 - System.Math.Exp(-extinction)) / samples;
             }
             TestContext.WriteLine($"offset={offset:R}; measured={measured:R}; expected={expected:R}; " +
@@ -1340,7 +1591,7 @@ public sealed class LightingGPULifecyclePlayModeTests
                 double distance = 0.5 / System.Math.Max(System.Math.Abs(System.Math.Cos(angle)),
                     System.Math.Abs(System.Math.Sin(angle)));
                 double extinction = LightingConfigHolder.EmptyExtinctionMultiplier;
-                centerExpected += LightingConfigHolder.EmissionScale *
+                centerExpected += LightingConfigHolder.GlowScale *
                     (1 - System.Math.Exp(-extinction * distance)) /
                     (1 - System.Math.Exp(-extinction)) / LightingQualityTuningController.DynamicAngularSampleCount;
             }
@@ -1622,7 +1873,7 @@ public sealed class LightingGPULifecyclePlayModeTests
                 {
                     int gridX = (int)origin.x + localX;
                     int unityY = (int)origin.y + localY;
-                    CellType foregroundType = TerrainCellData.ForegroundTypeOf(cells.GetCell(gridX, unityY));
+                    CellType foregroundType = TerrainCellData.TypeOf(cells.GetCell(gridX, unityY));
                     if (foregroundType is not (CellType.Unloaded or CellType.Empty))
                     {
                         foregroundAtlas++;
@@ -1640,17 +1891,17 @@ public sealed class LightingGPULifecyclePlayModeTests
         }
 
         var standaloneMaterial = new RenderTexture(materialField.descriptor);
-        var standaloneEmission = new RenderTexture(lighting.GPUResources.Geometry.StaticEmission!.descriptor);
+        var standaloneGlow = new RenderTexture(lighting.GPUResources.Geometry.StaticGlow!.descriptor);
         try
         {
             Assert.That(standaloneMaterial.Create(), Is.True);
-            Assert.That(standaloneEmission.Create(), Is.True);
+            Assert.That(standaloneGlow.Create(), Is.True);
             using var commands = new CommandBuffer { name = "ProductionFieldBindingDiagnosis" };
             Vector4 standaloneRect = new(Mathf.Floor(nearestForeground.x) - 1f,
                 Mathf.Floor(nearestForeground.y) - 1f, 4f, 4f);
-            terrain.RenderMaterialEmissionFields(commands,
-                new Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext(
-                    standaloneMaterial, standaloneEmission, standaloneRect));
+            terrain.RenderMaterialGlowFields(commands,
+                new Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext(
+                    standaloneMaterial, standaloneGlow, standaloneRect));
             Graphics.ExecuteCommandBuffer(commands);
             bool standaloneRead = false;
             AsyncGPUReadback.Request(standaloneMaterial, 0, request =>
@@ -1669,9 +1920,9 @@ public sealed class LightingGPULifecyclePlayModeTests
             });
             yield return PlayModeHarness.WaitUntil(() => standaloneRead, 10f, "Standalone production field did not finish.");
             commands.Clear();
-            terrain.RenderMaterialEmissionFields(commands,
-                new Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext(
-                    standaloneMaterial, standaloneEmission, lighting.WorldRect));
+            terrain.RenderMaterialGlowFields(commands,
+                new Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext(
+                    standaloneMaterial, standaloneGlow, lighting.WorldRect));
             Graphics.ExecuteCommandBuffer(commands);
             standaloneRead = false;
             AsyncGPUReadback.Request(standaloneMaterial, 0, request =>
@@ -1693,9 +1944,9 @@ public sealed class LightingGPULifecyclePlayModeTests
             {
                 commands.Clear();
                 commands.SetGlobalInteger(Shader.PropertyToID("_KernLightingFieldDiagnosticStage"), stage);
-                terrain.RenderMaterialEmissionFields(commands,
-                    new Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext(
-                        standaloneMaterial, standaloneEmission, lighting.WorldRect));
+                terrain.RenderMaterialGlowFields(commands,
+                    new Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext(
+                        standaloneMaterial, standaloneGlow, lighting.WorldRect));
                 commands.SetGlobalInteger(Shader.PropertyToID("_KernLightingFieldDiagnosticStage"), 0);
                 Graphics.ExecuteCommandBuffer(commands);
                 standaloneRead = false;
@@ -1728,11 +1979,11 @@ public sealed class LightingGPULifecyclePlayModeTests
             });
             yield return PlayModeHarness.WaitUntil(() => standaloneRead, 10f, "Large field clear did not finish.");
             standaloneMaterial.Release();
-            standaloneEmission.Release();
-            standaloneMaterial.width = standaloneEmission.width = 128;
-            standaloneMaterial.height = standaloneEmission.height = 128;
+            standaloneGlow.Release();
+            standaloneMaterial.width = standaloneGlow.width = 128;
+            standaloneMaterial.height = standaloneGlow.height = 128;
             Assert.That(standaloneMaterial.Create(), Is.True);
-            Assert.That(standaloneEmission.Create(), Is.True);
+            Assert.That(standaloneGlow.Create(), Is.True);
             commands.Clear();
             commands.SetRenderTarget(standaloneMaterial);
             commands.ClearRenderTarget(false, true, Color.red);
@@ -1747,9 +1998,9 @@ public sealed class LightingGPULifecyclePlayModeTests
             });
             yield return PlayModeHarness.WaitUntil(() => standaloneRead, 10f, "Field clear did not finish.");
             commands.Clear();
-            terrain.RenderMaterialEmissionFields(commands,
-                new Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext(
-                    standaloneMaterial, standaloneEmission, lighting.WorldRect));
+            terrain.RenderMaterialGlowFields(commands,
+                new Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext(
+                    standaloneMaterial, standaloneGlow, lighting.WorldRect));
             Graphics.ExecuteCommandBuffer(commands);
             standaloneRead = false;
             AsyncGPUReadback.Request(standaloneMaterial, 0, request =>
@@ -1769,9 +2020,9 @@ public sealed class LightingGPULifecyclePlayModeTests
             yield return PlayModeHarness.WaitUntil(() => standaloneRead, 10f, "Resized production field did not finish.");
             commands.Clear();
             commands.SetGlobalInteger(Shader.PropertyToID("_KernLightingFieldDiagnosticStage"), 1);
-            terrain.RenderMaterialEmissionFields(commands,
-                new Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext(
-                    standaloneMaterial, standaloneEmission, lighting.WorldRect));
+            terrain.RenderMaterialGlowFields(commands,
+                new Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext(
+                    standaloneMaterial, standaloneGlow, lighting.WorldRect));
             commands.SetGlobalInteger(Shader.PropertyToID("_KernLightingFieldDiagnosticStage"), 0);
             Graphics.ExecuteCommandBuffer(commands);
             standaloneRead = false;
@@ -1800,9 +2051,9 @@ public sealed class LightingGPULifecyclePlayModeTests
         {
             Shader.SetGlobalInteger("_KernLightingFieldDiagnosticStage", 0);
             standaloneMaterial.Release();
-            standaloneEmission.Release();
+            standaloneGlow.Release();
             Object.Destroy(standaloneMaterial);
-            Object.Destroy(standaloneEmission);
+            Object.Destroy(standaloneGlow);
         }
         Color32[] wholeMaterial = null!;
         bool materialRead = false;

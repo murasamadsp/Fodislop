@@ -33,7 +33,7 @@ internal static class DummyCellConfigurationUtilities
         var pack = new List<byte>();
         foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
         {
-            if (def.Shape is CellShape.Wall or CellShape.Corner or CellShape.Door)
+            if (def.Outline is CellOutline.Wall or CellOutline.Corner or CellOutline.Door)
             {
                 pack.Add((byte)type);
             }
@@ -52,18 +52,18 @@ internal static class DummyCellConfigurationUtilities
             BlockDefinition def = BlockRegistry.Get(type);
 
             CellConfigProperties props = CellConfigProperties.None;
-            if (def.Passable)
+            if (def.IsPassable)
             {
                 props |= CellConfigProperties.Passable;
             }
 
             // Правило сервера: ломается всё непроходимое, кроме частей пака.
-            if (!def.Passable && def.Shape is not (CellShape.Wall or CellShape.Corner or CellShape.Door))
+            if (!def.IsPassable && def.Outline is not (CellOutline.Wall or CellOutline.Corner or CellOutline.Door))
             {
                 props |= CellConfigProperties.Breakable;
             }
 
-            if (def.EmitsLight)
+            if (def.Glow > 0f)
             {
                 props |= CellConfigProperties.Glowing;
             }
@@ -71,22 +71,19 @@ internal static class DummyCellConfigurationUtilities
             configs[i] = new CellConfigurationPacket
             {
                 Properties = props,
-                Distortion = def.Shape switch
+                // Протокол делит контур на искажение: волнистый двигает узлы,
+                // гибкий нет, остальные держат.
+                Distortion = def.Outline switch
                 {
-                    CellShape.Flat => CellDistortionType.Neutral,
-                    CellShape.Organic => CellDistortionType.Cause,
+                    CellOutline.Wavy => CellDistortionType.Cause,
+                    CellOutline.Pliant => CellDistortionType.Neutral,
                     _ => CellDistortionType.Block,
                 },
-                // Мигание и мерцание — анимации сервера, со сдвигом фазы в кадр.
-                Animation = def.Surface switch
-                {
-                    CellSurface.Blinking => CellAnimationType.Blinking,
-                    CellSurface.Shimmer => CellAnimationType.Shimmer,
-                    _ => CellAnimationType.None,
-                },
-                AnimationSpeed = def.SurfaceSpeed,
-                FrameOffset = (byte)(def.Surface is CellSurface.Blinking or CellSurface.Shimmer ? 1 : 0),
-                ReliefGroup = def.RimGroup,
+                // Анимации сервера — со сдвигом фазы в кадр.
+                Animation = def.AnimationType,
+                AnimationSpeed = (byte)def.AnimationSpeed,
+                FrameOffset = (byte)(def.AnimationType != CellAnimationType.None ? 1 : 0),
+                ReliefGroup = def.RimMass,
                 Color = DummyMapColors.Get(i),
             };
         }
@@ -101,7 +98,7 @@ internal static class DummyCellConfigurationUtilities
         foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
         {
             // Правило сервера: по проходимому — быстро, по остальному — медленно.
-            speeds[type] = (ushort)(def.Passable ? 20 : 100);
+            speeds[type] = (ushort)(def.IsPassable ? 20 : 100);
         }
 
         return speeds;

@@ -26,7 +26,7 @@ public struct GraphicsQualitySettings : IEquatable<GraphicsQualitySettings>
 
     [Range(1, 16)]
     [SettingLabel("settings.lighting.density")]
-    [Tooltip("Запрошенная плотность проб статического транспорта, проб на клетку. Бюджет атласа и трассировки ограничивает пробы; геометрия, альбедо, эмиссия и применение света вычисляются в 32×32 независимо от зума.")]
+    [Tooltip("Запрошенная плотность проб статического транспорта, проб на клетку. Бюджет атласа и трассировки ограничивает пробы; геометрия, альбедо, свечение и применение света вычисляются в 32×32 независимо от зума.")]
     [SettingConsumer(SettingConsumerTarget.LightingEngine, "LightingEngine field allocation")]
     public int LightingMinimumPixelsPerCell;
 

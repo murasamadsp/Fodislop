@@ -285,10 +285,6 @@ namespace Kern.World
 
         public int GetAnimationFrameHeight(CellType cellType) => _cellCatalog.GetAnimationFrameHeight(cellType);
 
-        public byte GetAnimationSpeed(CellType cellType) => _cellCatalog.GetAnimationSpeed(cellType);
-
-        public bool HasAnimation(CellType cellType) => _cellCatalog.HasAnimation(cellType);
-
         public string WorldCodeName => _worldCodeName;
         public ushort WorldWidth => _width;
         public ushort WorldHeight => _height;

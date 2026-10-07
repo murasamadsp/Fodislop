@@ -63,7 +63,7 @@ public sealed class ShaderContractTests
         string[] expectedIdentifiers =
         {
             "_MaterialField",
-            "_EmissionField",
+            "_GlowField",
             "_RadianceAtlas",
             "_DirectTexture",
             "_DirectInput",

@@ -53,6 +53,8 @@ namespace Kern.Networking.Connection
 
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;
+        public event Action? OnPacketBatchStarted;
+        public event Action? OnPacketBatchCompleted;
         public event Action<string>? OnReconnectStatusChanged;
         public event Action<string>? OnDisconnectReason;
         public event Action? OnReconnectHidden;
@@ -111,35 +113,52 @@ namespace Kern.Networking.Connection
             int processedCount = 0;
             bool stoppedByBudget = false;
             bool stoppedByCap = false;
-            while (processedCount < ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
+
+            bool batchActive = _inboundPackets.Count > 1;
+            if (batchActive)
             {
-                // A handler cannot be preempted. Stop before dequeuing the next
-                // packet so one expensive handler is the only unavoidable overrun.
-                float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-                if (processedCount > 0 && elapsedMs >= budgetSeconds * 1000f)
-                {
-                    stoppedByBudget = true;
-                    break;
-                }
+                OnPacketBatchStarted?.Invoke();
+            }
 
-                if (!_inboundPackets.TryTake(out ServerPacket packet))
+            try
+            {
+                while (processedCount < ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
                 {
-                    break;
-                }
+                    // A handler cannot be preempted. Stop before dequeuing the next
+                    // packet so one expensive handler is the only unavoidable overrun.
+                    float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                    if (processedCount > 0 && elapsedMs >= budgetSeconds * 1000f)
+                    {
+                        stoppedByBudget = true;
+                        break;
+                    }
 
-                processedCount++;
-                try
-                {
-                    OnPacketReceived?.Invoke(packet);
+                    if (!_inboundPackets.TryTake(out ServerPacket packet))
+                    {
+                        break;
+                    }
+
+                    processedCount++;
+                    try
+                    {
+                        OnPacketReceived?.Invoke(packet);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogException(
+                            new InvalidOperationException(
+                                "A server packet could not be processed. Disconnecting to avoid continuing with corrupted state.",
+                                ex));
+                        TriggerDisconnect("Client packet processing failed.");
+                        break;
+                    }
                 }
-                catch (Exception ex)
+            }
+            finally
+            {
+                if (batchActive)
                 {
-                    Debug.LogException(
-                        new InvalidOperationException(
-                            "A server packet could not be processed. Disconnecting to avoid continuing with corrupted state.",
-                            ex));
-                    TriggerDisconnect("Client packet processing failed.");
-                    break;
+                    OnPacketBatchCompleted?.Invoke();
                 }
             }
 

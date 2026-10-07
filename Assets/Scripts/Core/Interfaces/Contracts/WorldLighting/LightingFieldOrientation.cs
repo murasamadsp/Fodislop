@@ -7,8 +7,8 @@ namespace Kern.Core.Interfaces.WorldLighting;
 
 /// <summary>
 /// The single owner of how world-space lighting fields are laid out in texture
-/// memory. Raster writers (terrain material, emission and AO fields) and every
-/// reader (lighting compute, terrain AO sampling, bloom emission sampling,
+/// memory. Raster writers (terrain material, glow and AO fields) and every
+/// reader (lighting compute, terrain AO sampling, bloom glow sampling,
 /// diagnostics readback) take the row order from here, never from
 /// <see cref="SystemInfo.graphicsUVStartsAtTop"/> directly.
 /// </summary>

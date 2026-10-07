@@ -6,13 +6,13 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace Kern.Networking.Processors;
 
-public sealed class MapRegionProcessor(IWorldDataStorage storage) : IPacketProcessor<MapRegionPacket>
+public sealed class MapRegionProcessor(IWorldDataStorage storage) :
+    IPacketProcessor<MapRegionPacket>,
+    IBatchAwareProcessor
 {
-    private readonly IRegionBatchStorage? _batchStorage = storage as IRegionBatchStorage;
+    public void BeginBatch() => storage.BeginRegionBatch();
 
-    public void BeginBatch() => _batchStorage?.BeginRegionBatch();
-
-    public void EndBatch() => _batchStorage?.EndRegionBatch();
+    public void EndBatch() => storage.EndRegionBatch();
 
     public void Process(MapRegionPacket packet)
     {

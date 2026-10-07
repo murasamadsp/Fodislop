@@ -5,9 +5,9 @@ using System.Collections.Generic;
 using System.IO;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.World;
 using Kern.World.Terrain;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -15,7 +15,7 @@ namespace Kern.Tests.World;
 
 // Та же проверка, что TerrainCellEquivalenceTests в Unity, на пёстром мире
 // вне редактора: у каждого типа свой атлас, кадры, анимация, свечение,
-// тайлгруппа, рельеф и искажение; часть типов без текстуры. Слой клетки и
+// тайлгруппа, кайма и искажение; часть типов без текстуры. Слой клетки и
 // строка типа обязаны дать ровно вершины FillQuad.
 [TestFixture]
 public sealed class TerrainCellEquivalenceHarnessTests
@@ -54,7 +54,9 @@ public sealed class TerrainCellEquivalenceHarnessTests
             (gx, uy) => TerrainVertexDistortionCalculator.ComputeNode(
                 world.Sources.CellCache, world.Sources.Distortion, gx - OriginX, uy - OriginY, WorldWidth, WorldHeight),
             type => world.Rows[type],
+            slot => world.Sources.Atlases[slot].Size,
             TerrainCellData.PackTileDescriptors(),
+            (uint)BlockRegistry.UnderlayType,
             TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule),
             TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule),
             WorldHeight,
@@ -68,7 +70,7 @@ public sealed class TerrainCellEquivalenceHarnessTests
         {
             oracle.AssertMatchesQuad(
                 quad.Vertices, quad.Result, OriginX + quad.X, OriginY + quad.Y, quad.Layer,
-                $"({quad.X},{quad.Y}) слой {quad.Layer} {style}");
+                $"({quad.X},{quad.Y}) слой {quad.Layer} {style} клетка {(CellType)world.Cells[(OriginX + quad.X, OriginY + quad.Y)].Bits}");
             if (quad.Result.HasAtlas)
             {
                 anchored += quad.Layer == 1 && quad.Vertices[0].UV5x != 0 ? 1 : 0;
@@ -117,7 +119,7 @@ public sealed class TerrainCellEquivalenceHarnessTests
         int ringHeight = Height + 2;
         writer.Write(WorldWidth);
         writer.Write(WorldHeight);
-        writer.Write(TerrainCellData.DistortionMode(world.Sources.Distortion));
+        writer.Write(TerrainCellData.DistortionStyleOf(world.Sources.Distortion));
         foreach (Vector4 vector in TerrainCellData.PackDistortion())
         {
             writer.Write(vector.x);
@@ -139,24 +141,29 @@ public sealed class TerrainCellEquivalenceHarnessTests
             writer.Write(word);
         }
 
+        // Размеры атласов по слотам: из них шейдер выводит размер тайла.
+        for (int slot = 0; slot < 8; slot++)
+        {
+            writer.Write(slot < world.Sources.Atlases.Count ? world.Sources.Atlases[slot].Size : 1);
+        }
+
         foreach (TerrainTypeRow row in world.Rows)
         {
-            foreach (uint word in new[] { row.AX, row.AY, row.AZ, row.AW, row.BX, row.BY, row.BZ, row.BW })
+            foreach (uint word in new[] { row.AtlasXY, row.AtlasWH, row.Look, row.SpeedGlowTile })
             {
                 writer.Write(word);
             }
         }
 
-        var ring = new ushort[ringWidth * ringHeight];
+        writer.Write((int)BlockRegistry.UnderlayType);
+
+        var ring = new byte[ringWidth * ringHeight];
         foreach (((int gx, int uy), TerrainCell cell) in world.Cells)
         {
             ring[(Ring(uy, ringHeight) * ringWidth) + Ring(gx, ringWidth)] = cell.Bits;
         }
 
-        foreach (ushort cell in ring)
-        {
-            writer.Write(cell);
-        }
+        writer.Write(ring);
 
         writer.Write(world.Quads.Count);
         foreach (Quad quad in world.Quads)
@@ -170,7 +177,7 @@ public sealed class TerrainCellEquivalenceHarnessTests
                 foreach (float value in new[]
                 {
                     H(v.UV0x), H(v.UV0y),
-                    H(v.UV1x), H(v.UV1y), H(v.UV1z), H(v.UV1w),
+                    v.UV1.x, v.UV1.y, v.UV1.z, v.UV1.w,
                     H(v.UV2x), H(v.UV2y), H(v.UV2z), H(v.UV2w),
                     v.UV3.x, v.UV3.y, v.UV3.z, v.UV3.w,
                     H(v.UV4x), H(v.UV4y), H(v.UV4z), H(v.UV4w),
@@ -218,7 +225,7 @@ public sealed class TerrainCellEquivalenceHarnessTests
             {
                 if (x < 0 || y < 0 || x == Width || y == Height)
                 {
-                    world.Cells[(OriginX + x, OriginY + y)] = TerrainCellPacker.PackMargin(sources, x, y);
+                    world.Cells[(OriginX + x, OriginY + y)] = TerrainCellPacker.PackCell(sources, x, y);
                     continue;
                 }
 
@@ -242,13 +249,15 @@ public sealed class TerrainCellEquivalenceHarnessTests
             }
         }
 
-        for (int index = 1; index < world.Rows.Length; index++)
+        // Как TerrainCellBuffers: строка без метаданных (Unloaded их не
+        // получает) несёт только cells.json.
+        for (int index = 0; index < world.Rows.Length; index++)
         {
-            if (lookup.TryGet((CellType)index, out CellMetadata metadata))
-            {
-                world.Rows[index] = TerrainCellData.PackType(
-                    TerrainCellPacker.ResolveTypeSurface((CellType)index, in metadata, atlases));
-            }
+            var type = (CellType)index;
+            world.Rows[index] = TerrainCellData.PackType(
+                type != CellType.Unloaded && lookup.TryGet(type, out CellMetadata metadata)
+                    ? TerrainCellPacker.ResolveTypeFields(type, in metadata, atlases)
+                    : TerrainCellPacker.ResolveTypeFields(type, default, System.Array.Empty<IAtlasDescriptor>()));
         }
 
         return world;
@@ -261,27 +270,18 @@ public sealed class TerrainCellEquivalenceHarnessTests
             int t = (byte)type;
             uint hash = Hash(t, seed);
             bool textured = type == CellType.Empty || hash % 7 != 0;
-            bool glowing = hash % 3 == 0;
             metadata = new CellMetadata
             {
-                Properties = (glowing ? CellConfigProperties.Glowing : 0) |
-                    (type == CellType.Empty || type == CellType.Road ? CellConfigProperties.Passable : CellConfigProperties.DropsShadow),
-                ReliefGroup = (byte)(type == CellType.Empty ? 0 : hash % 4),
-                Distortion = type is CellType.Empty or CellType.Road
-                    ? CellDistortionType.Neutral
-                    : hash % 5 == 0 ? CellDistortionType.Block : CellDistortionType.Cause,
+                // Вид — из cells.json, как в TerrainCellMetadataCache.
+                RimMass = BlockRegistry.Get(type).RimMass,
+                Outline = BlockRegistry.Get(type).Outline,
                 HasTileGroup = hash % 4 == 1 || type is CellType.BuildingWall or CellType.BuildingCorner or CellType.BuildingDoor,
                 TileGroupId = (int)(hash % 3),
-                MinimapColor = new Color32((byte)hash, (byte)(hash >> 8), (byte)(hash >> 16), (byte)(hash >> 24)),
-                Animation = (CellAnimationType)(hash % 4),
-                AnimationSpeed = (hash >> 4) % 17 / 4f,
                 AtlasRect = textured
                     ? new Vector4((hash % 8) / 16f, ((hash >> 3) % 8) / 16f, 0.0625f * (1 + (hash % 3)), 0.0625f)
                     : Vector4.zero,
                 AtlasIndex = (int)(hash % 3) - 1,
-                UVTileSize = textured ? 1f / 1024f : 0f,
                 AnimationFrameCount = 1 + (int)(hash % 4),
-                FrameHeightTiles = 1 + (hash >> 6) % 3,
                 IsTextureReady = textured,
                 IsPopulated = true,
             };
@@ -295,19 +295,13 @@ public sealed class TerrainCellEquivalenceHarnessTests
             {
                 State = state,
                 Type = type,
-                Properties = m.Properties,
-                ReliefGroup = m.ReliefGroup,
-                Distortion = m.Distortion,
+                RimMass = m.RimMass,
+                Outline = m.Outline,
                 HasTileGroup = m.HasTileGroup,
                 TileGroupId = m.TileGroupId,
-                MinimapColor = m.MinimapColor,
-                Animation = m.Animation,
-                AnimationSpeed = m.AnimationSpeed,
                 AtlasRect = m.AtlasRect,
                 AtlasIndex = m.AtlasIndex,
-                UVTileSize = m.UVTileSize,
                 AnimationFrameCount = m.AnimationFrameCount,
-                FrameHeightTiles = m.FrameHeightTiles,
                 IsTextureReady = m.IsTextureReady,
             };
         }
@@ -349,7 +343,7 @@ public sealed class TerrainCellEquivalenceHarnessTests
         public CachedCellInfo GetCell(int x, int y)
         {
             CachedCellData data = GetCellData(x, y);
-            return new CachedCellInfo { Type = data.Type, Properties = data.Properties };
+            return new CachedCellInfo { Type = data.Type };
         }
     }
 

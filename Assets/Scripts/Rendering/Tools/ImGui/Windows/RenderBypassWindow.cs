@@ -216,16 +216,16 @@ public sealed class RenderBypassWindow : ToolWindow
             "камнем, а не плиткой. Силуэт построек не трогается в обоих случаях.",
             MutedLabelStyle);
 
-        bool rim = _clientConfig.Config.Terrain.EnableReliefRim;
-        if (DrawSwitch(rim, "Кайма рельефа", ToolTheme.Success) != rim)
+        bool rim = _clientConfig.Config.Terrain.EnableRim;
+        if (DrawSwitch(rim, "Кайма", ToolTheme.Success) != rim)
         {
             bool next = !rim;
-            _clientConfig.UpdateSection(config => config.Terrain, terrain => terrain.EnableReliefRim = next);
+            _clientConfig.UpdateSection(config => config.Terrain, terrain => terrain.EnableRim = next);
             _terrainRenderer.ApplyClientConfig();
         }
 
         GUILayout.Label(
-            "Затемнение к границам, за которыми лежит чужая рельефная семья. " +
+            "Затемнение к границам, за которыми лежит чужая семья каймы. " +
             "Выключение не убирает ни маску, ни транспорт — шейдер просто " +
             "перестаёт на неё умножать.",
             MutedLabelStyle);

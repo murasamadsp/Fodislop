@@ -5,8 +5,8 @@ using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Kern.World.Terrain;
 
-// Правила соседства клетки: автотайл, углы стены пака, рельеф и твёрдые
-// соседи. Шейдер выводит то же из буфера клеток (TerrainCellData.hlsl);
+// Правила соседства клетки: автотайл, углы стены пака, кайма и соседи-
+// блоки. Шейдер выводит то же из буфера клеток (TerrainCellData.hlsl);
 // здесь — CPU-сторона для вершин накладки дверей и эталона тестов.
 public static class TerrainCellMaskCalculator
 {
@@ -78,24 +78,24 @@ public static class TerrainCellMaskCalculator
         CachedCellData bottom)
     {
         int cornerSideMask = 0;
-        if (MapCellConfigCatalog.GetVisualProperties(data.Type).IsBuildingWall)
+        if (BlockRegistry.Get(data.Type).Outline == CellOutline.Wall)
         {
-            if (MapCellConfigCatalog.GetVisualProperties(left.Type).IsBuildingCorner)
+            if (BlockRegistry.Get(left.Type).Outline == CellOutline.Corner)
             {
                 cornerSideMask |= 1;
             }
 
-            if (MapCellConfigCatalog.GetVisualProperties(right.Type).IsBuildingCorner)
+            if (BlockRegistry.Get(right.Type).Outline == CellOutline.Corner)
             {
                 cornerSideMask |= 2;
             }
 
-            if (MapCellConfigCatalog.GetVisualProperties(top.Type).IsBuildingCorner)
+            if (BlockRegistry.Get(top.Type).Outline == CellOutline.Corner)
             {
                 cornerSideMask |= 4;
             }
 
-            if (MapCellConfigCatalog.GetVisualProperties(bottom.Type).IsBuildingCorner)
+            if (BlockRegistry.Get(bottom.Type).Outline == CellOutline.Corner)
             {
                 cornerSideMask |= 8;
             }
@@ -104,7 +104,7 @@ public static class TerrainCellMaskCalculator
         return cornerSideMask;
     }
 
-    // Рельефная маска: бит стоит там, где сосед принадлежит той же рельефной
+    // Маска каймы: бит стоит там, где сосед принадлежит той же
     // поверхности. Обычно это ненулевая серверная группа. Непрерывные листы
     // также объединяются по семейству; зелёный и синий кристаллы с пустоскалом
     // образуют собственное исключительное семейство и не сливаются с ними.
@@ -115,35 +115,35 @@ public static class TerrainCellMaskCalculator
     // (группа 4) считал соседа своим и сливался с ним, а порода рядом с
     // кристаллом — чужим и обводилась. Шов получался у одной клетки из двух.
     // В оригинале сравнение равенством, и обе стороны обводят друг друга.
-    public static byte CalculateReliefMask(
+    public static byte CalculateRimMask(
         CachedCellData data,
         CachedCellData top,
         CachedCellData left,
         CachedCellData bottom,
         CachedCellData right)
     {
-        if (data.ReliefGroup == 0)
+        if (data.RimMass == 0)
         {
             return 0;
         }
 
         byte rm = 0;
-        if (SameReliefSurface(data, top))
+        if (SameRimSurface(data, top))
         {
             rm |= 1;
         }
 
-        if (SameReliefSurface(data, left))
+        if (SameRimSurface(data, left))
         {
             rm |= 2;
         }
 
-        if (SameReliefSurface(data, bottom))
+        if (SameRimSurface(data, bottom))
         {
             rm |= 4;
         }
 
-        if (SameReliefSurface(data, right))
+        if (SameRimSurface(data, right))
         {
             rm |= 8;
         }
@@ -151,11 +151,11 @@ public static class TerrainCellMaskCalculator
         return rm;
     }
 
-    // Одна масса — одна группа каймы; группа 0 каймы не имеет.
-    private static bool SameReliefSurface(in CachedCellData first, in CachedCellData second) =>
-        second.ReliefGroup != 0 && first.ReliefGroup == second.ReliefGroup;
+    // Соседи одной ненулевой массы — одно тело без каймы; масса 0 каймы не имеет.
+    private static bool SameRimSurface(in CachedCellData first, in CachedCellData second) =>
+        second.RimMass != 0 && first.RimMass == second.RimMass;
 
-    internal static void CalculateReliefMasks(
+    internal static void CalculateRimMasks(
         in CachedCellData data,
         in CachedCellData top,
         in CachedCellData left,
@@ -165,42 +165,42 @@ public static class TerrainCellMaskCalculator
         in CachedCellData topRight,
         in CachedCellData bottomLeft,
         in CachedCellData bottomRight,
-        out byte reliefMask,
-        out byte reliefCornerMask)
+        out byte rimMask,
+        out byte rimCornerMask)
     {
-        reliefMask = 0;
-        reliefCornerMask = 0;
-        if (data.ReliefGroup == 0)
+        rimMask = 0;
+        rimCornerMask = 0;
+        if (data.RimMass == 0)
         {
             return;
         }
 
-        bool topSame = SameReliefSurface(data, top);
-        bool leftSame = SameReliefSurface(data, left);
-        bool bottomSame = SameReliefSurface(data, bottom);
-        bool rightSame = SameReliefSurface(data, right);
+        bool topSame = SameRimSurface(data, top);
+        bool leftSame = SameRimSurface(data, left);
+        bool bottomSame = SameRimSurface(data, bottom);
+        bool rightSame = SameRimSurface(data, right);
 
         if (topSame)
         {
-            reliefMask |= 1;
+            rimMask |= 1;
         }
 
         if (leftSame)
         {
-            reliefMask |= 2;
+            rimMask |= 2;
         }
 
         if (bottomSame)
         {
-            reliefMask |= 4;
+            rimMask |= 4;
         }
 
         if (rightSame)
         {
-            reliefMask |= 8;
+            rimMask |= 8;
         }
 
-        reliefCornerMask = CalculateReliefCornerMask(
+        rimCornerMask = CalculateRimCornerMask(
             data,
             top,
             left,
@@ -214,7 +214,7 @@ public static class TerrainCellMaskCalculator
 
     // Вогнутый угол силуэта: обе кардинальные клетки принадлежат поверхности,
     // диагональная — нет. Одной маски сторон для такого шаблона недостаточно.
-    public static byte CalculateReliefCornerMask(
+    public static byte CalculateRimCornerMask(
         CachedCellData data,
         CachedCellData top,
         CachedCellData left,
@@ -225,32 +225,32 @@ public static class TerrainCellMaskCalculator
         CachedCellData bottomLeft,
         CachedCellData bottomRight)
     {
-        if (data.ReliefGroup == 0)
+        if (data.RimMass == 0)
         {
             return 0;
         }
 
         byte cornerMask = 0;
-        if (SameReliefSurface(data, bottom) && SameReliefSurface(data, left) &&
-            !SameReliefSurface(data, bottomLeft))
+        if (SameRimSurface(data, bottom) && SameRimSurface(data, left) &&
+            !SameRimSurface(data, bottomLeft))
         {
             cornerMask |= 1 << 0;
         }
 
-        if (SameReliefSurface(data, bottom) && SameReliefSurface(data, right) &&
-            !SameReliefSurface(data, bottomRight))
+        if (SameRimSurface(data, bottom) && SameRimSurface(data, right) &&
+            !SameRimSurface(data, bottomRight))
         {
             cornerMask |= 1 << 1;
         }
 
-        if (SameReliefSurface(data, top) && SameReliefSurface(data, right) &&
-            !SameReliefSurface(data, topRight))
+        if (SameRimSurface(data, top) && SameRimSurface(data, right) &&
+            !SameRimSurface(data, topRight))
         {
             cornerMask |= 1 << 2;
         }
 
-        if (SameReliefSurface(data, top) && SameReliefSurface(data, left) &&
-            !SameReliefSurface(data, topLeft))
+        if (SameRimSurface(data, top) && SameRimSurface(data, left) &&
+            !SameRimSurface(data, topLeft))
         {
             cornerMask |= 1 << 3;
         }
@@ -258,39 +258,37 @@ public static class TerrainCellMaskCalculator
         return cornerMask;
     }
 
-    public static byte CalculateSolidBoundaryMask(
+    public static byte CalculateForegroundSidesMask(
         CachedCellData top,
         CachedCellData left,
         CachedCellData bottom,
         CachedCellData right)
     {
-        byte solidMask = 0;
+        byte foregroundSides = 0;
         if (CastsShadow(top))
         {
-            solidMask |= 1;
+            foregroundSides |= 1;
         }
 
         if (CastsShadow(left))
         {
-            solidMask |= 2;
+            foregroundSides |= 2;
         }
 
         if (CastsShadow(bottom))
         {
-            solidMask |= 4;
+            foregroundSides |= 4;
         }
 
         if (CastsShadow(right))
         {
-            solidMask |= 8;
+            foregroundSides |= 8;
         }
 
-        return solidMask;
+        return foregroundSides;
     }
 
-    // Тень отбрасывает загруженная клетка, через которую нельзя пройти.
+    // Тень отбрасывает блок, в том числе незагруженная клетка.
     private static bool CastsShadow(in CachedCellData cell) =>
-        cell.State == TerrainCellState.Loaded &&
-        cell.Type != CellType.Unloaded &&
-        (cell.Properties & CellConfigProperties.Passable) == 0;
+        BlockRegistry.Get(cell.Type).DrawLayer == CellDrawLayer.Foreground;
 }

@@ -1,7 +1,7 @@
 #ifndef KERN_TERRAIN_PASS_COMMON_INCLUDED
 #define KERN_TERRAIN_PASS_COMMON_INCLUDED
 
-// Геометрический контракт вершин, общий между экранным, material/emission и
+// Геометрический контракт вершин, общий между экранным, material/glow и
 // AO-проходами. Выборка анимационных flow-текстур живёт отдельно.
 
 // Атлас у клетки может отсутствовать (клетка за миром, не загружена или слой
@@ -33,7 +33,7 @@ struct TerrainVertexInput
     output.worldPos = cell.worldPos; \
     output.animData = cell.animData; \
     output.packedData = cell.packedData; \
-    output.glowData = cell.glowData; \
+    output.lightContourDecal = cell.lightContourDecal; \
     output.geometryCornersX = cell.geometryCornersX; \
     output.geometryCornersY = cell.geometryCornersY; \
     output.uvBits = cell.uvBits; \

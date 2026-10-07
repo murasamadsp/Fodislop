@@ -23,7 +23,7 @@ float TerrainRoundableSignedDistance(float2 samplePosition, float packedLighting
 {
     float2 cellPosition = samplePosition - 0.5;
     float distance = length(cellPosition) - _RoundableCornerRadius;
-    int sameMask = KernTerrainSolidBoundary(
+    int sameMask = KernTerrainForegroundSides(
         KernTerrainLightingFlags(packedLightingFlags));
     if ((sameMask & 1) != 0 || (sameMask & 2) != 0)
     {
@@ -68,7 +68,7 @@ float EvaluateRoundableBlockAlpha(
     }
 
     uint lightingFlags = KernTerrainLightingFlags(packedLightingFlags);
-    int sameMask = KernTerrainSolidBoundary(lightingFlags);
+    int sameMask = KernTerrainForegroundSides(lightingFlags);
     float4 bits = frac(sameMask * float4(0.5, 0.25, 0.125, 0.0625));
     bool4 hasSame = bits >= 0.5;
     float2 p = QuantizeTerrainFaceUV(uv) - 0.5;
@@ -104,11 +104,11 @@ float EvaluateRoundableBlockAlpha(
 }
 
 // Выключатель каймы. Настройка игрока, публикуется TerrainRenderer.
-float _TerrainReliefRimEnabled;
+float _TerrainRimEnabled;
 
-float TerrainQuantizeReliefBevel(float bevel)
+float TerrainQuantizeRimBevel(float bevel)
 {
-    if (_ReliefRimQuantizationEnabled > 0.5)
+    if (_RimQuantizationEnabled > 0.5)
     {
         return round(bevel * KERN_TERRAIN_FACE_GRID_SIZE) /
             KERN_TERRAIN_FACE_GRID_SIZE;
@@ -143,7 +143,7 @@ struct TerrainSurfaceInputs
     float packedOrganicEdges;
     float packedContour;
     float packedLightingFlags;
-    int animationProfile;
+    int cellSurfaceEffect;
 };
 
 TerrainSurfaceInputs BuildTerrainSurfaceInputs(
@@ -151,8 +151,8 @@ TerrainSurfaceInputs BuildTerrainSurfaceInputs(
     float2 tileUV,
     float4 cornersX,
     float4 cornersY,
-    float4 glowData,
-    float packedAnimationProfile)
+    float4 lightContourDecal,
+    float packedCellSurfaceEffect)
 {
     TerrainSurfaceInputs surface;
     surface.cellSample = packedData.yz;
@@ -161,15 +161,15 @@ TerrainSurfaceInputs BuildTerrainSurfaceInputs(
     surface.cornersY = cornersY;
     surface.anchored = packedData.x;
     surface.packedOrganicEdges = packedData.w;
-    surface.packedContour = glowData.z;
-    surface.packedLightingFlags = glowData.y;
-    surface.animationProfile = (int)(packedAnimationProfile + 0.5);
+    surface.packedContour = lightContourDecal.z;
+    surface.packedLightingFlags = lightContourDecal.y;
+    surface.cellSurfaceEffect = (int)(packedCellSurfaceEffect + 0.5);
     return surface;
 }
 
 // Shade each exposed side independently. Distances use the rendered polygon,
 // including the quantized organic bend points, so the bevel follows distortion.
-float TerrainReliefSideBevel(TerrainSurfaceInputs surface, int foreignSides)
+float TerrainRimSideBevel(TerrainSurfaceInputs surface, int foreignSides)
 {
     bool isOrganic = surface.packedOrganicEdges > 0.5;
     float4 organicBends = isOrganic
@@ -192,31 +192,31 @@ float TerrainReliefSideBevel(TerrainSurfaceInputs surface, int foreignSides)
             organicBends,
             isOrganic,
             side);
-        float influence = saturate(1.0 - distanceToSide * _ReliefRimDistanceScale);
-        float sideShade = 1.0 - _ReliefRimFalloff * influence * influence;
+        float influence = saturate(1.0 - distanceToSide * _RimDistanceScale);
+        float sideShade = 1.0 - _RimFalloff * influence * influence;
         bevel *= sideShade * sideShade * sideShade;
     }
 
     return bevel;
 }
 
-// Кайма рельефа: стороны с чужой поверхностью и вогнутые углы.
-float TerrainReliefBevel(TerrainSurfaceInputs surface)
+// Кайма: стороны с чужой поверхностью и вогнутые углы.
+float TerrainRimBevel(TerrainSurfaceInputs surface)
 {
-    if (_TerrainReliefRimEnabled < 0.5)
+    if (_TerrainRimEnabled < 0.5)
     {
         return 1.0;
     }
 
-    int reliefCode = KernTerrainReliefCode(surface.packedContour);
-    if (reliefCode == 0)
+    int rimCode = KernTerrainRimCode(surface.packedContour);
+    if (rimCode == 0)
     {
         return 1.0;
     }
 
     // Code stores the foreign-side mask inverted, plus one; zero means no bevel.
-    int foreignSides = (~(reliefCode - 1)) & 0x0F;
-    int concaveCorners = KernTerrainReliefCornerMask(surface.packedContour);
+    int foreignSides = (~(rimCode - 1)) & (int)KERN_TERRAIN_RIM_SIDES_MASK;
+    int concaveCorners = KernTerrainRimCornerMask(surface.packedContour);
     if (foreignSides == 0 && concaveCorners == 0)
     {
         return 1.0;
@@ -238,18 +238,18 @@ float TerrainReliefBevel(TerrainSurfaceInputs surface)
         // Продолжение — полоса шириной в клетку от её середины до соседа:
         // перекрытие с силуэтом не даёт объединению занизить расстояние до
         // края внутри клетки, а ширина не скрывает чужую боковую сторону.
-        int sameSides = (~foreignSides) & 0x0F;
+        int sameSides = (~foreignSides) & (int)KERN_TERRAIN_RIM_SIDES_MASK;
         if ((sameSides & 1) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.0, 0.75), float2(0.5, 0.75)));
         if ((sameSides & 2) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(-0.75, 0.0), float2(0.75, 0.5)));
         if ((sameSides & 4) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.0, -0.75), float2(0.5, 0.75)));
         if ((sameSides & 8) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.75, 0.0), float2(0.75, 0.5)));
-        float influence = saturate(1.0 + edge * _ReliefRimDistanceScale);
-        float shade = 1.0 - _ReliefRimFalloff * influence * influence;
+        float influence = saturate(1.0 + edge * _RimDistanceScale);
+        float shade = 1.0 - _RimFalloff * influence * influence;
         bevel = shade * shade * shade;
     }
     else
     {
-        bevel = TerrainReliefSideBevel(surface, foreignSides);
+        bevel = TerrainRimSideBevel(surface, foreignSides);
     }
 
     [branch]
@@ -266,19 +266,19 @@ float TerrainReliefBevel(TerrainSurfaceInputs surface)
             float distanceToCorner = distance(
                 surface.cellSample,
                 TerrainGeometryCorner(surface.cornersX, surface.cornersY, corner));
-            float influence = saturate(1.0 - distanceToCorner * _ReliefRimDistanceScale);
-            float cornerShade = 1.0 - _ReliefRimFalloff * influence * influence;
+            float influence = saturate(1.0 - distanceToCorner * _RimDistanceScale);
+            float cornerShade = 1.0 - _RimFalloff * influence * influence;
             bevel *= cornerShade * cornerShade * cornerShade;
         }
     }
 
-    return TerrainQuantizeReliefBevel(bevel);
+    return TerrainQuantizeRimBevel(bevel);
 }
 
 
-float TerrainReliefRim(TerrainSurfaceInputs surface)
+float TerrainRim(TerrainSurfaceInputs surface)
 {
-    return TerrainReliefBevel(surface);
+    return TerrainRimBevel(surface);
 }
 
 // The visible terrain and the material field must use the same cell shape.

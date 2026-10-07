@@ -36,6 +36,8 @@ public interface IPlayerStats
     long MissionProgress { get; }
     long MissionMaxProgress { get; }
     bool DailyBonusAvailable { get; }
+    ushort? MissionArrowX { get; }
+    ushort? MissionArrowY { get; }
 
     void SetLevel(long level);
     void SetHealth(int current, int max);
@@ -57,7 +59,9 @@ public interface IPlayerStats
     void ClearStatusLines();
     event Action OnStatsChanged;
     event Action OnHealthChanged;
+    event Action<int, int> OnHealthUpdated;
     event Action OnCurrencyChanged;
+    event Action<long, long> OnCurrencyUpdated;
     event Action OnGeologyChanged;
     event Action OnLevelChanged;
     event Action OnNicknameChanged;
@@ -65,5 +69,6 @@ public interface IPlayerStats
     event Action<SkillType, long, long> OnSkillProgress;
     event Action OnDailyBonusChanged;
     event Action OnMissionChanged;
+    event Action OnMissionArrowChanged;
     event Action OnStatusLinesChanged;
 }

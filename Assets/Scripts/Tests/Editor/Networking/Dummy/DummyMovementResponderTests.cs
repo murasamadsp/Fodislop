@@ -75,6 +75,44 @@ public sealed class DummyMovementResponderTests
         Assert.That(supervisor.OperationNames, Is.EqualTo(new[] { "dummy_move_wait_for_cell" }));
     }
 
+    [Test]
+    public void AdjacentMove_WithIgnoreCollision_CompletesMoveAtPassableSpeed()
+    {
+        var sent = new List<ServerPacket>();
+        var supervisor = new ExecutingSupervisor();
+        var clock = new VirtualDummyClock(seed: 1);
+        var player = new DummyPlayerSimulationState();
+        player.SetPosition(10, 20);
+        using var world = new DummyWorldSimulationState(supervisor, new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
+        var teleports = new DummyTeleportManager(sent.Add, [], supervisor);
+        var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
+        using var movement = new DummyMovementResponder(
+            supervisor,
+            clock,
+            player,
+            world,
+            teleports,
+            pathFinder,
+            sent.Add,
+            () => true,
+            456);
+
+        movement.HandleMove(new MovePacket(11, 20));
+
+        Assert.That(player.X, Is.EqualTo(11));
+        Assert.That(player.Y, Is.EqualTo(20));
+
+        Assert.That(clock.PendingCount, Is.EqualTo(1));
+        clock.Advance(19);
+        Assert.That(sent, Is.Empty);
+        clock.Advance(1);
+        Assert.That(sent, Has.Count.EqualTo(1));
+        var heartbeat = (HBPacket)sent[0].Payload;
+        var position = (RobotPositionPacket)heartbeat.Payload[0];
+        Assert.That(position.X, Is.EqualTo(11));
+        Assert.That(position.Y, Is.EqualTo(20));
+    }
+
     private sealed class RecordingSupervisor : IAsyncOperationSupervisor
     {
         public List<string> OperationNames { get; } = [];
@@ -84,6 +122,24 @@ public sealed class DummyMovementResponderTests
         public void Run(string operationName, Func<CancellationToken, UniTask> operation)
         {
             OperationNames.Add(operationName);
+        }
+
+        public UniTask StopAsync(CancellationToken cancellationToken = default)
+        {
+            return UniTask.CompletedTask;
+        }
+    }
+
+    private sealed class ExecutingSupervisor : IAsyncOperationSupervisor
+    {
+        public List<string> OperationNames { get; } = [];
+
+        public int ActiveCount => 0;
+
+        public void Run(string operationName, Func<CancellationToken, UniTask> operation)
+        {
+            OperationNames.Add(operationName);
+            operation(CancellationToken.None).Forget();
         }
 
         public UniTask StopAsync(CancellationToken cancellationToken = default)

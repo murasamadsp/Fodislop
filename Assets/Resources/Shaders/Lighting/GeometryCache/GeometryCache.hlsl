@@ -25,13 +25,13 @@ void BuildCellSolidMask(uint3 dispatchId : SV_DispatchThreadID)
 
     int2 cell = int2(dispatchId.xy);
     // A transport shortcut needs a proof over EVERY base texel, including
-    // partial silhouettes and emissive non-solid materials. Corner sealing
+    // partial silhouettes and glowing non-solid materials. Corner sealing
     // reads the texels themselves (CornerSealed), never a cell-centre sample.
     int2 first = CellFirstTexel(cell);
     int2 last = min(CellFirstTexel(cell + 1), _FieldSize);
     float firstOccupancy = _MaterialField.Load(int3(MaterialPixel(first), 0)).a;
     bool uniformOccupancy = true;
-    bool emissionFree = true;
+    bool glowFree = true;
     bool uniformSolid = true;
     [loop]
     for (int y = first.y; y < last.y && (uniformOccupancy || uniformSolid); y++)
@@ -42,28 +42,28 @@ void BuildCellSolidMask(uint3 dispatchId : SV_DispatchThreadID)
             int2 materialPixel = MaterialPixel(int2(x, y));
             float occupancy = _MaterialField.Load(int3(materialPixel, 0)).a;
             uniformOccupancy = uniformOccupancy && occupancy == firstOccupancy;
-            if (emissionFree && uniformOccupancy)
+            if (glowFree && uniformOccupancy)
             {
-                emissionFree = all(_EmissionField.Load(int3(materialPixel, 0)).rgb == 0.0);
+                glowFree = all(_GlowField.Load(int3(materialPixel, 0)).rgb == 0.0);
             }
             uniformSolid = uniformSolid && IsSolidOccupancy(occupancy);
         }
     }
-    // R proves clean air: every texel has zero occupancy and zero emission,
+    // R proves clean air: every texel has zero occupancy and zero glow,
     // so any path through the cell is pure air transport (CleanCellCount).
-    bool cleanAir = uniformOccupancy && emissionFree && firstOccupancy == 0.0;
+    bool cleanAir = uniformOccupancy && glowFree && firstOccupancy == 0.0;
     _CellSolidMaskOutput[cell] = float4(cleanAir ? 1.0 : 0.0,
-        uniformOccupancy && emissionFree ? 1.0 : 0.0,
+        uniformOccupancy && glowFree ? 1.0 : 0.0,
         uniformSolid ? 1.0 : 0.0, uniformOccupancy ? 1.0 : 0.0);
-    // G proves constant extinction AND zero static emission; A proves constant
-    // extinction alone (dynamic transport does not collect static emission).
+    // G proves constant extinction AND zero static glow; A proves constant
+    // extinction alone (dynamic transport does not collect static glow).
     // Store proof flags, not half-precision occupancy. The traverser loads the
     // original UNorm material alpha once per proven cell, preserving its value.
 }
 
 // Summed-area tables of cells that are NOT clean air (x: mask R == 0) and
 // NOT clean stone (y), so a ray neighbourhood can be proven one uniform
-// medium with four loads. Clean stone: uniform, emission-free (mask G) and
+// medium with four loads. Clean stone: uniform, glow-free (mask G) and
 // fully occupied — any path through it is solid transport at occupancy 1.
 // Rows first, then columns; rebuilt with the mask.
 [numthreads(64, 1, 1)]
@@ -100,6 +100,119 @@ void BuildCleanCellColumns(uint3 id : SV_DispatchThreadID)
         sum += _CleanCellRows[index];
         _CleanCellPrefixOutput[index] = sum;
     }
+}
+
+// Dynamic signed-distance cache for empty-space sphere tracing. Both sides of
+// every occupancy boundary seed JFA; positive distance is empty space and
+// negative distance is occupied material. The ray marcher subtracts the texel
+// footprint and sample offset before advancing, then hands the boundary tail
+// to exact DDA.
+uint PackDynamicSdfSeed(int2 position)
+{
+    return (uint(position.x) & 0xffffu) | ((uint(position.y) & 0xffffu) << 16u);
+}
+
+int2 UnpackDynamicSdfSeed(uint packed)
+{
+    return int2(int(packed & 0xffffu), int(packed >> 16u));
+}
+
+[numthreads(8, 8, 1)]
+void SeedDynamicDistanceField(uint3 dispatchId : SV_DispatchThreadID)
+{
+    int2 position = int2(dispatchId.xy);
+    if (any(position >= _FieldSize))
+    {
+        return;
+    }
+
+    bool occupied = _MaterialField.Load(int3(MaterialPixel(position), 0)).a > 0.0;
+    bool boundary = false;
+    [unroll]
+    for (int y = -1; y <= 1; y++)
+    {
+        [unroll]
+        for (int x = -1; x <= 1; x++)
+        {
+            if (x == 0 && y == 0)
+            {
+                continue;
+            }
+
+            int2 neighbor = position + int2(x, y);
+            bool neighborOccupied = false;
+            if (all(neighbor >= 0) && all(neighbor < _FieldSize))
+            {
+                neighborOccupied = _MaterialField.Load(int3(MaterialPixel(neighbor), 0)).a > 0.0;
+            }
+            boundary = boundary || (neighborOccupied != occupied);
+        }
+    }
+
+    uint seed = boundary ? PackDynamicSdfSeed(position) : 0xffffffffu;
+    _DynamicSdfSeedOutput[position.y * _FieldSize.x + position.x] = seed;
+}
+
+[numthreads(8, 8, 1)]
+void JumpFloodDynamicDistanceField(uint3 dispatchId : SV_DispatchThreadID)
+{
+    int2 position = int2(dispatchId.xy);
+    if (any(position >= _FieldSize))
+    {
+        return;
+    }
+
+    uint best = 0xffffffffu;
+    int bestDistance = 0x7fffffff;
+    [unroll]
+    for (int y = -1; y <= 1; y++)
+    {
+        [unroll]
+        for (int x = -1; x <= 1; x++)
+        {
+            int2 samplePosition = position + int2(x, y) * _DynamicSdfJumpStep;
+            if (any(samplePosition < 0) || any(samplePosition >= _FieldSize))
+            {
+                continue;
+            }
+
+            uint candidate = _DynamicSdfSeedInput[samplePosition.y * _FieldSize.x + samplePosition.x];
+            if (candidate == 0xffffffffu)
+            {
+                continue;
+            }
+
+            int2 seedPosition = UnpackDynamicSdfSeed(candidate);
+            int2 offset = seedPosition - position;
+            int distanceSquared = offset.x * offset.x + offset.y * offset.y;
+            if (distanceSquared < bestDistance)
+            {
+                best = candidate;
+                bestDistance = distanceSquared;
+            }
+        }
+    }
+
+    _DynamicSdfSeedOutput[position.y * _FieldSize.x + position.x] = best;
+}
+
+[numthreads(8, 8, 1)]
+void ResolveDynamicDistanceField(uint3 dispatchId : SV_DispatchThreadID)
+{
+    int2 position = int2(dispatchId.xy);
+    if (any(position >= _FieldSize))
+    {
+        return;
+    }
+
+    uint seed = _DynamicSdfSeedInput[position.y * _FieldSize.x + position.x];
+    float distance = length(float2(_FieldSize));
+    if (seed != 0xffffffffu)
+    {
+        distance = max(length(float2(UnpackDynamicSdfSeed(seed) - position)) - 0.5, 0.0);
+    }
+    bool occupied = _MaterialField.Load(int3(MaterialPixel(position), 0)).a > 0.0;
+    _DynamicSdfOutput[position] = occupied ? -distance : distance;
 }
 
 // First air texel in each cardinal direction, cached for the dynamic composite.

@@ -96,11 +96,15 @@ namespace Kern.Game.Managers
             _activeEffects.Add(effect);
         }
 
+        public void PlayEffect(global::MinesServer.Data.SFX effectType, ushort x, ushort y, ushort targetBotId = 0, int param = 0) =>
+            PlayEffect(new AudioPacket(effectType, targetBotId, x, y, Array.Empty<MinesServer.Networking.Shared.Packets.StringPairPacket>()));
+
+        public void PlayEffect(global::MinesServer.Data.VFX effectType, ushort x, ushort y, ushort targetBotId = 0, int param = 0) =>
+            PlayEffect(new VFXPacket(effectType, targetBotId, x, y, Array.Empty<MinesServer.Networking.Shared.Packets.StringPairPacket>()));
+
         public void PlayEffect(VFXPacket packet)
         {
             IVFXSlot? slot = _vfxService.Acquire();
-
-            Debug.Log($"{TAG} VFX '{packet.EffectType}' at {packet.X}:{packet.Y} (bot {packet.TargetBotId}).");
 
             var effect = new ServerVFXEvent(
                 packet,

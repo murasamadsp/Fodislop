@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
@@ -123,25 +122,18 @@ public sealed class TerrainCellMetadataCache : ITerrainMetadataLookup
 
         Vector4 atlasRect = wtm.GetCellFrameRect(type);
         int frameCount = wtm.GetAnimationFrameCount(type);
-        int frameSize = wtm.GetFrameSize(type);
 
+        BlockDefinition block = BlockRegistry.Get(type);
         var meta = new CellMetadata
         {
-            Properties = config.Properties,
-            ReliefGroup = config.ReliefGroup,
-            Distortion = config.Distortion,
+            // Вид — из cells.json, как в строке типа.
+            RimMass = block.RimMass,
+            Outline = block.Outline,
             HasTileGroup = mm.TryGetTileGroup(type, out int gid),
             TileGroupId = gid,
-            MinimapColor = mm.GetCellMinimapColor32(type),
-            Animation = config.Animation,
-            AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
             AtlasRect = atlasRect,
             AtlasIndex = atlasIndex,
-            UVTileSize = atlasIndex >= 0 && atlasIndex < atlases.Count
-                ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size
-                : 0f,
             AnimationFrameCount = frameCount,
-            FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
             IsTextureReady = atlasIndex >= 0 && atlasRect.z > 0f,
             IsPopulated = true,
         };
@@ -167,19 +159,13 @@ public sealed class TerrainCellMetadataCache : ITerrainMetadataLookup
         {
             State = TerrainCellState.Loaded,
             Type = type,
-            Properties = meta.Properties,
-            ReliefGroup = meta.ReliefGroup,
-            Distortion = meta.Distortion,
+            RimMass = meta.RimMass,
+            Outline = meta.Outline,
             HasTileGroup = meta.HasTileGroup,
             TileGroupId = meta.TileGroupId,
-            MinimapColor = meta.MinimapColor,
-            Animation = meta.Animation,
-            AnimationSpeed = meta.AnimationSpeed,
             AtlasRect = meta.AtlasRect,
             AtlasIndex = meta.AtlasIndex,
-            UVTileSize = meta.UVTileSize,
             AnimationFrameCount = meta.AnimationFrameCount,
-            FrameHeightTiles = meta.FrameHeightTiles,
             IsTextureReady = meta.IsTextureReady,
         };
     }

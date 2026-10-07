@@ -86,7 +86,8 @@ internal static class DebugOverlayTextFormatter
                     else
                     {
                         var config = mapManager.GetCellConfig(cellType);
-                        bool passable = cellType == CellType.Empty || ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
+                        BlockDefinition block = BlockRegistry.Get(cellType);
+                        bool passable = ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
                         bool breakable = ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Breakable);
 
                         sb.Append("\n<b>Клетка под курсором  ·  ")
@@ -94,7 +95,8 @@ internal static class DebugOverlayTextFormatter
                           .Append("kern:").Append(cellType.ToString().ToLowerInvariant()).Append(" (#").Append((int)cellType).Append(")\n")
                           .Append("Проходимая: ").Append(passable ? "да" : "нет")
                           .Append("  ·  Разрушаемая: ").Append(breakable ? "да" : "нет")
-                          .Append("  ·  Рельеф: ").Append(config.ReliefGroup).Append("\n");
+                          .Append("\nСлой: ").Append(block.DrawLayer)
+                          .Append("  ·  Группа каймы: ").Append(block.RimMass).Append("\n");
                     }
                 }
             }

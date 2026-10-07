@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uniform-source transport experiment — 2026-10-06</title>
+<style>
+body{font:16px/1.55 system-ui,sans-serif;max-width:1080px;margin:40px auto;padding:0 24px;color:#20242a;background:#fafafa}
+h1,h2{line-height:1.2}table{border-collapse:collapse;width:100%;margin:20px 0}td,th{border:1px solid #ccd1d7;padding:9px;text-align:left;vertical-align:top}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eef0f3;padding:16px}code{font-size:.9em}.pending{background:#fff0cc;padding:16px}a{color:#145bb5}
+</style>
+<h1>Uniform-source transport experiment</h1>
+<p>2026-10-06. Current working tree, Unity 6000.6.0f1, macOS. User selected conservative acceleration after considering JFA + sphere tracing.</p>
+<p class="pending"><strong>Prototype only; merge/activation gates remain open.</strong>
+The setting defaults to exact DDA. «Ускоренный» is opt-in in the existing Lighting Cost settings window and still falls back to exact DDA for mixed regions.
+No GPU speedup or visual equivalence is claimed. Unity CLI refused the batch run because the project is open in Editor PID 90878.
+The editor was not controlled or closed. Standalone compiler and C++ tests do not satisfy production-path verification.</p>
+
+<h2>TL-CHANGE: scope and decision</h2>
+<p>Owner: Lighting, dynamic transport, <code>GatherDynamicSource</code> in
+<a href="../../../Assets/Resources/Shaders/Lighting/Dynamic/DynamicPolar.hlsl">DynamicPolar.hlsl</a>.
+Consumer: <code>SolveDynamicLighting</code> near-source receivers. Current per-cell DDA repeats geometry traversal for every angular sample.
+The experiment proves a complete receiver/emitter bounding box once using the existing clean-cell summed-area table, then integrates the same continuous emitter in a uniform medium.</p>
+<p>The box includes the existing cell-plus-texel corner guard. Clean air requires zero occupancy and emission throughout; clean stone requires full occupancy, zero emission and an entirely in-field box.
+Outside-field air is allowed only by the air proof. Partial occupancy, silhouettes, static emitters and mixed boxes use the existing exact DDA.
+The source retains continuous bounds, RGB extinction and unbounded scene-linear HDR radiance. No sphere-tracing epsilon or approximate distance field is introduced.</p>
+<p>No public/domain API change. Applicable requirements: TL-OWN, TL-API, TL-LIFE, TL-REV, TL-STAGE, TL-VERIFY, TL-CHANGE.
+JFA and additional distance-field resources are deferred: the existing exact proof can test the uniform-region hypothesis without a new rebuild stage.</p>
+
+<h2>Opt-in multi-light dispatch prototype</h2>
+<p>The «Батчить несколько фонарей» toggle in the same settings window groups polar rays by equal angle-group count and receiver work by equal 8×8 dispatch dimensions. A 32-byte structured descriptor per source carries its receiver rectangle, polar size, uploaded-light index and persistent cache slot. The shader derives each invocation's context from the descriptor and calls the same transport routines as serial dispatch. It does not pad receiver rectangles or merge different polar/cache layers. The descriptor buffer is owned by <code>DynamicLightingSolver</code> and released with the solver; serial dispatch remains the default.</p>
+<p>This reduces dispatch submissions only. It does not reduce DDA visits, receiver texels or polar rays; descriptor upload and GPU scheduling may offset the CPU submission savings. The fixed production benchmark uses 16 moving lights, captures the actual world output, and requires fewer dispatches, at least 100 real GPU samples, no more than 2% receiver-stage/GPU-frame/frame-p95 regression in each of three repetitions. No result is claimed until that PlayMode benchmark runs.</p>
+
+<h2>TL-API: dependency review</h2>
+<p>Runtime C# adds <code>DynamicLightBatch</code>, the opt-in dispatch selection in <code>DynamicLightingSolver</code>, telemetry counters and the batch-kernel resource identifiers. No public/domain API, event, alias, reflection, service location or cross-domain state is added. The existing geometry-cache owner binds the clean-cell prefix resource to the batch receiver kernel. Existing working-tree terrain changes are outside this experiment.</p>
+<pre>rg -n '\b(LightingEngine|LightingComposition|LightingUpdateCoordinator|LightingFrameExecutor|GeometryLightingSolver|StaticLightingSolver|DynamicLightingSolver|IndirectLightingSolver|LightingGeometryRegistry|LightingResourceManager|LightingTexturePool|LightingPresentation|LightingRuntimeState|LightingInvalidationFlags)\b' Assets/Scripts/World/Terrain --glob '*.cs'
+Output: empty (rg exit 1).
+
+rg -n '\b(TerrainRenderer|TerrainViewportCalculator|TerrainCellCache|TerrainCellBuilder|TerrainCellBuffers|TerrainMeshManager|TerrainMaterialManager|TerrainLook)\b|Kern\.World\.Terrain' Assets/Scripts/World/Lighting --glob '*.cs'
+Assets/Scripts/World/Lighting/Core/LightingRegionCalculator.cs:54: /// Террейн уже держит окно на этот кадр (TerrainViewportCalculator). Регион
+Classification: pre-existing documentation comment, outside the diff; no code dependency.
+
+dotnet run --project tools/Kern.ArchitectureLinter/Kern.ArchitectureLinter.csproj -- --project-root . --rule KERN-TERRAIN-LIGHTING-BOUNDARY --source-only
+Rules: 1; Total violations: 0; exit 0.</pre>
+
+<h2>TL-LIFE and TL-REV</h2>
+<table>
+<tr><th>State/resource</th><th>Owner/lifecycle</th><th>Change</th></tr>
+<tr><td>Clean-cell prefix buffer</td><td>Existing LightingResourceManager allocation/release; GeometryLightingSolver builds after material/emission raster.</td><td>Additional read-only binding to SolveDynamicLighting. No allocation or lifetime change.</td></tr>
+<tr><td>Uniform-source proof</td><td>Local HLSL values for one receiver/source invocation.</td><td>No persistent cache; never survives a dispatch.</td></tr>
+<tr><td>Candidate switch</td><td>LightingComputeBinder diagnostic setting, bound with common uniforms; tests restore it in finally.</td><td>Default false. Tests change source input to force a fresh solve when switching variants.</td></tr>
+</table>
+<table>
+<tr><th>Input → revision/region</th><th>Acknowledgement/consumer</th><th>Expected work</th><th>Untouched</th></tr>
+<tr><td>Terrain occupancy/material/emission → existing journal channels and dirty regions</td><td>Existing exchange/journal acknowledgement after lighting succeeds</td><td>Existing raster → mask → prefix → invalidated transport. Candidate reads that same prefix.</td><td>No additional rebuild, region expansion or acknowledgement</td></tr>
+<tr><td>Contributor geometry revision or field reanchor</td><td>Existing registry/region invalidation</td><td>Existing geometry caches rebuilt before source gather</td><td>No new distance-field stage</td></tr>
+<tr><td>Continuous source position/color/intensity</td><td>Existing dynamic upload/tile invalidation</td><td>Dynamic solve; proof recomputed locally from unchanged prefix</td><td>Material, prefix, static cascades</td></tr>
+<tr><td>All inputs unchanged</td><td>Existing cache validity</td><td>No new work; candidate cannot request a frame</td><td>All existing caches and update cadence</td></tr>
+</table>
+
+<h2>TL-STAGE and cost</h2>
+<table>
+<tr><th>Stage</th><th>Reads/writes, bounds, load/clear</th><th>Cost/observability</th></tr>
+<tr><td>GeometryLightingSolver.PrepareCaches</td><td>Binds the existing uint2 prefix buffer to the dynamic receiver kernel before its existing early return. Existing row/column builders and contents are unchanged.</td><td>One additional buffer binding; zero extra dispatches, threads or GPU payload allocation.</td></tr>
+<tr><td>SolveDynamicLighting → GatherDynamicSource</td><td>Additional _CleanCellPrefix read; existing source, field and medium inputs. Writes the same dynamic tile/direct texels. Existing 8×8 receiver dispatch and bounds in DynamicLightingSolver.Record remain in force; no clear/load changes.</td><td>Best: up to four uint2 reads per gather plus one analytic integral per angular sample. Worst: four reads plus current DDA and proof arithmetic. Default-disabled branch has not been GPU-measured.</td></tr>
+<tr><td>TraceDynamicPolar / compose / static transport</td><td>No new tracing or output format; no changes to polar radial storage or static cascade algorithm.</td><td>Unchanged dispatch counts. This experiment does not accelerate polar writes.</td></tr>
+</table>
+<p>Dispatch locations:
+<a href="../../../Assets/Scripts/World/Lighting/Solvers/DynamicLightingSolver.cs">DynamicLightingSolver.Record</a>;
+kernel entry:
+<a href="../../../Assets/Resources/Shaders/Lighting/Dynamic/DynamicLightTrace.hlsl">SolveDynamicLighting</a>.
+GPU marker: <code>Kern.Lighting.DynamicReceiverTrace</code>; existing dynamic dispatch-pixel telemetry and DDA segment/visit counters retain their meaning.
+Analytic paths contribute no DDA visits. The supplementary native harness counts prefix-buffer reads as well as material/texture reads, so a proof is not treated as free.</p>
+
+<h2>Supplementary results</h2>
+<pre>dotnet run --project tools/Kern.LightingTests/Kern.LightingTests.csproj -- transport
+Baseline before experiment: 3391 checks passed.
+Candidate suite: 27678 checks passed (actual extracted HLSL functions, float32).
+
+dotnet run --project tools/Kern.LightingTests/Kern.LightingTests.csproj -- compile
+All 16 production WorldLighting.compute kernels: PASS (glslang SPIR-V compilation).
+This is not Unity/Metal compilation or a GPU dispatch.</pre>
+<p>Each cost row covers 385 receiver/source pairs × 8 angular samples, at density 2. Both variants keep existing per-cell skipping. Prefix reads are included. Densities 8 and 32 are also checked; counts for homogeneous scenes are identical because baseline cell skipping already removes density dependence.</p>
+<table>
+<tr><th>Fixture</th><th>Baseline reads</th><th>Candidate reads</th><th>Baseline/candidate DDA visits</th></tr>
+<tr><td>Clean air</td><td>36,784</td><td>1,540</td><td>18,392 / 0</td></tr>
+<tr><td>Clean stone, finite extinction</td><td>36,784</td><td>1,540</td><td>18,392 / 0</td></tr>
+<tr><td>Partial occupancy</td><td>36,784</td><td>38,324</td><td>18,392 / 18,392</td></tr>
+<tr><td>One-texel wall</td><td>40,097</td><td>41,637</td><td>21,705 / 21,705</td></tr>
+<tr><td>Narrow tunnel</td><td>36,784</td><td>38,324</td><td>18,392 / 18,392</td></tr>
+<tr><td>Static-emission texel</td><td>36,784</td><td>38,324</td><td>18,392 / 18,392</td></tr>
+<tr><td>Checkerboard corner contacts</td><td>40,869</td><td>42,409</td><td>18,392 / 18,392</td></tr>
+</table>
+<p>The native suite also checks subcell source movement, field-border sources, independent double-precision Beer–Lambert/source integrals in RGB HDR, and insertion/removal of a one-texel blocker with cache rebuilds. Differential tolerance is 3e-5 absolute + 3e-5 relative; the independent continuous-medium oracle uses 1e-5 absolute.</p>
+<p><strong>Interpretation:</strong> approximately 95.8% fewer reads in proven uniform fixtures, approximately 4.2% more in some rejected fixtures. These are operation counts, not GPU timings or whole-frame speedups. Actual solid extinction and branch divergence can change the timing outcome.</p>
+
+<h2>C# compilation</h2>
+<p>A standalone Roslyn check compiled the current Kern dependency graph and Kern.Tests.PlayMode to a disposable directory, preserving all Unity-generated analyzer/define/reference settings. Only output paths and references to freshly compiled Kern dependencies were redirected. No live Editor assembly was replaced.</p>
+<pre>/Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/Resources/Scripting/DotNetSdk/dotnet
+  /Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/Resources/Scripting/DotNetSdk/sdk/8.0.318/Roslyn/bincore/csc.dll
+  @/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-uniform-source-assemblies-jpko1mkg/Kern.Tests.PlayMode.rsp
+Result: exit 0. Dependencies, including Kern.World, compiled successfully first.
+Remaining CS1701 warnings: existing third-party netstandard 2.0 references unified with Unity netstandard 2.1; no suppression added.</pre>
+<p>The generated .csproj build initially lacked Temp/obj/Kern.Tests.Editor/project.assets.json (NETSDK1004). A first standalone compile against cached Kern references also found stale contracts; rebuilding current dependencies in the disposable directory resolved those mismatches. The Roslyn check is supplementary and does not satisfy the Unity gate.</p>
+
+<h2>Production gates: not run</h2>
+<pre>unity test . --mode PlayMode --filter Kern.Tests.PlayMode.LightingGPULifecyclePlayModeTests --output /tmp/kern-transport-baseline-tests.xml --timeout 300 -- -logFile /tmp/kern-transport-baseline-unity.log
+Error: The project is already open in a running Editor (PID 90878).
+
+Required when batch execution is available:
+unity test . --mode PlayMode --filter Kern.Tests.PlayMode.LightingGPULifecyclePlayModeTests.UniformSourceTraversal_PreservesContinuousEmitterAndGeometryChanges --output /tmp/kern-uniform-source-gpu.xml --timeout 600 -- -logFile /tmp/kern-uniform-source-gpu.log
+unity test . --mode PlayMode --filter Kern.Tests.PlayMode.FrameBenchmarkPlayModeTests.MainGame_DynamicTransportDdaVsAccelerated --output /tmp/kern-uniform-source-benchmark.xml --timeout 1000 -- -logFile /tmp/kern-uniform-source-benchmark.log
+unity test . --mode PlayMode --filter Kern.Tests.PlayMode.FrameBenchmarkPlayModeTests.MainGame_BatchedDynamicLightsBeforeAfter --output /tmp/kern-batched-lights.xml --timeout 1000 -- -logFile /tmp/kern-batched-lights.log</pre>
+<p>The prepared lifecycle test uses the real World Surface material-field pass, mesh attributes, production field projection, production compute bindings and game pipeline at densities 2 and 32. Its double-precision emitter oracle is independent of HLSL. It includes source motion, colored HDR sums and air → occupied → air contributor revisions. World-image and performance comparison reuse the real game renderer and camera path in FrameBenchmarkPlayModeTests.</p>
+<p>A/B keeps per-cell DDA and scalar polar storage enabled on both sides and toggles only the candidate. Image acceptance: maximum error and reference drift ≤0.002 in the production world capture. Timed windows: 120 warmup + 300 measured frames, three alternating repetitions. Require ≥100 genuine GPU samples, ≥10% reduction in the dynamic receiver GPU marker, and ≤2% regression in whole-frame GPU median and frame-time p95 per repetition. Missing GPU timings fail the gate; CPU marker scopes cannot replace them.</p>
+<p>The lifecycle test also runs its independent continuous-emitter and three-colored-source production oracle with batching off and on at receiver densities 2 and 32. It verifies cached-slot reordering as well as the real air/solid geometry revision path. Native float32 transport tests pass 27,678 checks, and the compute compiler reports all 18 production kernels passing, including both batch kernels. These are supplementary; the real production GPU test remains blocked by the open Editor.</p>
+<p>Remaining activation evidence also includes unchanged-input frames, geometry-edit and reanchor GPU costs, thin-wall/corner production images and the lighting debug views. The prepared moving-source benchmark alone is insufficient to approve activation. The established terrain/lighting conformance debt is neither changed nor waived.</p>
+
+<h2>Settings feedback and dynamic-work rejection</h2>
+<p>The settings window now keeps its Apply/Load controls above the quality rows as well as below them. Runtime mode and batch switches display selected/applied state; map details show transport and receiver dimensions, fixed 32-pixel-per-cell AO with its estimated payload, cascade atlas occupancy, and a theoretical full-map receiver-sample count for the draft quality. Frame dumps include all quality tuning values and the authored radiometric coefficients. DDA and accelerated uniform-region tracing are expected to produce matching images, so their intended difference is dispatch/work cost rather than visible output.</p>
+<p>Quality application now estimates a conservative worst-case polar ray workload for the current receiver map and registered dynamic-light count. Requests above <code>MaximumDynamicPolarRayWorkUnits</code> are rejected before publishing the tuning, with an actionable Russian message; the exact transport allocator remains unchanged and does not silently reduce authored angular quality or ray distance. A regression test covers the 6144×4096 map with 1024 directions, 4×4 emitters and four sources. Unity PlayMode/GPU verification is still pending under TL-VERIFY because PID 90878 owns the open Editor.</p>
+
+<h2>Review checklist</h2>
+<ul>
+<li>Owner, resource lifetime, stage reads/writes and invalidation documented; no domain API or allocation added.</li>
+<li>Both boundary scans reviewed; source boundary linter reports zero violations.</li>
+<li>Continuous coordinates, fractional occupancy, emission and HDR contracts retained.</li>
+<li>Native oracle and shader compilation passed; C# compile passed with the stated third-party reference warnings.</li>
+<li>Production GPU/image and rebuild-cost gates remain pending; no merge or activation approval inferred.</li>
+</ul>
+</html>

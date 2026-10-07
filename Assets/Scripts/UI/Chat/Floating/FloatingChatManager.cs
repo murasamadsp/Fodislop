@@ -18,6 +18,10 @@ namespace Kern.UI
 {
     public class FloatingChatManager : MonoBehaviour
     {
+        private const float BubblePoolIdleShrinkDelaySeconds = 30f;
+        private const int BubblePoolMinimumSize = 1;
+        private const int BubblePoolShrinkPerFrame = 4;
+
         [Inject]
         private RobotManager _robotManager = null!;
 
@@ -45,12 +49,14 @@ namespace Kern.UI
         private IAsyncOperationSupervisor _operations = null!;
 
         private LocalChatInput? _localInput;
+        private float _lastBubbleActivityTime;
 
         protected void Start()
         {
             _chatEvents.LocalMessageReceived += ShowLocalChat;
             TryInitialize();
             PrewarmBubble();
+            _lastBubbleActivityTime = Time.unscaledTime;
 
             // Школа (одна дорога): [Inject]-методы и панель UIDocument создаются
             // до Start, один вызов без ретраев из Update.
@@ -94,11 +100,6 @@ namespace Kern.UI
         {
             _localInput?.Tick();
 
-            if (_activeBubbles.Count == 0)
-            {
-                return;
-            }
-
             for (int i = _activeBubbles.Count - 1; i >= 0; i--)
             {
                 if (_activeBubbles[i] == null || !_activeBubbles[i].gameObject.activeInHierarchy)
@@ -107,6 +108,8 @@ namespace Kern.UI
                     _activeBubbles.RemoveAt(i);
                 }
             }
+
+            ShrinkBubblePoolIfIdle();
         }
 
         protected void OnDestroy()
@@ -132,6 +135,7 @@ namespace Kern.UI
 
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
+            _lastBubbleActivityTime = Time.unscaledTime;
             TryInitialize();
             if (_camera == null)
             {
@@ -229,6 +233,7 @@ namespace Kern.UI
                 if (bubble != null)
                 {
                     bubble.gameObject.SetActive(true);
+                    _lastBubbleActivityTime = Time.unscaledTime;
                     return bubble;
                 }
             }
@@ -240,6 +245,7 @@ namespace Kern.UI
 
             var newBubble = _sceneObjects.Create<FloatingChatBubble>("ChatBubble", RuntimeOwner.FloatingUI);
             newBubble.transform.SetParent(transform, false);
+            _lastBubbleActivityTime = Time.unscaledTime;
             return newBubble;
         }
 
@@ -252,6 +258,26 @@ namespace Kern.UI
 
             bubble.gameObject.SetActive(false);
             _pool.Enqueue(bubble);
+            _lastBubbleActivityTime = Time.unscaledTime;
+        }
+
+        private void ShrinkBubblePoolIfIdle()
+        {
+            if (_pool.Count <= BubblePoolMinimumSize ||
+                Time.unscaledTime - _lastBubbleActivityTime < BubblePoolIdleShrinkDelaySeconds)
+            {
+                return;
+            }
+
+            int shrinkCount = Mathf.Min(BubblePoolShrinkPerFrame, _pool.Count - BubblePoolMinimumSize);
+            for (int i = 0; i < shrinkCount; i++)
+            {
+                FloatingChatBubble bubble = _pool.Dequeue();
+                if (bubble != null)
+                {
+                    Destroy(bubble.gameObject);
+                }
+            }
         }
 
     }

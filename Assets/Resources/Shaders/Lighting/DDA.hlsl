@@ -3,7 +3,7 @@
 
 // Примитивы геометрического traversal (DDA ray marching).
 //
-// READS: _MaterialField, _CellSolidMask, _EmissionField, _MaterialYFlip, _FieldSize, _WorldRect, _CellSize, _CellGridSize
+// READS: _MaterialField, _CellSolidMask, _GlowField, _MaterialYFlip, _FieldSize, _WorldRect, _CellSize, _CellGridSize
 // WRITES: ничего (out-параметры)
 // MAY: маршировать геометрию
 // MUST NOT: знать о каскадах, источниках, dynamic lights
@@ -96,8 +96,8 @@ bool CornerSealed(
 }
 
 // COST: 4 loads. Cells inside the field-texel box [minTexel, maxTexel] that
-// are not clean air (x: zero occupancy and emission in every texel) and not
-// clean stone (y: full occupancy, zero emission in every texel). Space
+// are not clean air (x: zero occupancy and glow in every texel) and not
+// clean stone (y: full occupancy, zero glow in every texel). Space
 // outside the cell grid is air, exactly as DDA treats outside-field space:
 // it never breaks the air proof and always breaks the stone proof.
 uint2 CleanCellPrefixAt(int2 cell)
@@ -135,7 +135,7 @@ float3 CleanMediumTransmittance(float occupancy, float2 direction, float lengthT
 }
 
 // COST: O(1). Пересечение отрезка с полем (slab-тест).
-// Outside-field material is empty air. Static field emission is absent there;
+// Outside-field material is empty air. Static field glow is absent there;
 // a supplied continuous emitter is integrated analytically through those tails.
 void ClipSegmentToField(
     float2 segmentStart,
@@ -158,7 +158,7 @@ void ClipSegmentToField(
 // The source has continuous bounds; material transport still visits every
 // crossed field texel. Rounding the source to texel centers changes its area
 // abruptly when the robot crosses the transport grid.
-float EmissiveBoxExit(float2 segmentStart, float2 inverseDirection, float4 sourceRect)
+float GlowBoxExit(float2 segmentStart, float2 inverseDirection, float4 sourceRect)
 {
     float2 boxA = (sourceRect.xy - segmentStart) * inverseDirection;
     float2 boxB = (sourceRect.zw - segmentStart) * inverseDirection;
@@ -176,7 +176,7 @@ int2 CellOfTexel(int2 texel, float2 cellsPerPixel)
 void TraceLightSegmentLocal(
     float2 segmentStart,
     float2 segmentEnd,
-    bool collectEmission,
+    bool collectGlow,
     bool isolateSource,
     float4 sourceRect,
     float3 sourceRadiance,
@@ -204,32 +204,32 @@ void TraceLightSegmentLocal(
     float2 inverseDirection = float2(
         abs(direction.x) > 1e-20 ? 1.0 / direction.x : 1e20,
         abs(direction.y) > 1e-20 ? 1.0 / direction.y : 1e20);
-    float emissionExit = collectEmission && isolateSource
-        ? EmissiveBoxExit(segmentStart, inverseDirection, sourceRect)
+    float glowExit = collectGlow && isolateSource
+        ? GlowBoxExit(segmentStart, inverseDirection, sourceRect)
         : 1e30;
     float2 sourceNear = min((sourceRect.xy - segmentStart) * inverseDirection,
         (sourceRect.zw - segmentStart) * inverseDirection);
-    float emissionEntry = max(0.0, max(sourceNear.x, sourceNear.y));
+    float glowEntry = max(0.0, max(sourceNear.x, sourceNear.y));
     float entry = 0.0;
     float exitDistance = 0.0;
     ClipSegmentToField(segmentStart, inverseDirection, intervalLength, fieldAnchor, entry, exitDistance);
     if (exitDistance <= entry)
     {
-        float airEmissionEnd = min(intervalLength, emissionExit);
-        if (collectEmission && isolateSource && airEmissionEnd > emissionEntry)
+        float airGlowEnd = min(intervalLength, glowExit);
+        if (collectGlow && isolateSource && airGlowEnd > glowEntry)
         {
-            radiance = SegmentTransmission(0.0, emissionEntry * cellsPerDistance) * sourceRadiance *
-                MediumEmissionWeight(SegmentExtinction(0.0), (airEmissionEnd - emissionEntry) * cellsPerDistance);
+            radiance = SegmentTransmission(0.0, glowEntry * cellsPerDistance) * sourceRadiance *
+                MediumGlowWeight(SegmentExtinction(0.0), (airGlowEnd - glowEntry) * cellsPerDistance);
         }
         transmittance = SegmentTransmission(0.0, intervalLength * cellsPerDistance);
         return;
     }
 
-    float prefixEmissionEnd = min(entry, emissionExit);
-    if (collectEmission && isolateSource && prefixEmissionEnd > emissionEntry)
+    float prefixGlowEnd = min(entry, glowExit);
+    if (collectGlow && isolateSource && prefixGlowEnd > glowEntry)
     {
-        radiance = SegmentTransmission(0.0, emissionEntry * cellsPerDistance) * sourceRadiance *
-            MediumEmissionWeight(SegmentExtinction(0.0), (prefixEmissionEnd - emissionEntry) * cellsPerDistance);
+        radiance = SegmentTransmission(0.0, glowEntry * cellsPerDistance) * sourceRadiance *
+            MediumGlowWeight(SegmentExtinction(0.0), (prefixGlowEnd - glowEntry) * cellsPerDistance);
     }
     transmittance = SegmentTransmission(0.0, entry * cellsPerDistance);
     float2 start = segmentStart + direction * entry;
@@ -284,7 +284,7 @@ void TraceLightSegmentLocal(
         {
             float4 proof = _CellSolidMask.Load(int3(cell, 0));
             uniformCell = _UniformCellTraversalEnabled != 0 &&
-                ((collectEmission && !isolateSource) ? proof.g : proof.a) == 1.0;
+                ((collectGlow && !isolateSource) ? proof.g : proof.a) == 1.0;
             if (uniformCell)
             {
                 uniformOccupancy = _MaterialField.Load(int3(MaterialPixel(texel + fieldAnchor), 0)).a;
@@ -341,31 +341,31 @@ void TraceLightSegmentLocal(
         {
             solidDistanceCells += distanceCells;
         }
-        if (collectEmission)
+        if (collectGlow)
         {
-            float3 emission = 0.0;
-            float emissionDistanceCells = distanceCells;
-            float emissionLeadCells = 0.0;
+            float3 glow = 0.0;
+            float glowDistanceCells = distanceCells;
+            float glowLeadCells = 0.0;
             if (isolateSource)
             {
-                float emissionStart = max(distance, emissionEntry);
-                float emissionEnd = min(end, emissionExit);
-                emissionDistanceCells = max(0.0, emissionEnd - emissionStart) * cellsPerDistance;
-                emissionLeadCells = max(0.0, emissionStart - distance) * cellsPerDistance;
-                emission = sourceRadiance;
+                float glowStart = max(distance, glowEntry);
+                float glowEnd = min(end, glowExit);
+                glowDistanceCells = max(0.0, glowEnd - glowStart) * cellsPerDistance;
+                glowLeadCells = max(0.0, glowStart - distance) * cellsPerDistance;
+                glow = sourceRadiance;
             }
             else if (!uniformCell)
             {
-                emission = max(_EmissionField.Load(int3(materialPixel, 0)).rgb, 0.0) * _EmissionScale;
+                glow = max(_GlowField.Load(int3(materialPixel, 0)).rgb, 0.0) * _GlowScale;
             }
 
             // Most isolated-source intervals are between receiver and emitter,
-            // where the emission integral is exactly zero. Do not evaluate its
+            // where the glow integral is exactly zero. Do not evaluate its
             // exponentials/divisions until the ray actually enters the source.
-            if (Max3(emission) > 0.0 && emissionDistanceCells > 0.0)
+            if (Max3(glow) > 0.0 && glowDistanceCells > 0.0)
             {
-                float3 emissionWeight = MediumEmissionWeight(extinction, emissionDistanceCells);
-                radiance += transmittance * OpticalDepthTransmission(extinction * emissionLeadCells) * emission * emissionWeight;
+                float3 glowWeight = MediumGlowWeight(extinction, glowDistanceCells);
+                radiance += transmittance * OpticalDepthTransmission(extinction * glowLeadCells) * glow * glowWeight;
             }
         }
 
@@ -373,14 +373,14 @@ void TraceLightSegmentLocal(
         distance = end;
         // A dynamic light ray also stops once everything it could still bring is below
         // what any display can show. The rest of the path is bounded by
-        // transmittance * source radiance * the largest single-cell emission
+        // transmittance * source radiance * the largest single-cell glow
         // weight (a cell crossed diagonally, ~1.42 < 1.5). The bound is
         // absolute radiance derived from the active output (SDR or HDR PQ),
         // exposure and source count, so even the tails of every dynamic light
         // meeting in one pixel stay below one display level.
-        bool tailInvisible = collectEmission && isolateSource &&
+        bool tailInvisible = collectGlow && isolateSource &&
             Max3(transmittance * sourceRadiance) * 1.5 < _InvisibleDynamicRadiance;
-        if (distance >= exitDistance || distance >= emissionExit || Max3(transmittance) == 0.0 ||
+        if (distance >= exitDistance || distance >= glowExit || Max3(transmittance) == 0.0 ||
             tailInvisible)
         {
             break;
@@ -430,12 +430,12 @@ void TraceLightSegmentLocal(
         }
     }
 
-    float tailEmissionStart = max(exitDistance, emissionEntry);
-    float tailEmissionEnd = min(intervalLength, emissionExit);
-    if (collectEmission && isolateSource && distance >= exitDistance && tailEmissionEnd > tailEmissionStart)
+    float tailGlowStart = max(exitDistance, glowEntry);
+    float tailGlowEnd = min(intervalLength, glowExit);
+    if (collectGlow && isolateSource && distance >= exitDistance && tailGlowEnd > tailGlowStart)
     {
-        radiance += transmittance * SegmentTransmission(0.0, (tailEmissionStart - exitDistance) * cellsPerDistance) *
-            sourceRadiance * MediumEmissionWeight(SegmentExtinction(0.0), (tailEmissionEnd - tailEmissionStart) * cellsPerDistance);
+        radiance += transmittance * SegmentTransmission(0.0, (tailGlowStart - exitDistance) * cellsPerDistance) *
+            sourceRadiance * MediumGlowWeight(SegmentExtinction(0.0), (tailGlowEnd - tailGlowStart) * cellsPerDistance);
     }
     transmittance *= SegmentTransmission(0.0, (intervalLength - exitDistance) * cellsPerDistance);
 }
@@ -446,14 +446,14 @@ void TraceLightSegmentLocal(
 void TraceLightSegment(
     float2 segmentStart,
     float2 segmentEnd,
-    bool collectEmission,
+    bool collectGlow,
     bool isolateSource,
     float4 sourceRect,
     float3 sourceRadiance,
     out float3 radiance,
     out float3 transmittance)
 {
-    TraceLightSegmentLocal(segmentStart, segmentEnd, collectEmission, isolateSource,
+    TraceLightSegmentLocal(segmentStart, segmentEnd, collectGlow, isolateSource,
         sourceRect, sourceRadiance, int2(0, 0), radiance, transmittance);
 }
 
@@ -474,11 +474,11 @@ void TraceRadianceProbeSegment(
 void TraceRadianceSegment(
     float2 segmentStart,
     float2 segmentEnd,
-    bool collectEmission,
+    bool collectGlow,
     out float3 radiance,
     out float3 transmittance)
 {
-    TraceLightSegment(segmentStart, segmentEnd, collectEmission, false,
+    TraceLightSegment(segmentStart, segmentEnd, collectGlow, false,
         float4(0.0, 0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0), radiance, transmittance);
 }
 

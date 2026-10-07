@@ -19,10 +19,10 @@ internal sealed class LightingPresentation
     private static readonly int s_worldLightRectId = Shader.PropertyToID("_WorldLightRect");
     private static readonly int s_worldLightDebugViewId = Shader.PropertyToID("_WorldLightDebugView");
     private static readonly int s_worldLightTextureSizeId = Shader.PropertyToID("_WorldLightTextureSize");
-    private static readonly int s_worldEmissionScaleId = Shader.PropertyToID("_WorldEmissionScale");
+    private static readonly int s_worldGlowScaleId = Shader.PropertyToID("_WorldGlowScale");
     private static readonly int s_worldAmbientOcclusionTextureId =
         Shader.PropertyToID("_WorldAmbientOcclusionTexture");
-    private static readonly int s_worldEmissionTextureId = Shader.PropertyToID("_WorldEmissionTexture");
+    private static readonly int s_worldGlowTextureId = Shader.PropertyToID("_WorldGlowTexture");
 
     private readonly LightingResourceManager _resources;
     private bool _disabledStatePublished;
@@ -53,8 +53,8 @@ internal sealed class LightingPresentation
         Shader.SetGlobalInteger(s_worldLightDebugViewId, 0);
         Shader.SetGlobalTexture(s_worldAmbientOcclusionTextureId, Texture2D.blackTexture);
         LightingFieldOrientation.PublishGlobals();
-        Shader.SetGlobalFloat(s_worldEmissionScaleId, LightingConfigHolder.EmissionScale);
-        Shader.SetGlobalTexture(s_worldEmissionTextureId, Texture2D.blackTexture);
+        Shader.SetGlobalFloat(s_worldGlowScaleId, LightingConfigHolder.GlowScale);
+        Shader.SetGlobalTexture(s_worldGlowTextureId, Texture2D.blackTexture);
         _disabledStatePublished = true;
     }
 
@@ -78,11 +78,11 @@ internal sealed class LightingPresentation
         _disabledStatePublished = false;
         Shader.SetGlobalTexture(s_worldLightTextureId, Texture2D.whiteTexture);
         Shader.SetGlobalTexture(s_worldAmbientOcclusionTextureId, ambientOcclusion);
-        Shader.SetGlobalTexture(s_worldEmissionTextureId, Texture2D.blackTexture);
+        Shader.SetGlobalTexture(s_worldGlowTextureId, Texture2D.blackTexture);
         LightingFieldOrientation.PublishGlobals();
         Shader.SetGlobalInteger(s_worldLightDebugViewId, 0);
         Shader.SetGlobalVector(s_worldLightTextureSizeId, new Vector4(1f, 1f, 1f, 1f));
-        Shader.SetGlobalFloat(s_worldEmissionScaleId, LightingConfigHolder.EmissionScale);
+        Shader.SetGlobalFloat(s_worldGlowScaleId, LightingConfigHolder.GlowScale);
         Shader.SetGlobalVector(
             s_worldLightRectId,
             new Vector4(
@@ -119,13 +119,13 @@ internal sealed class LightingPresentation
         Shader.SetGlobalTexture(s_worldLightTextureId, lightmap);
         Shader.SetGlobalTexture(s_worldAmbientOcclusionTextureId, ambientOcclusion);
         Shader.SetGlobalTexture(
-            s_worldEmissionTextureId,
-            (Texture?)_resources.StaticEmissionField ?? Texture2D.blackTexture);
+            s_worldGlowTextureId,
+            (Texture?)_resources.StaticGlowField ?? Texture2D.blackTexture);
         LightingFieldOrientation.PublishGlobals();
         TerrainSurfaceShaderGlobals.ApplyShaderGlobals();
 
         Shader.SetGlobalInteger(s_worldLightDebugViewId, (int)debugView);
-        Shader.SetGlobalFloat(s_worldEmissionScaleId, LightingConfigHolder.EmissionScale);
+        Shader.SetGlobalFloat(s_worldGlowScaleId, LightingConfigHolder.GlowScale);
         Shader.SetGlobalVector(
             s_worldLightTextureSizeId,
             new Vector4(

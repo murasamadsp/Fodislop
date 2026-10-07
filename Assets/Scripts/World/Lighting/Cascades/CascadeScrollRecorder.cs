@@ -43,7 +43,7 @@ internal sealed class CascadeScrollRecorder
     public void RecordWorldReanchor(
         CommandBuffer cmd,
         ComputeShader compute,
-        RenderTexture emission,
+        RenderTexture glow,
         Vector2Int cellDelta,
         int dirtyRegionCount,
         Action<CommandBuffer, ComputeShader, int, int, RenderTexture, RectInt, bool, int> recordCascade)
@@ -64,9 +64,9 @@ internal sealed class CascadeScrollRecorder
         int rowsKernel = _resources.BuildReanchorChangeRowsKernel;
         int columnsKernel = _resources.BuildReanchorChangeColumnsKernel;
         cmd.SetComputeTextureParam(compute, rowsKernel, "_ReanchorMaterial", _resources.ReanchorMaterial!);
-        cmd.SetComputeTextureParam(compute, rowsKernel, "_ReanchorEmission", _resources.ReanchorEmission!);
+        cmd.SetComputeTextureParam(compute, rowsKernel, "_ReanchorGlow", _resources.ReanchorGlow!);
         cmd.SetComputeTextureParam(compute, rowsKernel, LightingComputeBinder.MaterialFieldId, _resources.MaterialField!);
-        cmd.SetComputeTextureParam(compute, rowsKernel, LightingComputeBinder.EmissionFieldId, emission);
+        cmd.SetComputeTextureParam(compute, rowsKernel, LightingComputeBinder.GlowFieldId, glow);
         cmd.SetComputeBufferParam(compute, rowsKernel, "_ReanchorChangeRowsOutput", _resources.ReanchorRows!);
         cmd.DispatchCompute(compute, rowsKernel, (_resources.FieldHeight + 63) / 64, 1, 1);
         cmd.SetComputeBufferParam(compute, columnsKernel, "_ReanchorChangeRows", _resources.ReanchorRows!);
@@ -115,7 +115,7 @@ internal sealed class CascadeScrollRecorder
             cmd.SetComputeIntParam(compute, LightingComputeBinder.ReanchorFarPhaseMatchesId, farPhase ? 1 : 0);
             cmd.SetComputeIntParams(compute, LightingComputeBinder.ReanchorFarDeltaProbesId,
                 texelDelta.x / far.ProbeSpacing, texelDelta.y / far.ProbeSpacing);
-            recordCascade(cmd, compute, _resources.SolveCascadeKernel, i, emission,
+            recordCascade(cmd, compute, _resources.SolveCascadeKernel, i, glow,
                 new RectInt(0, 0, cascade.ProbeWidth, cascade.ProbeHeight), true, dirtyRegionCount);
         }
         cmd.SetComputeIntParam(compute, LightingComputeBinder.CascadeReanchorEnabledId, 0);
@@ -251,7 +251,7 @@ internal sealed class CascadeScrollRecorder
         ComputeShader compute,
         int solveKernel,
         int cascadeIndex,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         Vector2Int scrollDelta,
         RectInt dirtyProbeRect,
         Action<CommandBuffer, ComputeShader, int, int, RenderTexture, RectInt, bool, int> recordCascade)
@@ -286,7 +286,7 @@ internal sealed class CascadeScrollRecorder
                 compute,
                 solveKernel,
                 cascadeIndex,
-                emissionField,
+                glowField,
                 ClipProbeRect(
                     Mathf.Min(leadX, trailX) - marginProbes,
                     0,
@@ -309,7 +309,7 @@ internal sealed class CascadeScrollRecorder
                 compute,
                 solveKernel,
                 cascadeIndex,
-                emissionField,
+                glowField,
                 ClipProbeRect(
                     0,
                     Mathf.Min(leadY, trailY) - marginProbes,
@@ -328,7 +328,7 @@ internal sealed class CascadeScrollRecorder
                 compute,
                 solveKernel,
                 cascadeIndex,
-                emissionField,
+                glowField,
                 ClipProbeRect(
                     dirtyProbeRect.x,
                     dirtyProbeRect.y,

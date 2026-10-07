@@ -104,19 +104,19 @@ internal sealed class LightingFrameExecutor
         CommandBuffer commandBuffer,
         Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor terrainGeometry,
         Vector4 worldRect,
-        RectInt? rasterRect = null) =>
+        IReadOnlyList<RectInt>? rasterRects = null) =>
         _geometrySolver.RecordAmbientOcclusionField(
             commandBuffer,
             terrainGeometry,
             _geometryRegistry,
             worldRect,
-            rasterRect);
+            rasterRects);
 
     public void ConfigureSharedComputeParameters(
         CommandBuffer commandBuffer,
         Vector4 worldRect,
         float cellSize,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         LightingQualityMode quality,
         LightingEngine.DebugView debugView)
     {
@@ -131,7 +131,7 @@ internal sealed class LightingFrameExecutor
             cellSize,
             debugView,
             _resources.MaterialField!,
-            emissionField,
+            glowField,
             _resources.SolveCascadeKernel,
             _resources.ResolveDirectKernel,
             _resources.CompositeLightingKernel,
@@ -143,7 +143,7 @@ internal sealed class LightingFrameExecutor
         CommandBuffer commandBuffer,
         LightingFrameRequest request,
         Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor terrainGeometry,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         RenderTexture staticDirectTexture)
     {
         _executedStages.Clear();
@@ -155,7 +155,7 @@ internal sealed class LightingFrameExecutor
             {
                 _resources.EnsureReanchorFields();
                 commandBuffer.CopyTexture(_resources.MaterialField!, _resources.ReanchorMaterial!);
-                commandBuffer.CopyTexture(_resources.StaticEmissionField!, _resources.ReanchorEmission!);
+                commandBuffer.CopyTexture(_resources.StaticGlowField!, _resources.ReanchorGlow!);
             }
 
             _geometrySolver.RecordMaterialField(
@@ -168,8 +168,8 @@ internal sealed class LightingFrameExecutor
             _geometrySolver.PrepareCaches(commandBuffer, materialFieldRebuilt: true);
             _executedStages.Add("GeometryCache");
             RecordMaterialReadback(commandBuffer, "GeometryCache");
-            RectInt? aoRasterRect = request.AllowPartialAmbientOcclusion
-                ? LightingAmbientOcclusionUpdatePolicy.ResolveRasterRect(
+            IReadOnlyList<RectInt>? aoRasterRects = request.AllowPartialAmbientOcclusion
+                ? LightingAmbientOcclusionUpdatePolicy.ResolveRasterRects(
                     request.DirtyRegions,
                     new RectInt(
                         Mathf.RoundToInt(request.WorldRect.x / request.CellSize),
@@ -183,12 +183,21 @@ internal sealed class LightingFrameExecutor
                 commandBuffer,
                 terrainGeometry,
                 request.WorldRect,
-                aoRasterRect);
+                aoRasterRects);
             _executedStages.Add("AmbientOcclusionField");
             RecordMaterialReadback(commandBuffer, "AmbientOcclusionField");
         }
 
         bool staticRadianceChanged = request.StaticRadianceChanged;
+        if (request.DynamicLightCount > 0 &&
+            LightingConfigHolder.EnabledFeatures.HasFlag(LightingFeatureFlags.DynamicLights))
+        {
+            if (_geometrySolver.PrepareDynamicDistanceField(commandBuffer))
+            {
+                _executedStages.Add("DynamicSdfBuild");
+            }
+        }
+
         bool dynamicRadianceNeeded = request.DynamicRadianceChanged &&
             request.DynamicLightCount > 0;
         if (request.ClearDynamicRadiance)
@@ -202,7 +211,7 @@ internal sealed class LightingFrameExecutor
         {
             _staticSolver.RecordTrace(
                 commandBuffer,
-                emissionField,
+                glowField,
                 request.ReuseStaticAtlas,
                 request.RegionDelta,
                 request.DirtyRegions,
@@ -212,7 +221,7 @@ internal sealed class LightingFrameExecutor
             _staticSolver.RecordResolve(
                 commandBuffer,
                 request.DebugView,
-                emissionField,
+                glowField,
                 staticDirectTexture);
             _executedStages.Add("CascadeMerge");
         }

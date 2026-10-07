@@ -52,7 +52,6 @@ public class TerrainCellCache : ITerrainCellDataSource
         AtlasIndex = -1,
     };
 
-    private static CachedCellInfo UnloadedCellInfo => new() { Type = CellType.Unloaded };
 
     public int CacheMinX => _hasPending ? _pendingMinX : _cacheMinX;
     public int CacheMinY => _hasPending ? _pendingMinY : _cacheMinY;
@@ -79,10 +78,7 @@ public class TerrainCellCache : ITerrainCellDataSource
 
     public CachedCellInfo GetCell(int x, int y)
     {
-        CellType type = GetCellType(x, y);
-        return type == CellType.Unloaded
-            ? UnloadedCellInfo
-            : new CachedCellInfo { Type = type, Properties = RequireMetadata(type).Properties };
+        return new CachedCellInfo { Type = GetCellType(x, y) };
     }
 
     public CachedCellData GetCellData(int x, int y)
@@ -127,7 +123,6 @@ public class TerrainCellCache : ITerrainCellDataSource
 
         BeginCapture(minX - 1, minY - 1, full: true, 0, 0);
         CaptureRect(new RectInt(0, 0, _cacheWidth, _cacheHeight), layer, mm.WorldWidth, mm.WorldHeight);
-        wtm.RequestTexture(CellType.Empty);
     }
 
     /// <summary>Снять вошедшие полосы сдвига кэша на (dx, dy).</summary>
@@ -156,7 +151,6 @@ public class TerrainCellCache : ITerrainCellDataSource
         TerrainScrollBands bands = TerrainScrollBands.Resolve(_cacheWidth, _cacheHeight, dx, dy);
         CaptureRect(bands.ColumnBand, layer, mm.WorldWidth, mm.WorldHeight);
         CaptureRect(bands.RowBand, layer, mm.WorldWidth, mm.WorldHeight);
-        wtm.RequestTexture(CellType.Empty);
     }
 
     /// <summary>Снять изменённые клетки мира (координаты Unity) в границах кэша.</summary>
@@ -210,9 +204,9 @@ public class TerrainCellCache : ITerrainCellDataSource
     }
 
     /// <summary>
-    /// Разрешить метаданные всех снятых типов и подстановок фона (Road под
-    /// зданием, Empty под пустой клеткой). Последнее, что главный поток
-    /// делает перед передачей кэша рабочему.
+    /// Разрешить метаданные всех снятых типов и того, что лежит под ними
+    /// (TerrainCellData.UnderOf). Последнее, что главный поток делает перед
+    /// передачей кэша рабочему.
     /// </summary>
     public void ResolveCapturedTypes(
         IMapDataProvider mapData,
@@ -220,8 +214,6 @@ public class TerrainCellCache : ITerrainCellDataSource
         IReadOnlyList<IAtlasDescriptor> atlases)
     {
         _metadataCache.BeginPass();
-        _metadataCache.GetMetadata(CellType.Empty, mapData, textureService, atlases);
-        _metadataCache.GetMetadata(CellType.Road, mapData, textureService, atlases);
         for (int type = 0; type < _seenTypes.Length; type++)
         {
             if (!_seenTypes[type])
@@ -230,9 +222,15 @@ public class TerrainCellCache : ITerrainCellDataSource
             }
 
             _seenTypes[type] = false;
-            if ((CellType)type != CellType.Unloaded)
+            Resolve((CellType)type);
+            Resolve(TerrainCellData.UnderOf((CellType)type));
+        }
+
+        void Resolve(CellType cellType)
+        {
+            if (cellType != CellType.Unloaded)
             {
-                _metadataCache.GetMetadata((CellType)type, mapData, textureService, atlases);
+                _metadataCache.GetMetadata(cellType, mapData, textureService, atlases);
             }
         }
     }

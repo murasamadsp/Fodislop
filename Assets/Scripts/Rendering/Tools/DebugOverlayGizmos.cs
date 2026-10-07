@@ -92,7 +92,7 @@ public static class DebugOverlayGizmos
             if (type != CellType.Unloaded)
             {
                 var config = mapManager.GetCellConfig(type);
-                passable = type == CellType.Empty || ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
+                passable = ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
             }
         }
 

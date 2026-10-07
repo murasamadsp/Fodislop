@@ -59,9 +59,9 @@ internal static class TerrainQuadBuilder
 
         CachedCellData ccd = cellCache.GetCellData(cx, cy);
         CellType cellFgType = ccd.Type;
-        CellVisualProperties foregroundVisuals = MapCellConfigCatalog.GetVisualProperties(cellFgType);
+        BlockDefinition foregroundBlock = BlockRegistry.Get(cellFgType);
 
-        bool isDoor = !isBackground && foregroundVisuals.IsBuildingDoor;
+        bool isDoor = !isBackground && foregroundBlock.Outline == CellOutline.Door;
 
         if (ccd.State != TerrainCellState.Loaded)
         {
@@ -69,7 +69,7 @@ internal static class TerrainQuadBuilder
             return TerrainQuadResult.NoAtlas(isDoor);
         }
 
-        // Соседство клетки: маски, рельеф и автотайл считаются здесь же — тем
+        // Соседство клетки: маски, кайма и автотайл считаются здесь же — тем
         // же правилом, что шейдер выводит из соседей в буфере клеток.
         CachedCellData left = cellCache.GetCellData(cx - 1, cy);
         CachedCellData bottomLeft = cellCache.GetCellData(cx - 1, cy - 1);
@@ -82,59 +82,42 @@ internal static class TerrainQuadBuilder
 
         bool organicTerrain = distortion.EnableDistortion &&
             distortion.DistortionStyle == TerrainDistortionStyle.Organic &&
-            TerrainVertexDistortionCalculator.IsCause(ccd);
+            TerrainVertexDistortionCalculator.IsWavy(ccd);
         bool organicCause = !isBackground && organicTerrain;
         int organicEdges = 0;
-        bool needsOrganicUnderlay = false;
-        if (organicTerrain)
+        if (organicCause)
         {
-            needsOrganicUnderlay =
-                IsOrganicEmptyEdge(bottom) ||
-                IsOrganicEmptyEdge(right) ||
-                IsOrganicEmptyEdge(top) ||
-                IsOrganicEmptyEdge(left);
-            if (organicCause)
-            {
-                organicEdges = TerrainCellGeometry.EncodeOrganicEdges(
-                    OrganicEdgeBend(bottom, gridX, unityY, false, 1),
-                    OrganicEdgeBend(right, gridX + 1, unityY, true, -1),
-                    OrganicEdgeBend(top, gridX, unityY + 1, false, -1),
-                    OrganicEdgeBend(left, gridX, unityY, true, 1));
-            }
+            organicEdges = TerrainCellGeometry.EncodeOrganicEdges(
+                OrganicEdgeBend(bottom, gridX, unityY, false, 1),
+                OrganicEdgeBend(right, gridX + 1, unityY, true, -1),
+                OrganicEdgeBend(top, gridX, unityY + 1, false, -1),
+                OrganicEdgeBend(left, gridX, unityY, true, 1));
         }
 
-        CellType backgroundType = isBackground
-            ? TerrainCellLayers.ResolveBackground(cellFgType, ccd.Properties)
-            : cellFgType;
-
-        // Силуэт переднего плана считается до выбора слоя: от него зависит,
-        // нужна ли под ним подложка.
-        //
-        // Общие смещённые рёбра закрывают друг друга. Подложка нужна только
-        // там, где Organic врезает открытый край внутрь собственной клетки;
-        // внутри сплошного массива второй слой не рисуем.
-        bool foregroundFillsCell = !foregroundVisuals.IsRound && !needsOrganicUnderlay;
-
-        if (!TerrainCellLayers.TryGetType(
-            cellFgType, backgroundType, isBackground, foregroundFillsCell, out CellType cellType))
+        // Какой тип рисует слой. Фон (drawLayer Background или Underlay) лежит сам на себе и
+        // рисуется только фоном; у остального передний план — сама клетка,
+        // фон — подложка (drawLayer: Underlay в cells.json).
+        CellType backgroundType = UnderOf(cellFgType);
+        bool floor = backgroundType == cellFgType;
+        CellType cellType = isBackground ? backgroundType : cellFgType;
+        if ((floor && !isBackground) || cellType == CellType.Unloaded)
         {
             quad.Clear();
             return TerrainQuadResult.NoAtlas(isDoor);
         }
 
-        bool isSameCell = !isBackground || cellType == cellFgType;
-
-        TerrainTypeSurface type = TerrainCellPacker.ResolveTypeSurface(
+        TerrainTypeFields type = TerrainCellPacker.ResolveTypeFields(
             cellType,
-            GetRenderProperties(isSameCell, in ccd, cellType, sources.MetadataLookup),
+            GetMetadata(cellType, sources.MetadataLookup),
             atlases);
-        int atlasIndex = type.AtlasSlot;
+        BlockDefinition block = type.Block;
+        int atlasIndex = type.Slot;
 
         // Shared lattice offsets describe the deformable mass, not every
         // surface sharing its vertices. Roads/ground can occupy the foreground
         // layer too; a neighboring Cause must not warp their carrier or UVs.
         bool applyDistortion = !isBackground && distortion.EnableDistortion &&
-            TerrainVertexDistortionCalculator.IsCause(ccd);
+            TerrainVertexDistortionCalculator.IsWavy(ccd);
         Vector3 off00 = applyDistortion ? Node(sources, x, y) : Vector3.zero;
         Vector3 off10 = applyDistortion ? Node(sources, x + 1, y) : Vector3.zero;
         Vector3 off01 = applyDistortion ? Node(sources, x, y + 1) : Vector3.zero;
@@ -162,7 +145,7 @@ internal static class TerrainQuadBuilder
         int cornerSideMask = TerrainCellMaskCalculator.CalculateCornerSideMask(ccd, left, right, top, bottom);
         bool useNeighborVariants =
             !isBackground &&
-            foregroundVisuals.IsBuildingWall &&
+            foregroundBlock.Outline == CellOutline.Wall &&
             cornerSideMask != 0;
         bool tiling = type.HasTileGroup || useNeighborVariants;
 
@@ -171,14 +154,14 @@ internal static class TerrainQuadBuilder
             descriptor = ResolveBuildingWallVariant(descriptor, cornerSideMask);
         }
 
-        bool hasRoundedPhysicalContour = !isBackground && type.ForegroundRoundable;
+        bool hasRoundedPhysicalContour = !isBackground && block.Outline == CellOutline.Round;
 
         // Маска соседства кладётся и фоновым квадам тоже.
         //
-        // ЗАЧЕМ. Клетке пола нужно знать, что над ней твёрдый блок, — иначе
+        // ЗАЧЕМ. Клетке пола нужно знать, что над ней блок, — иначе
         // шейдеру нечем нарисовать падающую от блока тень, а без тени
         // выдавленность блока читается как обводка, а не как высота. Маска в
-        // (x, y) описывает твёрдость соседей этой клетки в переднем плане, что
+        // (x, y) описывает какие соседи — блоки этой клетки в переднем плане, что
         // фону и требуется: бит 1 означает «сверху блок».
         //
         // ПОЧЕМУ ЭТО БЕЗОПАСНО. Единственный прежний потребитель битов 0-3 —
@@ -186,29 +169,30 @@ internal static class TerrainQuadBuilder
         // который у фона всегда снят. Поле материалов трогает маску только под
         // тем же флагом. Так что до этой правки у фона стоял ноль не по
         // смыслу, а потому что читать его было некому.
-        byte solidConnectivityMask = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(top, left, bottom, right);
-        // Кайма рельефа — только у переднего плана: фон её не рисует, а
-        // ring-адрес у фонового текселя тот же, и чужой код рельефа въехал бы
+        byte foregroundSides = TerrainCellMaskCalculator.CalculateForegroundSidesMask(top, left, bottom, right);
+        // Кайма — только у переднего плана: фон её не рисует, а
+        // ring-адрес у фонового текселя тот же, и чужой код каймы въехал бы
         // в соседний слой.
-        TerrainCellMaskCalculator.CalculateReliefMasks(
+        TerrainCellMaskCalculator.CalculateRimMasks(
             ccd, top, left, bottom, right, topLeft, topRight, bottomLeft, bottomRight,
-            out byte reliefMask,
-            out byte reliefCornerMask);
+            out byte rimMask,
+            out byte rimCornerMask);
         // Серверная группа определяет наличие фаски. Без проверки группа 0
-        // получает reliefCode=1 и рисует фаску по всем четырём сторонам.
-        bool hasRelief = !isBackground &&
-            ccd.ReliefGroup != 0;
-        // Масса для света — твёрдый (непроходимый) передний план.
-        bool isPhysicalMass = !isBackground && type.Solid;
+        // получает rimCode=1 и рисует фаску по всем четырём сторонам.
+        bool hasRim = !isBackground &&
+            ccd.RimMass != 0;
+        // Масса для света — передний план-блок.
+        bool isPhysicalMass = !isBackground && block.DrawLayer == CellDrawLayer.Foreground;
+        byte glow = TerrainCellData.GlowByte(block.Glow);
         TerrainLightingData lightingData = TerrainLightingData.Pack(
-            solidConnectivityMask,
-            type.IsGlowing,
+            foregroundSides,
+            glow != 0,
             hasRoundedPhysicalContour,
             isPhysicalMass,
-            type.EmissionPower,
-            reliefMask,
-            hasRelief,
-            reliefCornerMask);
+            TerrainCellData.GlowOf(glow),
+            rimMask,
+            hasRim,
+            rimCornerMask);
         float zOffset = isBackground ? 0.1f : 0.0f;
         float lx = x * cellSize;
         float ly = y * cellSize;
@@ -230,39 +214,34 @@ internal static class TerrainQuadBuilder
 
         // Текстуры нет — шейдер рисует клетку диагностическим шумом по
         // мировой клетке (SampleMissingTexture), а не тихой дырой в кадре.
-        float animOffset = ResolveAnimationOffset(
-            type.AnimationSettings, type.Animation, type.HasAtlasRect, gridX, serverY);
+        float animOffset = ResolveAnimationOffset(block, type.HasAtlasRect, gridX, serverY);
 
+        // Анимация и поверхность — свои поля; скорость — из half строки.
         Vector4 animDataVec = new(
-            (float)type.Animation,
-            type.AnimationSettings.Speed,
+            (float)block.AnimationType,
+            TerrainCellData.HalfValue(TerrainCellData.HalfBits(block.AnimationSpeed)),
             animOffset,
-            (float)type.AnimationSettings.Profile);
+            (float)block.SurfaceEffect);
         Vector4 tileSizeVec = new Vector4(type.TileSize, type.TileSize, (float)type.FrameCount, type.FrameHeightTiles);
-        // Признак сплошного листа — бит 5 в z, над колонкой тайлгруппы
+        // Признак текстуры по миру — бит 5 в z, над колонкой тайлгруппы
         // (она занимает биты 0-4). В w его класть нельзя: там значение
         // больше 1.5 уже означает «отбросить», и Terrain.shader вместе с
         // TerrainCellBuilder выкидывали по нему всю породу и все кристаллы.
         int packedColumn = descriptor & 0x1F;
-        if (type.ContinuousSheet)
+        if (block.TextureAnchor == CellTextureAnchor.World)
         {
             packedColumn |= 32;
         }
 
         Vector4 worldPosVec = new Vector4(gridX, serverY, packedColumn, tiling ? 1f : 0f);
 
-        // Read RGB directly from Color32 bytes — no intermediate Color allocation
-        Color32 lightColor = type.LightColor;
-        int packedLightingColor = lightColor.r |
-            (lightColor.g << 8) |
-            (lightColor.b << 16);
-
         float decalPlacement = TerrainDecalCatalog.Place(
-            isBackground ? TerrainDecalCatalog.GroundRule : TerrainDecalCatalog.RuleOf(type.ForegroundDecal),
+            TerrainDecalCatalog.RuleOf(block.DecalAtlas),
             gridX,
             serverY);
+        // x свободен: цвет блика шейдер берёт из альбедо.
         Vector4 glowVec = new Vector4(
-            packedLightingColor,
+            0f,
             lightingData.PackedFlags,
             lightingData.PackedContour,
             decalPlacement);
@@ -298,23 +277,23 @@ internal static class TerrainQuadBuilder
         int inwardSign)
     {
         if (neighbor.State != TerrainCellState.Loaded ||
-            TerrainVertexDistortionCalculator.IsBlock(neighbor) ||
-            (!TerrainVertexDistortionCalculator.IsCause(neighbor) && !IsOrganicEmptyEdge(neighbor)))
+            TerrainVertexDistortionCalculator.Holds(neighbor) ||
+            (!TerrainVertexDistortionCalculator.IsWavy(neighbor) && !IsOrganicEmptyEdge(neighbor)))
         {
             return 0;
         }
 
         int bend = TerrainVertexDistortionCalculator.ComputeOrganicEdgeBend(edgeX, edgeY, vertical);
-        return TerrainVertexDistortionCalculator.IsCause(neighbor)
+        return TerrainVertexDistortionCalculator.IsWavy(neighbor)
             ? bend
             : Math.Min(Math.Abs(bend), 1) * inwardSign;
     }
 
     private static bool IsOrganicEmptyEdge(CachedCellData neighbor) =>
         neighbor.State == TerrainCellState.Loaded &&
-        neighbor.Type == CellType.Empty &&
-        !TerrainVertexDistortionCalculator.IsBlock(neighbor) &&
-        !TerrainVertexDistortionCalculator.IsCause(neighbor);
+        UnderOf(neighbor.Type) == neighbor.Type &&
+        !TerrainVertexDistortionCalculator.Holds(neighbor) &&
+        !TerrainVertexDistortionCalculator.IsWavy(neighbor);
 
     /// <summary>
     /// Вариант стены здания по соседним углам.
@@ -365,31 +344,32 @@ internal static class TerrainQuadBuilder
     /// Без текстуры разброса нет: клетка рисуется плоским цветом миникарты, и
     /// анимировать в ней нечего.
     private static float ResolveAnimationOffset(
-        TerrainAnimationSettings animationSettings,
-        CellAnimationType animType,
+        BlockDefinition block,
         bool hasAtlasRect,
         int gridX,
         int serverY)
     {
         if (!hasAtlasRect)
         {
-            return animationSettings.PaletteIndex;
+            return block.SurfaceEffectPalette;
         }
 
-        if (animationSettings.Profile == TerrainAnimationProfile.Default &&
-            animType == CellAnimationType.Blinking)
+        if (block.AnimationType == CellAnimationType.Blinking)
         {
             uint seed = HashCell(gridX, serverY);
             return (seed % 6283) / 1000f;
         }
 
-        if (animationSettings.Profile == TerrainAnimationProfile.FacetedCrystal)
+        if (block.SurfaceEffect == CellSurfaceEffect.Faceted)
         {
             return (HashCell(gridX, serverY) & 0xFFFF) / 65536f;
         }
 
-        return animationSettings.PaletteIndex;
+        return block.SurfaceEffectPalette;
     }
+
+    internal static CellType UnderOf(CellType type) =>
+        BlockRegistry.Get(type).DrawLayer != CellDrawLayer.Foreground ? type : BlockRegistry.UnderlayType;
 
     private static uint HashCell(int gridX, int serverY)
     {
@@ -398,40 +378,13 @@ internal static class TerrainQuadBuilder
         return seed ^ (seed >> 16);
     }
 
-    private static TerrainCellPacker.CellRenderProperties GetRenderProperties(
-        bool isSameCell,
-        in CachedCellData ccd,
-        CellType cellType,
-        ITerrainMetadataLookup metadataLookup)
-    {
-        if (isSameCell)
-        {
-            return new TerrainCellPacker.CellRenderProperties(
-                ccd.AtlasRect,
-                ccd.UVTileSize,
-                ccd.Animation,
-                ccd.AnimationSpeed,
-                ccd.AnimationFrameCount,
-                ccd.FrameHeightTiles,
-                ccd.HasTileGroup,
-                ccd.TileGroupId,
-                ccd.Properties,
-                ccd.MinimapColor,
-                ccd.AtlasIndex,
-                ccd.Distortion,
-                ccd.ReliefGroup);
-        }
-
-        // Без фолбеков: промах означает, что прогрев не покрыл тип. Тихая
-        // подстановка пустой метаданности нарисовала бы правдоподобную
-        // подделку вместо того, чтобы показать дефект.
-        if (!metadataLookup.TryGet(cellType, out CellMetadata meta))
-        {
-            throw new InvalidOperationException(
+    // Без фолбеков: промах означает, что прогрев не покрыл тип. Тихая
+    // подстановка пустой метаданности нарисовала бы правдоподобную подделку
+    // вместо того, чтобы показать дефект.
+    private static CellMetadata GetMetadata(CellType cellType, ITerrainMetadataLookup metadataLookup) =>
+        metadataLookup.TryGet(cellType, out CellMetadata meta)
+            ? meta
+            : throw new InvalidOperationException(
                 $"Terrain metadata for cell type '{cellType}' was not warmed before the build.");
-        }
-
-        return TerrainCellPacker.FromMetadata(in meta);
-    }
 
 }

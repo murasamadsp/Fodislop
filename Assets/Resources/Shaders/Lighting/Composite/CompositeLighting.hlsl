@@ -3,7 +3,7 @@
 
 // CompositeLighting: финальная сборка изображения.
 //
-// READS: _DirectInput, _StaticDirectInput, _MaterialField, _EmissionField, _SurfaceAirCache
+// READS: _DirectInput, _StaticDirectInput, _MaterialField, _GlowField, _SurfaceAirCache
 // WRITES: _Result
 // MUST NOT: вызывать DDA, трогать каскады, источники
 
@@ -83,7 +83,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     int2 materialPixel = MaterialPixel(LightPxToFieldTexel(pixel));
 
     float4 material = _MaterialField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
-    float4 emission = _EmissionField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
+    float4 glow = _GlowField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
     if (_DebugView == 1) // Occupancy
     {
         _Result[pixel] = float4(material.aaa, 1.0);
@@ -96,9 +96,9 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    if (_DebugView == 3) // Emission
+    if (_DebugView == 3) // Glow
     {
-        _Result[pixel] = float4(emission.rgb, 1.0);
+        _Result[pixel] = float4(glow.rgb, 1.0);
         return;
     }
 
@@ -109,7 +109,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     // динамической.
     //
     // ЗАЧЕМ. В этом отладочном виде ResolveDirect выходит раньше и пишет одну
-    // прозрачность, без всякой эмиссии, — обе половины содержат одно и то же,
+    // прозрачность, без всякой свечения, — обе половины содержат одно и то же,
     // и опасаться загрязнения статикой здесь не от чего. Зато динамическая
     // половина решается только когда в кадре есть хоть один динамический
     // источник, а иначе её текстуру просто обнуляют (ClearDynamicDirect). Вид
@@ -121,7 +121,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         // Берётся та половина, которая в этом кадре решалась.
         //
         // В этом отладочном виде ResolveDirect выходит раньше и пишет одну
-        // прозрачность, без эмиссии, — обе половины содержат одно и то же,
+        // прозрачность, без свечения, — обе половины содержат одно и то же,
         // и выбирать между ними по смыслу не из чего. Зато пропущена может
         // быть любая: динамическая не решается, когда в кадре нет ни одного
         // динамического источника (её текстуру тогда обнуляют), а статическая
@@ -162,7 +162,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     if (_DebugView == 8) // Exposure (false-color zebras)
     {
         // Шкала в стопах от белого, а не от единицы: контент HDR by design
-        // (эмиссия до EmissionScale), а URP Neutral гасит света плавно.
+        // (свечение до GlowScale), а URP Neutral гасит света плавно.
         // Красный — только то что сгорит и после тонмаппа (выше потолка
         // _MaximumLightMultiplier, +3 стопа), жёлтое — рабочий HDR-запас.
         float ceiling = max(_MaximumLightMultiplier, 1.0);

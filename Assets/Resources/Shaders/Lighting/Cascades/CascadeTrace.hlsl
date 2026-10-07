@@ -3,7 +3,7 @@
 
 // SolveCascade: DDA traversal каскадов и запись в атлас.
 //
-// READS: _MaterialField, _EmissionField, _RadianceAtlas[cascade+1]
+// READS: _MaterialField, _GlowField, _RadianceAtlas[cascade+1]
 // WRITES: _RadianceAtlas[cascade]
 // MAY: вызывать DDA (TraceRadianceSegment)
 // MUST NOT: писать финальный свет, трогать DynamicLight buffers
@@ -278,8 +278,8 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
 
         // Every child path below runs from this probe's interval start to a
         // neighbouring far probe's interval start. If the whole neighbourhood
-        // is one clean medium — air (no occupancy, no emission in any texel)
-        // or stone (full occupancy, no emission, entirely inside the field) —
+        // is one clean medium — air (no occupancy, no glow in any texel)
+        // or stone (full occupancy, no glow, entirely inside the field) —
         // each path is exactly uniform transport: zero radiance and
         // closed-form transmittance, the same product DDA would accumulate.
         // Any surface, silhouette edge or emitter in the box keeps the full

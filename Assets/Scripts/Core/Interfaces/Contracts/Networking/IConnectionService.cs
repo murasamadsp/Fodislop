@@ -17,6 +17,8 @@ public interface IConnectionService
     void HandleServerReconnect();
     void Send(ClientPacket packet);
     event Action<ServerPacket>? OnPacketReceived;
+    event Action? OnPacketBatchStarted;
+    event Action? OnPacketBatchCompleted;
     event Action<string>? OnReconnectStatusChanged;
     event Action<string>? OnDisconnectReason;
     event Action? OnReconnectHidden;

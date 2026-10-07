@@ -8,11 +8,11 @@ using System;
 internal enum TerrainLightingFlags : byte
 {
     None = 0,
-    SolidTop = 1 << 0,
-    SolidLeft = 1 << 1,
-    SolidBottom = 1 << 2,
-    SolidRight = 1 << 3,
-    Emissive = 1 << 4,
+    ForegroundTop = 1 << 0,
+    ForegroundLeft = 1 << 1,
+    ForegroundBottom = 1 << 2,
+    ForegroundRight = 1 << 3,
+    Glow = 1 << 4,
     PhysicalMass = 1 << 5,
 }
 
@@ -20,19 +20,19 @@ internal enum TerrainLightingFlags : byte
 // Assets/Shaders/Terrain/TerrainLightingData.hlsl.
 internal readonly struct TerrainLightingData
 {
-    public const byte SolidBoundaryMask = 0x0F;
+    public const byte ForegroundSidesMask = 0x0F;
 
-    private const float EmissionFractionScale = 0.25f;
-    private const int ReliefCodeShift = 5;
-    private const int ReliefCodeRange = 1 << ReliefCodeShift;
+    private const float GlowFractionScale = 0.25f;
+    private const int RimCodeShift = 5;
+    private const int RimCodeRange = 1 << RimCodeShift;
 
     // Бит 0 — roundable contour, биты 1-4 свободны,
-    // биты 5-9 — код сторон рельефа, биты 10-13 — вогнутые углы.
+    // биты 5-9 — код сторон каймы, биты 10-13 — вогнутые углы.
     // Код сторон, а не маска:
-    // ноль означает «клетка без рельефа, каймы нет», а маска рельефа
-    // хранится как mask + 1. Иначе клетка без рельефа и клетка, у которой
+    // ноль означает «клетка без каймы, каймы нет», а маска каймы
+    // хранится как mask + 1. Иначе клетка без каймы и клетка, у которой
     // все четыре соседа чужие, выглядели бы одинаково.
-    public const int NoRelief = 0;
+    public const int NoRim = 0;
     private const int RoundableContourFlag = 1 << 0;
 
     public TerrainLightingData(float packedFlags, float packedContour)
@@ -48,13 +48,13 @@ internal readonly struct TerrainLightingData
     public TerrainLightingFlags Flags =>
         (TerrainLightingFlags)(byte)MathF.Floor(PackedFlags + 0.0001f);
 
-    public int SolidBoundary => (int)Flags & SolidBoundaryMask;
+    public int ForegroundSides => (int)Flags & ForegroundSidesMask;
 
-    public int ReliefCode => ((int)MathF.Round(PackedContour) >> ReliefCodeShift) & 0x1F;
+    public int RimCode => ((int)MathF.Round(PackedContour) >> RimCodeShift) & 0x1F;
 
-    public int ReliefCornerMask => ((int)MathF.Round(PackedContour) >> 10) & SolidBoundaryMask;
+    public int RimCornerMask => ((int)MathF.Round(PackedContour) >> 10) & ForegroundSidesMask;
 
-    public bool IsEmissive => (Flags & TerrainLightingFlags.Emissive) != 0;
+    public bool Glows => (Flags & TerrainLightingFlags.Glow) != 0;
 
     public bool IsPhysicalMass => (Flags & TerrainLightingFlags.PhysicalMass) != 0;
 
@@ -63,29 +63,29 @@ internal readonly struct TerrainLightingData
     public bool IsRoundable =>
         ((int)MathF.Round(PackedContour) & RoundableContourFlag) != 0;
 
-    public float EmissionStrength => IsEmissive
-        ? Math.Clamp((PackedFlags - MathF.Floor(PackedFlags)) / EmissionFractionScale, 0f, 1f)
+    public float Glow => Glows
+        ? Math.Clamp((PackedFlags - MathF.Floor(PackedFlags)) / GlowFractionScale, 0f, 1f)
         : 0f;
 
     // Дробная часть PackedFlags. Отдельной функцией, потому что строка типа
     // хранит её готовой, и шейдер складывает её с целыми флагами так же.
-    public static float EmissionFraction(float emissionStrength) =>
-        TerrainCellData.EmissionFraction(emissionStrength);
+    public static float GlowFraction(float glow) =>
+        TerrainCellData.GlowFraction(glow);
 
     public static TerrainLightingData Pack(
-        byte solidConnectivityMask,
-        bool isGlowing,
+        byte foregroundSides,
+        bool glows,
         bool hasRoundedPhysicalContour,
         bool isPhysicalMass,
-        float emissionStrength,
-        byte reliefMask,
-        bool hasRelief,
-        byte reliefCornerMask = 0)
+        float glow,
+        byte rimMask,
+        bool hasRim,
+        byte rimCornerMask = 0)
     {
-        var flags = (TerrainLightingFlags)(solidConnectivityMask & SolidBoundaryMask);
-        if (isGlowing)
+        var flags = (TerrainLightingFlags)(foregroundSides & ForegroundSidesMask);
+        if (glows)
         {
-            flags |= TerrainLightingFlags.Emissive;
+            flags |= TerrainLightingFlags.Glow;
         }
 
         if (isPhysicalMass)
@@ -94,10 +94,10 @@ internal readonly struct TerrainLightingData
         }
 
         int contourFlags = hasRoundedPhysicalContour ? RoundableContourFlag : 0;
-        int reliefCode = hasRelief ? (reliefMask & SolidBoundaryMask) + 1 : NoRelief;
-        int packedReliefCorners = hasRelief ? (reliefCornerMask & SolidBoundaryMask) << 10 : 0;
+        int rimCode = hasRim ? (rimMask & ForegroundSidesMask) + 1 : NoRim;
+        int packedRimCorners = hasRim ? (rimCornerMask & ForegroundSidesMask) << 10 : 0;
         return new TerrainLightingData(
-            (byte)flags + EmissionFraction(emissionStrength),
-            contourFlags + (reliefCode * ReliefCodeRange) + packedReliefCorners);
+            (byte)flags + GlowFraction(glow),
+            contourFlags + (rimCode * RimCodeRange) + packedRimCorners);
     }
 }

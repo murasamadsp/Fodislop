@@ -5,7 +5,7 @@ namespace Kern.World.Lighting;
 // Tight per-cascade probe rect for dependency-mask solves.
 //
 // A probe entry changes only if its transport inputs changed: geometry or
-// emission along its ray segment, or the far-field values it reads. The far
+// glow along its ray segment, or the far-field values it reads. The far
 // cascade solves its own rect from the same dirty bounds, so a near probe is
 // covered when every probe whose segment can touch the dirty bounds is
 // dispatched. Segment reach is bounded by the cascade interval length, hence
