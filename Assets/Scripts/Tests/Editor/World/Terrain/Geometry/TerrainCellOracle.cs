@@ -22,7 +22,9 @@ internal sealed class TerrainCellOracle(
     Func<int, int, TerrainCell> cellAt,
     Func<int, int, TerrainVertexOffset> nodeAt,
     Func<uint, TerrainTypeRow> typeOf,
+    Func<int, int> atlasSize,
     uint[] tileDescriptors,
+    uint groundType,
     uint groundDecalRule,
     uint rockDecalRule,
     int worldHeight,
@@ -54,10 +56,9 @@ internal sealed class TerrainCellOracle(
             nbType[i] = nb[i] & 0xFFu;
         }
 
-        uint fgFlags = typeOf(fgType).BZ;
-        bool fgEmpty = (fgFlags & (1u << 22)) != 0;
-        bool fgCause = (fgFlags & (1u << 20)) != 0;
-        bool fgRoundable = (fgFlags & (1u << 19)) != 0;
+        uint fgLook = typeOf(fgType).Look;
+        bool fgEmpty = Bit(fgLook, 3);
+        bool fgCause = Outline(fgLook) == 1;
         bool organicTerrain = organicEdges && fgCause;
 
         uint typeIndex = 0;
@@ -69,11 +70,7 @@ internal sealed class TerrainCellOracle(
             }
             else
             {
-                uint bg = (cell >> 8) & 0xFFu;
-                bool underlay = organicTerrain &&
-                    (EmptyEdge(nbType[Bottom]) || EmptyEdge(nbType[Right]) || EmptyEdge(nbType[Top]) || EmptyEdge(nbType[Left]));
-                bool fills = !fgRoundable && !underlay;
-                typeIndex = fgEmpty || (bg != 0 && (bg != fgType || !fills)) ? bg : 0u;
+                typeIndex = Under(fgType);
             }
         }
 
@@ -97,13 +94,13 @@ internal sealed class TerrainCellOracle(
         if (typeIndex != 0 && !foreground)
         {
             bool occluded = !fgEmpty &&
-                (fgFlags & ((1u << 23) | (1u << 19))) == 1u << 23 &&
-                (typeOf(fgType).BW & (1u << 5)) != 0;
+                HasRect(typeOf(fgType)) && Outline(fgLook) != 3 &&
+                Bit(fgLook, 4);
             if (occluded && fgAnchored)
             {
                 for (int i = 0; i < 8; i++)
                 {
-                    occluded &= SolidMass(nbType[i]);
+                    occluded &= OpaqueMass(nbType[i]);
                 }
             }
 
@@ -111,32 +108,33 @@ internal sealed class TerrainCellOracle(
         }
 
         TerrainTypeRow type = typeOf(typeIndex);
-        int atlasIndex = typeIndex != 0 ? (int)(type.BX >> 24) : -1;
+        int atlasIndex = typeIndex != 0 ? (int)(type.Look & 7u) : -1;
+        float size = typeIndex != 0 ? atlasSize(atlasIndex) : 1f;
         Assert.That(atlasIndex, Is.EqualTo(result.AtlasIndex), $"{where}: слот атласа");
         if (typeIndex == 0)
         {
             return;
         }
 
-        uint flags = type.BZ;
-        uint near = type.BW;
+        uint look = type.Look;
+
         int serverY = worldHeight - 1 - unityY;
 
         var layerTypes = new uint[8];
         for (int i = 0; i < 8; i++)
         {
-            layerTypes[i] = foreground ? nbType[i] : (nb[i] >> 8) & 0xFFu;
+            layerTypes[i] = foreground ? nbType[i] : Under(nbType[i]);
         }
 
         uint descriptor = 0;
-        bool tiling = (near & (1u << 2)) != 0;
+        bool tiling = TileCode(type) != 0;
         if (tiling)
         {
             uint mask = 0;
             for (int i = 0; i < 8; i++)
             {
-                uint other = typeOf(layerTypes[i]).BW;
-                if ((other & (1u << 2)) != 0 && other >> 24 == near >> 24)
+                TerrainTypeRow other = typeOf(layerTypes[i]);
+                if (TileCode(other) != 0 && TileCode(other) == TileCode(type))
                 {
                     mask |= 1u << i;
                 }
@@ -145,7 +143,7 @@ internal sealed class TerrainCellOracle(
             descriptor = (tileDescriptors[mask >> 2] >> (int)((mask & 3u) * 8u)) & 0xFFu;
         }
 
-        if (foreground && (near & (1u << 3)) != 0)
+        if (foreground && Outline(look) == 4)
         {
             uint side = (Corner(nbType[Left]) ? 1u : 0u) | (Corner(nbType[Right]) ? 2u : 0u) |
                 (Corner(nbType[Top]) ? 4u : 0u) | (Corner(nbType[Bottom]) ? 8u : 0u);
@@ -156,32 +154,42 @@ internal sealed class TerrainCellOracle(
             }
         }
 
-        uint solid = (Solid(nbType[Top]) ? 1u : 0u) | (Solid(nbType[Left]) ? 2u : 0u) |
-            (Solid(nbType[Bottom]) ? 4u : 0u) | (Solid(nbType[Right]) ? 8u : 0u);
-        uint lightingFlags = solid |
-            (((flags >> 16) & 1u) << 4) |
-            (foreground && ((flags >> 17) & 1u) != 0 ? 32u : 0u);
+        uint foregroundSides = (IsForeground(nbType[Top]) ? 1u : 0u) | (IsForeground(nbType[Left]) ? 2u : 0u) |
+            (IsForeground(nbType[Bottom]) ? 4u : 0u) | (IsForeground(nbType[Right]) ? 8u : 0u);
+        uint glow = (type.SpeedGlowTile >> 16) & 0xFFu;
+        uint lightingFlags = foregroundSides |
+            (glow != 0 ? 16u : 0u) |
+            (foreground && !Bit(look, 3) ? 32u : 0u);
         uint contour = 0;
         if (foreground)
         {
-            contour = ((flags >> 19) & 1u) != 0 ? 1u : 0u;
-            if (((near >> 16) & 0xFFu) != 0)
+            contour = Outline(look) == 3 ? 1u : 0u;
+            if (Rim(type) != 0)
             {
-                bool t = Same(near, nbType[Top]), l = Same(near, nbType[Left]);
-                bool b = Same(near, nbType[Bottom]), r = Same(near, nbType[Right]);
-                uint relief = (t ? 1u : 0u) | (l ? 2u : 0u) | (b ? 4u : 0u) | (r ? 8u : 0u);
-                uint corners = (b && l && !Same(near, nbType[BottomLeft]) ? 1u : 0u) |
-                    (b && r && !Same(near, nbType[BottomRight]) ? 2u : 0u) |
-                    (t && r && !Same(near, nbType[TopRight]) ? 4u : 0u) |
-                    (t && l && !Same(near, nbType[TopLeft]) ? 8u : 0u);
-                contour += ((relief + 1) * 32) + (corners << 10);
+                bool t = Same(Rim(type), nbType[Top]), l = Same(Rim(type), nbType[Left]);
+                bool b = Same(Rim(type), nbType[Bottom]), r = Same(Rim(type), nbType[Right]);
+                uint rim = (t ? 1u : 0u) | (l ? 2u : 0u) | (b ? 4u : 0u) | (r ? 8u : 0u);
+                uint corners = (b && l && !Same(Rim(type), nbType[BottomLeft]) ? 1u : 0u) |
+                    (b && r && !Same(Rim(type), nbType[BottomRight]) ? 2u : 0u) |
+                    (t && r && !Same(Rim(type), nbType[TopRight]) ? 4u : 0u) |
+                    (t && l && !Same(Rim(type), nbType[TopLeft]) ? 8u : 0u);
+                contour += ((rim + 1) * 32) + (corners << 10);
             }
         }
 
-        float packedFlags = lightingFlags + BitConverter.Int32BitsToSingle(unchecked((int)type.BY));
-        uint decalRule = !foreground ? groundDecalRule
-            : (near & 3u) == 1 ? groundDecalRule
-            : (near & 3u) == 2 ? rockDecalRule
+        // Свечение — байт 0..255, доля после масштаба — четверть.
+        float packedFlags = lightingFlags + glow * (1f / 255f) * 0.25f;
+        // Размер тайла и высота кадра не хранятся: 32 текселя на размер атласа
+        // слота и высота прямоугольника на размер тайла.
+        float tile = 32f / atlasSize(atlasIndex);
+        // Прямоугольник — пиксели по 12 бит, в UV делятся на размер атласа.
+        var rect = new Vector4(
+            (type.AtlasXY & 0xFFFu) / size, ((type.AtlasXY >> 12) & 0xFFFu) / size,
+            (type.AtlasWH & 0xFFFu) / size, ((type.AtlasWH >> 12) & 0xFFFu) / size);
+        float frameHeight = rect.w > 0f ? rect.w / tile : 1f;
+        uint decal = (look >> 17) & 3u;
+        uint decalRule = decal == 1 ? groundDecalRule
+            : decal == 2 ? rockDecalRule
             : 0u;
 
         uint organic = 0;
@@ -202,7 +210,10 @@ internal sealed class TerrainCellOracle(
         }
 
         uint uvBits = CornerUvBits(descriptor, tiling);
-        float phase = Phase(flags, gridX, serverY);
+        uint animation = (look >> 10) & 3u;
+        uint surface = (look >> 12) & 3u;
+        float speed = Mathf.HalfToFloat((ushort)(type.SpeedGlowTile & 0xFFFFu));
+        float phase = Phase((look >> 14) & 7u, HasRect(type), animation == 1, surface == 2, gridX, serverY);
         for (int corner = 0; corner < 4; corner++)
         {
             TerrainVertex v = quad[corner];
@@ -211,60 +222,76 @@ internal sealed class TerrainCellOracle(
             Assert.That(v.UV0x, Is.EqualTo(TerrainVertex.H((uvBits >> (corner * 2)) & 1u)), $"{at}: u");
             Assert.That(v.UV0y, Is.EqualTo(TerrainVertex.H((uvBits >> ((corner * 2) + 1)) & 1u)), $"{at}: v");
 
-            Assert.That(v.UV1x, Is.EqualTo((ushort)type.AX), $"{at}: атлас x");
-            Assert.That(v.UV1y, Is.EqualTo((ushort)(type.AX >> 16)), $"{at}: атлас y");
-            Assert.That(v.UV1z, Is.EqualTo((ushort)type.AY), $"{at}: атлас z");
-            Assert.That(v.UV1w, Is.EqualTo((ushort)(type.AY >> 16)), $"{at}: атлас w");
+            AssertFloat(v.UV1.x, rect.x, $"{at}: атлас x");
+            AssertFloat(v.UV1.y, rect.y, $"{at}: атлас y");
+            AssertFloat(v.UV1.z, rect.z, $"{at}: атлас z");
+            AssertFloat(v.UV1.w, rect.w, $"{at}: атлас w");
 
-            Assert.That(v.UV2x, Is.EqualTo((ushort)type.AZ), $"{at}: тайл x");
-            Assert.That(v.UV2y, Is.EqualTo((ushort)type.AZ), $"{at}: тайл y");
-            Assert.That(v.UV2z, Is.EqualTo((ushort)(type.AZ >> 16)), $"{at}: кадры");
-            Assert.That(v.UV2w, Is.EqualTo((ushort)type.AW), $"{at}: высота кадра");
+            Assert.That(v.UV2x, Is.EqualTo(TerrainVertex.H(tile)), $"{at}: тайл x");
+            Assert.That(v.UV2y, Is.EqualTo(TerrainVertex.H(tile)), $"{at}: тайл y");
+            Assert.That(v.UV2z, Is.EqualTo(TerrainVertex.H(type.AtlasXY >> 24)), $"{at}: кадры");
+            Assert.That(v.UV2w, Is.EqualTo(TerrainVertex.H(frameHeight)), $"{at}: высота кадра");
 
             AssertFloat(v.UV3.x, gridX, $"{at}: мировой x");
             AssertFloat(v.UV3.y, serverY, $"{at}: серверный y");
-            AssertFloat(v.UV3.z, (descriptor & 31u) | (((near >> 8) & 1u) != 0 ? 32u : 0u), $"{at}: колонка");
+            AssertFloat(v.UV3.z, (descriptor & 31u) | (Bit(look, 6) ? 32u : 0u), $"{at}: колонка");
             AssertFloat(v.UV3.w, tiling ? 1f : 0f, $"{at}: автотайл");
 
-            Assert.That(v.UV4x, Is.EqualTo(TerrainVertex.H(flags & 0xFFu)), $"{at}: тип анимации");
-            Assert.That(v.UV4y, Is.EqualTo((ushort)(type.AW >> 16)), $"{at}: скорость");
+            Assert.That(v.UV4x, Is.EqualTo(TerrainVertex.H(animation)), $"{at}: тип анимации");
+            Assert.That(v.UV4y, Is.EqualTo(TerrainVertex.H(speed)), $"{at}: скорость");
             Assert.That(v.UV4z, Is.EqualTo(TerrainVertex.H(phase)), $"{at}: фаза");
-            Assert.That(v.UV4w, Is.EqualTo(TerrainVertex.H((flags >> 8) & 0xFFu)), $"{at}: профиль");
+            Assert.That(v.UV4w, Is.EqualTo(TerrainVertex.H(surface)), $"{at}: поверхность");
 
             Assert.That(v.UV5x, Is.EqualTo(TerrainVertex.H(anchored ? 1f : 0f)), $"{at}: якорь");
             Assert.That(Mathf.HalfToFloat(v.UV5y), Is.EqualTo(cornersX[corner]), $"{at}: угол x");
             Assert.That(Mathf.HalfToFloat(v.UV5z), Is.EqualTo(cornersY[corner]), $"{at}: угол y");
             Assert.That(v.UV5w, Is.EqualTo(TerrainVertex.H(organic)), $"{at}: органика");
 
-            AssertFloat(v.UV6.x, type.BX & 0xFFFFFFu, $"{at}: цвет света");
+            AssertFloat(v.UV6.x, 0f, $"{at}: свободно");
             AssertFloat(v.UV6.y, packedFlags, $"{at}: флаги света");
             AssertFloat(v.UV6.z, contour, $"{at}: контур");
             AssertFloat(v.UV6.w, Decal(decalRule, gridX, serverY), $"{at}: декаль");
         }
     }
 
-    private bool EmptyEdge(uint type) =>
-        type != 0 && (typeOf(type).BZ & (1u << 22)) != 0 && (typeOf(type).BZ & ((1u << 20) | (1u << 21))) == 0;
+    // Раскладка строки — своя расшифровка, независимая от шейдера:
+    // look: слот 0-2, пол 3, opaqueOwn 4, opaqueAny 5, по миру 6,
+    // контур 7-9, анимация 10-11, эффект поверхности 12-13, палитра 14-16,
+    // атлас декалей 17-18; speedGlowTile:
+    // скорость half 0-15, свечение 16-23, тайлгруппа + 1 24-31; масса каймы —
+    // старший байт atlasWH.
+    private static bool Bit(uint word, int bit) => ((word >> bit) & 1u) != 0;
 
-    private bool SolidMass(uint type) =>
+    // Фон (бит 3) лежит сам на себе, передний план — на подложке.
+    private uint Under(uint type) => Bit(typeOf(type).Look, 3) ? type : groundType;
+
+    // Контур: 0 гибкий, 1 волнистый, 2 жёсткий, 3 капля, 4 стена, 5 угол, 6 дверь.
+    private static uint Outline(uint look) => (look >> 7) & 7u;
+
+    private static uint TileCode(TerrainTypeRow row) => row.SpeedGlowTile >> 24;
+
+    private static uint Rim(TerrainTypeRow row) => row.AtlasWH >> 24;
+
+    private static bool HasRect(TerrainTypeRow row) => (row.AtlasWH & 0xFFFu) != 0;
+
+    private bool OpaqueMass(uint type) =>
         type != 0 &&
-        (typeOf(type).BZ & ((1u << 20) | (1u << 19))) == 1u << 20 &&
-        (typeOf(type).BW & (1u << 6)) != 0;
+        Outline(typeOf(type).Look) == 1 &&
+        Bit(typeOf(type).Look, 5);
 
-    private bool Corner(uint type) => (typeOf(type).BW & (1u << 4)) != 0;
+    private bool Corner(uint type) => Outline(typeOf(type).Look) == 5;
 
-    private bool Solid(uint type) => (typeOf(type).BZ & (1u << 17)) != 0;
+    private bool IsForeground(uint type) => !Bit(typeOf(type).Look, 3);
 
-    private bool Same(uint own, uint otherType)
+    private bool Same(uint ownRim, uint otherType)
     {
-        uint other = typeOf(otherType).BW;
-        uint otherGroup = (other >> 16) & 0xFFu;
+        uint otherGroup = Rim(typeOf(otherType));
         if (otherGroup == 0)
         {
             return false;
         }
 
-        return ((own >> 16) & 0xFFu) == otherGroup;
+        return ownRim == otherGroup;
     }
 
     private static uint WallVariant(uint descriptor, uint side)
@@ -293,10 +320,10 @@ internal sealed class TerrainCellOracle(
             return 0;
         }
 
-        uint flags = typeOf(type).BZ;
-        bool cause = (flags & (1u << 20)) != 0;
-        bool block = (flags & (1u << 21)) != 0;
-        bool emptyEdge = (flags & (1u << 22)) != 0 && !block && !cause;
+        uint look = typeOf(type).Look;
+        bool cause = Outline(look) == 1;
+        bool block = Outline(look) >= 2;
+        bool emptyEdge = Bit(look, 3) && !block && !cause;
         if (block || (!cause && !emptyEdge))
         {
             return 0;
@@ -313,10 +340,9 @@ internal sealed class TerrainCellOracle(
         return cause ? bend : Math.Min(Math.Abs(bend), 1) * inwardSign;
     }
 
-    private static float Phase(uint flags, int gridX, int serverY)
+    private static float Phase(uint palette, bool hasRect, bool blinking, bool faceted, int gridX, int serverY)
     {
-        float palette = flags >> 24;
-        if ((flags & (1u << 23)) == 0)
+        if (!hasRect)
         {
             return palette;
         }
@@ -324,14 +350,12 @@ internal sealed class TerrainCellOracle(
         uint seed = unchecked(((uint)gridX * 374761397u) + ((uint)serverY * 668265263u));
         seed = unchecked((seed ^ (seed >> 13)) * 1274126177u);
         seed ^= seed >> 16;
-        uint animation = flags & 0xFFu;
-        uint profile = (flags >> 8) & 0xFFu;
-        if (profile == 0 && animation == 1)
+        if (blinking)
         {
             return (seed % 6283) / 1000f;
         }
 
-        return profile == 3 ? (seed & 0xFFFF) / 65536f : palette;
+        return faceted ? (seed & 0xFFFF) / 65536f : palette;
     }
 
     private static uint CornerUvBits(uint descriptor, bool tiling)

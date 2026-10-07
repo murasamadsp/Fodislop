@@ -38,17 +38,8 @@ internal static class TerrainBackgroundTileResolver
         int y,
         int tileGroupId)
     {
-        // В кайме фона нет: она несёт только передний план.
-        if ((uint)x >= (uint)(sources.CellCache.CacheWidth - 2) ||
-            (uint)y >= (uint)(sources.CellCache.CacheHeight - 2))
-        {
-            return false;
-        }
-
         CachedCellData foreground = sources.CellCache.GetCellData(x + 1, y + 1);
-        CellType background = TerrainCellLayers.ResolveBackground(
-            foreground.Type,
-            foreground.Properties);
+        CellType background = TerrainQuadBuilder.UnderOf(foreground.Type);
         if (!sources.MetadataLookup.TryGet(background, out CellMetadata metadata))
         {
             throw new InvalidOperationException(

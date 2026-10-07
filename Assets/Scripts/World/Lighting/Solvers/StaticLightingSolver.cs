@@ -17,7 +17,7 @@ namespace Kern.World.Lighting;
 internal sealed class StaticLightingSolver
 {
     private const int MaximumDispatchGroupsPerDimension = 65535;
-    private static readonly uint[] s_zeroTransportCounters = new uint[3];
+    private static readonly uint[] s_zeroTransportCounters = new uint[LightingComputeBinder.LightingCounterCount];
 
     private static readonly ProfilerMarker s_cascadeMarker =
         new("Kern.Lighting.Cascades.Record.CPU");
@@ -42,7 +42,7 @@ internal sealed class StaticLightingSolver
 
     public void RecordTrace(
         CommandBuffer commandBuffer,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         bool reuseOverlap,
         Vector2Int regionDelta,
         IReadOnlyList<RectInt> dirtyRegions,
@@ -54,6 +54,15 @@ internal sealed class StaticLightingSolver
         using var radianceCascadesSample = new CommandBufferSampleScope(commandBuffer, "Kern.Lighting.RadianceCascades");
         ComputeShader compute = _resources.LightingCompute!;
         int solveKernel = _resources.SolveCascadeKernel;
+        // The prefix table is read by this kernel on every solve. Bind it in
+        // the dispatch command stream; cache preparation can be skipped on a
+        // later radiance-only solve and command-buffer bindings are not a
+        // durable resource lifetime.
+        commandBuffer.SetComputeBufferParam(
+            compute,
+            solveKernel,
+            LightingComputeBinder.CleanCellPrefixId,
+            _resources.CleanCellPrefix!);
         // A reused region expands the change stream and replaces its buffer
         // after shared-parameter recording; bind that current identity here.
         _resources.EnsureReanchorChangeBinding();
@@ -78,7 +87,7 @@ internal sealed class StaticLightingSolver
                 _resources.DirtyRegions!.SetData(edits);
             }
             _telemetry.LightingStaticDependencyMaskSolveCount++;
-            _scrollRecorder.RecordWorldReanchor(commandBuffer, compute, emissionField, regionDelta,
+            _scrollRecorder.RecordWorldReanchor(commandBuffer, compute, glowField, regionDelta,
                 edits.Length, RecordCascade);
             _telemetry.LightingCascadeTraceTimeMs =
                 (float)((System.Diagnostics.Stopwatch.GetTimestamp() - traceStart) *
@@ -184,7 +193,7 @@ internal sealed class StaticLightingSolver
                     compute,
                     solveKernel,
                     cascadeIndex,
-                    emissionField,
+                    glowField,
                     scrollDeltas[cascadeIndex],
                     dirtyProbeRect,
                     RecordCascade);
@@ -216,7 +225,7 @@ internal sealed class StaticLightingSolver
                     compute,
                     solveKernel,
                     cascadeIndex,
-                    emissionField,
+                    glowField,
                     probeRect,
                     useDependencyMask,
                     dirtyFieldRegions.Length);
@@ -233,7 +242,7 @@ internal sealed class StaticLightingSolver
     public void RecordResolve(
         CommandBuffer commandBuffer,
         LightingEngine.DebugView debugView,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         RenderTexture directTarget)
     {
         using var resolveMarker = s_resolveMarker.Auto();
@@ -263,7 +272,7 @@ internal sealed class StaticLightingSolver
             directTarget);
         if (transmissionDebug)
         {
-            BindFieldTextures(commandBuffer, compute, resolveKernel, emissionField);
+            BindFieldTextures(commandBuffer, compute, resolveKernel, glowField);
             commandBuffer.SetComputeTextureParam(
                 compute,
                 resolveKernel,
@@ -287,7 +296,7 @@ internal sealed class StaticLightingSolver
         ComputeShader compute,
         int solveKernel,
         int cascadeIndex,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         RectInt probeRect,
         bool useDependencyMask,
         int dirtyRegionCount)
@@ -311,7 +320,7 @@ internal sealed class StaticLightingSolver
             cascade,
             farCascade,
             hasFarCascade);
-        BindFieldTextures(commandBuffer, compute, solveKernel, emissionField);
+        BindFieldTextures(commandBuffer, compute, solveKernel, glowField);
         commandBuffer.SetComputeBufferParam(
             compute,
             solveKernel,
@@ -401,14 +410,14 @@ internal sealed class StaticLightingSolver
         CommandBuffer commandBuffer,
         ComputeShader compute,
         int kernel,
-        RenderTexture emissionField)
+        RenderTexture glowField)
     {
         LightingComputeBinder.BindFieldTextures(
             commandBuffer,
             compute,
             kernel,
             _resources.MaterialField!,
-            emissionField,
+            glowField,
             _resources.LightingCounters);
     }
 }

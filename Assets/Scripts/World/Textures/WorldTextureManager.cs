@@ -32,7 +32,6 @@ namespace Kern.World
 
         // Скорость покадровой анимации клетки, когда серверный конфиг её не
         // задал, а текстура — GIF-лента кадров (например, вращение бокса).
-        private const float DefaultCellAnimationFPS = 6f;
 
         private WorldAtlasCollection _atlasCollection = null!;
 
@@ -58,8 +57,6 @@ namespace Kern.World
             ProjectRuntimeContracts.AssetStreaming.MaximumConcurrentTextureLoads);
 
         public int PendingCellTextureRequests => _retryTracker.PendingRequestsCount;
-
-        private Texture2D? _cachedEmptyTexture;
 
         public uint TextureRevision { get; private set; }
 
@@ -158,23 +155,8 @@ namespace Kern.World
 
                 if (textureInfo.AnimationFrames > 1)
                 {
-                    float speed = _mapManager.GetAnimationSpeed(cellType);
-
-                    if (speed <= 0)
-                    {
-                        if (_mapManager.GetAnimationFrameHeight(cellType) > 0)
-                        {
-                            // Сервер объявил анимацию, но не задал скорость —
-                            // ошибка конфигурации, а не повод крутить молча.
-                            throw new InvalidOperationException(
-                                $"Server animation speed for cell type {cellType} must be greater than zero.");
-                        }
-
-                        // Анимация выведена из самой текстуры (лента кадров без
-                        // серверного конфига) — крутим дефолтной скоростью.
-                        speed = DefaultCellAnimationFPS;
-                    }
-
+                    // Скорость — animationSpeed из cells.json, как у шейдера террейна.
+                    float speed = BlockRegistry.Get(cellType).AnimationSpeed;
                     frameIndex = (int)(Time.realtimeSinceStartup * speed) % textureInfo.AnimationFrames;
                     frameHeight = textureInfo.FrameSize;
                 }
@@ -217,36 +199,6 @@ namespace Kern.World
         {
             EnsureInitialized();
             return _textureCache.TryGetTexture(cellType, out var info) ? info.AnimationFrames : 1;
-        }
-
-        public float GetAnimationSpeedForCell(CellType cellType)
-        {
-            EnsureInitialized();
-            MapManager mapManager = _mapManager;
-            if (mapManager.HasAnimation(cellType))
-            {
-                byte serverSpeed = mapManager.GetAnimationSpeed(cellType);
-                if (serverSpeed == 0)
-                {
-                    throw new InvalidDataException(
-                        $"Server animation speed for cell type {cellType} must be greater than zero.");
-                }
-
-                return serverSpeed;
-            }
-
-            // Конфиг анимации не объявлен, но текстура клетки — лента кадров
-            // (GIF-ассет без серверного конфига): GPU-террейн получает
-            // дефолтную скорость, иначе шейдер останется на кадре 0.
-            return _textureCache.TryGetTexture(cellType, out var info) && info.AnimationFrames > 1
-                ? DefaultCellAnimationFPS
-                : 0f;
-        }
-
-        public int GetFrameSize(CellType cellType)
-        {
-            EnsureInitialized();
-            return _textureCache.TryGetTexture(cellType, out var info) ? info.FrameSize : 0;
         }
 
         public UniTask<AtlasCoordinate> GetCellTextureCoordinate(
@@ -334,12 +286,7 @@ namespace Kern.World
 
         private async UniTask LoadTexture(CellType cellType)
         {
-            var filename = $"Cells/{(int)cellType}";
-
-            if (cellType == CellType.Empty)
-            {
-                filename = "Cells/32";
-            }
+            var filename = $"Cells/{cellType}";
 
             if (_textureCache.TryGetTexture(cellType, out CellTextureInfo cachedTextureInfo))
             {
@@ -370,11 +317,6 @@ namespace Kern.World
 
             if (texture != null)
             {
-                if (cellType == CellType.Empty)
-                {
-                    _cachedEmptyTexture = texture;
-                }
-
                 await UniTask.SwitchToMainThread();
                 AddTextureToAtlas(cellType, texture, ownsTexture: false);
                 return;
@@ -410,8 +352,8 @@ namespace Kern.World
             int frameHeight = _mapManager.GetAnimationFrameHeight(cellType);
 
             // Серверный конфиг анимации пока не заполняется (сервер шлёт
-            // FrameOffset=0 для всех клеток), а GIF-ассеты клеток — например,
-            // бокс Cells/90.gif с кадрами вращения — уже декодируются в
+            // FrameOffset=0 для всех клеток), а вертикальные PNG-ленты клеток —
+            // например, Cells/Box.png с кадрами вращения — уже декодируются в
             // вертикальную ленту кадров. Если конфиг молчит, а текстура — лента
             // (высота кратна клетке и больше неё), выводим высоту кадра из
             // самой текстуры: террейн крутит кадры без конфига.
@@ -451,7 +393,7 @@ namespace Kern.World
             _atlasCollection.AddTexture(cellType, texture, TextureAtlas.MeasureFullyOpaque(texture));
             _textureCache.AddTexture(cellType, textureInfo);
             TextureRevision++;
-            OnTextureLoaded?.Invoke($"Cells/{(int)cellType}.png", texture);
+            OnTextureLoaded?.Invoke($"Cells/{cellType}.png", texture);
         }
 
         private static CellVariation CalculateVariation(CellTextureInfo textureInfo, int globalX, int globalY)
@@ -494,7 +436,6 @@ namespace Kern.World
             _textureCache.Clear();
             _atlasCollection.Reset();
             _auxiliaryAssets.RegenerateFlowMap();
-            _cachedEmptyTexture = null;
             TextureRevision++;
         }
 

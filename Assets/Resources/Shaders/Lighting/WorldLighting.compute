@@ -8,12 +8,17 @@
 #pragma kernel SolveDynamicLighting
 #pragma kernel ComposeDynamicLighting
 #pragma kernel TraceDynamicPolar
+#pragma kernel TraceDynamicPolarBatch
+#pragma kernel SolveDynamicLightingBatch
 #pragma kernel ClearDynamicDirect
 #pragma kernel CompositeLighting
 #pragma kernel BuildCellSolidMask
 #pragma kernel BuildSurfaceAirCache
 #pragma kernel BuildCleanCellRows
 #pragma kernel BuildCleanCellColumns
+#pragma kernel SeedDynamicDistanceField
+#pragma kernel JumpFloodDynamicDistanceField
+#pragma kernel ResolveDynamicDistanceField
 
 #pragma target 5.0
 
@@ -50,13 +55,13 @@
 // ============================================================================
 
 Texture2D<float4> _ReanchorMaterial;
-Texture2D<float4> _ReanchorEmission;
+Texture2D<float4> _ReanchorGlow;
 RWStructuredBuffer<uint> _ReanchorChangeRowsOutput;
 StructuredBuffer<uint> _ReanchorChangeRows;
 RWStructuredBuffer<uint> _ReanchorChangesOutput;
 StructuredBuffer<uint> _ReanchorChanges;
 Texture2D<float4> _MaterialField;
-Texture2D<float4> _EmissionField;
+Texture2D<float4> _GlowField;
 RWStructuredBuffer<uint3> _RadianceAtlas;
 StructuredBuffer<uint3> _RadianceAtlasInput;
 RWStructuredBuffer<uint3> _RadianceAtlasOutput;
@@ -66,7 +71,7 @@ Texture2D<float4> _DirectInput;
 // Resolved radiance from the terrain's own emitters, solved separately and kept
 // across frames.
 //
-// Light transport is linear in emission and the medium does not depend on it, so
+// Light transport is linear in glow and the medium does not depend on it, so
 // solve(terrain + dynamic lights) is exactly solve(terrain) + solve(dynamic lights). Splitting the
 // two lets the terrain half survive until geometry actually changes, instead of
 // being recomputed every time a dynamic light moves a fraction of a cell - which is what
@@ -95,10 +100,22 @@ RWStructuredBuffer<uint2> _CleanCellRowsOutput;
 StructuredBuffer<uint2> _CleanCellRows;
 RWStructuredBuffer<uint2> _CleanCellPrefixOutput;
 StructuredBuffer<uint2> _CleanCellPrefix;
+StructuredBuffer<uint> _DynamicSdfSeedInput;
+RWStructuredBuffer<uint> _DynamicSdfSeedOutput;
+Texture2D<float> _DynamicSdfInput;
+RWTexture2D<float> _DynamicSdfOutput;
+int _DynamicSdfJumpStep;
+int _DynamicSdfTransportEnabled;
 
 RWStructuredBuffer<uint> _LightingCounters;
 int _LightingCountersEnabled;
+static const uint DynamicTraversalHistogramBins = 4096u;
+static const uint DynamicTraversalDdaHistogramOffset = 4u;
+static const uint DynamicTraversalSdfHistogramOffset = 4100u;
+static const uint DynamicTraversalTotalHistogramOffset = 8196u;
 int _UniformCellTraversalEnabled;
+// Opt-in experiment until production image and GPU cost gates pass.
+int _UniformSourceTraversalEnabled;
 StructuredBuffer<int4> _DirtyRegions;
 RWStructuredBuffer<uint> _CascadeChangedMask;
 int _CascadeChangedMaskCount;
@@ -120,6 +137,8 @@ StructuredBuffer<DynamicLight> _DynamicLights;
 int2 _DynamicDispatchOrigin;
 int2 _DynamicDispatchSize;
 int _DynamicLightIndex;
+StructuredBuffer<DynamicLightWorkItem> _DynamicLightWorkItems;
+int _DynamicBatchOffset;
 int _WriteDynamicDirect;
 int2 _DynamicTileOffset;
 RWTexture2DArray<float4> _DynamicTiles;
@@ -157,7 +176,7 @@ int _DynamicHorizonStride;
 // Shared Parameters
 // ============================================================================
 
-// Transport lattice: material, emission, DDA, cascade probes and polar fans.
+// Transport lattice: material, glow, DDA, cascade probes and polar fans.
 int2 _FieldSize;
 // Receiver lattice: static/dynamic direct, surface cache and the published
 // lightmap. Same world rect; an integer number of field texels per light
@@ -171,7 +190,7 @@ float4 _WorldRect;
 float4 _AmbientColor;
 float4 _EmptyExtinctionRGB;
 float4 _SolidExtinctionRGB;
-float _EmissionScale;
+float _GlowScale;
 // One dynamic light below this absolute radiance cannot move any display
 // level of the active output (LightingComputeBinder.InvisibleDynamicRadiance).
 float _InvisibleDynamicRadiance;
@@ -302,8 +321,8 @@ void BuildReanchorChangeRows(uint3 id : SV_DispatchThreadID)
             }
             changed = any(_MaterialField.Load(int3(rasterCurrent, 0)) !=
                 _ReanchorMaterial.Load(int3(rasterPrevious, 0))) ||
-                any(_EmissionField.Load(int3(rasterCurrent, 0)) !=
-                _ReanchorEmission.Load(int3(rasterPrevious, 0)));
+                any(_GlowField.Load(int3(rasterCurrent, 0)) !=
+                _ReanchorGlow.Load(int3(rasterPrevious, 0)));
         }
         sum += changed ? 1u : 0u;
         _ReanchorChangeRowsOutput[y * _FieldSize.x + x] = sum;

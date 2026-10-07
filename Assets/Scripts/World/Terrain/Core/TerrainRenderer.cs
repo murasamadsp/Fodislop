@@ -165,13 +165,13 @@ public class TerrainRenderer : MonoBehaviour, Kern.Core.Interfaces.WorldLighting
             _subscriptions.Bind(_storage, _textureService, _mapManager);
         }
 
-        public void RenderMaterialEmissionFields(
+        public void RenderMaterialGlowFields(
             CommandBuffer commandBuffer,
-            in Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext context) =>
+            in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context) =>
             _meshManager.RenderLightingMaterialFields(
                 commandBuffer,
                 context.MaterialField,
-                context.EmissionField,
+                context.GlowField,
                 context.WorldRect,
                 transform.localToWorldMatrix,
                 _window.Driver.Presentation.CellMaterials,

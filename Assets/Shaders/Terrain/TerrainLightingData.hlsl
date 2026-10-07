@@ -1,36 +1,33 @@
 #ifndef KERN_TERRAIN_LIGHTING_DATA_INCLUDED
 #define KERN_TERRAIN_LIGHTING_DATA_INCLUDED
 
-static const uint KERN_TERRAIN_SOLID_BOUNDARY_MASK = 0x0Fu;
-static const uint KERN_TERRAIN_EMISSIVE_FLAG = 0x10u;
-static const uint KERN_TERRAIN_PHYSICAL_MASS_FLAG = 0x20u;
-static const uint KERN_TERRAIN_ROUNDABLE_CONTOUR_FLAG = 0x01u;
+// Декодеры флагов света и контура вершины; раскладка — TerrainCellFormat.hlsl.
+#include "Assets/Shaders/Terrain/TerrainCellFormat.hlsl"
 
 uint KernTerrainLightingFlags(float packedFlags)
 {
     return (uint)floor(packedFlags + 0.0001);
 }
 
-int KernTerrainSolidBoundary(uint lightingFlags)
+int KernTerrainForegroundSides(uint lightingFlags)
 {
-    return int(lightingFlags & KERN_TERRAIN_SOLID_BOUNDARY_MASK);
+    return int(lightingFlags & KERN_TERRAIN_FOREGROUND_SIDES_MASK);
 }
 
-// Код рельефа: 0 — клетки без рельефа (каймы нет), иначе маска + 1.
-// Раскладка описана в TerrainLightingData.Pack.
-int KernTerrainReliefCode(float packedContour)
+// Код каймы: 0 — клетки без каймы (каймы нет), иначе маска + 1.
+int KernTerrainRimCode(float packedContour)
 {
-    return (int(round(packedContour)) >> 5) & 31;
+    return (int(round(packedContour)) >> KERN_TERRAIN_RIM_SHIFT) & KERN_TERRAIN_RIM_MASK;
 }
 
-int KernTerrainReliefCornerMask(float packedContour)
+int KernTerrainRimCornerMask(float packedContour)
 {
-    return (int(round(packedContour)) >> 10) & 15;
+    return (int(round(packedContour)) >> KERN_TERRAIN_RIM_CORNERS_SHIFT) & KERN_TERRAIN_RIM_CORNERS_MASK;
 }
 
-bool KernTerrainIsEmissive(uint lightingFlags)
+bool KernTerrainGlows(uint lightingFlags)
 {
-    return (lightingFlags & KERN_TERRAIN_EMISSIVE_FLAG) != 0u;
+    return (lightingFlags & KERN_TERRAIN_GLOW_FLAG) != 0u;
 }
 
 bool KernTerrainIsPhysicalMass(uint lightingFlags)
@@ -48,10 +45,10 @@ bool KernTerrainIsRoundable(float packedContour)
     return ((uint)round(packedContour) & KERN_TERRAIN_ROUNDABLE_CONTOUR_FLAG) != 0u;
 }
 
-float KernTerrainEmissionStrength(float packedFlags, uint lightingFlags)
+float KernTerrainGlow(float packedFlags, uint lightingFlags)
 {
-    return KernTerrainIsEmissive(lightingFlags)
-        ? saturate(frac(packedFlags) * 4.0)
+    return KernTerrainGlows(lightingFlags)
+        ? saturate(frac(packedFlags) / KERN_TERRAIN_GLOW_FRACTION_SCALE)
         : 0.0;
 }
 

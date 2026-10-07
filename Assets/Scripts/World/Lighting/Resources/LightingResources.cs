@@ -16,7 +16,7 @@ public sealed class LightingResources
     public sealed class GeometryResources
     {
         public RenderTexture? Material { get; internal set; }
-        public RenderTexture? StaticEmission { get; internal set; }
+        public RenderTexture? StaticGlow { get; internal set; }
         public RenderTexture? CellSolidMask { get; internal set; }
         public RenderTexture? SurfaceAirCache { get; internal set; }
         public RenderTexture? AmbientOcclusion { get; internal set; }
@@ -68,7 +68,7 @@ public sealed class LightingResources
     internal void ClearReferences()
     {
         Geometry.Material = null;
-        Geometry.StaticEmission = null;
+        Geometry.StaticGlow = null;
         Geometry.CellSolidMask = null;
         Geometry.SurfaceAirCache = null;
         Geometry.AmbientOcclusion = null;

@@ -24,8 +24,6 @@ namespace Kern.Game
 
         private readonly Queue<PooledSlot> _available = new();
         private readonly List<PooledSlot> _active = new();
-        private int _targetSize;
-        private float _lastReleaseTime;
         private bool _initialized;
 
         [Inject]
@@ -62,11 +60,12 @@ namespace Kern.Game
             {
                 if (_active[i].GameObject == null)
                 {
+                    DestroyPooledSlot(_active[i]);
                     _active.RemoveAt(i);
                 }
             }
 
-            ShrinkIfIdle(Time.realtimeSinceStartup);
+            ShrinkExpiredSlots(Time.realtimeSinceStartup);
         }
 
         public IVFXSlot? Acquire()
@@ -80,7 +79,6 @@ namespace Kern.Game
             PooledSlot slot = _available.Count > 0 ? _available.Dequeue() : CreatePooledSlot();
             slot.IsInPool = false;
             _active.Add(slot);
-            _targetSize = Mathf.Max(_targetSize, _available.Count + _active.Count);
             if (slot.GameObject != null)
             {
                 slot.GameObject.SetActive(true);
@@ -110,9 +108,9 @@ namespace Kern.Game
             }
 
             pooled.IsInPool = true;
+            pooled.ReleasedAt = Time.realtimeSinceStartup;
             _active.RemoveAt(index);
             _available.Enqueue(pooled);
-            _lastReleaseTime = Time.realtimeSinceStartup;
         }
 
         private void EnsureInitialized()
@@ -123,30 +121,33 @@ namespace Kern.Game
             }
 
             _initialized = true;
-            _targetSize = Mathf.Max(_initialSize, 1);
-            _lastReleaseTime = Time.realtimeSinceStartup;
-            while (_available.Count + _active.Count < _targetSize)
+            int initialSize = Mathf.Max(_initialSize, 1);
+            while (_available.Count + _active.Count < initialSize)
             {
                 _available.Enqueue(CreatePooledSlot());
             }
         }
 
-        private void ShrinkIfIdle(float now)
+        private void ShrinkExpiredSlots(float now)
         {
-            if (_available.Count <= _initialSize || now - _lastReleaseTime < _shrinkDelay)
+            int minimumSize = Mathf.Max(_initialSize, 1);
+            if (_available.Count <= minimumSize)
             {
                 return;
             }
 
-            int excess = _available.Count - Mathf.Max(_targetSize, _initialSize);
-            for (int i = 0; i < excess && _available.Count > 0; i++)
+            const int MaximumSlotsDestroyedPerFrame = 4;
+            int destroyed = 0;
+            while (_available.Count > minimumSize && destroyed < MaximumSlotsDestroyedPerFrame)
             {
-                DestroyPooledSlot(_available.Dequeue());
-            }
+                PooledSlot oldest = _available.Peek();
+                if (now - oldest.ReleasedAt < _shrinkDelay)
+                {
+                    break;
+                }
 
-            if (_targetSize > _initialSize)
-            {
-                _targetSize = Mathf.Max(_initialSize, _targetSize - 1);
+                DestroyPooledSlot(_available.Dequeue());
+                destroyed++;
             }
         }
 
@@ -164,6 +165,7 @@ namespace Kern.Game
                 EntityBatchRenderer = _entityBatchRenderer!,
                 BatchHandle = handle!,
                 IsInPool = true,
+                ReleasedAt = Time.realtimeSinceStartup,
             };
         }
 
@@ -186,6 +188,7 @@ namespace Kern.Game
             public WorldEntityBatchRenderer EntityBatchRenderer = null!;
             public WorldEntityBatchRenderer.SpriteHandle BatchHandle = null!;
             public bool IsInPool;
+            public float ReleasedAt;
 
             public void SetSprite(Sprite? sprite)
             {

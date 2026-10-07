@@ -22,7 +22,7 @@ public sealed class TerrainMeshManager
     public void RenderLightingMaterialFields(
         CommandBuffer commandBuffer,
         RenderTexture materialField,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         Vector4 worldRect,
         Matrix4x4 localToWorldMatrix,
         Material[] materials,
@@ -30,14 +30,14 @@ public sealed class TerrainMeshManager
         Vector4 screenViewOffset)
     {
         if (mesh == null || materials.Length == 0 ||
-            !materialField.IsCreated() || !emissionField.IsCreated())
+            !materialField.IsCreated() || !glowField.IsCreated())
         {
             throw new InvalidOperationException(
                 "Terrain material fields cannot be rendered before the terrain mesh and targets are ready.");
         }
 
         _lightingFieldTargets[0] = new RenderTargetIdentifier(materialField);
-        _lightingFieldTargets[1] = new RenderTargetIdentifier(emissionField);
+        _lightingFieldTargets[1] = new RenderTargetIdentifier(glowField);
         commandBuffer.DisableScissorRect();
         // Anchor the attachment extent to this offscreen target. Builtin None
         // leaves the raster pass dependent on the preceding camera target.
@@ -95,10 +95,12 @@ public sealed class TerrainMeshManager
             materials,
             mesh,
             screenViewOffset,
+            // Носитель расширен на всю длину спада контакта: меньший запас
+            // отрезал хвост тени ровной линией.
             new Vector2(
-                ProjectRuntimeContracts.World.CellSize * 0.5f +
+                ProjectRuntimeContracts.World.CellSize * TerrainConfigHolder.AmbientOcclusionDistanceCells +
                     worldRect.z / ambientOcclusionField.width * 0.5f,
-                ProjectRuntimeContracts.World.CellSize * 0.5f +
+                ProjectRuntimeContracts.World.CellSize * TerrainConfigHolder.AmbientOcclusionDistanceCells +
                     worldRect.w / ambientOcclusionField.height * 0.5f));
     }
 
@@ -131,7 +133,7 @@ public sealed class TerrainMeshManager
         // Каждый вызов рисует свою целевую семантику отдельным проходом одного
         // материала; AO-проход читает альфа атласа, material-проход — его RGB.
         //
-        // Material/emission fields are cleared and drawn in full. AO may use
+        // Material/glow fields are cleared and drawn in full. AO may use
         // a scissor rectangle: its owner clears that rectangle by rasterization,
         // because ClearRenderTarget ignores scissor on Metal.
         // Поля покрывают всю сетку со смещением ноль; экранное смещение

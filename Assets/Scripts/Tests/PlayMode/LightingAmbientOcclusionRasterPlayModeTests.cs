@@ -17,7 +17,7 @@ namespace Kern.Tests.PlayMode;
 public sealed class LightingAmbientOcclusionRasterPlayModeTests
 {
     [UnityTest]
-    public IEnumerator RemovedUpperCell_IsErasedWithoutTouchingLowerCell_AndMatchesFullRaster()
+    public IEnumerator RemovedUpperCell_MultiplePatchesPreserveLowerCell_AndMatchFullRaster()
     {
         Assert.That(SystemInfo.supportsAsyncGPUReadback, Is.True);
         var resources = new LightingResourceManager();
@@ -57,21 +57,23 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
             solver.RecordAmbientOcclusionField(commands, contributor, registry, worldRect);
             Graphics.ExecuteCommandBuffer(commands);
             commands.Clear();
-            Color32[]? before = null;
+            byte[]? before = null;
             yield return Read(field, values => before = values);
+            Assert.That(field.format, Is.EqualTo(RenderTextureFormat.R8));
             int upperIndex = LightingFieldOrientation.MemoryRow(368, field.height) * field.width + 80;
             int lowerIndex = LightingFieldOrientation.MemoryRow(80, field.height) * field.width + 368;
-            Assert.That(before![upperIndex].a, Is.EqualTo(255), "Known upper solid cell must occupy its world texel.");
-            Assert.That(before[lowerIndex].a, Is.EqualTo(255), "Known lower solid cell must occupy its world texel.");
+            Assert.That(before![upperIndex], Is.EqualTo(255), "Known upper solid cell must occupy its world texel.");
+            Assert.That(before[lowerIndex], Is.EqualTo(255), "Known lower solid cell must occupy its world texel.");
 
             SetCells(mesh, includeUpper: false);
-            solver.RecordAmbientOcclusionField(commands, contributor, registry, worldRect, patch);
+            RectInt retainedPatch = new(240, 240, 32, 32);
+            solver.RecordAmbientOcclusionField(commands, contributor, registry, worldRect, [patch, retainedPatch]);
             Graphics.ExecuteCommandBuffer(commands);
             commands.Clear();
-            Color32[]? partial = null;
+            byte[]? partial = null;
             yield return Read(field, values => partial = values);
-            Assert.That(partial![upperIndex].a, Is.Zero, "Removed geometry must not survive Max blending.");
-            Assert.That(partial[lowerIndex].a, Is.EqualTo(255), "Partial clearing must preserve distant geometry.");
+            Assert.That(partial![upperIndex], Is.Zero, "Removed geometry must not survive Max blending.");
+            Assert.That(partial[lowerIndex], Is.EqualTo(255), "Partial clearing must preserve distant geometry.");
             int changedOutside = 0;
             for (int y = 0; y < field.height; y++)
             {
@@ -79,22 +81,25 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
                 int row = memoryRow * field.width;
                 for (int x = 0; x < field.width; x++)
                 {
-                    if ((x < patch.xMin || x >= patch.xMax ||
-                         memoryRow < patch.yMin || memoryRow >= patch.yMax) &&
-                        before[row + x].a != partial[row + x].a)
+                    bool outsideBothPatches =
+                        (x < patch.xMin || x >= patch.xMax || memoryRow < patch.yMin || memoryRow >= patch.yMax) &&
+                        (x < retainedPatch.xMin || x >= retainedPatch.xMax ||
+                         memoryRow < retainedPatch.yMin || memoryRow >= retainedPatch.yMax);
+                    if (outsideBothPatches &&
+                        before[row + x] != partial[row + x])
                     {
                         changedOutside++;
                     }
                 }
             }
 
-            Assert.That(changedOutside, Is.Zero, "Every alpha texel outside the patch must remain unchanged.");
+            Assert.That(changedOutside, Is.Zero, "Every AO texel outside both patches must remain unchanged.");
 
             // Independent update oracle: discard the retained field and redraw
             // the same production geometry in full, with no regional policy.
             solver.RecordAmbientOcclusionField(commands, contributor, registry, worldRect);
             Graphics.ExecuteCommandBuffer(commands);
-            Color32[]? full = null;
+            byte[]? full = null;
             yield return Read(field, values => full = values);
             Assert.That(partial, Is.EqualTo(full), "Partial output must equal a fresh full production raster.");
         }
@@ -109,7 +114,7 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
         }
     }
 
-    private static IEnumerator Read(RenderTexture field, System.Action<Color32[]> receive)
+    private static IEnumerator Read(RenderTexture field, System.Action<byte[]> receive)
     {
         AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(field, 0);
         float started = Time.realtimeSinceStartup;
@@ -120,7 +125,7 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
         }
 
         Assert.That(request.hasError, Is.False);
-        receive(request.GetData<Color32>().ToArray());
+        receive(request.GetData<byte>().ToArray());
     }
 
     private static void SetCells(Mesh mesh, bool includeUpper)
@@ -141,7 +146,7 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
     {
         public ulong LightingGeometryRevision => 1;
 
-        public void RenderMaterialEmissionFields(CommandBuffer commands, in LightingMaterialEmissionContext context)
+        public void RenderMaterialGlowFields(CommandBuffer commands, in LightingMaterialGlowContext context)
         {
         }
 

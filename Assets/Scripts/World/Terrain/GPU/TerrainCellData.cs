@@ -1,123 +1,55 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Kern.Core;
+using Kern.Core.Interfaces;
+using Kern.World;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
 
-// ═══ Данные клетки террейна на GPU ════════════════════════════════════════
-//
-// Вся раскладка живёт здесь и в Assets/Shaders/Terrain/TerrainCellData.hlsl.
-// Больше нигде не решается, какой бит что значит.
-//
-// КЛЕТКА — один ushort, 2 байта; на GPU две клетки в uint (младшая — клетка
-// с чётным индексом кольца):
-//
-//    0- 7  тип переднего плана; 0 (CellType.Unloaded) — клетка не загружена,
-//          у неё нет ни одного слоя
-//    8-15  тип фона до решения слоя: сам пол, дорога под проходимой частью
-//          пака или земля (TerrainCellLayers.ResolveBackground)
-//
-// Всё остальное шейдер выводит из клетки, её восьми соседей и их строк
-// типов — тем же правилом, что прежняя CPU-сборка квада (эталон в тестах,
-// Tests/Editor/World/Terrain/Reference/TerrainQuadBuilder.cs):
-//   - узлы сетки — четыре угла клетки — по типам четырёх клеток вокруг узла
-//     и его мировой координате (TerrainVertexDistortionCalculator), в
-//     единицах 1/256 клетки;
-//   - рисуется ли фон (тот же тип под клеткой, закрывающей её целиком, не
-//     рисуется) и закрыт ли он передним планом полностью;
-//   - дескриптор автотайла обоих слоёв, вариант стены пака по углам;
-//   - маска твёрдых соседей, рельеф и его вогнутые углы;
-//   - органические рёбра, фаза анимации, декаль, мировая клетка.
-// Кольцо буфера на клетку шире окна с каждой стороны: в кайме лежит тип
-// переднего плана, фона там нет (автотайл фона за окном не ищет).
-//
-// ТИП КЛЕТКИ — строка таблицы на 256 типов, два uint4, 32 байта. Строка 0
-// всегда нулевая: так незагруженный сосед ничего не значит.
-//
-//   a.x  прямоугольник атласа x, y       half, half
-//   a.y  прямоугольник атласа z, w       half, half
-//   a.z  размер тайла, число кадров      half, half
-//   a.w  высота кадра, скорость анимации half, half
-//   b.x  цвет света RGB 0-23, слот атласа 24-31
-//   b.y  доля свечения, float
-//   b.z  тип анимации 0-7, профиль 8-15, флаги 16-23: светится 16, твёрдый
-//        17 (непроходим: отбрасывает тень и задерживает свет), 18 свободен,
-//        скругление 19, искажает (Cause) 20, не искажается (Block) 21,
-//        пустота (Empty) 22, есть прямоугольник атласа 23; палитра 24-31
-//   b.w  семья декали переднего плана 0-1, есть тайлгруппа 2, стена пака 3,
-//        угол пака 4, непрозрачен в своём атласе 5, непрозрачен хоть в
-//        одном атласе 6; текстура полотном 8; группа каймы 16-23;
-//        тайлгруппа 24-31
-//
-// АВТОТАЙЛ — таблица TileBitmaskConverter (маска восьми соседей →
-// дескриптор), 256 байт по четыре в uint; шейдер читает её, а не свою копию.
-//
-// ДЕКАЛИ — два глобальных правила (земля, камень): процент 0-6, зерно хэша
-// 7-14, атлас камня 15. Фон всегда получает землю.
-//
-// ИСКАЖЕНИЕ — восемь глобальных float4 из TerrainConfigHolder (PackDistortion),
-// все значения — целые меньше 2^24, во float точные:
-//   v0  классика: шаг в единицах узла, диапазон джиттера, центр, —
-//   v1  хэш x: A, B, C, D        v2  хэш y: A, B, C, D
-//   v3  модули x, y; органика: наибольшее смещение и центр в единицах узла
-//   v4  периоды: крупный, средний, мелкий; контраст
-//   v5  веса в процентах: крупный, средний, мелкий; центр в процентах
-//   v6  зёрна x: крупное, среднее, мелкое; биты хэша
-//   v7  зёрна y: крупное, среднее, мелкое; —
+// Упаковка данных террейна для GPU. Раскладка — только в
+// Assets/Shaders/Terrain/TerrainCellFormat.hlsl (источник правды); здесь —
+// её зеркало для записи и правила «тип → строка».
 
-/// <summary>Клетка на GPU: тип переднего плана и тип фона.</summary>
+/// <summary>Клетка на GPU: её тип (Cell в TerrainCellFormat.hlsl).</summary>
 [StructLayout(LayoutKind.Sequential)]
-public readonly record struct TerrainCell(ushort Bits);
+public readonly record struct TerrainCell(byte Bits);
 
 /// <summary>Строка таблицы типов на GPU.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct TerrainTypeRow(
-    uint AX,
-    uint AY,
-    uint AZ,
-    uint AW,
-    uint BX,
-    uint BY,
-    uint BZ,
-    uint BW);
+    uint AtlasXY,
+    uint AtlasWH,
+    uint Look,
+    uint SpeedGlowTile);
 
-/// <summary>Всё, что у типа одинаково во всех клетках, в развёрнутом виде.</summary>
+/// <summary>Строка типа в развёрнутом виде: тип из cells.json и факты его текстуры.</summary>
 ///
 /// Одно значение кормит строку таблицы и эталон вида в тестах: разойтись им
 /// негде, потому что считаются одной функцией
-/// (TerrainCellPacker.ResolveTypeSurface).
-internal readonly record struct TerrainTypeSurface(
-    int AtlasSlot,
+/// (TerrainCellPacker.ResolveTypeFields).
+internal readonly record struct TerrainTypeFields(
+    CellType Type,
+    BlockDefinition Block,
+    // Текстура.
+    int Slot,
     Vector4 AtlasRect,
     float TileSize,
     int FrameCount,
     float FrameHeightTiles,
-    CellAnimationType Animation,
-    TerrainAnimationSettings AnimationSettings,
+    bool OpaqueOwn,
+    bool OpaqueAny,
+    // Сервер.
     bool HasTileGroup,
-    int TileGroupId,
-    bool ContinuousSheet,
-    byte ReliefGroup,
-    Color32 LightColor,
-    bool IsGlowing,
-    float EmissionPower,
-    bool Solid,
-    bool ForegroundRoundable,
-    TerrainDecalFamily ForegroundDecal,
-    bool IsBuildingWall,
-    bool IsBuildingCorner,
-    bool OpaqueInOwnAtlas,
-    bool OpaqueInAnyAtlas,
-    CellDistortionType Distortion = CellDistortionType.Neutral,
-    bool IsEmpty = false)
+    int TileGroupId)
 {
-    public bool HasAtlasRect => AtlasRect.z >= 0.0001f;
+    public bool IsBackground => TerrainCellData.IsBackground(Block);
 
+    public bool HasAtlasRect => AtlasRect.z >= 0.0001f;
 }
 
 public static class TerrainCellData
@@ -137,86 +69,89 @@ public static class TerrainCellData
 
     public const int DistortionVectorCount = 8;
 
-    private const int BackgroundTypeShift = 8;
 
-    // b.z
-    private const int ProfileShift = 8;
-    private const uint GlowingFlag = 1u << 16;
-    private const uint SolidFlag = 1u << 17;
-    private const uint RoundableFlag = 1u << 19;
-    private const uint CauseFlag = 1u << 20;
-    private const uint BlockFlag = 1u << 21;
-    private const uint EmptyFlag = 1u << 22;
-    private const uint AtlasRectFlag = 1u << 23;
-    private const int PaletteShift = 24;
+    public static TerrainCell PackCell(CellType type) => new((byte)type);
 
-    // b.w
-    private const uint TileGroupFlag = 1u << 2;
-    private const uint BuildingWallFlag = 1u << 3;
-    private const uint BuildingCornerFlag = 1u << 4;
-    private const uint OpaqueOwnFlag = 1u << 5;
-    private const uint OpaqueAnyFlag = 1u << 6;
-    private const uint ContinuousSheetFlag = 1u << 8;
-    private const int ReliefGroupShift = 16;
-    private const int TileGroupShift = 24;
+    // Фон (drawLayer Background или Underlay) лежит сам на себе; под передним
+    // планом — подложка
+    // (TerrainTypeIsBackground, TerrainTypeUnder в шейдере).
+    public static bool IsBackground(in BlockDefinition block) => block.DrawLayer != CellDrawLayer.Foreground;
 
-    // Правило декали
-    private const int DecalSeedShift = 7;
-    private const uint DecalRockFlag = 1u << 15;
+    public static CellType UnderOf(CellType type) =>
+        IsBackground(BlockRegistry.Get(type)) ? type : BlockRegistry.UnderlayType;
 
-    public static TerrainCell PackCell(CellType foregroundType, CellType backgroundType) =>
-        new((ushort)((byte)foregroundType | ((byte)backgroundType << BackgroundTypeShift)));
+    public static CellType TypeOf(TerrainCell cell) => (CellType)cell.Bits;
 
-    // Клетка каймы кольца: её читают только соседи — тип переднего плана.
-    public static TerrainCell PackMargin(CellType foregroundType) =>
-        PackCell(foregroundType, CellType.Unloaded);
-
-    public static CellType ForegroundTypeOf(TerrainCell cell) => (CellType)(byte)cell.Bits;
-
-    public static CellType BackgroundTypeOf(TerrainCell cell) => (CellType)(byte)(cell.Bits >> BackgroundTypeShift);
-
-    internal static TerrainTypeRow PackType(in TerrainTypeSurface surface)
+    internal static TerrainTypeRow PackType(in TerrainTypeFields fields)
     {
-        float palette = surface.AnimationSettings.PaletteIndex;
-        if ((uint)surface.AtlasSlot > byte.MaxValue ||
-            (uint)surface.TileGroupId > byte.MaxValue ||
-            palette < 0f || palette > byte.MaxValue || palette != MathF.Floor(palette))
+        BlockDefinition block = fields.Block;
+        if ((uint)fields.Slot > TerrainCellFormat.TypeSlotMask ||
+            (uint)fields.TileGroupId > 254u ||
+            (uint)fields.FrameCount > byte.MaxValue ||
+            block.SurfaceEffectPalette > TerrainCellFormat.TypeSurfaceEffectPaletteMask)
         {
-            throw new ArgumentOutOfRangeException(nameof(surface));
+            throw new ArgumentOutOfRangeException(nameof(fields));
         }
 
-        Vector4 rect = surface.AtlasRect;
-        Color32 light = surface.LightColor;
-        uint flags =
-            (surface.IsGlowing ? GlowingFlag : 0u) |
-            (surface.Solid ? SolidFlag : 0u) |
-            (surface.ForegroundRoundable ? RoundableFlag : 0u) |
-            (surface.Distortion == CellDistortionType.Cause ? CauseFlag : 0u) |
-            (surface.Distortion == CellDistortionType.Block ? BlockFlag : 0u) |
-            (surface.IsEmpty ? EmptyFlag : 0u) |
-            (surface.HasAtlasRect ? AtlasRectFlag : 0u);
-        uint neighbourhood =
-            (uint)surface.ForegroundDecal |
-            (surface.HasTileGroup ? TileGroupFlag : 0u) |
-            (surface.IsBuildingWall ? BuildingWallFlag : 0u) |
-            (surface.IsBuildingCorner ? BuildingCornerFlag : 0u) |
-            (surface.OpaqueInOwnAtlas ? OpaqueOwnFlag : 0u) |
-            (surface.OpaqueInAnyAtlas ? OpaqueAnyFlag : 0u) |
-            (surface.ContinuousSheet ? ContinuousSheetFlag : 0u) |
-            ((uint)surface.ReliefGroup << ReliefGroupShift) |
-            ((uint)(surface.HasTileGroup ? surface.TileGroupId : 0) << TileGroupShift);
+        // Прямоугольник — целые пиксели атласа: размер атласа = 32 / размер тайла.
+        float atlasSize = fields.TileSize > 0f ? TerrainCellFormat.CellTexels / fields.TileSize : 0f;
+        int x = Mathf.RoundToInt(fields.AtlasRect.x * atlasSize);
+        int y = Mathf.RoundToInt(fields.AtlasRect.y * atlasSize);
+        int w = Mathf.RoundToInt(fields.AtlasRect.z * atlasSize);
+        int h = Mathf.RoundToInt(fields.AtlasRect.w * atlasSize);
+        if ((uint)x > TerrainCellFormat.TypePixelMask || (uint)y > TerrainCellFormat.TypePixelMask ||
+            (uint)w > TerrainCellFormat.TypePixelMask || (uint)h > TerrainCellFormat.TypePixelMask)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fields));
+        }
+
+        uint look =
+            (uint)fields.Slot |
+            (IsBackground(block) ? TerrainCellFormat.TypeBackground : 0u) |
+            (fields.OpaqueOwn ? TerrainCellFormat.TypeOpaqueOwn : 0u) |
+            (fields.OpaqueAny ? TerrainCellFormat.TypeOpaqueAny : 0u) |
+            ((uint)block.TextureAnchor << TerrainCellFormat.TypeTextureAnchorShift) |
+            ((uint)block.Outline << TerrainCellFormat.TypeOutlineShift) |
+            ((uint)block.AnimationType << TerrainCellFormat.TypeAnimationTypeShift) |
+            ((uint)block.SurfaceEffect << TerrainCellFormat.TypeSurfaceEffectShift) |
+            ((uint)block.SurfaceEffectPalette << TerrainCellFormat.TypeSurfaceEffectPaletteShift) |
+            ((uint)block.DecalAtlas << TerrainCellFormat.TypeDecalAtlasShift);
+        uint tileGroup = (uint)(fields.HasTileGroup ? fields.TileGroupId + 1 : 0);
         return new TerrainTypeRow(
-            Halves(rect.x, rect.y),
-            Halves(rect.z, rect.w),
-            Halves(surface.TileSize, surface.FrameCount),
-            Halves(surface.FrameHeightTiles, surface.AnimationSettings.Speed),
-            light.r | ((uint)light.g << 8) | ((uint)light.b << 16) | ((uint)surface.AtlasSlot << 24),
-            unchecked((uint)BitConverter.SingleToInt32Bits(EmissionFraction(surface.EmissionPower))),
-            (byte)surface.Animation |
-                ((uint)(byte)surface.AnimationSettings.Profile << ProfileShift) |
-                flags |
-                ((uint)palette << PaletteShift),
-            neighbourhood);
+            (uint)x | ((uint)y << TerrainCellFormat.TypePixelHighShift) | ((uint)fields.FrameCount << TerrainCellFormat.TypeByteShift),
+            (uint)w | ((uint)h << TerrainCellFormat.TypePixelHighShift) | ((uint)block.RimMass << TerrainCellFormat.TypeByteShift),
+            look,
+            HalfBits(block.AnimationSpeed) |
+                ((uint)GlowByte(block.Glow) << TerrainCellFormat.TypeGlowShift) |
+                (tileGroup << TerrainCellFormat.TypeByteShift));
+    }
+
+    // Свечение в строке — байт: 0..1 → 0..255; шейдер читает его как
+    // байт × (1/255), так же — GlowOf.
+    internal static byte GlowByte(float glow) => (byte)Mathf.RoundToInt(Mathf.Clamp01(glow) * 255f);
+
+    internal static float GlowOf(byte glow) => glow * (1f / 255f);
+
+    // half с отброшенным хвостом мантиссы — так же, как вершина пишет half
+    // (TerrainVertex.H); шейдер разворачивает его f16tof32.
+    internal static uint HalfBits(float value)
+    {
+        uint bits = unchecked((uint)BitConverter.SingleToInt32Bits(value));
+        int exponent = (int)((bits >> 23) & 0xFFu) - 127 + 15;
+        if (value < 0f || exponent >= 31)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), value, "Скорость анимации вне half.");
+        }
+
+        return exponent <= 0 ? 0u : ((uint)exponent << 10) | ((bits >> 13) & 0x3FFu);
+    }
+
+    internal static float HalfValue(uint halfBits)
+    {
+        uint exponent = (halfBits >> 10) & 0x1Fu;
+        return exponent == 0u
+            ? 0f
+            : BitConverter.Int32BitsToSingle(unchecked((int)(((exponent - 15u + 127u) << 23) | ((halfBits & 0x3FFu) << 13))));
     }
 
     public const int TileDescriptorWords = 64;
@@ -232,10 +167,11 @@ public static class TerrainCellData
         return words;
     }
 
-    // Режим искажения для шейдера: 0 — выключено, 1 — классика, 2 — органика.
-    public static int DistortionMode(TerrainDistortionSettings settings) =>
-        !settings.EnableDistortion ? 0 :
-        settings.DistortionStyle == TerrainDistortionStyle.Organic ? 2 : 1;
+    // Стиль искажения для шейдера: выключенное искажение — свой стиль Off.
+    public static int DistortionStyleOf(TerrainDistortionSettings settings) =>
+        !settings.EnableDistortion ? TerrainCellFormat.DistortionStyleOff :
+        settings.DistortionStyle == TerrainDistortionStyle.Organic ? TerrainCellFormat.DistortionStyleOrganic :
+        TerrainCellFormat.DistortionStyleClassic;
 
     public static Vector4[] PackDistortion()
     {
@@ -271,36 +207,150 @@ public static class TerrainCellData
         }
 
         return rule.Percent |
-            (rule.Seed << DecalSeedShift) |
-            (rule.RockAtlas ? DecalRockFlag : 0u);
+            (rule.Seed << TerrainCellFormat.DecalRuleSeedShift) |
+            (rule.RockAtlas ? TerrainCellFormat.DecalRuleRock : 0u);
     }
 
     // Доля свечения — дробная часть флагов света: шейдер складывает её с
-    // целыми флагами (раскладка TerrainLightingData.hlsl).
-    internal static float EmissionFraction(float emissionStrength) =>
-        emissionStrength * EmissionFractionScale;
+    // целыми флагами (LightingFlags в TerrainCellFormat.hlsl).
+    internal static float GlowFraction(float glow) =>
+        glow * TerrainCellFormat.GlowFractionScale;
+}
 
-    private const float EmissionFractionScale = 0.25f;
+// Упаковка клетки и строки типа для буфера клеток (TerrainCellData). Вид
+// типа — единственное место, где из конфига типа получается его строка; вид
+// клетки шейдер выводит из клетки и соседей.
+//
+// Прежняя CPU-сборка вершин квада (FillQuad) живёт в тестах как эталон вида:
+// Assets/Scripts/Tests/Editor/World/Terrain/Reference/TerrainQuadBuilder.cs.
+internal static class TerrainCellPacker
+{
+    // Клетка для буфера — только её тип (0 у незагруженной); подложку,
+    // узлы сетки и остальное шейдер выводит из типа и соседей. Кайма кольца
+    // пишется так же.
+    internal static TerrainCell PackCell(in TerrainCellSources sources, int x, int y) =>
+        TerrainCellData.PackCell(sources.CellCache.GetCell(x + 1, y + 1).Type);
 
-    private static uint Halves(float low, float high) =>
-        Half(low) | ((uint)Half(high) << 16);
-
-    // float → half обрезкой мантиссы; слишком малое — ±0, слишком большое — ±Inf.
-    internal static ushort Half(float value)
+    /// <summary>Строка таблицы типов: тип из cells.json и факты его текстуры.</summary>
+    ///
+    /// Единственное место, где из метаданных типа получается его строка. Тип
+    /// без разрешённых метаданных (default) — строка без текстуры и
+    /// тайлгруппы: всё из cells.json в ней уже есть.
+    internal static TerrainTypeFields ResolveTypeFields(
+        CellType cellType,
+        in CellMetadata props,
+        IReadOnlyList<IAtlasDescriptor> atlases)
     {
-        int bits = BitConverter.SingleToInt32Bits(value);
-        int sign = (bits >> 16) & 0x8000;
-        int exponent = ((bits >> 23) & 0xFF) - 127 + 15;
-        if (exponent <= 0)
+        Vector4 atlasRect = props.AtlasRect;
+        int frameCount = props.AnimationFrameCount;
+        int slot = (uint)props.AtlasIndex < (uint)atlases.Count ? props.AtlasIndex : 0;
+        bool hasTexture = atlasRect.z > 0f && atlasRect.w > 0f && props.AtlasIndex >= 0;
+        if (!hasTexture)
         {
-            return (ushort)sign;
+            atlasRect = Vector4.zero;
+            frameCount = 1;
         }
 
-        if (exponent >= 31)
+        // Размер тайла и высота кадра не хранятся — выводятся так же, как в
+        // шейдере (TerrainTypeTileSize, TerrainTypeFrameHeight).
+        float tileSize = atlases.Count > 0 ? TerrainCellFormat.CellTexels / atlases[slot].Size : 0f;
+
+        // Прямоугольник — в целых пикселях атласа, как его хранит строка;
+        // UV из пикселей точны (размер атласа — степень двойки).
+        if (atlasRect.z > 0f && atlases.Count > 0)
         {
-            return (ushort)(sign | 0x7C00);
+            float size = atlases[slot].Size;
+            atlasRect = new Vector4(
+                Mathf.Round(atlasRect.x * size) / size,
+                Mathf.Round(atlasRect.y * size) / size,
+                Mathf.Round(atlasRect.z * size) / size,
+                Mathf.Round(atlasRect.w * size) / size);
         }
 
-        return (ushort)(sign | (exponent << 10) | ((bits & 0x7FFFFF) >> 13));
+        // Непрозрачность — свойство пары «тип, атлас»: шейдер атласов не
+        // знает, поэтому оба ответа считаются здесь.
+        bool opaqueAny = false;
+        for (int index = 0; index < atlases.Count; index++)
+        {
+            opaqueAny |= atlases[index].IsFullyOpaque(cellType);
+        }
+
+        return new TerrainTypeFields(
+            Type: cellType,
+            Block: BlockRegistry.Get(cellType),
+            Slot: slot,
+            AtlasRect: atlasRect,
+            TileSize: tileSize,
+            FrameCount: frameCount,
+            FrameHeightTiles: atlasRect.w > 0f ? atlasRect.w / tileSize : 1f,
+            OpaqueOwn: slot < atlases.Count && atlases[slot].IsFullyOpaque(cellType),
+            OpaqueAny: opaqueAny,
+            HasTileGroup: props.HasTileGroup,
+            TileGroupId: props.TileGroupId);
+    }
+}
+
+/// <summary>Где и с какой частотой ставится декаль; Percent == 0 — нигде.</summary>
+public readonly record struct TerrainDecalRule(uint Percent, uint Seed, bool RockAtlas);
+
+public static class TerrainDecalCatalog
+{
+    public const int VariantCount = (int)TerrainCellFormat.DecalVariants;
+
+    // Доля клеток камня, получающих декаль. Порог сравнивается с хэшем
+    // клетки, поэтому подъём доли только добавляет декали, не трогая уже
+    // стоящие.
+    private const uint RockPlacementPercent = 30;
+
+    // Декаль земли и камня одним правилом: процент, зерно хэша и атлас.
+    // Правило лежит в строке типа, и шейдер ставит декаль тем же хэшем, что
+    // и Place, — поэтому сама декаль в данных клетки не хранится.
+    public static readonly TerrainDecalRule GroundRule =
+        new(TerrainConfigHolder.GroundDecalPlacementPercent, Seed: 32u, RockAtlas: false);
+
+    public static readonly TerrainDecalRule RockRule =
+        new(RockPlacementPercent, Seed: 7u, RockAtlas: true);
+
+    public static TerrainDecalRule RuleOf(CellDecalAtlas family) => family switch
+    {
+        CellDecalAtlas.Ground => GroundRule,
+        CellDecalAtlas.Rock => RockRule,
+        _ => default,
+    };
+
+    public static int Place(TerrainDecalRule rule, int worldX, int serverY)
+    {
+        if (rule.Percent == 0u)
+        {
+            return 0;
+        }
+
+        uint hash = Hash(worldX, serverY, rule.Seed);
+        if ((hash % 100u) >= rule.Percent)
+        {
+            return 0;
+        }
+
+        int variant = (int)(hash % (uint)VariantCount);
+        int rotation = (int)((hash >> 8) & 3u);
+        int mirror = (int)((hash >> 10) & 1u);
+        int offsetX = (int)((hash >> 12) & 3u);
+        int offsetY = (int)((hash >> 14) & 3u);
+        // DecalCode в TerrainCellFormat.hlsl.
+        int packed = 1 + variant +
+            (rotation << TerrainCellFormat.DecalRotationShift) +
+            (mirror << TerrainCellFormat.DecalMirrorShift) +
+            (offsetX << TerrainCellFormat.DecalOffsetXShift) +
+            (offsetY << TerrainCellFormat.DecalOffsetYShift);
+        return rule.RockAtlas ? packed | (int)TerrainCellFormat.DecalRockAtlas : packed;
+    }
+
+    private static uint Hash(int worldX, int serverY, uint seed)
+    {
+        uint hash = unchecked((uint)worldX) * 374761393u;
+        hash += unchecked((uint)serverY) * 668265263u;
+        hash ^= seed * 2246822519u;
+        hash = (hash ^ (hash >> 13)) * 1274126177u;
+        return hash ^ (hash >> 16);
     }
 }

@@ -78,7 +78,7 @@ Shader "Kern/World Entity"
             // Пороги отсечения одинаковы для всех материалов мира сущностей,
             // поэтому это глобальные юниформы: код кладёт их Shader.SetGlobalFloat.
             float _SpriteAlphaCull;
-            float _EmissiveFieldThreshold;
+            float _GlowFieldThreshold;
 
             #if defined(KERN_GPU_INSTANCING)
             struct EntityGpuInstance
@@ -146,7 +146,7 @@ Shader "Kern/World Entity"
             ENDHLSL
         }
 
-        // Light-emitting sprites (buildings) in the lighting fields. Emission
+        // Light-emitting sprites (buildings) in the lighting fields. Glow
         // is the sprite's own colour, the way glowing terrain emits its
         // albedo. Material output stays zero: with Max blending it keeps the
         // occupancy and albedo the terrain wrote, so a building glows without
@@ -189,7 +189,7 @@ Shader "Kern/World Entity"
             struct LightingFieldOutput
             {
                 half4 material : SV_Target0;
-                half4 emission : SV_Target1;
+                half4 glow : SV_Target1;
             };
 
             TEXTURE2D(_MainTex);
@@ -201,7 +201,7 @@ Shader "Kern/World Entity"
             CBUFFER_END
 
             float _SpriteAlphaCull;
-            float _EmissiveFieldThreshold;
+            float _GlowFieldThreshold;
 
             #if defined(KERN_GPU_INSTANCING)
             struct EntityGpuInstance
@@ -245,11 +245,11 @@ Shader "Kern/World Entity"
                 // интерполяцией, а текстура остаётся точечной намеренно.
                 half4 color = SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_PointClamp, input.uv, 0) *
                     input.color * _Color;
-                float strength = step(_EmissiveFieldThreshold, color.a) * color.a;
+                float strength = step(_GlowFieldThreshold, color.a) * color.a;
 
                 LightingFieldOutput output;
                 output.material = half4(0.0, 0.0, 0.0, 0.0);
-                output.emission = half4(color.rgb * strength, strength);
+                output.glow = half4(color.rgb * strength, strength);
                 return output;
             }
             ENDHLSL

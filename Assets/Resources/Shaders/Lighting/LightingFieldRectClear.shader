@@ -7,7 +7,7 @@ Shader "Hidden/Kern/LightingFieldRectClear"
         {
             Name "ClearAmbientOcclusionRect"
             Blend Off
-            ColorMask A
+            ColorMask R
             ZWrite Off
             ZTest Always
             Cull Off

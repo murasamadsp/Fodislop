@@ -52,10 +52,10 @@ float AbsorbedFraction(float opticalDepth)
     return result;
 }
 
-// EmissionField is the radiance emitted by one cell. Normalizing by the
+// GlowField is the radiance emitted by one cell. Normalizing by the
 // one-cell integral keeps glowing rock bright without bypassing intervening
 // rock, and makes splitting a segment leave the answer unchanged.
-float CellEmissionWeight(float extinction, float distanceCells)
+float CellGlowWeight(float extinction, float distanceCells)
 {
     float result = distanceCells;
     if (extinction > 0.0)
@@ -66,20 +66,20 @@ float CellEmissionWeight(float extinction, float distanceCells)
     return result;
 }
 
-float3 MediumEmissionWeight(float3 extinction, float distanceCells)
+float3 MediumGlowWeight(float3 extinction, float distanceCells)
 {
     float3 result = distanceCells;
     if (_NeutralExtinction != 0)
     {
-        float weight = CellEmissionWeight(extinction.r, distanceCells);
+        float weight = CellGlowWeight(extinction.r, distanceCells);
         result = float3(weight, weight, weight);
     }
     else
     {
         result = float3(
-            CellEmissionWeight(extinction.r, distanceCells),
-            CellEmissionWeight(extinction.g, distanceCells),
-            CellEmissionWeight(extinction.b, distanceCells));
+            CellGlowWeight(extinction.r, distanceCells),
+            CellGlowWeight(extinction.g, distanceCells),
+            CellGlowWeight(extinction.b, distanceCells));
     }
 
     return result;

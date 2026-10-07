@@ -15,8 +15,10 @@ public class ClientConfig
     // 37: InterfaceSettings.KeyAggression (агрессия перебиндивается).
     // 38: DisplaySettings.HDRSwitchPending для подтверждения смены режима дисплея.
     // 39: DisplaySettings.PeakBrightnessFromDisplay — пик с дисплея до ручной настройки.
-    // Схемы 31–38 мигрируются штатным загрузчиком с созданием backup.
-    public const int CurrentSchemaVersion = 39;
+    // 40: TerrainSettings EnableReliefRim → EnableRim, *Emission* → *Glow*,
+    //     PulseSpeedScale → BlinkingSpeedScale.
+    // Схемы 31–39 мигрируются штатным загрузчиком с созданием backup.
+    public const int CurrentSchemaVersion = 40;
 
     public int SchemaVersion;
     public AudioSettings Audio = new();

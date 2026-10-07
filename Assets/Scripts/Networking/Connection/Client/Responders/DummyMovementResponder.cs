@@ -309,7 +309,7 @@ internal sealed class DummyMovementResponder(
         try
         {
             await clock.Delay(
-                ignoreCollision() ? 20 : 200,
+                GetMoveDelay(playerState.X, playerState.Y),
                 linkedCancellation.Token);
             await worldState.SendChunksAroundAsync(
                 playerState.X,
@@ -335,6 +335,28 @@ internal sealed class DummyMovementResponder(
 
             positionCancellation.Dispose();
         }
+    }
+
+    private int GetMoveDelay(ushort x, ushort y)
+    {
+        if (ignoreCollision())
+        {
+            return 20;
+        }
+
+        if (worldState.HasLayer &&
+            worldState.TryGetCell(x, y, out CellType cellType))
+        {
+            CellConfigurationPacket? config = worldState.GetCellConfig(cellType);
+            if (config.HasValue &&
+                !((CellConfigProperties)config.Value.Properties).HasFlag(CellConfigProperties.Passable) &&
+                cellType != CellType.Empty)
+            {
+                return 100;
+            }
+        }
+
+        return 20;
     }
 
     private async UniTask WalkPathAsync(
@@ -374,7 +396,7 @@ internal sealed class DummyMovementResponder(
                         playerState.Y,
                         (byte)direction),
                 ])));
-                await clock.Delay(100, cancellationToken);
+                await clock.Delay(GetMoveDelay(nextX, nextY), cancellationToken);
             }
         }
         catch (OperationCanceledException)

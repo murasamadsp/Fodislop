@@ -135,7 +135,7 @@ namespace Kern.World.Lighting
         public static readonly LightingQualityTuning DefaultQuality = new(32, 32, 4, 64, 6f, 8, 3, 64);
         public static LightingFeatureFlags EnabledFeatures { get; set; } = LightingFeatureFlags.StaticRC;
         public const float AmbientIntensity = 0f;
-        public const float EmissionScale = 16f;
+        public const float GlowScale = 16f;
         public const float MaximumLightMultiplier = 1f;
         public const float EmptyExtinctionMultiplier = 0.2f;
         public const float SolidExtinctionMultiplier = 1f;

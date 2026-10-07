@@ -131,7 +131,7 @@ public sealed class SurfaceGeometryBuilder
             tileWidth: TransitTileWidth,
             uvProjectionHeight: TransitHeight,
             uvOffset: 0f,
-            emissionMask: 1f);
+            glowMask: 1f);
     }
 
     public void UpdateHorizonMesh(Mesh mesh)
@@ -229,7 +229,7 @@ public sealed class SurfaceGeometryBuilder
         float tileWidth,
         float uvProjectionHeight,
         float uvOffset,
-        float emissionMask)
+        float glowMask)
     {
         float clippedBottom = Mathf.Max(coverageRect.yMin, bottom);
         float clippedTop = Mathf.Min(coverageRect.yMax, top);
@@ -255,7 +255,7 @@ public sealed class SurfaceGeometryBuilder
         _quadUv[1] = new Vector2(uLeft, vTop);
         _quadUv[2] = new Vector2(uRight, vBottom);
         _quadUv[3] = new Vector2(uRight, vTop);
-        Vector2 lightingData = new(emissionMask, 0f);
+        Vector2 lightingData = new(glowMask, 0f);
         _quadLightingData[0] = lightingData;
         _quadLightingData[1] = lightingData;
         _quadLightingData[2] = lightingData;

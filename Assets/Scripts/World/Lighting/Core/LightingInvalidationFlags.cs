@@ -11,7 +11,7 @@ public enum LightingInvalidationFlags
     GeometryChanged = 1 << 0,
     RegionChanged = 1 << 1,
     FieldDirty = 1 << 2,
-    StaticEmissionChanged = 1 << 3,
+    StaticGlowChanged = 1 << 3,
     DynamicLightsChanged = 1 << 4,
     StaticRadianceChanged = 1 << 5,
     DynamicRadianceChanged = 1 << 6,

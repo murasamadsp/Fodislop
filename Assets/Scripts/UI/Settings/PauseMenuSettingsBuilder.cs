@@ -173,7 +173,7 @@ internal sealed class PauseMenuSettingsBuilder
                 $"Config={_lightingEngine.RuntimeConfigFilePath}\n" +
                 $"Debug={_lightingEngine.ActiveDebugView}\n" +
                 $"Ambient={_lightingEngine.AmbientIntensity:F3} " +
-                $"Emission={_lightingEngine.EmissionScale:F3}\n" +
+                $"Glow={_lightingEngine.GlowScale:F3}\n" +
                 $"EmptyExtinction={_lightingEngine.EmptyExtinctionMultiplier:F3} " +
                 $"SolidExtinction={_lightingEngine.SolidExtinctionMultiplier:F3}\n" +
                 $"MaximumLight={_lightingEngine.MaximumLightMultiplier:F3}\n" +

@@ -208,7 +208,7 @@ public sealed class DynamicLightManager
         float brightest = Mathf.Max(
             0f,
             Mathf.Max(source.Color.r, Mathf.Max(source.Color.g, source.Color.b)) * source.Intensity) *
-            LightingConfigHolder.EmissionScale;
+            LightingConfigHolder.GlowScale;
         if (brightest <= 0f)
         {
             return false;

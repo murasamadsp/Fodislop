@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using Cysharp.Threading.Tasks;
 using Kern.Core.Lifecycle;
@@ -9,6 +10,7 @@ using Kern.Persistence;
 using Kern.World;
 using MinesServer.Data;
 using NUnit.Framework;
+using UnityEngine;
 using UnityEngine.TestTools;
 
 namespace Kern.Tests.World;
@@ -188,6 +190,77 @@ public sealed class MapStoragePersistenceTests
             DeleteIfPresent(backupPath);
         }
     }
+
+    // Пакет открытия мира приходит в той же пачке пакетов, что и регионы:
+    // слой меняется посреди пачки, а её конец не должен падать и не должен
+    // сообщать новому миру области прежнего.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void InitWorldInsideRegionBatch_EndsBatchOnTheNewLayer(bool worldOpenBefore)
+    {
+        string worldCode = $"batch_reinit_{Guid.NewGuid():N}";
+        var paths = new List<string>();
+        using var operations = new AsyncOperationSupervisor();
+        var storage = new MapStorage(operations);
+        var changed = new List<RectInt>();
+        storage.RegionChanged += (x, y, w, h) => changed.Add(new RectInt(x, y, w, h));
+
+        try
+        {
+            if (worldOpenBefore)
+            {
+                storage.InitWorld(worldCode + "_old", width: 64, height: 64);
+                paths.Add(storage.MapFilePath);
+                paths.Add(storage.BackupMapFilePath);
+
+                // Чанк уже есть: повторная запись внутри пачки копится в область.
+                storage.SetRegion(40, 40, 2, 2, Fill((CellType)5));
+            }
+
+            storage.BeginRegionBatch();
+            if (worldOpenBefore)
+            {
+                storage.SetRegion(40, 40, 2, 2, Fill((CellType)6));
+            }
+
+            storage.InitWorld(worldCode, width: 32, height: 32);
+            paths.Add(storage.MapFilePath);
+            paths.Add(storage.BackupMapFilePath);
+            storage.SetRegion(0, 0, 2, 2, Fill((CellType)7));
+            changed.Clear();
+
+            Assert.DoesNotThrow(storage.EndRegionBatch);
+            Assert.That(changed, Is.Empty, "Область прежнего мира попала в новый.");
+            Assert.That(storage.GetCell(1, 1), Is.EqualTo((CellType)7));
+        }
+        finally
+        {
+            storage.Dispose();
+            foreach (string path in paths)
+            {
+                DeleteIfPresent(path);
+            }
+        }
+    }
+
+    [Test]
+    public void BatchWithoutWorldOpened_DoesNotThrow()
+    {
+        using var operations = new AsyncOperationSupervisor();
+        var storage = new MapStorage(operations);
+        storage.BeginRegionBatch();
+        Assert.DoesNotThrow(storage.EndRegionBatch);
+    }
+
+    [Test]
+    public void EndBatchWithoutBegin_ThrowsInvalidOperation()
+    {
+        using var operations = new AsyncOperationSupervisor();
+        var storage = new MapStorage(operations);
+        Assert.Throws<InvalidOperationException>(storage.EndRegionBatch);
+    }
+
+    private static CellType[] Fill(CellType type) => [type, type, type, type];
 
     private static void DeleteIfPresent(string path)
     {

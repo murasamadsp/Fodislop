@@ -50,6 +50,9 @@ public interface IFrameTelemetry
     int LightingStaticDenseFallbackCount { get; set; }
     int LightingDynamicSolveCount { get; set; }
     int LightingDynamicTraceCount { get; set; }
+    int LightingDynamicPolarDispatchCount { get; set; }
+    int LightingDynamicReceiverDispatchCount { get; set; }
+    int LightingDynamicBatchDescriptorBytes { get; set; }
     long LightingDynamicDispatchPixels { get; set; }
     long LightingDynamicComposePixels { get; set; }
     long LightingCompositeDispatchPixels { get; set; }
@@ -151,6 +154,9 @@ public sealed class FrameTelemetry : IFrameTelemetry, IFrameTelemetryProducerSta
 
     // Dynamic lights actually traced; the rest of each dynamic solve reused their tiles.
     public int LightingDynamicTraceCount { get; set; }
+    public int LightingDynamicPolarDispatchCount { get; set; }
+    public int LightingDynamicReceiverDispatchCount { get; set; }
+    public int LightingDynamicBatchDescriptorBytes { get; set; }
     public long LightingDynamicDispatchPixels { get; set; }
     public long LightingDynamicComposePixels { get; set; }
     public long LightingCompositeDispatchPixels { get; set; }
@@ -343,6 +349,9 @@ public sealed class FrameTelemetry : IFrameTelemetry, IFrameTelemetryProducerSta
         LightingDdaTexelVisits = 0L;
         LightingCascadeMergeSamples = 0;
         LightingDynamicDispatchPixels = 0;
+        LightingDynamicPolarDispatchCount = 0;
+        LightingDynamicReceiverDispatchCount = 0;
+        LightingDynamicBatchDescriptorBytes = 0;
         LightingDynamicComposePixels = 0;
         LightingCompositeDispatchPixels = 0;
         LightingPolarRayWorkUnits = 0;

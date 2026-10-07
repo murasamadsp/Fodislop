@@ -81,7 +81,7 @@ namespace Kern.UI.HUD.Player.View
         private bool _initializationStarted;
 
         [Inject]
-        private PlayerStatsModel _model = null!;
+        private IPlayerStats _model = null!;
         [Inject]
         private GlobalChatUI _globalChatUI = null!;
         [Inject]
@@ -132,6 +132,7 @@ namespace Kern.UI.HUD.Player.View
             }
 
             _programmatorGrid?.Tick();
+            _bonusController?.Update();
         }
 
         private void TryStartInitialization()
@@ -392,7 +393,7 @@ namespace Kern.UI.HUD.Player.View
             // Кнопки чата в HUD нет: глобальный чат открывается по TAB
             // внутри GlobalChatUI.Update.
 
-            _bonusController = new PlayerHUDBonusController(packet => _networkService?.Send(packet), _loc);
+            _bonusController = new PlayerHUDBonusController(packet => _networkService?.Send(packet), _loc, _uiInput);
             _bonusController.Initialize(tree);
             var bonusButton = tree.Q<Button>("BonusButton");
             if (bonusButton != null)

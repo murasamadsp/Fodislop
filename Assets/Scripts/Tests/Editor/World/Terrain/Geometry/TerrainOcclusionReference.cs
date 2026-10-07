@@ -29,16 +29,16 @@ internal static class TerrainOcclusionReference
         }
 
         TerrainVertex vertex = foreground[0];
-        bool hasTexture = vertex.UV1z != 0 && Mathf.HalfToFloat(vertex.UV1z) > 0.0001f;
+        bool hasTexture = vertex.UV1.z > 0.0001f;
         bool roundable = (Mathf.RoundToInt(vertex.UV6.z) & 1) != 0;
         if (!hasTexture || roundable)
         {
             return false;
         }
 
-        // Смещённый квад закрывает клетку, только если лежит внутри сплошного
-        // массива: его узлы общие с соседями.
-        if (vertex.UV5x != 0 && !IsInsideSolidMass(x, y, sources))
+        // Смещённый квад закрывает клетку, только если лежит внутри
+        // массы: его узлы общие с соседями.
+        if (vertex.UV5x != 0 && !IsInsideOpaqueMass(x, y, sources))
         {
             return false;
         }
@@ -47,14 +47,14 @@ internal static class TerrainOcclusionReference
         return sources.Atlases[foregroundAtlas].IsFullyOpaque(foregroundType);
     }
 
-    private static bool IsInsideSolidMass(int x, int y, TerrainCellSources sources)
+    private static bool IsInsideOpaqueMass(int x, int y, TerrainCellSources sources)
     {
         for (int dy = -1; dy <= 1; dy++)
         {
             for (int dx = -1; dx <= 1; dx++)
             {
                 if ((dx != 0 || dy != 0) &&
-                    !IsSolidMassCell(sources.CellCache.GetCellData(x + 1 + dx, y + 1 + dy), sources.Atlases))
+                    !IsOpaqueMassCell(sources.CellCache.GetCellData(x + 1 + dx, y + 1 + dy), sources.Atlases))
                 {
                     return false;
                 }
@@ -64,11 +64,10 @@ internal static class TerrainOcclusionReference
         return true;
     }
 
-    private static bool IsSolidMassCell(CachedCellData cell, IReadOnlyList<IAtlasDescriptor> atlases)
+    private static bool IsOpaqueMassCell(CachedCellData cell, IReadOnlyList<IAtlasDescriptor> atlases)
     {
         if (cell.State != TerrainCellState.Loaded ||
-            cell.Distortion != MinesServer.Networking.Server.Packets.Connection.CellDistortionType.Cause ||
-            MapCellConfigCatalog.GetVisualProperties(cell.Type).IsRound)
+            cell.Outline != CellOutline.Wavy)
         {
             return false;
         }

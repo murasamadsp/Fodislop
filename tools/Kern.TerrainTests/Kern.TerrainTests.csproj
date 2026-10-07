@@ -51,7 +51,6 @@
     <Compile Include="$(Game)/Rendering/PostProcessing/ColorGrading/Contracts/VisualTuning.cs" Link="Game/VisualTuning.cs" />
     <Compile Include="$(Game)/World/Lighting/Quality/Contracts/LightingQualityTuning.cs" Link="Game/LightingQualityTuning.cs" />
     <Compile Include="$(Game)/World/Common/TileBitmaskConverter.cs" Link="Game/TileBitmaskConverter.cs" />
-    <Compile Include="$(Game)/World/Terrain/Mesh/TerrainCellLayers.cs" Link="Game/TerrainCellLayers.cs" />
     <Compile Include="$(Game)/World/Terrain/Mesh/TerrainVertexDistortionCalculator.cs" Link="Game/TerrainVertexDistortionCalculator.cs" />
     <Compile Include="$(Game)/World/Common/Contracts/RenderingConstants.cs" Link="Game/RenderingConstants.cs" />
     <Compile Include="$(Game)/World/Common/Contracts/BlockDefinition.cs" Link="Game/BlockDefinition.cs" />
@@ -59,14 +58,11 @@
     <Compile Include="$(Game)/World/Common/Contracts/CellVisualProtocol.cs" Link="Game/CellVisualProtocolContracts.cs" />
     <Compile Include="$(Game)/World/Common/MapBlockColors.cs" Link="Game/MapBlockColors.cs" />
     <Compile Include="$(Game)/World/Storage/BlockRegistry.cs" Link="Game/BlockRegistry.cs" />
-    <Compile Include="$(Game)/World/Storage/CellVisualProtocol.cs" Link="Game/CellVisualProtocol.cs" />
     <Compile Include="$(Game)/World/Storage/MapCellConfigCatalog.cs" Link="Game/MapCellConfigCatalog.cs" />
-    <Compile Include="$(Game)/World/Terrain/Mesh/TerrainAnimationProfile.cs" Link="Game/TerrainAnimationProfile.cs" />
-    <Compile Include="$(Game)/World/Terrain/Mesh/TerrainDecalCatalog.cs" Link="Game/TerrainDecalCatalog.cs" />
     <!-- TerrainCellMaskCalculator трогает оба каталога: без них CPU-набор не собирался. -->
     <Compile Include="$(Game)/World/Terrain/GPU/TerrainCellData.cs" Link="Game/TerrainCellData.cs" />
+    <Compile Include="$(Game)/World/Terrain/GPU/TerrainCellFormat.cs" Link="Game/TerrainCellFormat.cs" />
     <!-- Сборка квада — тот же код игры, источники — подмены бенчмарка. -->
-    <Compile Include="$(Game)/World/Terrain/GPU/TerrainCellPacker.cs" Link="Game/TerrainCellPacker.cs" />
     <Compile Include="$(Game)/Tests/Editor/World/Terrain/Reference/*.cs" LinkBase="Tests/Reference" />
     <Compile Include="../Kern.TerrainBench/TerrainProductionAdapters.cs" Link="Shim/TerrainProductionAdapters.cs" />
     <Compile Include="../Kern.TerrainBench/BenchAtlasDescriptor.cs" Link="Shim/BenchAtlasDescriptor.cs" />

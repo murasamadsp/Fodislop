@@ -122,4 +122,39 @@ public class PlayerStatsModelTests
         Assert.IsEmpty(_statsModel.MissionTitle);
         Assert.IsEmpty(_statsModel.MissionDescription);
     }
+
+    [Test]
+    public void Batching_CoalescesMultipleStatMutationsIntoSingleStatsChangedEvent()
+    {
+        int statsChangedCount = 0;
+        _statsModel.OnStatsChanged += () => statsChangedCount++;
+
+        _statsModel.BeginBatch();
+        _statsModel.SetHealth(50, 100);
+        _statsModel.SetLevel(10);
+        _statsModel.SetCurrency(100, 5);
+        _statsModel.EndBatch();
+
+        Assert.AreEqual(1, statsChangedCount);
+        Assert.AreEqual(50, _statsModel.Health);
+        Assert.AreEqual(10, _statsModel.Level);
+        Assert.AreEqual(100, _statsModel.Money);
+        Assert.AreEqual(5, _statsModel.Credits);
+    }
+
+    [Test]
+    public void InformativeEvents_FireWithAccurateParameters()
+    {
+        (int current, int max) healthResult = default;
+        (long money, long credits) currencyResult = default;
+
+        _statsModel.OnHealthUpdated += (c, m) => healthResult = (c, m);
+        _statsModel.OnCurrencyUpdated += (m, c) => currencyResult = (m, c);
+
+        _statsModel.SetHealth(80, 120);
+        _statsModel.SetCurrency(5000, 42);
+
+        Assert.AreEqual((80, 120), healthResult);
+        Assert.AreEqual((5000, 42), currencyResult);
+    }
 }

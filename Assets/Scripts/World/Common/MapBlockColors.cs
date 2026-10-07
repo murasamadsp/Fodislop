@@ -21,7 +21,7 @@ namespace Kern.World;
 /// каждом ненулевом канале: <c>Color(r / 256f)</c> → <c>byte(c * 255f)</c> даёт
 /// <c>255 → 254</c> и <c>112 → 111</c>, то есть палитра систематически темнела.
 ///
-/// Неназванные числовые значения (2–28, 46, 47, 56–59, 84, 85, 89, 123–255)
+/// Неназванные числовые значения (2–27, 46, 47, 57–59, 84, 85, 89, 123–255)
 /// получают <see cref="UnknownColor"/> — громкий маркер «нет данных», а не
 /// формула: формула молча рисовала произвольный цвет там, где типа клетки
 /// попросту нет.
@@ -68,50 +68,9 @@ public static class MapBlockColors
     {
         foreach ((CellType type, BlockDefinition def) in BlockRegistry.Blocks)
         {
-            if (TryParseHEXColor32(def.MapColorHEX, out Color32 color))
-            {
-                Set((byte)type, color.r, color.g, color.b, color.a);
-            }
+            Color32 color = def.MapColor;
+            Set((byte)type, color.r, color.g, color.b, color.a);
         }
-    }
-
-    private static bool TryParseHEXColor32(string? hex, out Color32 color)
-    {
-        color = default;
-        if (string.IsNullOrEmpty(hex))
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> span = hex.AsSpan();
-        if (span.StartsWith("#"))
-        {
-            span = span[1..];
-        }
-
-        if (span.Length == 6)
-        {
-            if (byte.TryParse(span[..2], System.Globalization.NumberStyles.HexNumber, null, out byte r) &&
-                byte.TryParse(span[2..4], System.Globalization.NumberStyles.HexNumber, null, out byte g) &&
-                byte.TryParse(span[4..6], System.Globalization.NumberStyles.HexNumber, null, out byte b))
-            {
-                color = new Color32(r, g, b, 255);
-                return true;
-            }
-        }
-        else if (span.Length == 8)
-        {
-            if (byte.TryParse(span[..2], System.Globalization.NumberStyles.HexNumber, null, out byte r) &&
-                byte.TryParse(span[2..4], System.Globalization.NumberStyles.HexNumber, null, out byte g) &&
-                byte.TryParse(span[4..6], System.Globalization.NumberStyles.HexNumber, null, out byte b) &&
-                byte.TryParse(span[6..8], System.Globalization.NumberStyles.HexNumber, null, out byte a))
-            {
-                color = new Color32(r, g, b, a);
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static void Set(int cellId, byte r, byte g, byte b, byte a)

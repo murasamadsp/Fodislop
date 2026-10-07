@@ -3,6 +3,7 @@
 using System;
 using System.Globalization;
 using Kern.Core;
+using Kern.Persistence;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -20,6 +21,9 @@ internal sealed class DummyAdminCommands(
     private const string CommandPrefix = "/";
 
     private const CellType DefaultPlacedCell = CellType.SuperRainbow;
+    private const int FillWidth = 100;
+    private const int FillHeight = 100;
+    private const CellType DefaultFillCell = CellType.SuperRainbow;
 
     private static readonly System.Drawing.Color s_serverColor =
         System.Drawing.Color.FromArgb(255, 255, 180, 60);
@@ -55,6 +59,9 @@ internal sealed class DummyAdminCommands(
             case "set":
                 ApplySetCommand(parts);
                 return true;
+            case "fill":
+                ApplyFillCommand(parts);
+                return true;
             default:
                 Reply($"Неизвестная команда «{parts[0]}». Список — /help");
                 return true;
@@ -67,6 +74,9 @@ internal sealed class DummyAdminCommands(
         Reply("/help — этот список");
         Reply("/tp <x> <y> — телепорт в указанную клетку");
         Reply($"/set [тип] — поставить блок перед роботом (без аргумента — {DefaultPlacedCell})");
+        Reply(
+            $"/fill [тип] — заполнить область {FillWidth}x{FillHeight} вокруг робота " +
+            $"(без аргумента — {DefaultFillCell})");
     }
 
     private void Teleport(string[] parts)
@@ -128,6 +138,52 @@ internal sealed class DummyAdminCommands(
         ])));
 
         Reply($"{placed} поставлен в ({cellX}, {cellY}).");
+    }
+
+    private void ApplyFillCommand(string[] parts)
+    {
+        CellType fillType = DefaultFillCell;
+        if (parts.Length >= 2 && !Enum.TryParse(parts[1], ignoreCase: true, out fillType))
+        {
+            Reply($"Неизвестный тип клетки «{parts[1]}».");
+            return;
+        }
+
+        WorldLayer<CellType>? layer = worldState.Layer;
+        if (layer == null)
+        {
+            Reply("Мир ещё не загружен.");
+            return;
+        }
+
+        int worldWidth = Math.Min(layer.WidthChunks * layer.ChunkSize, ushort.MaxValue + 1);
+        int worldHeight = Math.Min(layer.HeightChunks * layer.ChunkSize, ushort.MaxValue + 1);
+        if (worldWidth < FillWidth || worldHeight < FillHeight)
+        {
+            Reply($"Мир меньше требуемой области {FillWidth}x{FillHeight}.");
+            return;
+        }
+
+        int maxX = worldWidth - FillWidth;
+        int maxY = worldHeight - FillHeight;
+        int startX = Math.Clamp(playerState.X - (FillWidth / 2), 0, maxX);
+        int startY = Math.Clamp(playerState.Y - (FillHeight / 2), 0, maxY);
+
+        var payload = new CellType[FillWidth * FillHeight];
+        Array.Fill(payload, fillType);
+        layer.SetRegion(startX, startY, FillWidth, FillHeight, payload);
+
+        sendPacket(new ServerPacket(new HBPacket(
+        [
+            new MapRegionPacket(
+                (ushort)startX,
+                (ushort)startY,
+                (byte)(FillWidth - 1),
+                (byte)(FillHeight - 1),
+                payload),
+        ])));
+
+        Reply($"Область {FillWidth}x{FillHeight} заполнена клеткой {fillType} от ({startX}, {startY}).");
     }
 
     private static bool TryParseCoordinate(string text, out ushort value) =>

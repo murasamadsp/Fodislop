@@ -10,15 +10,15 @@ using UnityEngine;
 namespace Kern.Tests.World;
 
 // Раскладка TerrainCellData против чисел, посчитанных вручную по таблице
-// битов в начале TerrainCellData.cs.
+// битов в TerrainCellFormat.hlsl.
 [TestFixture]
 public sealed class TerrainCellDataTests
 {
     [Test]
-    public void CellIsOneUshortAndTypeIsTwoUint4()
+    public void CellIsOneByteAndTypeIsFourUints()
     {
-        Assert.That(Marshal.SizeOf<TerrainCell>(), Is.EqualTo(2));
-        Assert.That(Marshal.SizeOf<TerrainTypeRow>(), Is.EqualTo(32));
+        Assert.That(Marshal.SizeOf<TerrainCell>(), Is.EqualTo(1));
+        Assert.That(Marshal.SizeOf<TerrainTypeRow>(), Is.EqualTo(16));
     }
 
     [Test]
@@ -29,20 +29,12 @@ public sealed class TerrainCellDataTests
     }
 
     [Test]
-    public void CellFieldsLandOnTheirBits()
+    public void CellIsItsType()
     {
-        TerrainCell cell = TerrainCellData.PackCell((CellType)0x5A, (CellType)0x21);
+        TerrainCell cell = TerrainCellData.PackCell((CellType)0x5A);
 
-        // 5A | 21 << 8.
-        Assert.That(cell.Bits, Is.EqualTo((ushort)0x215A));
-        Assert.That(TerrainCellData.ForegroundTypeOf(cell), Is.EqualTo((CellType)0x5A));
-        Assert.That(TerrainCellData.BackgroundTypeOf(cell), Is.EqualTo((CellType)0x21));
-    }
-
-    [Test]
-    public void MarginCellCarriesOnlyForegroundType()
-    {
-        Assert.That(TerrainCellData.PackMargin((CellType)0x5A), Is.EqualTo(new TerrainCell(0x5A)));
+        Assert.That(cell.Bits, Is.EqualTo((byte)0x5A));
+        Assert.That(TerrainCellData.TypeOf(cell), Is.EqualTo((CellType)0x5A));
     }
 
     // Константы искажения целые и меньше 2^24: во float шейдера они точные.
@@ -64,77 +56,87 @@ public sealed class TerrainCellDataTests
     [Test]
     public void TypeFieldsLandOnTheirBits()
     {
-        TerrainTypeRow row = TerrainCellData.PackType(new TerrainTypeSurface(
-            AtlasSlot: 2,
+        TerrainTypeRow row = TerrainCellData.PackType(new TerrainTypeFields(
+            Type: CellType.Rock,
+            Block: new BlockDefinition(
+                DrawLayer: CellDrawLayer.Foreground,
+                Glow: 1f,
+                Outline: CellOutline.Corner,
+                TextureAnchor: CellTextureAnchor.World,
+                AnimationType: CellAnimationType.Shimmer,
+                AnimationSpeed: 1.5f,
+                SurfaceEffect: CellSurfaceEffect.Faceted,
+                SurfaceEffectPalette: 0,
+                DecalAtlas: CellDecalAtlas.Rock,
+                RimMass: 4,
+                MapColor: default),
+            Slot: 2,
             AtlasRect: new Vector4(0.25f, 0.5f, 0.125f, 1f),
             TileSize: 0.03125f,
             FrameCount: 3,
             FrameHeightTiles: 2f,
-            Animation: CellAnimationType.Blinking,
-            AnimationSettings: new TerrainAnimationSettings(TerrainAnimationProfile.FacetedCrystal, 1.5f),
+            OpaqueOwn: true,
+            OpaqueAny: true,
             HasTileGroup: true,
-            TileGroupId: 3,
-            ContinuousSheet: true,
-            ReliefGroup: 4,
-            LightColor: new Color32(10, 20, 30, 128),
-            IsGlowing: true,
-            EmissionPower: 0.5f,
-            Solid: true,
-            ForegroundRoundable: false,
-            ForegroundDecal: TerrainDecalFamily.Rock,
-            IsBuildingWall: false,
-            IsBuildingCorner: true,
-            OpaqueInOwnAtlas: true,
-            OpaqueInAnyAtlas: true,
-            Distortion: MinesServer.Networking.Server.Packets.Connection.CellDistortionType.Cause));
+            TileGroupId: 3));
 
-        // half: 0.25 = 3400, 0.5 = 3800, 0.125 = 3000, 1 = 3C00,
-        // 1/32 = 2800, 3 = 4200, 2 = 4000, 1.5 = 3E00.
-        Assert.That(row.AX, Is.EqualTo(0x38003400u));
-        Assert.That(row.AY, Is.EqualTo(0x3C003000u));
-        Assert.That(row.AZ, Is.EqualTo(0x42002800u));
-        Assert.That(row.AW, Is.EqualTo(0x3E004000u));
-        Assert.That(row.BX, Is.EqualTo(0x021E140Au));
-        Assert.That(row.BY, Is.EqualTo(0x3E000000u), "0.5 * 0.25 = 0.125f");
-        // анимация 1, профиль 3, светится, твёрдый, масса, Cause, есть атлас.
-        Assert.That(row.BZ, Is.EqualTo(0x00930301u));
-        // камень 2, тайлгруппа 4, угол 10, непрозрачен 20 и 40; кайма Rock
-        // 2 << 8; рельеф 4 << 16; тайлгруппа 3 << 24.
-        Assert.That(row.BW, Is.EqualTo(0x03040176u));
+        // Тайл 1/32 — атлас 1024: x 256, y 512 << 12, кадров 3 << 24;
+        // w 128, h 1024 << 12, кайма 4 << 24.
+        Assert.That(row.AtlasXY, Is.EqualTo(0x03200100u));
+        Assert.That(row.AtlasWH, Is.EqualTo(0x04400080u));
+        // слот 2, блок (бит пола 0), непрозрачен 10 и 20, по миру 40, угол 5 << 7,
+        // мерцание 2 << 10, грани 2 << 12, камень 2 << 17.
+        Assert.That(row.Look, Is.EqualTo(0x00042AF2u));
+        // скорость 1.5 в half — 3E00, свечение 255 << 16, тайлгруппа (3 + 1) << 24.
+        Assert.That(row.SpeedGlowTile, Is.EqualTo(0x04FF3E00u));
     }
 
     [Test]
-    public void PaletteBlockAndEmptyLandOnTheirBits()
+    public void PaletteAndNoTextureLandOnTheirBits()
     {
-        TerrainTypeRow row = TerrainCellData.PackType(new TerrainTypeSurface(
-            AtlasSlot: 0,
+        var type = (CellType)0x5A;
+        TerrainTypeRow row = TerrainCellData.PackType(new TerrainTypeFields(
+            Type: type,
+            Block: new BlockDefinition(
+                DrawLayer: CellDrawLayer.Background,
+                Glow: 0f,
+                Outline: CellOutline.Wall,
+                TextureAnchor: CellTextureAnchor.Cell,
+                AnimationType: CellAnimationType.None,
+                AnimationSpeed: 50f,
+                SurfaceEffect: CellSurfaceEffect.Prismatic,
+                SurfaceEffectPalette: 5,
+                DecalAtlas: CellDecalAtlas.None,
+                RimMass: 0,
+                MapColor: default),
+            Slot: 0,
             AtlasRect: Vector4.zero,
             TileSize: 0f,
             FrameCount: 1,
             FrameHeightTiles: 1f,
-            Animation: CellAnimationType.None,
-            AnimationSettings: new TerrainAnimationSettings(TerrainAnimationProfile.PrismaticCrystal, 0f, 5f),
+            OpaqueOwn: false,
+            OpaqueAny: false,
             HasTileGroup: false,
-            TileGroupId: 7,
-            ContinuousSheet: false,
-            ReliefGroup: 0,
-            LightColor: default,
-            IsGlowing: false,
-            EmissionPower: 0f,
-            Solid: false,
-            ForegroundRoundable: false,
-            ForegroundDecal: TerrainDecalFamily.None,
-            IsBuildingWall: true,
-            IsBuildingCorner: false,
-            OpaqueInOwnAtlas: false,
-            OpaqueInAnyAtlas: false,
-            Distortion: MinesServer.Networking.Server.Packets.Connection.CellDistortionType.Block,
-            IsEmpty: true));
+            TileGroupId: 7));
 
-        // профиль 1 << 8, Block 21, Empty 22, атласа нет, палитра 5 << 24.
-        Assert.That(row.BZ, Is.EqualTo(0x05600100u));
-        // стена 8; номер тайлгруппы без самой группы не пишется.
-        Assert.That(row.BW, Is.EqualTo(0x00000008u));
+        // кадров 1 << 24; прямоугольника нет.
+        Assert.That(row.AtlasXY, Is.EqualTo(0x01000000u));
+        Assert.That(row.AtlasWH, Is.Zero);
+        // проходим 8, стена 4 << 7, радужный кристалл 3 << 12, палитра 5 << 14.
+        Assert.That(row.Look, Is.EqualTo(0x00017208u));
+        // скорость 50 в half — 5240, свечения нет; номер тайлгруппы без
+        // самой группы не пишется.
+        Assert.That(row.SpeedGlowTile, Is.EqualTo(0x5240u));
+    }
+
+    // Свечение — байт: края точные, середина округляется к ближнему.
+    [TestCase(0f, (byte)0)]
+    [TestCase(1f, (byte)255)]
+    [TestCase(0.5f, (byte)128)]
+    public void GlowIsAByte(float glow, byte expected)
+    {
+        Assert.That(TerrainCellData.GlowByte(glow), Is.EqualTo(expected));
+        Assert.That(TerrainCellData.GlowOf(TerrainCellData.GlowByte(1f)), Is.EqualTo(1f));
     }
 
     [Test]

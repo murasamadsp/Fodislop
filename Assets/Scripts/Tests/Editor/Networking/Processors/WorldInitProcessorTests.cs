@@ -113,8 +113,6 @@ public class WorldInitProcessorTests
         public Color GetCellMinimapColor(CellType type) => Color.white;
         public Color32 GetCellMinimapColor32(CellType type) => Color.white;
         public int GetAnimationFrameHeight(CellType cellType) => 0;
-        public byte GetAnimationSpeed(CellType cellType) => 0;
-        public bool HasAnimation(CellType cellType) => false;
         public void ResetWorldState() { }
     }
 

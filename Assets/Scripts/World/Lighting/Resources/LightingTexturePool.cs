@@ -19,6 +19,7 @@ internal static class LightingTexturePool
     {
         int bytesPerPixel = format switch
         {
+            RenderTextureFormat.R8 => 1,
             RenderTextureFormat.ARGB32 or RenderTextureFormat.RFloat => 4,
             RenderTextureFormat.ARGBHalf => 8,
             RenderTextureFormat.ARGBFloat => 16,

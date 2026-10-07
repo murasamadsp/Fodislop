@@ -12,7 +12,7 @@ Shader "Hidden/Kern/LightingFieldOrientationProbe"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/World/LightingFieldRaster.hlsl"
 
-            // Same raster transform as the terrain material/emission/AO fields.
+            // Same raster transform as the terrain material/glow/AO fields.
             float4 ProbeVert(float3 positionOS : POSITION) : SV_POSITION
             {
                 return KernLightingFieldClipPosition(positionOS);

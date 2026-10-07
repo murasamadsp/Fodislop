@@ -109,18 +109,18 @@ namespace Kern.World
 
             _materialManager.ApplyMaterialConfig(
                 transitMaterial,
-                config.Terrain.TransitEmissionColor,
-                config.Terrain.TransitEmissionStrength,
+                config.Terrain.TransitGlowColor,
+                config.Terrain.TransitGlowStrength,
                 config.Terrain.SurfaceOccupancy);
             _materialManager.ApplyMaterialConfig(
                 perspectiveMaterial,
-                config.Terrain.PerspectiveEmissionColor,
-                config.Terrain.PerspectiveEmissionStrength,
+                config.Terrain.PerspectiveGlowColor,
+                config.Terrain.PerspectiveGlowStrength,
                 occupancy: 0f);
             _materialManager.ApplyMaterialConfig(
                 redRockMaterial,
                 Color.clear,
-                emissionStrength: 0f,
+                glowStrength: 0f,
                 occupancy: 1f);
             _lightingGeometryRevision++;
             Debug.Log($"[SurfaceRenderer] ApplyClientConfig: revision={_lightingGeometryRevision}");
@@ -154,9 +154,9 @@ namespace Kern.World
             }
         }
 
-        public void RenderMaterialEmissionFields(
+        public void RenderMaterialGlowFields(
             CommandBuffer commandBuffer,
-            in Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext context) =>
+            in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context) =>
             RenderLightingMeshes(
                 commandBuffer,
                 context.WorldRect,
@@ -373,24 +373,24 @@ namespace Kern.World
 
             Vector2 worldSize = new(_mapManager.WorldWidth, _mapManager.WorldHeight);
             _transitMaterial = _materialManager.CreateSurfaceMaterial(
-                transitTexture, clientConfig.Terrain.TransitEmissionColor,
-                clientConfig.Terrain.TransitEmissionStrength, clientConfig.Terrain.SurfaceOccupancy,
+                transitTexture, clientConfig.Terrain.TransitGlowColor,
+                clientConfig.Terrain.TransitGlowStrength, clientConfig.Terrain.SurfaceOccupancy,
                 Vector2.one, worldSize, SurfaceMaterialManager.SurfaceKind.Transit, "World Surface Transit");
 
             _perspectiveMaterial = _materialManager.CreateSurfaceMaterial(
-                perspectiveTexture, clientConfig.Terrain.PerspectiveEmissionColor,
-                clientConfig.Terrain.PerspectiveEmissionStrength, occupancy: 0f,
+                perspectiveTexture, clientConfig.Terrain.PerspectiveGlowColor,
+                clientConfig.Terrain.PerspectiveGlowStrength, occupancy: 0f,
                 baseMapTileCount: Vector2.one, worldSize: worldSize,
                 kind: SurfaceMaterialManager.SurfaceKind.Perspective, materialName: "World Surface Perspective");
 
             _redRockMaterial = _materialManager.CreateSurfaceMaterial(
-                redRockTexture, Color.clear, emissionStrength: 0f, occupancy: 1f,
+                redRockTexture, Color.clear, glowStrength: 0f, occupancy: 1f,
                 baseMapTileCount: _materialManager.GetTerrainSheetTileCount(redRockTexture),
                 worldSize: worldSize, kind: SurfaceMaterialManager.SurfaceKind.RedRock,
                 materialName: "World Surface Redrock");
 
             _horizonMaterial = _materialManager.CreateSurfaceMaterial(
-                perspectiveTexture, Color.clear, emissionStrength: 0f, occupancy: 0f,
+                perspectiveTexture, Color.clear, glowStrength: 0f, occupancy: 0f,
                 baseMapTileCount: Vector2.one, worldSize: worldSize,
                 kind: SurfaceMaterialManager.SurfaceKind.Horizon, materialName: "World Surface Horizon");
             _materialManager.SetHorizonSkyColor(_horizonMaterial, SurfaceMaterialManager.HorizonSkyColor);

@@ -13,12 +13,12 @@ public class TerrainLightingDataTests
     {
         TerrainLightingData data = TerrainLightingData.Pack(
             0xA5,
-            isGlowing: true,
+            glows: true,
             hasRoundedPhysicalContour: true,
             isPhysicalMass: true,
-            emissionStrength: 0.6f,
-            reliefMask: 0,
-            hasRelief: false);
+            glow: 0.6f,
+            rimMask: 0,
+            hasRim: false);
 
         Assert.That(data.PackedFlags, Is.EqualTo(53.15f).Within(0.0001f));
         // Старшая тетрада 0xA5 — бывшие диагонали; в контур они не попадают.
@@ -31,21 +31,21 @@ public class TerrainLightingDataTests
     [TestCase(false, false, true)]
     [TestCase(true, true, true)]
     public void PackRoundTripsIndependentLightingFlags(
-        bool isGlowing,
+        bool glows,
         bool hasRoundedPhysicalContour,
         bool isPhysicalMass)
     {
         TerrainLightingData data = TerrainLightingData.Pack(
             0xA5,
-            isGlowing,
+            glows,
             hasRoundedPhysicalContour,
             isPhysicalMass,
-            isGlowing ? 0.6f : 0f,
-            reliefMask: 0,
-            hasRelief: false);
+            glows ? 0.6f : 0f,
+            rimMask: 0,
+            hasRim: false);
 
-        Assert.That(data.SolidBoundary, Is.EqualTo(0x05));
-        Assert.That(data.IsEmissive, Is.EqualTo(isGlowing));
+        Assert.That(data.ForegroundSides, Is.EqualTo(0x05));
+        Assert.That(data.Glows, Is.EqualTo(glows));
         Assert.That(data.IsRoundable, Is.EqualTo(hasRoundedPhysicalContour));
         Assert.That(data.IsPhysicalMass, Is.EqualTo(isPhysicalMass));
     }
@@ -58,12 +58,12 @@ public class TerrainLightingDataTests
     {
         TerrainLightingData data = TerrainLightingData.Pack(
             0xFF,
-            isGlowing: true,
+            glows: true,
             hasRoundedPhysicalContour: true,
             isPhysicalMass: isPhysicalMass,
-            emissionStrength: 1f,
-            reliefMask: 0,
-            hasRelief: false);
+            glow: 1f,
+            rimMask: 0,
+            hasRim: false);
 
         Assert.That(data.ReceivesAmbientOcclusion, Is.EqualTo(expectedReceiver));
     }
@@ -73,68 +73,68 @@ public class TerrainLightingDataTests
     [TestCase(0.25f)]
     [TestCase(0.6f)]
     [TestCase(1f)]
-    public void EmissionStrengthRoundTripsWithoutCorruptingFlags(float emissionStrength)
+    public void GlowRoundTripsWithoutCorruptingFlags(float glow)
     {
         TerrainLightingData data = TerrainLightingData.Pack(
             0x5A,
-            isGlowing: true,
+            glows: true,
             hasRoundedPhysicalContour: true,
             isPhysicalMass: true,
-            emissionStrength: emissionStrength,
-            reliefMask: 0,
-            hasRelief: false);
+            glow: glow,
+            rimMask: 0,
+            hasRim: false);
 
-        Assert.That(data.EmissionStrength, Is.EqualTo(emissionStrength).Within(0.0001f));
-        Assert.That(data.SolidBoundary, Is.EqualTo(0x0A));
-        Assert.That(data.IsEmissive, Is.True);
+        Assert.That(data.Glow, Is.EqualTo(glow).Within(0.0001f));
+        Assert.That(data.ForegroundSides, Is.EqualTo(0x0A));
+        Assert.That(data.Glows, Is.True);
         Assert.That(data.IsPhysicalMass, Is.True);
     }
 
     [Test]
-    public void NonEmissiveDataDecodesZeroEmission()
+    public void NonGlowingDataDecodesZeroGlow()
     {
         TerrainLightingData data = TerrainLightingData.Pack(
             0,
-            isGlowing: false,
+            glows: false,
             hasRoundedPhysicalContour: false,
             isPhysicalMass: false,
-            emissionStrength: 0.75f,
-            reliefMask: 0,
-            hasRelief: false);
+            glow: 0.75f,
+            rimMask: 0,
+            hasRim: false);
 
-        Assert.That(data.EmissionStrength, Is.Zero);
+        Assert.That(data.Glow, Is.Zero);
     }
 
-    // Код рельефа лежит над флагом roundable contour и не затрагивает его.
+    // Код каймы лежит над флагом roundable contour и не затрагивает его.
     [TestCase(0, 1)]
     [TestCase(0x05, 6)]
     [TestCase(0x0F, 16)]
-    public void ReliefCodeRoundTripsBesideContourFields(int reliefMask, int expectedCode)
+    public void RimCodeRoundTripsBesideContourFields(int rimMask, int expectedCode)
     {
         TerrainLightingData data = TerrainLightingData.Pack(
             0xA5,
-            isGlowing: true,
+            glows: true,
             hasRoundedPhysicalContour: true,
             isPhysicalMass: true,
-            emissionStrength: 0.6f,
-            reliefMask: (byte)reliefMask,
-            hasRelief: true);
+            glow: 0.6f,
+            rimMask: (byte)rimMask,
+            hasRim: true);
 
-        Assert.That(data.ReliefCode, Is.EqualTo(expectedCode));
+        Assert.That(data.RimCode, Is.EqualTo(expectedCode));
         Assert.That(data.IsRoundable, Is.True);
     }
 
-    // Ноль означает «рельефа нет», поэтому клетка без семьи и клетка, у
+    // Ноль означает «каймы нет», поэтому клетка без семьи и клетка, у
     // которой все четыре соседа чужие, обязаны различаться.
     [Test]
-    public void NoReliefIsDistinctFromAllNeighborsForeign()
+    public void NoRimIsDistinctFromAllNeighborsForeign()
     {
         TerrainLightingData without = TerrainLightingData.Pack(
-            0, false, false, false, 0f, reliefMask: 0, hasRelief: false);
+            0, false, false, false, 0f, rimMask: 0, hasRim: false);
         TerrainLightingData surrounded = TerrainLightingData.Pack(
-            0, false, false, false, 0f, reliefMask: 0, hasRelief: true);
+            0, false, false, false, 0f, rimMask: 0, hasRim: true);
 
-        Assert.That(without.ReliefCode, Is.EqualTo(TerrainLightingData.NoRelief));
-        Assert.That(surrounded.ReliefCode, Is.EqualTo(1));
+        Assert.That(without.RimCode, Is.EqualTo(TerrainLightingData.NoRim));
+        Assert.That(surrounded.RimCode, Is.EqualTo(1));
     }
 }

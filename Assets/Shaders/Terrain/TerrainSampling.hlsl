@@ -2,6 +2,7 @@
 #define KERN_TERRAIN_SAMPLING_INCLUDED
 
 #include "TerrainTileAddressing.hlsl"
+#include "TerrainCellFormat.hlsl"
 #include "TerrainGeometryContract.hlsl"
 
 // Порядок обязателен: cbuffer-файл зовёт TerrainAtlasTexelSize, — сначала идёт
@@ -58,9 +59,10 @@ float2 TerrainResolveGeometryTileUV(
         cellSample, cornersX, cornersY);
 
     uint packedUvs = (uint)round(uvBits);
+    const uint uvStep = KERN_TERRAIN_UV_BITS_PER_CORNER;
     float2 uv00 = float2(packedUvs & 1u, (packedUvs >> 1u) & 1u);
-    float2 uv10 = float2((packedUvs >> 2u) & 1u, (packedUvs >> 3u) & 1u);
-    float2 uv01 = float2((packedUvs >> 6u) & 1u, (packedUvs >> 7u) & 1u);
+    float2 uv10 = float2((packedUvs >> uvStep) & 1u, (packedUvs >> (uvStep + 1u)) & 1u);
+    float2 uv01 = float2((packedUvs >> (3u * uvStep)) & 1u, (packedUvs >> (3u * uvStep + 1u)) & 1u);
     return uv00 + (uv10 - uv00) * cellLocalUv.x + (uv01 - uv00) * cellLocalUv.y;
 }
 
@@ -166,20 +168,16 @@ TerrainTileUvResult ResolveTerrainTileUV(
     float2 tilesCount = ceil(subAtlasSizeUV / tileSizeUV - 0.0001);
     tilesCount = max(tilesCount, 1.0);
 
-    // Раскладка упакованных каналов клетки:
-    //   w — бит 0: автотайлинг по соседям. Биты выше свободны.
-    //   z — биты 0-4: колонка тайлгруппы (descriptor & 0x1F);
-    //       бит 5: сплошной лист.
+    // Раскладка каналов — PackedColumn в TerrainCellFormat.hlsl.
     //
     // В w когда-то читали значение больше 1.5 как «выбросить квад», но
     // писателя у него не было ни в одном коммите, и канал только выглядел
     // занятым. Читателей сняли; выбрасывание квада выражено там, где оно
-    // и принимается, — atlasIndex < 0 в LoadTerrainCellVertex и
-    // TerrainCellLayers.TryGetType.
+    // и принимается, — atlasIndex < 0 в LoadTerrainCellVertex.
     bool isTiling = fmod(worldPos.w, 2.0) > 0.5;
     int packedColumn = (int)(worldPos.z + 0.5);
-    bool isContinuousSheet = (packedColumn & 32) != 0;
-    float tileGroupColumn = (float)(packedColumn & 31);
+    bool worldTextureAnchor = ((uint)packedColumn & KERN_TERRAIN_COLUMN_WORLD_TEXTURE_ANCHOR) != 0u;
+    float tileGroupColumn = (float)((uint)packedColumn & KERN_TERRAIN_COLUMN_MASK);
 
     // Кристаллы и камень адресуют лист по фактической позиции фрагмента в
     // деформированной геометрии. Это сохраняет непрерывность текстуры через
@@ -188,7 +186,7 @@ TerrainTileUvResult ResolveTerrainTileUV(
     // Тайл на клетку этого не умеет. Его UV зажат в свою клетку, геометрия
     // уезжает без него, и на каждой границе остаётся шов: массив читается
     // кладкой из штампов, а не одним камнем.
-    if (isContinuousSheet)
+    if (worldTextureAnchor)
     {
         float2 sheetPosition = float2(worldPos.x, -worldPos.y - 1.0) + geometryCellPosition;
         float2 sheetUV = frac(sheetPosition / tilesCount);
@@ -277,7 +275,7 @@ float2 ClampTerrainTileUV(float2 uv, TerrainTileUvResult tile)
 
 // Ширина экранного пикселя в текселях атласа для PixelArtSampleUV.
 //
-// finalUV клетки рвётся: сплошной лист оборачивается через frac на границах
+// finalUV клетки рвётся: бесшовная текстура оборачивается через frac на границах
 // клеток, кратных его ширине, а клетка за краем берёт соседний тайл. fwidth
 // от такой UV в квадах 2×2 на этих линиях — целый лист, сглаживание шва
 // прилипало к углу текселя, и прямые грани на целых границах мерцали с зумом.

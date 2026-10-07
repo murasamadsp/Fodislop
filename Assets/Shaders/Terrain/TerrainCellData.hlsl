@@ -2,105 +2,17 @@
 #define KERN_TERRAIN_CELL_DATA_INCLUDED
 
 #include "TerrainGeometryContract.hlsl"
+#include "TerrainCellFormat.hlsl"
+#include "TerrainAtlasSampling.hlsl"
+#include "TerrainMaterialCBuffer.hlsl"
 
-// Квад террейна из данных клетки. Раскладка битов — та же таблица, что в
-// Assets/Scripts/World/Terrain/GPU/TerrainCellData.cs; меняются только вместе.
+// Квад террейна из данных клетки — только функции. Данные (раскладка,
+// буферы, глобалы) — в TerrainCellFormat.hlsl.
 //
-// Меш идентификаторов (TerrainCellIDMesh) несёт в POSITION адрес квада
-// (x, y, слой: 0 фон, 1 передний план, 2 накладка дверей), а в TEXCOORD0
-// угол. Здесь из клетки, её восьми соседей и
-// строк их типов восстанавливаются ровно те атрибуты, что TerrainQuadBuilder
-// пишет в вершину.
-//
-// КЛЕТКА, ushort; две клетки в uint (младшая — с чётным индексом кольца):
-//    0- 7  тип переднего плана (0 — не загружена)
-//    8-15  тип фона до решения слоя (0 — нет)
-// Узлы сетки (углы клетки) шейдер считает сам по типам клеток вокруг узла.
-//
-// ТИП, два uint4:
-//   a.x/a.y  прямоугольник атласа (4 half)
-//   a.z      размер тайла, число кадров (half, half)
-//   a.w      высота кадра, скорость анимации (half, half)
-//   b.x      цвет света RGB 0-23, слот атласа 24-31
-//   b.y      доля свечения (float)
-//   b.z      тип анимации 0-7, профиль 8-15, светится 16, твёрдый 17,
-//            масса 18, скругление 19, Cause 20, Block 21, Empty 22,
-//            есть прямоугольник атласа 23; палитра 24-31
-//   b.w      семья декали 0-1, тайлгруппа есть 2, стена пака 3, угол пака 4,
-//            непрозрачен в своём атласе 5, хоть в одном 6; текстура полотном 8;
-//            рельефная группа 16-23; тайлгруппа 24-31
-
-struct TerrainTypeRow
-{
-    uint4 a;
-    uint4 b;
-};
-
-StructuredBuffer<uint> _TerrainCells;
-StructuredBuffer<TerrainTypeRow> _TerrainTypes;
-// TileBitmaskConverter: маска восьми соседей → дескриптор автотайла,
-// четыре байта на uint.
-StructuredBuffer<uint> _TerrainTileDescriptors;
-
-// b.z
-static const uint KERN_TERRAIN_TYPE_GLOWING = 1u << 16;
-static const uint KERN_TERRAIN_TYPE_SOLID = 1u << 17;
-static const uint KERN_TERRAIN_TYPE_ROUNDABLE = 1u << 19;
-static const uint KERN_TERRAIN_TYPE_CAUSE = 1u << 20;
-static const uint KERN_TERRAIN_TYPE_BLOCK = 1u << 21;
-static const uint KERN_TERRAIN_TYPE_EMPTY = 1u << 22;
-static const uint KERN_TERRAIN_TYPE_ATLAS_RECT = 1u << 23;
-
-// b.w
-static const uint KERN_TERRAIN_TYPE_TILE_GROUP = 1u << 2;
-static const uint KERN_TERRAIN_TYPE_WALL = 1u << 3;
-static const uint KERN_TERRAIN_TYPE_CORNER = 1u << 4;
-static const uint KERN_TERRAIN_TYPE_OPAQUE_OWN = 1u << 5;
-static const uint KERN_TERRAIN_TYPE_OPAQUE_ANY = 1u << 6;
-static const uint KERN_TERRAIN_TYPE_SHEET = 1u << 8;
-static const uint KERN_TERRAIN_WALL_BASE_COLUMN = 8u;
-
-// Соседи в порядке битов маски автотайла (TileBitmaskConverter):
-// L, BL, B, BR, R, TR, T, TL.
-static const int KERN_TERRAIN_LEFT = 0;
-static const int KERN_TERRAIN_BOTTOM_LEFT = 1;
-static const int KERN_TERRAIN_BOTTOM = 2;
-static const int KERN_TERRAIN_BOTTOM_RIGHT = 3;
-static const int KERN_TERRAIN_RIGHT = 4;
-static const int KERN_TERRAIN_TOP_RIGHT = 5;
-static const int KERN_TERRAIN_TOP = 6;
-static const int KERN_TERRAIN_TOP_LEFT = 7;
-static const int KERN_TERRAIN_NEIGHBOUR_X[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
-static const int KERN_TERRAIN_NEIGHBOUR_Y[8] = { 0, -1, -1, -1, 0, 1, 1, 1 };
-
-// x, y — размер кольца клеток (окно и кайма по клетке с каждой стороны);
-// z — размер клетки в мире.
-float4 _TerrainCellGridSize;
-
-// x, y — мировая клетка локального (0, 0) окна; z, w — высота и ширина мира
-// в клетках.
-// Клетки лежат по кольцевому адресу: мировая координата по модулю размера
-// кольца.
-float4 _TerrainCellOrigin;
-
-// Искажение: 0 — выключено, 1 — классика, 2 — органика; константы —
-// TerrainCellData.PackDistortion (раскладка там же). Зёрна органических
-// рёбер — TerrainConfigHolder.OrganicEdge*Seed.
-int _TerrainDistortionMode;
-float4 _TerrainDistortion[8];
-int _TerrainOrganicHorizontalSeed;
-int _TerrainOrganicVerticalSeed;
-
-// Правила декалей земли и камня (TerrainCellData.PackDecal): процент 0-6,
-// зерно 7-14, атлас камня 15.
-int _TerrainGroundDecalRule;
-int _TerrainRockDecalRule;
-
-// Начало рисуемого окна внутри сетки. Экран рисует меш размером с видимое
-// окно, поле материалов — меш всей сетки со смещением ноль.
-float4 _TerrainCellViewOffset;
-float2 _TerrainGeometryCarrierPaddingWorld;
-int _TerrainDebugBackgroundTileIdentity;
+// Меш идентификаторов (TerrainCellIdMesh) несёт в POSITION адрес квада
+// (x, y, слой: 0 фон, 1 передний план, 2 накладка дверей) и угол. Из
+// клетки, её восьми соседей и строк их типов восстанавливаются ровно те
+// атрибуты, что TerrainQuadBuilder пишет в вершину.
 
 int TerrainRing(int value, int size)
 {
@@ -114,35 +26,85 @@ uint TerrainLoadCell(int gridX, int unityY)
     int width = (int)round(_TerrainCellGridSize.x);
     int height = (int)round(_TerrainCellGridSize.y);
     uint index = (uint)(TerrainRing(unityY, height) * width + TerrainRing(gridX, width));
-    return (_TerrainCells[index >> 1] >> ((index & 1u) * 16u)) & 0xFFFFu;
+    return (_TerrainCells[index / KERN_TERRAIN_CELLS_PER_WORD] >>
+        ((index % KERN_TERRAIN_CELLS_PER_WORD) * KERN_TERRAIN_CELL_BITS)) & KERN_TERRAIN_CELL_TYPE_MASK;
 }
 
-float TerrainLowHalf(uint packed)
-{
-    return f16tof32(packed & 0xFFFFu);
-}
+// ═══ ФОРМАТ: доступ к полям ═════════════════════════════════════════════
+// Только здесь поле клетки или строки типа достаётся по битам; остальной
+// код зовёт эти функции. Имя функции — TerrainType + имя поля строки.
 
-float TerrainHighHalf(uint packed)
-{
-    return f16tof32(packed >> 16);
-}
+// Клетка: её тип.
+uint TerrainCellType(uint cell) { return cell & KERN_TERRAIN_CELL_TYPE_MASK; }
 
-uint TerrainForegroundType(uint cell)
-{
-    return cell & 0xFFu;
-}
+// Строка типа читается целиком — и своя, и соседей.
+TerrainTypeRow TerrainTypeRowOf(uint type) { return _TerrainTypes[type]; }
 
-uint TerrainBackgroundType(uint cell)
-{
-    return (cell >> 8) & 0xFFu;
-}
+uint TerrainField(uint word, uint shift, uint mask) { return (word >> shift) & mask; }
 
-// Признаки типа, нужные соседям: x — флаги (b.z), y — соседство (b.w).
-// Одно чтение на клетку; у строки 0 оба нуля, поэтому незагруженная клетка
-// не проходит ни одной проверки ниже.
-uint2 TerrainTypeTraits(uint type)
+// atlasXY, atlasWH
+float4 TerrainTypeAtlasPixels(TerrainTypeRow row)
 {
-    return _TerrainTypes[type].b.zw;
+    return float4(
+        row.atlasXY & KERN_TERRAIN_TYPE_PIXEL_MASK,
+        (row.atlasXY >> KERN_TERRAIN_TYPE_PIXEL_HIGH_SHIFT) & KERN_TERRAIN_TYPE_PIXEL_MASK,
+        row.atlasWH & KERN_TERRAIN_TYPE_PIXEL_MASK,
+        (row.atlasWH >> KERN_TERRAIN_TYPE_PIXEL_HIGH_SHIFT) & KERN_TERRAIN_TYPE_PIXEL_MASK);
+}
+float TerrainTypeFrameCount(TerrainTypeRow row) { return (float)(row.atlasXY >> KERN_TERRAIN_TYPE_BYTE_SHIFT); }
+uint TerrainTypeRimMass(TerrainTypeRow row) { return row.atlasWH >> KERN_TERRAIN_TYPE_BYTE_SHIFT; }
+
+// speedGlowTile
+uint TerrainTypeTileGroupCode(TerrainTypeRow row) { return row.speedGlowTile >> KERN_TERRAIN_TYPE_BYTE_SHIFT; }
+bool TerrainTypeHasTileGroup(TerrainTypeRow row) { return TerrainTypeTileGroupCode(row) != 0u; }
+uint TerrainTypeTileGroup(TerrainTypeRow row) { return TerrainTypeTileGroupCode(row) - 1u; }
+
+// look
+uint TerrainTypeSlot(TerrainTypeRow row) { return row.look & KERN_TERRAIN_TYPE_SLOT_MASK; }
+bool TerrainTypeOpaqueOwn(TerrainTypeRow row) { return (row.look & KERN_TERRAIN_TYPE_OPAQUE_OWN) != 0u; }
+bool TerrainTypeOpaqueAny(TerrainTypeRow row) { return (row.look & KERN_TERRAIN_TYPE_OPAQUE_ANY) != 0u; }
+uint TerrainTypeTextureAnchor(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_TEXTURE_ANCHOR_SHIFT, KERN_TERRAIN_TYPE_TEXTURE_ANCHOR_MASK); }
+uint TerrainTypeOutline(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_OUTLINE_SHIFT, KERN_TERRAIN_TYPE_OUTLINE_MASK); }
+uint TerrainTypeAnimationType(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_ANIMATION_TYPE_SHIFT, KERN_TERRAIN_TYPE_ANIMATION_TYPE_MASK); }
+uint TerrainTypeSurfaceEffect(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_SURFACE_EFFECT_SHIFT, KERN_TERRAIN_TYPE_SURFACE_EFFECT_MASK); }
+uint TerrainTypeSurfaceEffectPalette(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_SURFACE_EFFECT_PALETTE_SHIFT, KERN_TERRAIN_TYPE_SURFACE_EFFECT_PALETTE_MASK); }
+uint TerrainTypeDecalAtlas(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_DECAL_ATLAS_SHIFT, KERN_TERRAIN_TYPE_DECAL_ATLAS_MASK); }
+
+float TerrainTypeAnimationSpeed(TerrainTypeRow row) { return f16tof32(row.speedGlowTile & KERN_TERRAIN_TYPE_ANIMATION_SPEED_MASK); }
+uint TerrainTypeGlowByte(TerrainTypeRow row) { return TerrainField(row.speedGlowTile, KERN_TERRAIN_TYPE_GLOW_SHIFT, KERN_TERRAIN_TYPE_GLOW_MASK); }
+float TerrainTypeGlow(TerrainTypeRow row) { return (float)TerrainTypeGlowByte(row) * (1.0 / 255.0); }
+
+// Сравнение одного поля со значением.
+// Фон (drawLayer Background или Underlay) лежит сам на себе; под передним
+// планом — подложка.
+bool TerrainTypeIsBackground(TerrainTypeRow row) { return (row.look & KERN_TERRAIN_TYPE_BACKGROUND) != 0u; }
+uint TerrainTypeUnder(uint type, TerrainTypeRow row) { return TerrainTypeIsBackground(row) ? type : (uint)_TerrainUnderlayType; }
+bool TerrainTypeGlows(TerrainTypeRow row) { return TerrainTypeGlowByte(row) != 0u; }
+bool TerrainTypeWavy(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_WAVY; }
+bool TerrainTypeHolds(TerrainTypeRow row)
+{
+    uint outline = TerrainTypeOutline(row);
+    return outline != KERN_TERRAIN_OUTLINE_PLIANT && outline != KERN_TERRAIN_OUTLINE_WAVY;
+}
+bool TerrainTypeRound(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_ROUND; }
+bool TerrainTypeWall(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_WALL; }
+bool TerrainTypeCorner(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_CORNER; }
+
+// Факты текстуры: прямоугольник, размер тайла, высота кадра.
+float4 TerrainTypeAtlasRect(TerrainTypeRow row)
+{
+    float4 texel = TerrainMaterialAtlasTexelSize((int)TerrainTypeSlot(row));
+    return TerrainTypeAtlasPixels(row) * texel.xyxy;
+}
+bool TerrainTypeHasAtlasRect(TerrainTypeRow row) { return (row.atlasWH & KERN_TERRAIN_TYPE_PIXEL_MASK) != 0u; }
+float TerrainTypeTileSize(TerrainTypeRow row)
+{
+    return KERN_TERRAIN_CELL_TEXELS * TerrainMaterialAtlasTexelSize((int)TerrainTypeSlot(row)).x;
+}
+float TerrainTypeFrameHeight(TerrainTypeRow row)
+{
+    float height = TerrainTypeAtlasRect(row).w;
+    return height > 0.0 ? height / TerrainTypeTileSize(row) : 1.0;
 }
 
 uint TerrainTileDescriptor(uint mask)
@@ -152,21 +114,21 @@ uint TerrainTileDescriptor(uint mask)
 
 // Как TerrainCellMaskCalculator.CalculateTilingDescriptor и
 // TerrainBackgroundTileResolver: соседи той же тайлгруппы → дескриптор.
-// neighbourhoods — соседство (b.w) соседей того же слоя.
-uint TerrainTilingDescriptor(uint ownNeighbourhood, uint neighbourhoods[8])
+// neighbours — признаки соседей того же слоя.
+uint TerrainTilingDescriptor(TerrainTypeRow own, TerrainTypeRow neighbours[8])
 {
-    if ((ownNeighbourhood & KERN_TERRAIN_TYPE_TILE_GROUP) == 0u)
+    if (!TerrainTypeHasTileGroup(own))
     {
         return 0u;
     }
 
-    uint group = ownNeighbourhood >> 24;
+    uint group = TerrainTypeTileGroup(own);
     uint mask = 0u;
     [unroll]
     for (int i = 0; i < 8; i++)
     {
-        uint other = neighbourhoods[i];
-        if ((other & KERN_TERRAIN_TYPE_TILE_GROUP) != 0u && (other >> 24) == group)
+        TerrainTypeRow other = neighbours[i];
+        if (TerrainTypeHasTileGroup(other) && TerrainTypeTileGroup(other) == group)
         {
             mask |= 1u << i;
         }
@@ -185,42 +147,33 @@ uint TerrainBuildingWallVariant(uint descriptor, uint cornerSideMask)
     bool hasBottom = (cornerSideMask & 8u) != 0u;
     uint cornerCount = (hasLeft ? 1u : 0u) + (hasRight ? 1u : 0u) + (hasTop ? 1u : 0u) + (hasBottom ? 1u : 0u);
     uint column = KERN_TERRAIN_WALL_BASE_COLUMN + (cornerCount < 2u ? cornerCount : 2u);
-    uint transforms = descriptor & 0xE0u;
+    uint transforms = descriptor & KERN_TERRAIN_TILE_TRANSFORM_MASK;
     if (cornerCount == 1u && (hasRight || hasBottom))
     {
-        transforms ^= 0x40u;
+        transforms ^= 1u << KERN_TERRAIN_TILE_FLIP_U_SHIFT;
     }
 
     if (cornerCount >= 2u && !hasLeft && !hasRight)
     {
-        transforms ^= 0x80u;
+        transforms ^= 1u << KERN_TERRAIN_TILE_TURN_SHIFT;
     }
 
-    return transforms | (column & 0x1Fu);
+    return transforms | (column & KERN_TERRAIN_TILE_COLUMN_MASK);
 }
 
-// Как TerrainCellMaskCalculator.SameReliefSurface: одна масса — одна группа
-// каймы; группа 0 каймы не имеет.
-bool TerrainSameRelief(uint own, uint other)
+// Как TerrainCellMaskCalculator.SameRimSurface: соседи одной ненулевой
+// массы — одно тело без каймы; масса 0 каймы не имеет.
+bool TerrainSameRim(TerrainTypeRow own, TerrainTypeRow other)
 {
-    uint otherGroup = (other >> 16) & 0xFFu;
-    return otherGroup != 0u && ((own >> 16) & 0xFFu) == otherGroup;
+    uint otherMass = TerrainTypeRimMass(other);
+    return otherMass != 0u && TerrainTypeRimMass(own) == otherMass;
 }
 
-// Как TerrainQuadBuilder.IsOrganicEmptyEdge.
-bool TerrainOrganicEmptyEdge(uint flags)
+// Как TerrainForegroundOcclusion.IsOpaqueMassCell (до переноса в шейдер):
+// загруженная волнистая клетка, непрозрачная в атласе.
+bool TerrainOpaqueMassCell(TerrainTypeRow row)
 {
-    return (flags & KERN_TERRAIN_TYPE_EMPTY) != 0u &&
-        (flags & (KERN_TERRAIN_TYPE_BLOCK | KERN_TERRAIN_TYPE_CAUSE)) == 0u;
-}
-
-// Как TerrainForegroundOcclusion.IsSolidMassCell (до переноса в шейдер):
-// загруженная искажающая нескруглённая клетка, непрозрачная в атласе.
-bool TerrainSolidMassCell(uint2 traits)
-{
-    return (traits.x & KERN_TERRAIN_TYPE_CAUSE) != 0u &&
-        (traits.x & KERN_TERRAIN_TYPE_ROUNDABLE) == 0u &&
-        (traits.y & KERN_TERRAIN_TYPE_OPAQUE_ANY) != 0u;
+    return TerrainTypeWavy(row) && TerrainTypeOpaqueAny(row);
 }
 
 // Углы UV квада после отражений и поворота автотайла — как
@@ -229,9 +182,9 @@ bool TerrainSolidMassCell(uint2 traits)
 uint TerrainCornerUvBits(uint descriptor, bool tiling)
 {
     uint transforms = tiling ? descriptor : 0u;
-    uint flipU = (transforms >> 6) & 1u;
-    uint flipV = (transforms >> 5) & 1u;
-    uint turn = (transforms >> 7) & 1u;
+    uint flipU = (transforms >> KERN_TERRAIN_TILE_FLIP_U_SHIFT) & 1u;
+    uint flipV = (transforms >> KERN_TERRAIN_TILE_FLIP_V_SHIFT) & 1u;
+    uint turn = (transforms >> KERN_TERRAIN_TILE_TURN_SHIFT) & 1u;
     uint bits = 0u;
     [unroll]
     for (uint corner = 0u; corner < 4u; corner++)
@@ -239,7 +192,7 @@ uint TerrainCornerUvBits(uint descriptor, bool tiling)
         uint source = (corner + turn) & 3u;
         uint u = ((source == 1u || source == 2u) ? 1u : 0u) ^ flipU;
         uint v = (source >= 2u ? 1u : 0u) ^ flipV;
-        bits |= (u | (v << 1)) << (corner * 2u);
+        bits |= (u | (v << 1)) << (corner * KERN_TERRAIN_UV_BITS_PER_CORNER);
     }
 
     return bits;
@@ -248,7 +201,7 @@ uint TerrainCornerUvBits(uint descriptor, bool tiling)
 // Декаль — тем же хэшем, что TerrainDecalCatalog.Place.
 float TerrainDecalPlacement(uint rule, int worldX, int serverY)
 {
-    uint percent = rule & 0x7Fu;
+    uint percent = rule & KERN_TERRAIN_DECAL_RULE_PERCENT_MASK;
     if (percent == 0u)
     {
         return 0.0;
@@ -256,7 +209,7 @@ float TerrainDecalPlacement(uint rule, int worldX, int serverY)
 
     uint hash = asuint(worldX) * 374761393u;
     hash += asuint(serverY) * 668265263u;
-    hash ^= ((rule >> 7) & 0xFFu) * 2246822519u;
+    hash ^= ((rule >> KERN_TERRAIN_DECAL_RULE_SEED_SHIFT) & KERN_TERRAIN_DECAL_RULE_SEED_MASK) * 2246822519u;
     hash = (hash ^ (hash >> 13)) * 1274126177u;
     hash ^= hash >> 16;
     if (hash % 100u >= percent)
@@ -264,12 +217,12 @@ float TerrainDecalPlacement(uint rule, int worldX, int serverY)
         return 0.0;
     }
 
-    uint packed = 1u + hash % 16u +
-        (((hash >> 8) & 3u) << 4) +
-        (((hash >> 10) & 1u) << 6) +
-        (((hash >> 12) & 3u) << 7) +
-        (((hash >> 14) & 3u) << 9);
-    return (float)((rule & 0x8000u) != 0u ? packed | 4096u : packed);
+    uint packed = 1u + hash % KERN_TERRAIN_DECAL_VARIANTS +
+        (((hash >> 8) & 3u) << KERN_TERRAIN_DECAL_ROTATION_SHIFT) +
+        (((hash >> 10) & 1u) << KERN_TERRAIN_DECAL_MIRROR_SHIFT) +
+        (((hash >> 12) & 3u) << KERN_TERRAIN_DECAL_OFFSET_X_SHIFT) +
+        (((hash >> 14) & 3u) << KERN_TERRAIN_DECAL_OFFSET_Y_SHIFT);
+    return (float)((rule & KERN_TERRAIN_DECAL_RULE_ROCK) != 0u ? packed | KERN_TERRAIN_DECAL_ROCK_ATLAS : packed);
 }
 
 // Значение после записи в half вершины (TerrainVertex.H): мантисса
@@ -319,22 +272,20 @@ uint TerrainCellHash(int gridX, int serverY)
 }
 
 // Фаза анимации — как TerrainQuadBuilder.ResolveAnimationOffset.
-float TerrainAnimationPhase(uint flags, int gridX, int serverY)
+float TerrainAnimationPhase(TerrainTypeRow row, bool hasAtlasRect, int gridX, int serverY)
 {
-    float palette = (float)(flags >> 24);
-    if ((flags & KERN_TERRAIN_TYPE_ATLAS_RECT) == 0u)
+    float palette = (float)TerrainTypeSurfaceEffectPalette(row);
+    if (!hasAtlasRect)
     {
         return palette;
     }
 
-    uint animation = flags & 0xFFu;
-    uint profile = (flags >> 8) & 0xFFu;
-    if (profile == 0u && animation == 1u)
+    if (TerrainTypeAnimationType(row) == KERN_TERRAIN_ANIMATION_TYPE_BLINKING)
     {
         return TerrainThousandthsAsHalf(TerrainCellHash(gridX, serverY) % 6283u);
     }
 
-    if (profile == 3u)
+    if (TerrainTypeSurfaceEffect(row) == KERN_TERRAIN_SURFACE_EFFECT_FACETED)
     {
         return TerrainTruncateToHalf(
             (float)(TerrainCellHash(gridX, serverY) & 0xFFFFu) * (1.0 / 65536.0));
@@ -424,27 +375,27 @@ float2 TerrainNodeCells(int2 units)
 // Узел сетки — левый нижний угол клетки (nodeX, nodeY) — в единицах 1/256
 // клетки по флагам передних типов клеток вокруг узла: как
 // TerrainVertexDistortionCalculator.ComputeNode.
-int2 TerrainNode(int nodeX, int nodeY, uint ftl, uint ftr, uint fbl, uint fbr)
+int2 TerrainNode(int nodeX, int nodeY, TerrainTypeRow ftl, TerrainTypeRow ftr, TerrainTypeRow fbl, TerrainTypeRow fbr)
 {
     int worldX = nodeX - 1;
     int worldY = nodeY - 1;
     int worldWidth = (int)round(_TerrainCellOrigin.w);
     int worldHeight = (int)round(_TerrainCellOrigin.z);
-    if (_TerrainDistortionMode == 0 ||
+    if (_TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_OFF ||
         worldX <= 0 || worldX >= worldWidth || worldY <= 0 || worldY >= worldHeight)
     {
         return int2(0, 0);
     }
 
-    bool ctl = (ftl & KERN_TERRAIN_TYPE_CAUSE) != 0u;
-    bool ctr = (ftr & KERN_TERRAIN_TYPE_CAUSE) != 0u;
-    bool cbl = (fbl & KERN_TERRAIN_TYPE_CAUSE) != 0u;
-    bool cbr = (fbr & KERN_TERRAIN_TYPE_CAUSE) != 0u;
+    bool ctl = TerrainTypeWavy(ftl);
+    bool ctr = TerrainTypeWavy(ftr);
+    bool cbl = TerrainTypeWavy(fbl);
+    bool cbr = TerrainTypeWavy(fbr);
     bool allCause = ctl && ctr && cbl && cbr;
     int rx;
     int ry;
     int center;
-    if (_TerrainDistortionMode == 2)
+    if (_TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_ORGANIC)
     {
         if (!allCause)
         {
@@ -469,7 +420,7 @@ int2 TerrainNode(int nodeX, int nodeY, uint ftl, uint ftr, uint fbl, uint fbr)
         return int2(rx - center, -(ry - center));
     }
 
-    if (((ftl | ftr | fbl | fbr) & KERN_TERRAIN_TYPE_BLOCK) != 0u ||
+    if (TerrainTypeHolds(ftl) || TerrainTypeHolds(ftr) || TerrainTypeHolds(fbl) || TerrainTypeHolds(fbr) ||
         (ctl && cbr) || (ctr && cbl))
     {
         return int2(0, 0);
@@ -488,12 +439,12 @@ int2 TerrainNode(int nodeX, int nodeY, uint ftl, uint ftr, uint fbl, uint fbr)
 
 // Как TerrainQuadBuilder.OrganicEdgeBend: сосед по ребру — по флагам его
 // типа (у незагруженного они нулевые, и ребро не гнётся).
-int TerrainOrganicNeighbourBend(uint flags, int edgeX, int edgeY, bool vertical, int inwardSign)
+int TerrainOrganicNeighbourBend(TerrainTypeRow row, int edgeX, int edgeY, bool vertical, int inwardSign)
 {
-    bool cause = (flags & KERN_TERRAIN_TYPE_CAUSE) != 0u;
-    bool block = (flags & KERN_TERRAIN_TYPE_BLOCK) != 0u;
-    bool emptyEdge = (flags & KERN_TERRAIN_TYPE_EMPTY) != 0u && !block && !cause;
-    if (block || (!cause && !emptyEdge))
+    bool cause = TerrainTypeWavy(row);
+    bool block = TerrainTypeHolds(row);
+    bool backgroundEdge = TerrainTypeIsBackground(row) && !block && !cause;
+    if (block || (!cause && !backgroundEdge))
     {
         return 0;
     }
@@ -501,23 +452,6 @@ int TerrainOrganicNeighbourBend(uint flags, int edgeX, int edgeY, bool vertical,
     int bend = TerrainOrganicEdgeBend(edgeX, edgeY, vertical);
     return cause ? bend : min(abs(bend), 1) * inwardSign;
 }
-
-struct TerrainCellVertex
-{
-    float3 positionOS;
-    float2 uv;
-    float4 subAtlasRect;
-    float4 tileSizeUV;
-    float4 worldPos;
-    float4 animData;
-    float4 packedData;
-    float4 glowData;
-    float4 geometryCornersX;
-    float4 geometryCornersY;
-    float uvBits;
-    float atlasIndex;
-    float layer;
-};
 
 // Номер угла квада из меша идентификаторов (0..3, против часовой стрелки
 // от левого нижнего) — в угол клетки.
@@ -552,67 +486,42 @@ TerrainCellVertex LoadTerrainCellVertex(
 
     // Незагруженная клетка не рисует ни одного слоя.
     uint cell = TerrainLoadCell(gridX, unityY);
-    uint foregroundType = TerrainForegroundType(cell);
+    uint foregroundType = TerrainCellType(cell);
     if (foregroundType == 0u)
     {
         return v;
     }
 
     // Соседи и признаки их передних типов читаются ровно по разу: всё
-    // ниже — узлы, маски, рельеф, перекрытие, изгибы — берёт их отсюда.
+    // ниже — узлы, маски, кайма, перекрытие, изгибы — берёт их отсюда.
     uint neighbours[8];
-    uint2 neighbourTraits[8];
+    TerrainTypeRow neighbourRows[8];
     [unroll]
     for (int n = 0; n < 8; n++)
     {
         neighbours[n] = TerrainLoadCell(gridX + KERN_TERRAIN_NEIGHBOUR_X[n], unityY + KERN_TERRAIN_NEIGHBOUR_Y[n]);
-        neighbourTraits[n] = TerrainTypeTraits(TerrainForegroundType(neighbours[n]));
+        neighbourRows[n] = TerrainTypeRowOf(TerrainCellType(neighbours[n]));
     }
 
-    uint2 foregroundTraits = TerrainTypeTraits(foregroundType);
-    uint foregroundFlags = foregroundTraits.x;
-    bool foregroundEmpty = (foregroundFlags & KERN_TERRAIN_TYPE_EMPTY) != 0u;
-    bool foregroundCause = (foregroundFlags & KERN_TERRAIN_TYPE_CAUSE) != 0u;
-    bool foregroundRoundable = (foregroundFlags & KERN_TERRAIN_TYPE_ROUNDABLE) != 0u;
+    TerrainTypeRow foregroundRow = TerrainTypeRowOf(foregroundType);
+    bool foregroundIsBackground = TerrainTypeIsBackground(foregroundRow);
+    bool foregroundCause = TerrainTypeWavy(foregroundRow);
     // Органика — у искажающей клетки при стиле Organic
     // (TerrainQuadBuilder.organicTerrain).
-    bool organicTerrain = _TerrainDistortionMode == 2 && foregroundCause;
+    bool organicTerrain = _TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_ORGANIC && foregroundCause;
 
-    // Какой тип рисует слой — как TerrainCellLayers.TryGetType. Пустота
-    // принадлежит фону; фон того же типа под клеткой, закрывающей её
-    // целиком, не виден ни в одном пикселе и не рисуется. Скруглённая клетка
-    // и органический край у пустоты клетку целиком не закрывают.
-    uint typeIndex;
-    bool backgroundDrawn = false;
-    if (foreground)
-    {
-        typeIndex = foregroundEmpty ? 0u : foregroundType;
-    }
-    else
-    {
-        typeIndex = TerrainBackgroundType(cell);
-        bool needsOrganicUnderlay = organicTerrain && (
-            TerrainOrganicEmptyEdge(neighbourTraits[KERN_TERRAIN_BOTTOM].x) ||
-            TerrainOrganicEmptyEdge(neighbourTraits[KERN_TERRAIN_RIGHT].x) ||
-            TerrainOrganicEmptyEdge(neighbourTraits[KERN_TERRAIN_TOP].x) ||
-            TerrainOrganicEmptyEdge(neighbourTraits[KERN_TERRAIN_LEFT].x));
-        bool foregroundFillsCell = !foregroundRoundable && !needsOrganicUnderlay;
-        backgroundDrawn = foregroundEmpty ||
-            (typeIndex != 0u && (typeIndex != foregroundType || !foregroundFillsCell));
-        if (!backgroundDrawn)
-        {
-            typeIndex = 0u;
-        }
-    }
+    // Какой тип рисует слой — как TerrainQuadBuilder. Фон лежит сам на себе
+    // и рисуется только фоном; под передним планом фоном рисуется подложка.
+    uint layerType = foreground
+        ? (foregroundIsBackground ? 0u : foregroundType)
+        : TerrainTypeUnder(foregroundType, foregroundRow);
 
-    if (typeIndex == 0u)
+    if (layerType == 0u)
     {
         return v;
     }
 
-    TerrainTypeRow type = _TerrainTypes[typeIndex];
-    uint flags = type.b.z;
-    uint neighbourhood = type.b.w;
+    TerrainTypeRow row = TerrainTypeRowOf(layerType);
 
     // Геометрия — только у искажающего (Cause) переднего плана. Углы — узлы
     // клетки и её соседей справа, сверху и справа-сверху; органические рёбра
@@ -622,18 +531,18 @@ TerrainCellVertex LoadTerrainCellVertex(
     if (foregroundCause)
     {
         // Узел — левый нижний угол клетки; клетки вокруг него: tl, tr, bl, br.
-        uint left = neighbourTraits[KERN_TERRAIN_LEFT].x;
-        uint right = neighbourTraits[KERN_TERRAIN_RIGHT].x;
-        uint top = neighbourTraits[KERN_TERRAIN_TOP].x;
-        uint bottom = neighbourTraits[KERN_TERRAIN_BOTTOM].x;
+        TerrainTypeRow left = neighbourRows[KERN_TERRAIN_LEFT];
+        TerrainTypeRow right = neighbourRows[KERN_TERRAIN_RIGHT];
+        TerrainTypeRow top = neighbourRows[KERN_TERRAIN_TOP];
+        TerrainTypeRow bottom = neighbourRows[KERN_TERRAIN_BOTTOM];
         float2 node00 = TerrainNodeCells(TerrainNode(gridX, unityY,
-            left, foregroundFlags, neighbourTraits[KERN_TERRAIN_BOTTOM_LEFT].x, bottom));
+            left, foregroundRow, neighbourRows[KERN_TERRAIN_BOTTOM_LEFT], bottom));
         float2 node10 = TerrainNodeCells(TerrainNode(gridX + 1, unityY,
-            foregroundFlags, right, bottom, neighbourTraits[KERN_TERRAIN_BOTTOM_RIGHT].x));
+            foregroundRow, right, bottom, neighbourRows[KERN_TERRAIN_BOTTOM_RIGHT]));
         float2 node11 = TerrainNodeCells(TerrainNode(gridX + 1, unityY + 1,
-            top, neighbourTraits[KERN_TERRAIN_TOP_RIGHT].x, foregroundFlags, right));
+            top, neighbourRows[KERN_TERRAIN_TOP_RIGHT], foregroundRow, right));
         float2 node01 = TerrainNodeCells(TerrainNode(gridX, unityY + 1,
-            neighbourTraits[KERN_TERRAIN_TOP_LEFT].x, top, left, foregroundFlags));
+            neighbourRows[KERN_TERRAIN_TOP_LEFT], top, left, foregroundRow));
         geometryX += float4(node00.x, node10.x, node11.x, node01.x);
         geometryY += float4(node00.y, node10.y, node11.y, node01.y);
     }
@@ -646,19 +555,20 @@ TerrainCellVertex LoadTerrainCellVertex(
     // отбрасывается так же, как незаполненный квад (как
     // TerrainForegroundOcclusion.CoversCell до переноса в шейдер): у
     // переднего плана есть текстура, она непрозрачна в своём атласе, контур
-    // не скруглён, а смещённая клетка лежит внутри сплошного массива — её
+    // не скруглён, а смещённая клетка лежит внутри массы — её
     // общие узлы закрывают прямоугольник встык с соседями.
     if (!foreground)
     {
-        bool occluded = !foregroundEmpty &&
-            (foregroundFlags & (KERN_TERRAIN_TYPE_ATLAS_RECT | KERN_TERRAIN_TYPE_ROUNDABLE)) == KERN_TERRAIN_TYPE_ATLAS_RECT &&
-            (foregroundTraits.y & KERN_TERRAIN_TYPE_OPAQUE_OWN) != 0u;
+        bool occluded = !foregroundIsBackground &&
+            TerrainTypeHasAtlasRect(foregroundRow) &&
+            !TerrainTypeRound(foregroundRow) &&
+            TerrainTypeOpaqueOwn(foregroundRow);
         if (occluded && foregroundAnchored)
         {
             [unroll]
             for (int m = 0; m < 8; m++)
             {
-                occluded = occluded && TerrainSolidMassCell(neighbourTraits[m]);
+                occluded = occluded && TerrainOpaqueMassCell(neighbourRows[m]);
             }
         }
 
@@ -674,24 +584,29 @@ TerrainCellVertex LoadTerrainCellVertex(
     // Дескриптор автотайла: передний план — по типам соседей и стене пака,
     // фон — по фоновым типам соседей (в кайме фона нет, как и в
     // TerrainBackgroundTileResolver за окном).
-    uint layerNeighbourhoods[8];
+    TerrainTypeRow layerRows[8];
     [unroll]
     for (int t = 0; t < 8; t++)
     {
-        layerNeighbourhoods[t] = foreground
-            ? neighbourTraits[t].y
-            : TerrainTypeTraits(TerrainBackgroundType(neighbours[t])).y;
+        if (foreground)
+        {
+            layerRows[t] = neighbourRows[t];
+        }
+        else
+        {
+            layerRows[t] = TerrainTypeRowOf(TerrainTypeUnder(TerrainCellType(neighbours[t]), neighbourRows[t]));
+        }
     }
 
-    uint descriptor = TerrainTilingDescriptor(neighbourhood, layerNeighbourhoods);
-    bool tiling = (neighbourhood & KERN_TERRAIN_TYPE_TILE_GROUP) != 0u;
-    if (foreground && (neighbourhood & KERN_TERRAIN_TYPE_WALL) != 0u)
+    uint descriptor = TerrainTilingDescriptor(row, layerRows);
+    bool tiling = TerrainTypeHasTileGroup(row);
+    if (foreground && TerrainTypeWall(row))
     {
         uint cornerSideMask =
-            ((neighbourTraits[KERN_TERRAIN_LEFT].y & KERN_TERRAIN_TYPE_CORNER) != 0u ? 1u : 0u) |
-            ((neighbourTraits[KERN_TERRAIN_RIGHT].y & KERN_TERRAIN_TYPE_CORNER) != 0u ? 2u : 0u) |
-            ((neighbourTraits[KERN_TERRAIN_TOP].y & KERN_TERRAIN_TYPE_CORNER) != 0u ? 4u : 0u) |
-            ((neighbourTraits[KERN_TERRAIN_BOTTOM].y & KERN_TERRAIN_TYPE_CORNER) != 0u ? 8u : 0u);
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_LEFT]) ? 1u : 0u) |
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_RIGHT]) ? 2u : 0u) |
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_TOP]) ? 4u : 0u) |
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_BOTTOM]) ? 8u : 0u);
         if (cornerSideMask != 0u)
         {
             descriptor = TerrainBuildingWallVariant(descriptor, cornerSideMask);
@@ -701,84 +616,82 @@ TerrainCellVertex LoadTerrainCellVertex(
 
     uint uvBits = TerrainCornerUvBits(descriptor, tiling);
     v.uvBits = uvBits;
-    v.uv = float2((uvBits >> (corner * 2)) & 1u, (uvBits >> (corner * 2 + 1)) & 1u);
-    v.atlasIndex = (float)(type.b.x >> 24);
+    v.uv = float2(
+        (uvBits >> (corner * KERN_TERRAIN_UV_BITS_PER_CORNER)) & 1u,
+        (uvBits >> (corner * KERN_TERRAIN_UV_BITS_PER_CORNER + 1)) & 1u);
+    v.atlasIndex = (float)TerrainTypeSlot(row);
 
     // Мировая клетка — от адреса: высота мира переводит строку Unity в
     // серверную, как CoordinateUtils.UnityToServerY.
     int serverY = (int)round(_TerrainCellOrigin.z) - 1 - unityY;
-    float tileSize = TerrainLowHalf(type.a.z);
-    v.subAtlasRect = float4(
-        TerrainLowHalf(type.a.x),
-        TerrainHighHalf(type.a.x),
-        TerrainLowHalf(type.a.y),
-        TerrainHighHalf(type.a.y));
-    v.tileSizeUV = float4(tileSize, tileSize, TerrainHighHalf(type.a.z), TerrainLowHalf(type.a.w));
+    float tileSize = TerrainTypeTileSize(row);
+    v.subAtlasRect = TerrainTypeAtlasRect(row);
+    v.tileSizeUV = float4(tileSize, tileSize, TerrainTypeFrameCount(row), TerrainTypeFrameHeight(row));
     v.worldPos = float4(
         gridX,
         serverY,
-        (float)((descriptor & 31u) | ((neighbourhood & KERN_TERRAIN_TYPE_SHEET) != 0u ? 32u : 0u)),
+        (float)((descriptor & KERN_TERRAIN_COLUMN_MASK) | (TerrainTypeTextureAnchor(row) == KERN_TERRAIN_TEXTURE_ANCHOR_WORLD ? KERN_TERRAIN_COLUMN_WORLD_TEXTURE_ANCHOR : 0u)),
         tiling ? 1.0 : 0.0);
     v.animData = float4(
-        (float)(flags & 0xFFu),
-        TerrainHighHalf(type.a.w),
-        TerrainAnimationPhase(flags, gridX, serverY),
-        (float)((flags >> 8) & 0xFFu));
+        (float)TerrainTypeAnimationType(row),
+        TerrainTypeAnimationSpeed(row),
+        TerrainAnimationPhase(row, TerrainTypeHasAtlasRect(row), gridX, serverY),
+        (float)TerrainTypeSurfaceEffect(row));
 
-    // Твёрдые соседи — общие для слоёв (TerrainCellMaskRules): сверху,
+    // Соседи-блоки — общие для слоёв (TerrainCellMaskRules): сверху,
     // слева, снизу, справа.
-    uint solidMask =
-        ((neighbourTraits[KERN_TERRAIN_TOP].x & KERN_TERRAIN_TYPE_SOLID) != 0u ? 1u : 0u) |
-        ((neighbourTraits[KERN_TERRAIN_LEFT].x & KERN_TERRAIN_TYPE_SOLID) != 0u ? 2u : 0u) |
-        ((neighbourTraits[KERN_TERRAIN_BOTTOM].x & KERN_TERRAIN_TYPE_SOLID) != 0u ? 4u : 0u) |
-        ((neighbourTraits[KERN_TERRAIN_RIGHT].x & KERN_TERRAIN_TYPE_SOLID) != 0u ? 8u : 0u);
+    uint foregroundSides =
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_TOP]) ? 0u : 1u) |
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_LEFT]) ? 0u : 2u) |
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_BOTTOM]) ? 0u : 4u) |
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_RIGHT]) ? 0u : 8u);
 
-    // Рельеф — только у переднего плана с ненулевой рельефной группой
-    // (TerrainCellMaskCalculator.CalculateReliefMasks): стороны, где сосед —
+    // Кайма — только у переднего плана с ненулевой группой каймы
+    // (TerrainCellMaskCalculator.CalculateRimMasks): стороны, где сосед —
     // та же поверхность, и вогнутые углы.
     uint contour = 0u;
     if (foreground)
     {
-        contour = (flags & KERN_TERRAIN_TYPE_ROUNDABLE) != 0u ? 1u : 0u;
-        if (((neighbourhood >> 16) & 0xFFu) != 0u)
+        contour = TerrainTypeRound(row) ? KERN_TERRAIN_ROUNDABLE_CONTOUR_FLAG : 0u;
+        if (TerrainTypeRimMass(row) != 0u)
         {
-            bool top = TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_TOP].y);
-            bool left = TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_LEFT].y);
-            bool bottom = TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_BOTTOM].y);
-            bool right = TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_RIGHT].y);
-            uint reliefMask = (top ? 1u : 0u) | (left ? 2u : 0u) | (bottom ? 4u : 0u) | (right ? 8u : 0u);
-            uint reliefCorners =
-                (bottom && left && !TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_BOTTOM_LEFT].y) ? 1u : 0u) |
-                (bottom && right && !TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_BOTTOM_RIGHT].y) ? 2u : 0u) |
-                (top && right && !TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_TOP_RIGHT].y) ? 4u : 0u) |
-                (top && left && !TerrainSameRelief(neighbourhood, neighbourTraits[KERN_TERRAIN_TOP_LEFT].y) ? 8u : 0u);
-            contour += (reliefMask + 1u) * 32u + (reliefCorners << 10);
+            bool top = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_TOP]);
+            bool left = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_LEFT]);
+            bool bottom = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_BOTTOM]);
+            bool right = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_RIGHT]);
+            uint rimMask = (top ? 1u : 0u) | (left ? 2u : 0u) | (bottom ? 4u : 0u) | (right ? 8u : 0u);
+            uint rimCorners =
+                (bottom && left && !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_BOTTOM_LEFT]) ? 1u : 0u) |
+                (bottom && right && !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_BOTTOM_RIGHT]) ? 2u : 0u) |
+                (top && right && !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_TOP_RIGHT]) ? 4u : 0u) |
+                (top && left && !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_TOP_LEFT]) ? 8u : 0u);
+            contour += ((rimMask + 1u) << KERN_TERRAIN_RIM_SHIFT) +
+                (rimCorners << KERN_TERRAIN_RIM_CORNERS_SHIFT);
         }
     }
 
-    // Флаги света — раскладка TerrainLightingData; масса — твёрдый
+    // Флаги света — раскладка TerrainLightingData; масса — блок
     // передний план.
-    uint lightingFlags = solidMask |
-        ((flags & KERN_TERRAIN_TYPE_GLOWING) != 0u ? 16u : 0u) |
-        (foreground && (flags & KERN_TERRAIN_TYPE_SOLID) != 0u ? 32u : 0u);
-    uint decalFamily = neighbourhood & 3u;
-    uint decalRule = !foreground ? (uint)_TerrainGroundDecalRule
-        : decalFamily == 1u ? (uint)_TerrainGroundDecalRule
-        : decalFamily == 2u ? (uint)_TerrainRockDecalRule
+    uint lightingFlags = foregroundSides |
+        (TerrainTypeGlows(row) ? KERN_TERRAIN_GLOW_FLAG : 0u) |
+        (foreground && !TerrainTypeIsBackground(row) ? KERN_TERRAIN_PHYSICAL_MASS_FLAG : 0u);
+    uint decalAtlas = TerrainTypeDecalAtlas(row);
+    uint decalRule = decalAtlas == KERN_TERRAIN_DECAL_ATLAS_GROUND ? (uint)_TerrainGroundDecalRule
+        : decalAtlas == KERN_TERRAIN_DECAL_ATLAS_ROCK ? (uint)_TerrainRockDecalRule
         : 0u;
-    v.glowData = float4(
-        (float)(type.b.x & 0xFFFFFFu),
-        (float)lightingFlags + asfloat(type.b.y),
+    v.lightContourDecal = float4(
+        0.0,
+        (float)lightingFlags + TerrainTypeGlow(row) * KERN_TERRAIN_GLOW_FRACTION_SCALE,
         (float)contour,
         TerrainDecalPlacement(decalRule, gridX, serverY));
 
     uint organicCode = 0u;
     if (foreground && organicTerrain)
     {
-        int bottomBend = TerrainOrganicNeighbourBend(neighbourTraits[KERN_TERRAIN_BOTTOM].x, gridX, unityY, false, 1);
-        int rightBend = TerrainOrganicNeighbourBend(neighbourTraits[KERN_TERRAIN_RIGHT].x, gridX + 1, unityY, true, -1);
-        int topBend = TerrainOrganicNeighbourBend(neighbourTraits[KERN_TERRAIN_TOP].x, gridX, unityY + 1, false, -1);
-        int leftBend = TerrainOrganicNeighbourBend(neighbourTraits[KERN_TERRAIN_LEFT].x, gridX, unityY, true, 1);
+        int bottomBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_BOTTOM], gridX, unityY, false, 1);
+        int rightBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_RIGHT], gridX + 1, unityY, true, -1);
+        int topBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_TOP], gridX, unityY + 1, false, -1);
+        int leftBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_LEFT], gridX, unityY, true, 1);
         organicCode = (uint)(1 + (bottomBend + 2) + (rightBend + 2) * 5 +
             (topBend + 2) * 25 + (leftBend + 2) * 125);
     }

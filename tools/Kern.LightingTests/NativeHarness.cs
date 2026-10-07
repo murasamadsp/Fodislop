@@ -17,11 +17,14 @@ internal static class NativeHarness
         "TransportSolidTexel", "TransportSolidOccupancy", "NearSideTexel", "FarSideTexel", "CornerSealed",
         "PathLengthInCells",
         "CleanCellPrefixAt", "NonCleanCellCount", "CleanMediumTransmittance", "CellFirstTexel",
-        "ClipSegmentToField", "EmissiveBoxExit", "CellOfTexel",
+        "ClipSegmentToField", "GlowBoxExit", "CellOfTexel",
         "BuildCellSolidMask", "BuildCleanCellRows", "BuildCleanCellColumns", "BuildSurfaceAirCache", "ReanchorPrefix", "DirtySegmentOverlap",
-        "CascadeEntryMayChange", "AbsorbedFraction", "CellEmissionWeight", "MediumEmissionWeight", "TraceLightSegmentLocal", "TraceLightSegment",
-        "TraceRadianceProbeSegment", "TraceRadianceSegment", "GatherDynamicSource", "DynamicEmitterPoint", "WriteDynamicPolar", "TraceDynamicPolar",
-        "PolarColumnDepth", "PolarTransmission", "DynamicRadianceFromPolar", "DynamicHorizonContains", "SolveDynamicLighting", "ComposeDynamicLighting",
+        "CascadeEntryMayChange", "AbsorbedFraction", "CellGlowWeight", "MediumGlowWeight", "TraceLightSegmentLocal", "TraceLightSegment",
+        "TraceRadianceProbeSegment", "TraceRadianceSegment", "UniformSourceRadiance", "GatherDynamicSource",
+        "SerialDynamicTraceContext", "BatchedDynamicTraceContext", "DynamicEmitterPoint", "WriteDynamicPolar",
+        "TraceDynamicPolarRay", "TraceDynamicPolar", "TraceDynamicPolarBatch",
+        "PolarColumnDepth", "PolarTransmission", "DynamicRadianceFromPolar", "DynamicHorizonContains",
+        "SolveDynamicReceiver", "SolveDynamicLighting", "SolveDynamicLightingBatch", "ComposeDynamicLighting",
         "PackRadiance", "UnpackRadiance", "PackInterval", "UnpackTransmittance", "SolveCascade",
         "InterleavedGradientNoise", "SurfaceIncidentLighting",
     ];
@@ -31,8 +34,8 @@ internal static class NativeHarness
     private static readonly string[] RequiredTransportFunctions =
     [
         "TraceLightSegment", "TraceRadianceSegment", "CornerSealed",
-        "TransportSolidTexel", "SegmentExtinction", "SegmentTransmission", "CellEmissionWeight",
-        "OpticalDepthTransmission", "MediumEmissionWeight",
+        "TransportSolidTexel", "SegmentExtinction", "SegmentTransmission", "CellGlowWeight",
+        "OpticalDepthTransmission", "MediumGlowWeight",
     ];
 
     public static int RunTransport(string repositoryRoot)
@@ -155,7 +158,7 @@ internal static class NativeHarness
         {
             Match match = Regex.Match(
                 shader,
-                $"^(?:bool|float[234]?|uint[23]?|int[234]?|void) {Regex.Escape(name)}\\(",
+                $"^(?:bool|float[234]?|uint[23]?|int[234]?|void|DynamicTraceContext) {Regex.Escape(name)}\\(",
                 RegexOptions.Multiline | RegexOptions.CultureInvariant);
             if (!match.Success)
             {

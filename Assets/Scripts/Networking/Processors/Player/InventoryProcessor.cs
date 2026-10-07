@@ -17,9 +17,15 @@ namespace Kern.Networking.Processors;
 public sealed class InventoryProcessor(IInventoryState model, IItemCatalog catalog) :
     IPacketProcessor<InventoryPacket>,
     IPacketProcessor<SelectItemPacket>,
-    IPacketProcessor<DeselectItemPacket>
+    IPacketProcessor<DeselectItemPacket>,
+    IBatchAwareProcessor
 {
     private readonly int _knownTypeCount = catalog.AllTypes.Count();
+    private readonly IBatchAwareProcessor? _batchModel = model as IBatchAwareProcessor;
+
+    public void BeginBatch() => _batchModel?.BeginBatch();
+
+    public void EndBatch() => _batchModel?.EndBatch();
 
     public void Process(InventoryPacket packet)
     {

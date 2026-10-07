@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer.Unity;
@@ -13,6 +14,9 @@ namespace Kern.UI;
 public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : IWorldLabels, IPostLateTickable, IDisposable
 {
     private const string TAG = "[WorldLabels]";
+
+    private static readonly ProfilerMarker s_postLateTickMarker =
+        new("Kern.WorldLabels.PostLateTick");
 
     private readonly List<Entry> _entries = [];
     private VisualElement? _root;
@@ -50,6 +54,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
     // запаздывал на кадр — ники «плавали» и меняли размер.
     public void PostLateTick()
     {
+        using var marker = s_postLateTickMarker.Auto();
         if (!document.enabled || _root?.panel == null)
         {
             return;
@@ -84,10 +89,20 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
 
         foreach (Entry entry in _entries)
         {
+            // Куллер робота скрывает никнейм, пока робот далеко от камеры.
+            // Такая метка не может стать видимой от перемещения самой камеры:
+            // робот должен сначала попасть в область камеры и включить её
+            // обратно. Не проецируем её мировую точку каждый кадр.
+            if (!entry.Visible)
+            {
+                entry.ApplyHidden();
+                continue;
+            }
+
             entry.ApplyScale(scale);
 
             Vector3 viewport = view.WorldToViewportPoint(entry.Position);
-            bool visible = entry.Visible && viewport.z > 0f &&
+            bool visible = viewport.z > 0f &&
                 viewport.x >= -0.15f && viewport.x <= 1.15f &&
                 viewport.y >= -0.15f && viewport.y <= 1.15f;
             if (!visible)

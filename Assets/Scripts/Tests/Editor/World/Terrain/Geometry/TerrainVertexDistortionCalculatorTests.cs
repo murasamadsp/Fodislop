@@ -2,6 +2,7 @@
 
 namespace Kern.Tests.World;
 
+using Kern.World;
 using Kern.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -16,7 +17,7 @@ public class TerrainVertexDistortionCalculatorTests
     [Test]
     public void OrganicNodeLiesOnTheGeometryUnitGrid()
     {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
+        var cause = new CachedCellData { Outline = CellOutline.Wavy };
         int moved = 0;
         for (int x = 1; x < 200; x++)
         {
@@ -37,7 +38,7 @@ public class TerrainVertexDistortionCalculatorTests
     [Test]
     public void ComputeOffset_WorldBounds_ReturnsZero()
     {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
+        var cause = new CachedCellData { Outline = CellOutline.Wavy };
 
         TerrainVertexOffset minX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 0, 10, 100, 100);
         TerrainVertexOffset maxX = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, 100, 10, 100, 100);
@@ -53,8 +54,8 @@ public class TerrainVertexDistortionCalculatorTests
     [Test]
     public void ComputeOffset_WhenAnyNeighborIsBlock_ReturnsZero()
     {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        var block = new CachedCellData { Distortion = CellDistortionType.Block };
+        var cause = new CachedCellData { Outline = CellOutline.Wavy };
+        var block = new CachedCellData { Outline = CellOutline.Rigid };
 
         TerrainVertexOffset tlBlock = TerrainVertexDistortionCalculator.ComputeOffset(block, cause, cause, cause, 10, 10, 100, 100);
         TerrainVertexOffset trBlock = TerrainVertexDistortionCalculator.ComputeOffset(cause, block, cause, cause, 10, 10, 100, 100);
@@ -72,12 +73,12 @@ public class TerrainVertexDistortionCalculatorTests
     {
         var cause = new CachedCellData
         {
-            Distortion = CellDistortionType.Cause,
+            Outline = CellOutline.Wavy,
             Type = CellType.Rock,
         };
         var lava = new CachedCellData
         {
-            Distortion = CellDistortionType.Cause,
+            Outline = CellOutline.Wavy,
             Type = CellType.Lava,
         };
 
@@ -101,19 +102,19 @@ public class TerrainVertexDistortionCalculatorTests
             100,
             100);
 
-        Assert.That(TerrainVertexDistortionCalculator.IsCause(lava), Is.True);
+        Assert.That(TerrainVertexDistortionCalculator.IsWavy(lava), Is.True);
         Assert.That(result, Is.EqualTo(serverCauseResult));
         Assert.That(result, Is.Not.EqualTo(TerrainVertexOffset.Zero));
     }
 
-    // Узел внутри сплошного массива. Оригинал Mines (TerrainRenderer.GetDistortion,
+    // Узел внутри массы. Оригинал Mines (TerrainRenderer.GetDistortion,
     // первая ветка) двигает его свободно в обе стороны; именно эта ветка делает
     // кристалл цельным камнем, а не плиткой. Раньше здесь стоял ноль, и
     // внутренность любого массива оставалась идеальной решёткой.
     [Test]
     public void ComputeOffset_AllFourAreCause_JittersFreely()
     {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
+        var cause = new CachedCellData { Outline = CellOutline.Wavy };
         int limit = 3 * TerrainVertexDistortionCalculator.DistortionStrengthSteps;
         int moved = 0;
         bool negativeX = false;
@@ -213,11 +214,11 @@ public class TerrainVertexDistortionCalculatorTests
     [TestCase(CellType.Box)]
     public void ServerBlockPinsEverySharedCorner(CellType type)
     {
-        var causeCell = new CachedCellData { Type = type, Distortion = CellDistortionType.Cause };
-        Assert.That(TerrainVertexDistortionCalculator.IsCause(causeCell), Is.True);
+        var causeCell = new CachedCellData { Type = type, Outline = CellOutline.Wavy };
+        Assert.That(TerrainVertexDistortionCalculator.IsWavy(causeCell), Is.True);
 
-        var blockCell = new CachedCellData { Type = type, Distortion = CellDistortionType.Block };
-        Assert.That(TerrainVertexDistortionCalculator.IsBlock(blockCell), Is.True);
+        var blockCell = new CachedCellData { Type = type, Outline = CellOutline.Rigid };
+        Assert.That(TerrainVertexDistortionCalculator.Holds(blockCell), Is.True);
         for (int corner = 0; corner < 4; corner++)
         {
             var cells = new CachedCellData[4];
@@ -225,7 +226,7 @@ public class TerrainVertexDistortionCalculatorTests
             cells[(corner + 1) % 4] = new CachedCellData
             {
                 Type = CellType.Green,
-                Distortion = CellDistortionType.Cause,
+                Outline = CellOutline.Wavy,
             };
             for (int seed = 1; seed <= 16; seed++)
             {

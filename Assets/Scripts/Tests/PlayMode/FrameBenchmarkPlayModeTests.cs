@@ -86,6 +86,12 @@ public sealed class FrameBenchmarkPlayModeTests
         "Kern.Lighting.Cascade_3",
         "Kern.Lighting.DynamicRadiance",
         "Kern.Lighting.DynamicPolar",
+        "Kern.Lighting.DynamicPolar.DdaTrace",
+        "Kern.Lighting.DynamicPolar.JfaSphereTrace",
+        "Kern.Lighting.DynamicSdf.Seed",
+        "Kern.Lighting.DynamicSdf.JumpFloodPass",
+        "Kern.Lighting.DynamicSdf.Resolve",
+        "Kern.Lighting.DynamicSdf.JumpFloodBuild",
         "Kern.Lighting.DynamicReceiverTrace",
         "Kern.Lighting.DynamicCompose",
         "Kern.Lighting.Composite",
@@ -99,7 +105,9 @@ public sealed class FrameBenchmarkPlayModeTests
         "Kern.PostProcess.Bloom.Add",
     ];
 
-    private static readonly FrameTiming[] s_frameTimingBuffer = new FrameTiming[1];
+    // FrameTiming results arrive asynchronously. Drain a window each frame so
+    // delayed GPU records are not discarded by asking only for the newest one.
+    private static readonly FrameTiming[] s_frameTimingBuffer = new FrameTiming[64];
 
     private sealed class RecorderLifetime(
         List<(string Name, bool IsGPUStage, ProfilerRecorder Recorder)> cpu,
@@ -161,6 +169,9 @@ public sealed class FrameBenchmarkPlayModeTests
         public readonly int TerrainBuildCancels = telemetry.TerrainBuildCancelCount;
         public readonly int LightingDynamicSolves = telemetry.LightingDynamicSolveCount;
         public readonly int LightingDynamicTraces = telemetry.LightingDynamicTraceCount;
+        public readonly int LightingDynamicPolarDispatches = telemetry.LightingDynamicPolarDispatchCount;
+        public readonly int LightingDynamicReceiverDispatches = telemetry.LightingDynamicReceiverDispatchCount;
+        public readonly int LightingDynamicBatchDescriptorBytes = telemetry.LightingDynamicBatchDescriptorBytes;
         public readonly int LightingAtlasScrolls = telemetry.LightingAtlasScrollCount;
         public readonly int LightingFieldRebuilds = telemetry.LightingFieldRebuildCount;
         public readonly int LightingStaticSolves = telemetry.LightingStaticSolveFrameCount;
@@ -298,7 +309,7 @@ public sealed class FrameBenchmarkPlayModeTests
         public readonly int NativeUIWidth = Screen.width;
         public readonly int NativeUIHeight = Screen.height;
         public readonly CaptureSample[] Samples = new CaptureSample[count];
-        public readonly FrameTiming[] TimingObservations = new FrameTiming[count];
+        public readonly FrameTiming[] TimingObservations = new FrameTiming[count + s_frameTimingBuffer.Length];
         public int TimingObservationCount;
         public string? QualityProfile;
         public CaptureSample Baseline;
@@ -565,8 +576,8 @@ public sealed class FrameBenchmarkPlayModeTests
         var material = new Material(surfaceShader);
         material.EnableKeyword("KERN_SURFACE_TRANSIT");
         material.SetTexture("_BaseMap", texture);
-        material.SetColor("_EmissionColor", Color.white);
-        material.SetFloat("_EmissionStrength", 1f);
+        material.SetColor("_GlowColor", Color.white);
+        material.SetFloat("_GlowStrength", 1f);
         material.SetFloat("_Occupancy", 0f);
         material.SetVector("_BaseMapTileCount", Vector4.one);
         Texture2D blackTexture = RuntimeTextureFactory.CreateRGBA32NoMip(1, 1, "WorldBloomBlackFixture",
@@ -609,15 +620,15 @@ public sealed class FrameBenchmarkPlayModeTests
         // The authored cell source is registered on the transport grid, while
         // its visible sprite contains one HDR pixel. Keep the transport mask
         // independent of whether a coarse texel center hits that sprite pixel.
-        Texture2D emissionTexture = RuntimeTextureFactory.CreateRGBAFloatNoMip(1, 1, "WorldBloomEmissionFixture",
+        Texture2D glowTexture = RuntimeTextureFactory.CreateRGBAFloatNoMip(1, 1, "WorldBloomGlowFixture",
             RuntimeTextureColorSpace.Linear, FilterMode.Point, TextureWrapMode.Clamp);
-        emissionTexture.SetPixel(0, 0, Color.white);
-        emissionTexture.Apply(false);
-        var emissionMaterial = new Material(material);
-        emissionMaterial.SetTexture("_BaseMap", emissionTexture);
+        glowTexture.SetPixel(0, 0, Color.white);
+        glowTexture.Apply(false);
+        var glowMaterial = new Material(material);
+        glowMaterial.SetTexture("_BaseMap", glowTexture);
         var contributor = new BloomFixtureContributor(sourceMesh, material, fixture.transform)
         {
-            FieldMaterial = emissionMaterial,
+            FieldMaterial = glowMaterial,
         };
         bool registered = false;
         string directory = DiagnosticArtifactPaths.CreateDirectory("Performance", "world_bloom_image");
@@ -635,16 +646,16 @@ public sealed class FrameBenchmarkPlayModeTests
             PostProcessRuntimeState.DiagnosticOffscreenCamera = camera;
             PostProcessRuntimeState.BypassPostProcessEffects = false;
             yield return Skip(30);
-            float[] originalEmission = [];
-            bool emissionRead = false;
-            RenderTexture emission = lighting.GPUResources.Geometry.StaticEmission!;
-            AsyncGPUReadback.Request(emission, 0, TextureFormat.RGBAFloat, readback =>
+            float[] originalGlow = [];
+            bool glowRead = false;
+            RenderTexture glow = lighting.GPUResources.Geometry.StaticGlow!;
+            AsyncGPUReadback.Request(glow, 0, TextureFormat.RGBAFloat, readback =>
             {
                 Assert.That(readback.hasError, Is.False);
-                originalEmission = readback.GetData<float>().ToArray();
-                emissionRead = true;
+                originalGlow = readback.GetData<float>().ToArray();
+                glowRead = true;
             });
-            yield return WaitUntil(() => emissionRead, 10f, "Emission readback did not finish.");
+            yield return WaitUntil(() => glowRead, 10f, "Glow readback did not finish.");
             Vector4 field = lighting.WorldRect;
             Vector2Int sourceCell = default;
             bool found = false;
@@ -654,17 +665,17 @@ public sealed class FrameBenchmarkPlayModeTests
                 {
                     Vector2Int cell = new(Mathf.FloorToInt(camera.transform.position.x) + dx,
                         Mathf.FloorToInt(camera.transform.position.y) + dy);
-                    int x = Mathf.FloorToInt((cell.x + 0.5f - field.x) / field.z * emission.width);
-                    int y = Mathf.FloorToInt((cell.y + 0.5f - field.y) / field.w * emission.height);
-                    if (SystemInfo.graphicsUVStartsAtTop) { y = emission.height - 1 - y; }
-                    if (x < 0 || y < 0 || x >= emission.width || y >= emission.height) { continue; }
-                    int index = (y * emission.width + x) * 4;
-                    if (originalEmission[index] + originalEmission[index + 1] + originalEmission[index + 2] != 0f) { continue; }
+                    int x = Mathf.FloorToInt((cell.x + 0.5f - field.x) / field.z * glow.width);
+                    int y = Mathf.FloorToInt((cell.y + 0.5f - field.y) / field.w * glow.height);
+                    if (SystemInfo.graphicsUVStartsAtTop) { y = glow.height - 1 - y; }
+                    if (x < 0 || y < 0 || x >= glow.width || y >= glow.height) { continue; }
+                    int index = (y * glow.width + x) * 4;
+                    if (originalGlow[index] + originalGlow[index + 1] + originalGlow[index + 2] != 0f) { continue; }
                     sourceCell = cell;
                     found = true;
                 }
             }
-            Assert.That(found, Is.True, "Fixture requires a non-emissive production cell.");
+            Assert.That(found, Is.True, "Fixture requires a non-glowing production cell.");
             fixture.transform.position = new Vector3(sourceCell.x, sourceCell.y, 0f);
             backdrop.transform.position = camera.transform.position + new Vector3(-16f, -16f, 10f);
             registry.Register(contributor);
@@ -765,7 +776,7 @@ public sealed class FrameBenchmarkPlayModeTests
             }
             // Real Renderer2D + native grading + DisplayFinal + FinalBlit.
             // Independent disabled-effect expectations: white vignette mask,
-            // neutral signed-grain display, and zero bloom without emission.
+            // neutral signed-grain display, and zero bloom without glow.
             contributor.Emits = false;
             contributor.Revision++;
             PostProcessDebugView[] layerViews =
@@ -868,8 +879,8 @@ public sealed class FrameBenchmarkPlayModeTests
             Object.Destroy(blackMesh);
             Object.Destroy(material);
             Object.Destroy(blackMaterial);
-            Object.Destroy(emissionMaterial);
-            Object.Destroy(emissionTexture);
+            Object.Destroy(glowMaterial);
+            Object.Destroy(glowTexture);
             Object.Destroy(blackTexture);
             Object.Destroy(texture);
             target.Release();
@@ -899,8 +910,8 @@ public sealed class FrameBenchmarkPlayModeTests
         public ulong Revision = 1;
         public ulong LightingGeometryRevision => Revision;
 
-        public void RenderMaterialEmissionFields(CommandBuffer cmd,
-            in Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext context)
+        public void RenderMaterialGlowFields(CommandBuffer cmd,
+            in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context)
         {
             if (Emits)
             {
@@ -945,14 +956,14 @@ public sealed class FrameBenchmarkPlayModeTests
         Assert.That(originalTarget, Is.Null, "Native-output benchmark requires the gameplay camera to render to the display.");
         using var resolution = new NativeBenchmarkResolution(3420, 2148);
         ISceneObjectFactory objects = ResolveInScene<ISceneObjectFactory>(game);
-        GameObject fixture = objects.Create("RenderPathEmissionFixture");
+        GameObject fixture = objects.Create("RenderPathGlowFixture");
         Texture2D texture = RuntimeTextureFactory.CreateRGBAFloatNoMip(64, 64, "RenderPathHdrFixture",
             RuntimeTextureColorSpace.Linear, FilterMode.Point, TextureWrapMode.Clamp);
         var material = new Material(Shader.Find("Kern/World Surface"));
         material.EnableKeyword("KERN_SURFACE_TRANSIT");
         material.SetTexture("_BaseMap", texture);
-        material.SetColor("_EmissionColor", Color.white);
-        material.SetFloat("_EmissionStrength", 1f);
+        material.SetColor("_GlowColor", Color.white);
+        material.SetFloat("_GlowStrength", 1f);
         material.SetFloat("_Occupancy", 0f);
         material.SetVector("_BaseMapTileCount", Vector4.one);
         Mesh mesh = BloomFixtureQuad(64f);
@@ -1660,7 +1671,7 @@ public sealed class FrameBenchmarkPlayModeTests
                     previousFields[0] = request.GetData<byte>().ToArray();
                     oldInputsRead++;
                 });
-                AsyncGPUReadback.Request(lighting.GPUResources.Geometry.StaticEmission!, 0, request =>
+                AsyncGPUReadback.Request(lighting.GPUResources.Geometry.StaticGlow!, 0, request =>
                 {
                     Assert.That(request.hasError, Is.False);
                     previousFields[1] = request.GetData<byte>().ToArray();
@@ -1696,7 +1707,7 @@ public sealed class FrameBenchmarkPlayModeTests
                 var atlases = new uint[2][];
                 var counters = new uint[2][];
                 var materials = new byte[2][];
-                var emissions = new byte[2][];
+                var glows = new byte[2][];
                 Vector4 movedRect = lighting.WorldRect;
                 for (int reference = 0; reference < 2; reference++)
                 {
@@ -1739,10 +1750,10 @@ public sealed class FrameBenchmarkPlayModeTests
                             if (!request.hasError) { materials[captured] = request.GetData<byte>().ToArray(); }
                             completed++;
                         });
-                        cmd.RequestAsyncReadback(lighting.GPUResources.Geometry.StaticEmission!, 0, request =>
+                        cmd.RequestAsyncReadback(lighting.GPUResources.Geometry.StaticGlow!, 0, request =>
                         {
                             readbackError |= request.hasError;
-                            if (!request.hasError) { emissions[captured] = request.GetData<byte>().ToArray(); }
+                            if (!request.hasError) { glows[captured] = request.GetData<byte>().ToArray(); }
                             completed++;
                         });
                         cmd.RequestAsyncReadback(lighting.DiagnosticTransportCounterBuffer, request =>
@@ -1762,12 +1773,12 @@ public sealed class FrameBenchmarkPlayModeTests
                         System.Runtime.InteropServices.MemoryMarshal.AsBytes(atlases[reference].AsSpan()).ToArray());
                     File.WriteAllBytes(Path.Combine(directory, $"material_{move}_{reference}.rgba8"),
                         materials[reference]);
-                    File.WriteAllBytes(Path.Combine(directory, $"emission_{move}_{reference}.rgba16half"),
-                        emissions[reference]);
+                    File.WriteAllBytes(Path.Combine(directory, $"glow_{move}_{reference}.rgba16half"),
+                        glows[reference]);
                 }
                 File.WriteAllBytes(Path.Combine(directory, $"material_{move}_old.rgba8"),
                     previousFields[0]);
-                File.WriteAllBytes(Path.Combine(directory, $"emission_{move}_old.rgba16half"),
+                File.WriteAllBytes(Path.Combine(directory, $"glow_{move}_old.rgba16half"),
                     previousFields[1]);
                 File.AppendAllText(Path.Combine(directory, "oracle.txt"),
                     $"fieldDimensions={lighting.GPUResources.FieldWidth}x{lighting.GPUResources.FieldHeight}; layouts=" +
@@ -1831,8 +1842,45 @@ public sealed class FrameBenchmarkPlayModeTests
     [Timeout(900_000)]
     public IEnumerator MainGame_LightingTraversalBeforeAfter()
     {
+        yield return MeasureLightingTraversal(uniformSourceCandidate: false);
+    }
+
+    [UnityTest]
+    [Timeout(900_000)]
+    public IEnumerator MainGame_DynamicTransportDdaVsAccelerated()
+    {
+        yield return MeasureLightingTraversal(uniformSourceCandidate: true);
+    }
+
+    [UnityTest]
+    [Timeout(900_000)]
+    public IEnumerator MainGame_DynamicTransportDdaVsJfaSdf()
+    {
+        yield return MeasureLightingTraversal(uniformSourceCandidate: false, sdfCandidate: true);
+    }
+
+    [UnityTest]
+    [Timeout(600_000)]
+    public IEnumerator MainGame_BatchedDynamicLightsBeforeAfter()
+    {
+        yield return MeasureLightingTraversal(uniformSourceCandidate: false, batchLightsCandidate: true);
+    }
+
+    [UnityTest]
+    [Timeout(900_000)]
+    public IEnumerator MainGame_DynamicAngularQuality8Vs6()
+    {
+        yield return MeasureLightingTraversal(uniformSourceCandidate: false, angularQualityCandidate: true);
+    }
+
+    private IEnumerator MeasureLightingTraversal(
+        bool uniformSourceCandidate,
+        bool batchLightsCandidate = false,
+        bool angularQualityCandidate = false,
+        bool sdfCandidate = false)
+    {
         string? requestedSources = Environment.GetEnvironmentVariable("KERN_LIGHTING_BENCHMARK_SOURCE_COUNT");
-        int sourceCount = 1;
+        int sourceCount = batchLightsCandidate ? 16 : 1;
         if (requestedSources != null &&
             (!int.TryParse(requestedSources, out sourceCount) || sourceCount < 1 || sourceCount > 64))
         {
@@ -1861,6 +1909,45 @@ public sealed class FrameBenchmarkPlayModeTests
         bool originalFollow = follow.enabled;
         bool originalReference = LightingComputeBinder.DiagnosticTexelTraversalReference;
         bool originalVectorReference = LightingComputeBinder.DiagnosticVectorPolarReference;
+        bool originalUniformSource = LightingComputeBinder.DiagnosticUniformSourceTraversal;
+        bool originalBatchedLights = LightingComputeBinder.DiagnosticBatchedDynamicLights;
+        DynamicLightingTransportMode originalTransportMode = LightingQualityTuningController.DynamicTransportMode;
+        bool originalConfiguredBatching = LightingQualityTuningController.BatchDynamicLights;
+        LightingQualityTuning originalTuning = LightingQualityTuningController.Current;
+        string referenceName = angularQualityCandidate ? "angular-8" : sdfCandidate ? "dda" : batchLightsCandidate ? "serial-lights" : uniformSourceCandidate ? "cell-dda" : "texel-reference";
+        string candidateName = angularQualityCandidate ? "angular-6" : sdfCandidate ? "jfa-sdf" : batchLightsCandidate ? "batched-lights" : uniformSourceCandidate ? "uniform-source" : "uniform-proof";
+        void SelectTraversal(bool reference)
+        {
+            if (angularQualityCandidate)
+            {
+                LightingQualityTuning requested = new(
+                    originalTuning.FieldPixelsPerCell,
+                    originalTuning.LightPixelsPerCell,
+                    originalTuning.CascadeProbePixelsPerCell,
+                    originalTuning.MaximumStaticCascadeDirections,
+                    originalTuning.DynamicNearCells,
+                    reference ? 8 : 6,
+                    originalTuning.DynamicEmitterPointsPerAxis,
+                    originalTuning.DynamicPolarDirectionCount);
+                if (!lighting.TryApplyQualityTuning(requested, out string rejection))
+                {
+                    throw new InvalidOperationException($"Cannot apply angular A/B tuning: {rejection}");
+                }
+            }
+            bool compareAgainstTexelDda = !batchLightsCandidate && !uniformSourceCandidate &&
+                !sdfCandidate && reference;
+            LightingComputeBinder.DiagnosticTexelTraversalReference = compareAgainstTexelDda;
+            LightingComputeBinder.DiagnosticVectorPolarReference = compareAgainstTexelDda;
+            LightingComputeBinder.DiagnosticUniformSourceTraversal = false;
+            LightingComputeBinder.DiagnosticBatchedDynamicLights = batchLightsCandidate && !reference;
+            LightingQualityTuningController.SetDynamicTransportMode(
+                sdfCandidate && !reference
+                    ? DynamicLightingTransportMode.JumpFloodSdfSphereTracing
+                    : batchLightsCandidate || (uniformSourceCandidate && !reference)
+                    ? DynamicLightingTransportMode.AcceleratedUniformRegions
+                    : DynamicLightingTransportMode.ExactDda);
+            LightingQualityTuningController.SetBatchDynamicLights(batchLightsCandidate && !reference);
+        }
         float originalTimeScale = Time.timeScale;
         Camera? originalDiagnosticForOracle = PostProcessRuntimeState.DiagnosticOffscreenCamera;
         UniversalAdditionalCameraData? oracleCameraData = null;
@@ -1885,7 +1972,11 @@ public sealed class FrameBenchmarkPlayModeTests
         }
         List<Result> results = [];
         List<CaptureWindow> captures = [];
-        string directory = DiagnosticArtifactPaths.CreateDirectory("Performance", "lighting_traversal_ab");
+        ProfilerRecorder coldSdfBuildRecorder = default;
+        double coldSdfBuildGpuP50Ms = 0.0;
+        int coldSdfBuildGpuSampleCount = 0;
+        string directory = DiagnosticArtifactPaths.CreateDirectory("Performance",
+            uniformSourceCandidate ? "uniform_source_ab" : "lighting_traversal_ab");
         try
         {
             follow.enabled = false;
@@ -1953,8 +2044,18 @@ public sealed class FrameBenchmarkPlayModeTests
             for (int referenceIndex = 0; referenceIndex < 3; referenceIndex++)
             {
                 bool reference = referenceIndex != 1;
-                LightingComputeBinder.DiagnosticTexelTraversalReference = reference;
-                LightingComputeBinder.DiagnosticVectorPolarReference = reference;
+                if (sdfCandidate && referenceIndex == 1)
+                {
+                    coldSdfBuildRecorder = new ProfilerRecorder(
+                        ProfilerCategory.Render,
+                        "Kern.Lighting.DynamicSdf.JumpFloodBuild",
+                        64,
+                        ProfilerRecorderOptions.StartImmediately |
+                            ProfilerRecorderOptions.SumAllSamplesInFrame |
+                            ProfilerRecorderOptions.WrapAroundWhenCapacityReached |
+                            ProfilerRecorderOptions.GpuRecorder);
+                }
+                SelectTraversal(reference);
                 Vector2 pose = new(0.375f, 0.1875f);
                 SetSources(pose, 9f);
                 yield return Skip(5);
@@ -1976,6 +2077,22 @@ public sealed class FrameBenchmarkPlayModeTests
                     });
                 };
                 yield return WaitUntil(() => received, WorldTimeoutSeconds, "Production traversal image was not captured.");
+                if (sdfCandidate && referenceIndex == 1 && coldSdfBuildRecorder.Valid)
+                {
+                    coldSdfBuildRecorder.Stop();
+                    var samples = new List<ProfilerRecorderSample>(64);
+                    coldSdfBuildRecorder.CopyTo(samples);
+                    double[] validSamples = samples
+                        .Where(sample => sample.Count > 0 && sample.Value > 0)
+                        .Select(sample => sample.Value * 1e-6)
+                        .OrderBy(value => value)
+                        .ToArray();
+                    coldSdfBuildGpuSampleCount = validSamples.Length;
+                    if (validSamples.Length > 0)
+                    {
+                        coldSdfBuildGpuP50Ms = Percentile(validSamples, 0.50);
+                    }
+                }
             }
             Time.timeScale = originalTimeScale;
             RenderPipelineManager.beginCameraRendering -= deterministicOracleCamera;
@@ -1984,6 +2101,8 @@ public sealed class FrameBenchmarkPlayModeTests
             Assert.That(traversalImages[1].Length, Is.EqualTo(traversalImages[0].Length));
             float traversalImageError = 0f;
             float traversalReferenceDrift = 0f;
+            double traversalImageSquaredError = 0d;
+            double traversalImageAbsoluteError = 0d;
             int traversalWorstIndex = 0;
             bool finiteTraversalImage = true;
             for (int index = 0; index < traversalImages[0].Length; index++)
@@ -1991,15 +2110,39 @@ public sealed class FrameBenchmarkPlayModeTests
                 finiteTraversalImage &= float.IsFinite(traversalImages[0][index]) && float.IsFinite(traversalImages[1][index]);
                 float error = Mathf.Abs(traversalImages[0][index] - traversalImages[1][index]);
                 if (error > traversalImageError) { traversalImageError = error; traversalWorstIndex = index; }
+                traversalImageSquaredError += (double)error * error;
+                traversalImageAbsoluteError += error;
                 traversalReferenceDrift = Mathf.Max(traversalReferenceDrift,
                     Mathf.Abs(traversalImages[0][index] - traversalImages[2][index]));
             }
             File.WriteAllText(Path.Combine(directory, "image-oracle.txt"),
                 $"production world image values={traversalImages[0].Length}; maxError={traversalImageError:R}; " +
+                $"meanAbsoluteError={traversalImageAbsoluteError / traversalImages[0].Length:R}; " +
+                $"rootMeanSquareError={Math.Sqrt(traversalImageSquaredError / traversalImages[0].Length):R}; " +
                 $"referenceDrift={traversalReferenceDrift:R}; worstIndex={traversalWorstIndex}; " +
                 $"referenceValue={traversalImages[0][traversalWorstIndex]:R}; optimizedValue={traversalImages[1][traversalWorstIndex]:R}; " +
                 $"repeatReferenceValue={traversalImages[2][traversalWorstIndex]:R}; rect={traversalImageRects[0]}\n");
-            if (traversalImageError > 0.002f || traversalReferenceDrift > 0.002f)
+            if (sdfCandidate)
+            {
+                float[] amplifiedDifference = new float[traversalImages[0].Length];
+                for (int index = 0; index < amplifiedDifference.Length; index++)
+                {
+                    amplifiedDifference[index] = Mathf.Abs(traversalImages[0][index] - traversalImages[1][index]) * 100f;
+                }
+
+                byte[] differenceBytes = new byte[amplifiedDifference.Length * sizeof(float)];
+                Buffer.BlockCopy(amplifiedDifference, 0, differenceBytes, 0, differenceBytes.Length);
+                File.WriteAllBytes(Path.Combine(directory, "world-diff-x100.rgba32float"), differenceBytes);
+                File.WriteAllText(Path.Combine(directory, "world-diff-x100.json"), JsonConvert.SerializeObject(new
+                {
+                    format = "raw RGBA32Float; width and height match the captured production world target",
+                    scale = 100,
+                    maximumScaledError = traversalImageError * 100f,
+                    meanAbsoluteError = traversalImageAbsoluteError / traversalImages[0].Length,
+                    rootMeanSquareError = Math.Sqrt(traversalImageSquaredError / traversalImages[0].Length),
+                }, Formatting.Indented));
+            }
+            if (angularQualityCandidate || traversalImageError > 0.002f || traversalReferenceDrift > 0.002f)
             {
                 for (int index = 0; index < traversalImages.Length; index++)
                 {
@@ -2011,16 +2154,18 @@ public sealed class FrameBenchmarkPlayModeTests
             Assert.That(finiteTraversalImage, Is.True, "Non-finite production traversal image.");
             Assert.That(traversalReferenceDrift, Is.LessThanOrEqualTo(0.002f),
                 "Production image inputs changed between reference captures.");
-            Assert.That(traversalImageError, Is.LessThanOrEqualTo(0.002f),
-                "Uniform transport changed the production world image.");
+            if (!angularQualityCandidate)
+            {
+                Assert.That(traversalImageError, Is.LessThanOrEqualTo(0.002f),
+                    "Uniform transport changed the production world image.");
+            }
             Array.Clear(traversalImages, 0, traversalImages.Length);
             for (int repetition = 0; repetition < 3; repetition++)
             {
                 for (int order = 0; order < 2; order++)
                 {
                     bool reference = (order + repetition) % 2 == 0;
-                    LightingComputeBinder.DiagnosticTexelTraversalReference = reference;
-                    LightingComputeBinder.DiagnosticVectorPolarReference = reference;
+                    SelectTraversal(reference);
                     Action<int> advance = frame =>
                     {
                         // Identical continuous pose input for both paths. The
@@ -2033,7 +2178,7 @@ public sealed class FrameBenchmarkPlayModeTests
                         advance(warmup);
                         yield return null;
                     }
-                    string scenario = $"rep-{repetition}/{(reference ? "texel-reference" : "uniform-proof")}";
+                    string scenario = $"rep-{repetition}/{(reference ? referenceName : candidateName)}";
                     yield return Measure(scenario, results, telemetry, captures, scenario, advance, outputCamera);
                     Assert.That(lighting.UploadedDynamicLightCount, Is.EqualTo(sourceCount));
                     var sourceTextures = Resources.FindObjectsOfTypeAll<RenderTexture>()
@@ -2073,8 +2218,8 @@ public sealed class FrameBenchmarkPlayModeTests
             }
             var acceptance = Enumerable.Range(0, 3).Select(repetition =>
             {
-                Result before = results.Single(result => result.Scenario == $"rep-{repetition}/texel-reference");
-                Result after = results.Single(result => result.Scenario == $"rep-{repetition}/uniform-proof");
+                Result before = results.Single(result => result.Scenario == $"rep-{repetition}/{referenceName}");
+                Result after = results.Single(result => result.Scenario == $"rep-{repetition}/{candidateName}");
                 return new
                 {
                     repetition,
@@ -2095,19 +2240,95 @@ public sealed class FrameBenchmarkPlayModeTests
                 outputHeight = outputCamera.pixelHeight,
                 nativeUIWidth = Screen.width,
                 nativeUIHeight = Screen.height,
+                coldSdfBuildGpuP50Ms,
+                coldSdfBuildGpuSampleCount,
+                cachedTraceWindowsExcludeBuild = sdfCandidate,
                 warmupFrames = WarmupFrames,
                 measuredFrames = MeasuredFrames,
                 sourceCount,
                 traversalImageError,
                 repetitions = acceptance,
             }, Formatting.Indented));
-            Assert.That(acceptance.All(pair => pair.passesThirtyPercent && pair.passesP95), Is.True,
-                "Production transport acceptance failed: require >=30% p50 reduction and no p95 regression in every repetition.");
+            if (sdfCandidate)
+            {
+                string coldBuildReport = coldSdfBuildGpuSampleCount > 0
+                    ? $"JFA cold distance-field build GPU p50: {coldSdfBuildGpuP50Ms:F3} ms " +
+                        $"({coldSdfBuildGpuSampleCount} observations); timed JFA windows reused the cached field.\n"
+                    : "JFA cold distance-field build GPU timing unavailable; timed JFA windows reused the cached field.\n";
+                File.AppendAllText(Path.Combine(directory, "report.txt"), coldBuildReport);
+            }
+            if (uniformSourceCandidate || batchLightsCandidate || angularQualityCandidate || sdfCandidate)
+            {
+                const string ReceiverMarker = "Kern.Lighting.DynamicReceiverTrace";
+                const string DdaPolarMarker = "Kern.Lighting.DynamicPolar.DdaTrace";
+                const string SdfPolarMarker = "Kern.Lighting.DynamicPolar.JfaSphereTrace";
+                var gpuAcceptance = Enumerable.Range(0, 3).Select(repetition =>
+                {
+                    Result before = results.Single(result => result.Scenario == $"rep-{repetition}/{referenceName}");
+                    Result after = results.Single(result => result.Scenario == $"rep-{repetition}/{candidateName}");
+                    string beforeMarker = sdfCandidate ? DdaPolarMarker : ReceiverMarker;
+                    string afterMarker = sdfCandidate ? SdfPolarMarker : ReceiverMarker;
+                    bool hasStage = before.PostprocessGPUTimes.TryGetValue(beforeMarker, out double beforeStage) &&
+                        before.PostprocessGPUCounts.TryGetValue(beforeMarker, out int beforeSamples) && beforeSamples >= 100;
+                    bool hasAfterStage = after.PostprocessGPUTimes.TryGetValue(afterMarker, out double afterStage) &&
+                        after.PostprocessGPUCounts.TryGetValue(afterMarker, out int afterSamples) && afterSamples >= 100;
+                    bool hasFrame = before.GPUSampleCount >= 100 && after.GPUSampleCount >= 100;
+                    long beforeDispatches = captures.Single(capture => capture.Scenario == before.Scenario)
+                        .Samples.Sum(sample => sample.LightingDynamicPolarDispatches + sample.LightingDynamicReceiverDispatches);
+                    long afterDispatches = captures.Single(capture => capture.Scenario == after.Scenario)
+                        .Samples.Sum(sample => sample.LightingDynamicPolarDispatches + sample.LightingDynamicReceiverDispatches);
+                    bool dispatchGate = !batchLightsCandidate || afterDispatches < beforeDispatches;
+                    return new
+                    {
+                        repetition,
+                        hasStage,
+                        hasAfterStage,
+                        hasFrame,
+                        beforeStageMs = beforeStage,
+                        afterStageMs = afterStage,
+                        beforeStageMarker = beforeMarker,
+                        afterStageMarker = afterMarker,
+                        beforeGPUFrameMs = before.GPUP50Ms,
+                        afterGPUFrameMs = after.GPUP50Ms,
+                        beforeDispatches,
+                        afterDispatches,
+                        dispatchGate,
+                        passes = hasStage && hasAfterStage && hasFrame && beforeStage > 0 && dispatchGate &&
+                        afterStage <= beforeStage * (batchLightsCandidate ? 1.02 : 0.9) &&
+                            after.GPUP50Ms <= before.GPUP50Ms * 1.02 &&
+                            after.P95Ms <= before.P95Ms * 1.02,
+                    };
+                }).ToArray();
+                File.WriteAllText(Path.Combine(directory, "gpu-acceptance.json"),
+                    JsonConvert.SerializeObject(gpuAcceptance, Formatting.Indented));
+                Assert.That(gpuAcceptance.All(pair => pair.passes), Is.True,
+                        batchLightsCandidate
+                        ? "Batch acceptance requires fewer recorded dispatches, >=100 real GPU samples, no >2% receiver-stage regression, and <=2% GPU-frame/p95 regression in every repetition."
+                        : angularQualityCandidate
+                            ? "Angular quality acceptance requires >=100 real GPU samples, >=10% receiver-stage improvement, and <=2% GPU-frame/p95 regression in every repetition; image differences are captured for visual review."
+                            : sdfCandidate
+                                ? "JFA SDF acceptance requires a production image within the DDA tolerance, >=100 real GPU samples for DDA polar trace and JFA sphere trace, >=10% polar-trace improvement, and <=2% GPU-frame/p95 regression in every repetition."
+                                : "Uniform-source acceptance requires >=100 real GPU samples, >=10% receiver-stage improvement, and <=2% GPU-frame/p95 regression in every repetition; CPU scopes cannot substitute for GPU samples.");
+            }
+            else
+            {
+                Assert.That(acceptance.All(pair => pair.passesThirtyPercent && pair.passesP95), Is.True,
+                    "Production transport acceptance failed: require >=30% p50 reduction and no p95 regression in every repetition.");
+            }
         }
         finally
         {
+            if (coldSdfBuildRecorder.Valid) { coldSdfBuildRecorder.Dispose(); }
             LightingComputeBinder.DiagnosticTexelTraversalReference = originalReference;
             LightingComputeBinder.DiagnosticVectorPolarReference = originalVectorReference;
+            LightingComputeBinder.DiagnosticUniformSourceTraversal = originalUniformSource;
+            LightingComputeBinder.DiagnosticBatchedDynamicLights = originalBatchedLights;
+            LightingQualityTuningController.SetDynamicTransportMode(originalTransportMode);
+            LightingQualityTuningController.SetBatchDynamicLights(originalConfiguredBatching);
+            if (angularQualityCandidate && !lighting.TryApplyQualityTuning(originalTuning, out string rejection))
+            {
+                throw new InvalidOperationException($"Cannot restore angular A/B tuning: {rejection}");
+            }
             PostProcessRuntimeState.DiagnosticWorldImage = null;
             Time.timeScale = originalTimeScale;
             if (deterministicOracleCamera != null)
@@ -2475,15 +2696,15 @@ public sealed class FrameBenchmarkPlayModeTests
         var cpuRenderThreadMs = new List<double>(MeasuredFrames);
         var gpuFrameMs = new List<double>(MeasuredFrames);
         bool gpuTimingSupported = FrameTimingManager.IsFeatureEnabled();
-        ulong lastFrameTimingTimestamp = 0;
-        bool hasFrameTimingTimestamp = false;
+        var observedFrameTimingTimestamps = new HashSet<ulong>();
         if (gpuTimingSupported)
         {
             FrameTimingManager.CaptureFrameTimings();
-            if (FrameTimingManager.GetLatestTimings(1, s_frameTimingBuffer) > 0)
+            int initialTimingCount = checked((int)FrameTimingManager.GetLatestTimings(
+                (uint)s_frameTimingBuffer.Length, s_frameTimingBuffer));
+            for (int index = 0; index < initialTimingCount; index++)
             {
-                lastFrameTimingTimestamp = s_frameTimingBuffer[0].frameStartTimestamp;
-                hasFrameTimingTimestamp = true;
+                observedFrameTimingTimestamps.Add(s_frameTimingBuffer[index].frameStartTimestamp);
             }
         }
 
@@ -2529,10 +2750,12 @@ public sealed class FrameBenchmarkPlayModeTests
             if (gpuTimingSupported)
             {
                 FrameTimingManager.CaptureFrameTimings();
-                if (FrameTimingManager.GetLatestTimings(1, s_frameTimingBuffer) > 0)
+                int timingCount = checked((int)FrameTimingManager.GetLatestTimings(
+                    (uint)s_frameTimingBuffer.Length, s_frameTimingBuffer));
+                for (int index = 0; index < timingCount; index++)
                 {
-                    FrameTiming timing = s_frameTimingBuffer[0];
-                    if (!hasFrameTimingTimestamp || timing.frameStartTimestamp != lastFrameTimingTimestamp)
+                    FrameTiming timing = s_frameTimingBuffer[index];
+                    if (observedFrameTimingTimestamps.Add(timing.frameStartTimestamp))
                     {
                         if (capture is not null)
                         {
@@ -2557,9 +2780,6 @@ public sealed class FrameBenchmarkPlayModeTests
                         {
                             gpuFrameMs.Add(timing.gpuFrameTime);
                         }
-
-                        lastFrameTimingTimestamp = timing.frameStartTimestamp;
-                        hasFrameTimingTimestamp = true;
                     }
                 }
             }

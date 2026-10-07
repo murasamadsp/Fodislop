@@ -10,7 +10,7 @@ struct TerrainLightingFieldVaryings
     float4 worldPos     : TEXCOORD1;
     float4 animData     : TEXCOORD2;
     float4 packedData   : TEXCOORD3;
-    float4 glowData     : TEXCOORD4;
+    float4 lightContourDecal : TEXCOORD4;
     nointerpolation float isForeground : TEXCOORD5;
     float4 subAtlasRect : TEXCOORD6;
     float4 tileSizeUV   : TEXCOORD7;
@@ -23,12 +23,14 @@ struct TerrainLightingFieldVaryings
 TerrainLightingFieldVaryings TerrainLightingFieldVert(TerrainVertexInput input)
 {
     TerrainLightingFieldVaryings output = (TerrainLightingFieldVaryings)0;
-    // Background contributes neither material, emission nor occupancy.
+#if defined(KERN_TERRAIN_AO_FIELD)
+    // Фон не масса и контактной тени не даёт.
     if (input.positionOS.z < 0.5)
     {
         output.positionCS = TerrainCulledPosition();
         return output;
     }
+#endif
 
     TERRAIN_RESOLVE_CELL_VERTEX(input, output)
     output.positionCS = cell.atlasIndex >= 0.0
@@ -37,7 +39,7 @@ TerrainLightingFieldVaryings TerrainLightingFieldVert(TerrainVertexInput input)
 #if defined(KERN_TERRAIN_AO_FIELD)
     // A non-physical foreground cell cannot contribute contact occlusion.
     // Cull its quad before rasterization, including its expanded AO carrier.
-    if (!KernTerrainIsPhysicalMass(KernTerrainLightingFlags(output.glowData.y)))
+    if (!KernTerrainIsPhysicalMass(KernTerrainLightingFlags(output.lightContourDecal.y)))
     {
         output.positionCS = TerrainCulledPosition();
     }

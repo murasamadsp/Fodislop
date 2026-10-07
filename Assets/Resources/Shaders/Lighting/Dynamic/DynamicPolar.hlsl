@@ -3,12 +3,42 @@
 
 // Динамический свет источников: полярные лучи, optical depth lookup, per-pixel radiance.
 //
-// READS: _MaterialField, _DynamicLights, _DynamicPolarInput
+// READS: _MaterialField, _DynamicLights, _DynamicPolarInput,
+//        _CleanCellPrefix (opt-in uniform-source gather only)
 // WRITES: _DynamicPolar
 // MAY: вызывать DDA (TraceDynamicPolar, GatherDynamicSource)
 // MUST NOT: трогать каскады
 
-// Point `pointIndex` of a continuous emission grid over the dynamic light's
+DynamicTraceContext SerialDynamicTraceContext()
+{
+    DynamicTraceContext context;
+    context.receiverOrigin = _DynamicDispatchOrigin;
+    context.receiverSize = _DynamicDispatchSize;
+    context.tileOffset = _DynamicTileOffset;
+    context.polarSize = _DynamicPolarSize;
+    context.lightIndex = _DynamicLightIndex;
+    context.slot = _DynamicReachIndex;
+    context.polarLayerOffset = _DynamicPolarLayerOffset;
+    context.horizonBase = _DynamicHorizonBase;
+    return context;
+}
+
+DynamicTraceContext BatchedDynamicTraceContext(uint sourceIndex)
+{
+    DynamicLightWorkItem work = _DynamicLightWorkItems[_DynamicBatchOffset + sourceIndex];
+    DynamicTraceContext context;
+    context.receiverOrigin = work.receiverOrigin;
+    context.receiverSize = work.receiverSize;
+    context.tileOffset = int2(0, 0);
+    context.polarSize = work.polarSize;
+    context.lightIndex = work.lightIndex;
+    context.slot = work.slot;
+    context.polarLayerOffset = work.slot * _DynamicEmitterPointsPerAxis * _DynamicEmitterPointsPerAxis;
+    context.horizonBase = context.polarLayerOffset * _DynamicHorizonStride;
+    return context;
+}
+
+// Point `pointIndex` of a continuous glow grid over the dynamic light's
 // complete one-cell source square, including outside the field. Keeping
 // these sample positions in sub-texel coordinates lets the source move smoothly
 // instead of snapping its emitter grid to field-texel centres.
@@ -35,32 +65,31 @@ void DynamicEmitterPoint(
 
 // One extra column on each side lets hardware filtering cross the angular
 // seam without blending into a different emitter point's rows.
-void WriteDynamicPolar(int angleIndex, int radius, int pointIndex, float4 depth)
+void WriteDynamicPolar(int angleIndex, int radius, int pointIndex, float4 depth, DynamicTraceContext context)
 {
-    _DynamicPolar[int3(angleIndex + 1, radius, _DynamicPolarLayerOffset + pointIndex)] = depth;
+    _DynamicPolar[int3(angleIndex + 1, radius, context.polarLayerOffset + pointIndex)] = depth;
     if (angleIndex == 0)
     {
-        _DynamicPolar[int3(_DynamicPolarSize.x + 1, radius, _DynamicPolarLayerOffset + pointIndex)] = depth;
+        _DynamicPolar[int3(context.polarSize.x + 1, radius, context.polarLayerOffset + pointIndex)] = depth;
     }
 
-    if (angleIndex == _DynamicPolarSize.x - 1)
+    if (angleIndex == context.polarSize.x - 1)
     {
-        _DynamicPolar[int3(0, radius, _DynamicPolarLayerOffset + pointIndex)] = depth;
+        _DynamicPolar[int3(0, radius, context.polarLayerOffset + pointIndex)] = depth;
     }
 }
 
-[numthreads(64, 1, 1)]
-void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
+void TraceDynamicPolarRay(uint3 dispatchId, DynamicTraceContext context)
 {
     int angleIndex = int(dispatchId.x);
     int pointIndex = int(dispatchId.y);
-    if (angleIndex >= _DynamicPolarSize.x ||
+    if (angleIndex >= context.polarSize.x ||
         pointIndex >= _DynamicEmitterPointsPerAxis * _DynamicEmitterPointsPerAxis)
     {
         return;
     }
 
-    int radii = _DynamicPolarSize.y;
+    int radii = context.polarSize.y;
     // One polar row per receiver (light-lattice) texel. The march below still
     // visits every transport texel; only the stored radial samples are as
     // dense as the receivers that read them.
@@ -69,7 +98,7 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
     {
         InterlockedAdd(_LightingCounters[0], 1u);
     }
-    float angle = (float(angleIndex) + 0.5) * PI2 / float(_DynamicPolarSize.x);
+    float angle = (float(angleIndex) + 0.5) * PI2 / float(context.polarSize.x);
     float raySine = 0.0;
     float rayCosine = 1.0;
     sincos(angle, raySine, rayCosine);
@@ -77,14 +106,16 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
     float2 segmentStart = 0.0;
     float emitterArea = 0.0;
     bool emits = false;
-    DynamicEmitterPoint(_DynamicLights[_DynamicLightIndex], pointIndex, segmentStart, emitterArea, emits);
+    DynamicEmitterPoint(_DynamicLights[context.lightIndex], pointIndex, segmentStart, emitterArea, emits);
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     float cellsPerDistance = length(direction * cellsPerPixel);
     float intervalLength = float(radii - 1) * rowStep;
     float3 airExtinction = SegmentExtinction(0.0);
     float3 opticalDepth = 0.0;
     float distance = 0.0;
-    WriteDynamicPolar(angleIndex, 0, pointIndex, float4(0.0, 0.0, 0.0, 0.0));
+    uint ddaStepCount = 0u;
+    uint sdfStepCount = 0u;
+    WriteDynamicPolar(angleIndex, 0, pointIndex, float4(0.0, 0.0, 0.0, 0.0), context);
 
     int nextRadius = 1;
 
@@ -92,9 +123,9 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
     // carries can reach any display level. The stored depths are untouched;
     // receivers beyond the horizon of every ray they blend are skipped
     // (DynamicHorizonContains), so light is never cut while still visible.
-    DynamicLight horizonLight = _DynamicLights[_DynamicLightIndex];
+    DynamicLight horizonLight = _DynamicLights[context.lightIndex];
     float3 horizonSource = max(horizonLight.colorIntensity.rgb * horizonLight.colorIntensity.a, 0.0) *
-        _EmissionScale * DynamicHorizonWeightMargin;
+        _GlowScale * DynamicHorizonWeightMargin;
     float3 horizonEntryDepth = SegmentExtinction(1.0) * DynamicHorizonSourceDepthCells;
     float horizon = intervalLength;
     bool horizonFound = false;
@@ -115,13 +146,61 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
         while (nextRadius < radii && float(nextRadius) * rowStep <= entry)
         {
             WriteDynamicPolar(angleIndex, nextRadius, pointIndex,
-                float4(airExtinction * float(nextRadius) * rowStep * cellsPerDistance, 0.0));
+                float4(airExtinction * float(nextRadius) * rowStep * cellsPerDistance, 0.0), context);
             nextRadius++;
         }
 
         opticalDepth = airExtinction * entry * cellsPerDistance;
         distance = entry;
-        float2 start = segmentStart + direction * entry;
+        if (_DynamicSdfTransportEnabled != 0)
+        {
+            // Treat JFA distance as an estimate, subtract a texel-sized margin,
+            // and leave the boundary tail to the exact DDA path below. The
+            // production DDA image comparison remains the accuracy gate for this
+            // opt-in mode because JFA does not prove the globally nearest seed.
+            [loop]
+            while (distance < exitDistance)
+            {
+                float2 position = segmentStart + direction * distance;
+                int2 sdfTexel = int2(floor(position));
+                if (any(sdfTexel < 0) || any(sdfTexel >= _FieldSize))
+                {
+                    break;
+                }
+
+                float seedDistance = _DynamicSdfInput.Load(int3(sdfTexel, 0));
+                if (_LightingCountersEnabled != 0)
+                {
+                    InterlockedAdd(_LightingCounters[3], 1u);
+                    sdfStepCount++;
+                }
+                float sampleOffset = length(position - (float2(sdfTexel) + 0.5));
+                float clearance = max(seedDistance - sampleOffset - 1.0, 0.0);
+                if (clearance <= 0.5)
+                {
+                    break;
+                }
+
+                float advance = min(clearance * 0.5, exitDistance - distance);
+                if (advance <= 0.0)
+                {
+                    break;
+                }
+
+                float end = distance + advance;
+                [loop]
+                while (nextRadius < radii && float(nextRadius) * rowStep <= end)
+                {
+                    WriteDynamicPolar(angleIndex, nextRadius, pointIndex, float4(
+                        opticalDepth + airExtinction * (float(nextRadius) * rowStep - distance) * cellsPerDistance,
+                        0.0), context);
+                    nextRadius++;
+                }
+                opticalDepth += airExtinction * advance * cellsPerDistance;
+                distance = end;
+            }
+        }
+        float2 start = segmentStart + direction * distance;
         int2 texel = int2(floor(start));
         int2 step = int2(sign(direction));
         texel.x -= direction.x < 0.0 && start.x == floor(start.x) ? 1 : 0;
@@ -179,6 +258,7 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
             if (_LightingCountersEnabled != 0)
             {
                 InterlockedAdd(_LightingCounters[1], 1u);
+                ddaStepCount++;
             }
             float end = min(exitDistance, min(intervalNext.x, intervalNext.y));
             float distanceCells = max(0.0, end - distance) * cellsPerDistance;
@@ -213,7 +293,7 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
             {
                 WriteDynamicPolar(angleIndex, nextRadius, pointIndex, float4(
                     opticalDepth + extinction * (float(nextRadius) * rowStep - distance) * cellsPerDistance,
-                    0.0));
+                    0.0), context);
                 nextRadius++;
             }
 
@@ -281,7 +361,7 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
     {
         WriteDynamicPolar(angleIndex, nextRadius, pointIndex, float4(
             opticalDepth + airExtinction * (float(nextRadius) * rowStep - distance) * cellsPerDistance,
-            0.0));
+            0.0), context);
         nextRadius++;
     }
 
@@ -302,21 +382,31 @@ void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
         }
     }
 
-    _DynamicHorizon[_DynamicHorizonBase + pointIndex * _DynamicHorizonStride + angleIndex] = uint(ceil(horizon));
+    if (_LightingCountersEnabled != 0)
+    {
+        uint ddaBin = min(ddaStepCount, DynamicTraversalHistogramBins - 1u);
+        uint sdfBin = min(sdfStepCount, DynamicTraversalHistogramBins - 1u);
+        uint totalBin = min(ddaStepCount + sdfStepCount, DynamicTraversalHistogramBins - 1u);
+        InterlockedAdd(_LightingCounters[DynamicTraversalDdaHistogramOffset + ddaBin], 1u);
+        InterlockedAdd(_LightingCounters[DynamicTraversalSdfHistogramOffset + sdfBin], 1u);
+        InterlockedAdd(_LightingCounters[DynamicTraversalTotalHistogramOffset + totalBin], 1u);
+    }
+
+    _DynamicHorizon[context.horizonBase + pointIndex * _DynamicHorizonStride + angleIndex] = uint(ceil(horizon));
 }
 
 // Optical depth along one stored ray (texture column `column`, wrap columns
 // included) from emitter point `pointIndex` to `radius` transport texels,
 // linear between rows. Rows are one receiver texel apart.
-float3 PolarColumnDepth(int pointIndex, float column, float radius)
+float3 PolarColumnDepth(int pointIndex, float column, float radius, DynamicTraceContext context)
 {
     float radiusIndex = min(max(radius / float(_FieldTexelsPerLightTexel), 0.0),
-        float(_DynamicPolarSize.y - 1));
+        float(context.polarSize.y - 1));
     float2 polarUv = float2(
         (column + 0.5) / float(_DynamicPolarTextureSize.x),
         (radiusIndex + 0.5) / float(_DynamicPolarTextureSize.y));
     float3 depth = _DynamicPolarInput.SampleLevel(sampler_LinearClamp,
-        float3(polarUv, float(_DynamicPolarLayerOffset + pointIndex)), 0).rgb;
+        float3(polarUv, float(context.polarLayerOffset + pointIndex)), 0).rgb;
     return _DynamicPolarScalarExtinction != 0 ? depth.rrr : depth;
 }
 
@@ -325,23 +415,60 @@ float3 PolarColumnDepth(int pointIndex, float column, float radius)
 // transmission, not by optical depth: a sealed or wall-blocked ray (huge
 // depth) next to an open one gives a penumbra between them, where blending
 // depths blackened the whole angular gap and drew dark wedges.
-float3 PolarTransmission(int pointIndex, float angle, float farRadius, float nearRadius)
+float3 PolarTransmission(int pointIndex, float angle, float farRadius, float nearRadius, DynamicTraceContext context)
 {
     // Ray i is stored in column i + 1 at angle (i + 0.5) / N; columns 0 and
     // N + 1 repeat the last and first rays across the seam.
-    float rayPosition = frac(angle / PI2) * float(_DynamicPolarSize.x) - 0.5;
+    float rayPosition = frac(angle / PI2) * float(context.polarSize.x) - 0.5;
     float lowerRay = floor(rayPosition);
     float blend = rayPosition - lowerRay;
     float lowerColumn = lowerRay + 1.0;
-    float3 lowerDepth = max(PolarColumnDepth(pointIndex, lowerColumn, farRadius) -
-        PolarColumnDepth(pointIndex, lowerColumn, nearRadius), 0.0);
-    float3 upperDepth = max(PolarColumnDepth(pointIndex, lowerColumn + 1.0, farRadius) -
-        PolarColumnDepth(pointIndex, lowerColumn + 1.0, nearRadius), 0.0);
+    float3 lowerDepth = max(PolarColumnDepth(pointIndex, lowerColumn, farRadius, context) -
+        PolarColumnDepth(pointIndex, lowerColumn, nearRadius, context), 0.0);
+    float3 upperDepth = max(PolarColumnDepth(pointIndex, lowerColumn + 1.0, farRadius, context) -
+        PolarColumnDepth(pointIndex, lowerColumn + 1.0, nearRadius, context), 0.0);
     return lerp(OpticalDepthTransmission(lowerDepth), OpticalDepthTransmission(upperDepth), blend);
 }
 
+[numthreads(64, 1, 1)]
+void TraceDynamicPolar(uint3 dispatchId : SV_DispatchThreadID)
+{
+    TraceDynamicPolarRay(dispatchId, SerialDynamicTraceContext());
+}
+
+[numthreads(64, 1, 1)]
+void TraceDynamicPolarBatch(uint3 dispatchId : SV_DispatchThreadID)
+{
+    TraceDynamicPolarRay(dispatchId, BatchedDynamicTraceContext(dispatchId.z));
+}
+
+// Exact continuous emitter integral in a proven uniform medium. The caller
+// proves the complete receiver/emitter box, including the corner-seal guard.
+// COST: no field loads; one slab intersection and the existing medium integral.
+float3 UniformSourceRadiance(float2 origin, float2 direction, float2 sourceMin,
+    float2 sourceMax, float3 sourceRadiance, float occupancy)
+{
+    float2 inverseDirection = float2(
+        abs(direction.x) > 1e-20 ? 1.0 / direction.x : 1e20,
+        abs(direction.y) > 1e-20 ? 1.0 / direction.y : 1e20);
+    float2 slabA = (sourceMin - origin) * inverseDirection;
+    float2 slabB = (sourceMax - origin) * inverseDirection;
+    float entry = max(0.0, max(min(slabA.x, slabB.x), min(slabA.y, slabB.y)));
+    float exitDistance = min(max(slabA.x, slabB.x), max(slabA.y, slabB.y));
+    float3 result = 0.0;
+    if (exitDistance > entry)
+    {
+        float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
+        float cellsPerDistance = length(direction * cellsPerPixel);
+        result = SegmentTransmission(occupancy, entry * cellsPerDistance) * sourceRadiance *
+            MediumGlowWeight(SegmentExtinction(occupancy), (exitDistance - entry) * cellsPerDistance);
+    }
+    return result;
+}
+
 // Integrate only the angular interval subtended by this emitting cell. All
-// paths use the same DDA and emission integral as the terrain cascades.
+// paths use the same glow integral as the terrain cascades. A proven
+// uniform source box integrates analytically; all other paths use exact DDA.
 float3 GatherDynamicSource(float2 origin, DynamicLight light, int sampleCount)
 {
     // One-cell square centred on the robot, moving continuously with it.
@@ -384,7 +511,7 @@ float3 GatherDynamicSource(float2 origin, DynamicLight light, int sampleCount)
 
         float angularWidth = maxAngle - minAngle;
         float rayLength = length(toCenter) + length(sourceSize);
-        float3 sourceRadiance = max(light.colorIntensity.rgb * light.colorIntensity.a, 0.0) * _EmissionScale;
+        float3 sourceRadiance = max(light.colorIntensity.rgb * light.colorIntensity.a, 0.0) * _GlowScale;
         float3 radiance = 0.0;
         float angleStep = angularWidth / float(sampleCount);
         float angleStart = centerAngle + minAngle + 0.5 * angleStep;
@@ -394,20 +521,45 @@ float3 GatherDynamicSource(float2 origin, DynamicLight light, int sampleCount)
         float stepCos = 1.0;
         sincos(angleStart, raySin, rayCos);
         sincos(angleStep, stepSin, stepCos);
+        // Amortize four existing prefix-buffer reads over the whole angular
+        // gather, not over individual rays. A cell-plus-texel guard includes
+        // both sides of every corner-seal query. Outside the field is air;
+        // NonCleanCellCount explicitly excludes it from a stone proof.
+        // Static glow conservatively rejects a proof even though this
+        // gather integrates only its isolated continuous source.
+        bool uniformSourceBox = false;
+        float uniformOccupancy = 0.0;
+        if (_UniformSourceTraversalEnabled != 0)
+        {
+            float2 texelsPerCell = float2(_FieldSize) / float2(_CellGridSize);
+            float guardTexels = max(texelsPerCell.x, texelsPerCell.y) + 1.0;
+            uint2 nonClean = NonCleanCellCount(min(origin, sourceMin) - guardTexels,
+                max(origin, sourceMax) + guardTexels);
+            uniformSourceBox = nonClean.x == 0u || nonClean.y == 0u;
+            uniformOccupancy = nonClean.x == 0u ? 0.0 : 1.0;
+        }
         [loop]
         for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
         {
             float3 sampleRadiance = 0.0;
             float3 transmission = 1.0;
-            TraceLightSegment(
-                origin,
-                origin + float2(rayCos, raySin) * rayLength,
-                true,
-                true,
-                float4(sourceMin, sourceMax),
-                sourceRadiance,
-                sampleRadiance,
-                transmission);
+            if (uniformSourceBox)
+            {
+                sampleRadiance = UniformSourceRadiance(origin, float2(rayCos, raySin),
+                    sourceMin, sourceMax, sourceRadiance, uniformOccupancy);
+            }
+            else
+            {
+                TraceLightSegment(
+                    origin,
+                    origin + float2(rayCos, raySin) * rayLength,
+                    true,
+                    true,
+                    float4(sourceMin, sourceMax),
+                    sourceRadiance,
+                    sampleRadiance,
+                    transmission);
+            }
             radiance += sampleRadiance;
             float nextCos = rayCos * stepCos - raySin * stepSin;
             raySin = raySin * stepCos + rayCos * stepSin;
@@ -421,7 +573,7 @@ float3 GatherDynamicSource(float2 origin, DynamicLight light, int sampleCount)
 }
 
 // Dynamic light at a receiver from the emitter points' fans (see TraceDynamicPolar).
-float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount)
+float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCount, DynamicTraceContext context)
 {
     float2 worldCellMin = light.positionRadius.xy - 0.5 * _CellSize;
     float2 sourceMin = (worldCellMin - _WorldRect.xy) / _WorldRect.zw * float2(_FieldSize);
@@ -437,7 +589,7 @@ float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCou
     }
     else
     {
-        // Same angular samples and emission integral as GatherDynamicSource.
+        // Same angular samples and glow integral as GatherDynamicSource.
         // Each sample's transmittance is read from the fan of the emitter point
         // nearest to where the sample crosses the dynamic light: that ray ends exactly
         // at the receiver and starts within a sixth of a cell of the sample
@@ -461,7 +613,7 @@ float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCou
         }
 
         float angularWidth = maxAngle - minAngle;
-        float3 sourceRadiance = max(light.colorIntensity.rgb * light.colorIntensity.a, 0.0) * _EmissionScale;
+        float3 sourceRadiance = max(light.colorIntensity.rgb * light.colorIntensity.a, 0.0) * _GlowScale;
         int2 centerPixel = int2(floor((sourceMin + sourceMax) * 0.5));
         float sourceOccupancy = 0.0;
         if (all(centerPixel >= 0) && all(centerPixel < _FieldSize))
@@ -501,7 +653,7 @@ float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCou
                 {
                     float cellsPerDistance = length(direction * cellsPerPixel);
                     float chordCells = (exitDistance - entryDistance) * cellsPerDistance;
-                    float3 emissionWeight = MediumEmissionWeight(sourceExtinction, chordCells);
+                    float3 glowWeight = MediumGlowWeight(sourceExtinction, chordCells);
 
                     float2 crossing = origin + direction * (0.5 * (entryDistance + exitDistance));
                     int2 nearestPoint = clamp(
@@ -520,8 +672,8 @@ float3 DynamicRadianceFromPolar(float2 origin, DynamicLight light, int sampleCou
                     float2 entryPoint = origin + direction * entryDistance;
                     float entryRadius = min(max(dot(entryPoint - emitterPoint, rayDirection), 0.0), receiverRadius);
                     float rayAngle = atan2(toReceiver.y, toReceiver.x);
-                    radiance += PolarTransmission(pointIndex, rayAngle, receiverRadius, entryRadius) *
-                        sourceRadiance * emissionWeight;
+                    radiance += PolarTransmission(pointIndex, rayAngle, receiverRadius, entryRadius, context) *
+                        sourceRadiance * glowWeight;
                 }
 
                 float nextCosine = rayCosine * stepCosine - raySine * stepSine;

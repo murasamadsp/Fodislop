@@ -141,7 +141,7 @@ public sealed class InstallUpgradeTests
         Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
         Assert.That(result.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 1));
         Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
-        Assert.That(result.Config.Terrain.EnableReliefRim, Is.True);
+        Assert.That(result.Config.Terrain.EnableRim, Is.True);
         Assert.That(result.Config.Terrain.DistortionStyle, Is.EqualTo(TerrainDistortionStyle.Organic));
         Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Overdrive));
         Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(previousJson));
@@ -196,6 +196,40 @@ public sealed class InstallUpgradeTests
         Assert.That(result.SourceSchemaVersion, Is.EqualTo(38));
         Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
         Assert.That(result.Config.Display.PeakBrightnessFromDisplay, Is.True);
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
+    }
+
+    [Test]
+    public void Schema39TerrainNames_MigrateToRimGlowAndBlinking()
+    {
+        ClientConfig legacy = ClientConfigDefaults.Create(_profile);
+        legacy.SchemaVersion = 39;
+        legacy.Terrain.EnableRim = false;
+        legacy.Terrain.BlinkingSpeedScale = 3.25f;
+        legacy.Terrain.TransitGlowColor = new Color(0.25f, 0.5f, 0.75f, 1f);
+        legacy.Terrain.TransitGlowStrength = 2.5f;
+        legacy.Terrain.PerspectiveGlowColor = new Color(0.5f, 0.25f, 0.125f, 1f);
+        legacy.Terrain.PerspectiveGlowStrength = 1.5f;
+        string legacyJson = JsonUtility.ToJson(legacy, prettyPrint: true)
+            .Replace("\"EnableRim\"", "\"EnableReliefRim\"")
+            .Replace("\"BlinkingSpeedScale\"", "\"PulseSpeedScale\"")
+            .Replace("GlowColor\"", "EmissionColor\"")
+            .Replace("GlowStrength\"", "EmissionStrength\"");
+        Assert.That(legacyJson, Does.Contain("\"EnableReliefRim\""));
+        Assert.That(legacyJson, Does.Contain("\"PerspectiveEmissionStrength\""));
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, legacyJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Terrain.EnableRim, Is.False);
+        Assert.That(result.Config.Terrain.BlinkingSpeedScale, Is.EqualTo(3.25f));
+        Assert.That(result.Config.Terrain.TransitGlowColor, Is.EqualTo(new Color(0.25f, 0.5f, 0.75f, 1f)));
+        Assert.That(result.Config.Terrain.TransitGlowStrength, Is.EqualTo(2.5f));
+        Assert.That(result.Config.Terrain.PerspectiveGlowColor, Is.EqualTo(new Color(0.5f, 0.25f, 0.125f, 1f)));
+        Assert.That(result.Config.Terrain.PerspectiveGlowStrength, Is.EqualTo(1.5f));
         Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
     }
 

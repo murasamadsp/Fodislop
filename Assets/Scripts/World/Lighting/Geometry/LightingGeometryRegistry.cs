@@ -60,10 +60,10 @@ public sealed class LightingGeometryRegistry
         }
     }
 
-    public void RenderMaterialEmissionFields(
+    public void RenderMaterialGlowFields(
         CommandBuffer commandBuffer,
         RenderTexture materialField,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         Vector4 worldRect,
         bool clearFields = true)
     {
@@ -72,7 +72,7 @@ public sealed class LightingGeometryRegistry
             throw new ArgumentNullException(nameof(commandBuffer));
         }
 
-        if (!materialField.IsCreated() || !emissionField.IsCreated())
+        if (!materialField.IsCreated() || !glowField.IsCreated())
         {
             throw new InvalidOperationException(
                 "Lighting fields must be created before geometry contributors are rendered.");
@@ -94,7 +94,7 @@ public sealed class LightingGeometryRegistry
         if (clearFields)
         {
             _fieldTargets[0] = new RenderTargetIdentifier(materialField);
-            _fieldTargets[1] = new RenderTargetIdentifier(emissionField);
+            _fieldTargets[1] = new RenderTargetIdentifier(glowField);
             commandBuffer.SetRenderTarget(
                 _fieldTargets,
                 new RenderTargetIdentifier(materialField));
@@ -109,12 +109,12 @@ public sealed class LightingGeometryRegistry
         // each draw call. Camera matrices are not used by field passes.
         LightingFieldOrientation.BindRaster(commandBuffer, worldRect, Matrix4x4.identity);
 
-        var context = new LightingMaterialEmissionContext(materialField, emissionField, worldRect);
+        var context = new LightingMaterialGlowContext(materialField, glowField, worldRect);
         commandBuffer.SetViewport(new Rect(0f, 0f, materialField.width, materialField.height));
         commandBuffer.EnableScissorRect(new Rect(0f, 0f, materialField.width, materialField.height));
         foreach (Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor contributor in _contributors)
         {
-            contributor.RenderMaterialEmissionFields(commandBuffer, context);
+            contributor.RenderMaterialGlowFields(commandBuffer, context);
         }
         commandBuffer.DisableScissorRect();
     }

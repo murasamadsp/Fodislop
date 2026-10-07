@@ -23,7 +23,7 @@ namespace Kern.World.Lighting
             FinalLighting = 0,
             Occupancy = 1,
             Albedo = 2,
-            Emission = 3,
+            Glow = 3,
             Transmission = 4,
             StaticDirect = 5,
             DynamicDirect = 6,
@@ -39,7 +39,13 @@ namespace Kern.World.Lighting
             LightingUpdateCoordinator.DiagnosticForceDenseReanchor = false;
             LightingComputeBinder.DiagnosticTransportCounters = false;
             LightingComputeBinder.DiagnosticTexelTraversalReference = false;
+            LightingComputeBinder.DiagnosticUniformSourceTraversal = false;
+            LightingComputeBinder.DiagnosticBatchedDynamicLights = false;
             LightingQualityTuningController.Apply(LightingConfigHolder.DefaultQuality);
+            LightingQualityTuningController.SetDynamicTransportMode(DynamicLightingTransportMode.ExactDda);
+            LightingQualityTuningController.SetBatchDynamicLights(false);
+            LightingQualityTuningController.MarkDynamicExecutionModeApplied(
+                LightingQualityTuningController.DynamicExecutionModeRevision);
             LightingComputeBinder.DiagnosticVectorPolarReference = false;
             LightingFrameExecutor.DiagnosticMaterialReadback = null;
         }
@@ -108,6 +114,7 @@ namespace Kern.World.Lighting
 
         // Для интеграционных тестов жизненного цикла GPU-ресурсов.
         internal bool IsGPUPipelineInitialized => _resources.GPUPipelineInitialized;
+        internal bool HasDiagnosticTransportCounterBuffer => _resources.LightingCounters != null;
 
         internal LightingResources GPUResources => _resources.Registry;
         // Borrowed for explicit production captures; caller must finish before scope teardown.
@@ -127,6 +134,8 @@ namespace Kern.World.Lighting
 
         private bool _initialized;
         private LightingQualityTuning _appliedTuning = LightingQualityTuningController.Current;
+        private ulong _appliedDynamicExecutionModeRevision =
+            LightingQualityTuningController.DynamicExecutionModeRevision;
 
         public bool IsInitialized => _initialized;
 
@@ -154,7 +163,7 @@ namespace Kern.World.Lighting
 
         public Color AmbientColor => LightingConfigHolder.AmbientColor;
 
-        public float EmissionScale => LightingConfigHolder.EmissionScale;
+        public float GlowScale => LightingConfigHolder.GlowScale;
 
         public Color EmptyExtinctionRGB => LightingConfigHolder.EmptyExtinctionRGB;
 
@@ -200,8 +209,57 @@ namespace Kern.World.Lighting
         public int LightHeight => _resources.LightHeight;
 
         /// <summary>Validate a session quality change against this world's resource coverage before publishing it.</summary>
-        public bool TryApplyQualityTuning(LightingQualityTuning quality, out string rejection) =>
-            _resources.TryApplyQualityTuning(quality, QualityController.Settings, out rejection);
+        public bool TryApplyQualityTuning(LightingQualityTuning quality, out string rejection)
+        {
+            if (LightingQualityTuningController.DynamicTransportMode ==
+                DynamicLightingTransportMode.JumpFloodSdfSphereTracing &&
+                _resources.CellGridWidth > 0 && _resources.CellGridHeight > 0)
+            {
+                try
+                {
+                    LightingResourceManager.ValidateDynamicDistanceFieldRequest(
+                        checked(_resources.CellGridWidth * quality.FieldPixelsPerCell),
+                        checked(_resources.CellGridHeight * quality.FieldPixelsPerCell));
+                }
+                catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or OverflowException)
+                {
+                    rejection = exception.Message;
+                    return false;
+                }
+            }
+
+            return _resources.TryApplyQualityTuning(
+                quality, QualityController.Settings, _dynamicLightManager.Count, out rejection);
+        }
+
+        public bool TrySetDynamicTransportMode(DynamicLightingTransportMode mode, out string rejection)
+        {
+            try
+            {
+                if (mode == DynamicLightingTransportMode.JumpFloodSdfSphereTracing)
+                {
+                    if (!SystemInfo.SupportsRandomWriteOnRenderTextureFormat(RenderTextureFormat.RFloat))
+                    {
+                        throw new NotSupportedException("JFA sphere tracing requires random-write RFloat support.");
+                    }
+                    if (_resources.CellGridWidth > 0 && _resources.CellGridHeight > 0)
+                    {
+                        LightingResourceManager.ValidateDynamicDistanceFieldRequest(
+                            _resources.FieldWidth, _resources.FieldHeight);
+                    }
+                }
+
+                LightingQualityTuningController.SetDynamicTransportMode(mode);
+                rejection = string.Empty;
+                return true;
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or
+                NotSupportedException or OverflowException)
+            {
+                rejection = exception.Message;
+                return false;
+            }
+        }
 
         public RectInt DynamicReceiverRect => _runtimeState.LastDynamicReceiverRect;
 
@@ -248,6 +306,7 @@ namespace Kern.World.Lighting
             LightingDiagnosticsReporter.DescribeCascadeUniforms(_cascades);
 
         public int AtlasEntryCount => _atlasEntryCount;
+        public int AtlasCapacity => _resources.AtlasCapacity;
 
         public Color ComputeAmbientColor => LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity;
 
@@ -482,7 +541,9 @@ namespace Kern.World.Lighting
         private void ApplyVisualTuningIfChanged()
         {
             LightingQualityTuning tuning = LightingQualityTuningController.Current;
-            if (_appliedTuning == tuning)
+            ulong executionModeRevision = LightingQualityTuningController.DynamicExecutionModeRevision;
+            if (_appliedTuning == tuning &&
+                _appliedDynamicExecutionModeRevision == executionModeRevision)
             {
                 return;
             }
@@ -508,8 +569,10 @@ namespace Kern.World.Lighting
 
             FrameEventLog.Record(staticOrFieldChanged
                 ? "свет: VisualTuning изменил поля или статику"
-                : "свет: VisualTuning изменил динамический транспорт");
+                : "свет: изменён режим динамической трассировки или батчинга");
             _appliedTuning = tuning;
+            _appliedDynamicExecutionModeRevision = executionModeRevision;
+            LightingQualityTuningController.MarkDynamicExecutionModeApplied(executionModeRevision);
         }
 
         private RectInt CurrentLightingWorldRectCells()

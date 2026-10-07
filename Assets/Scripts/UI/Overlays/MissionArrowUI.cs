@@ -3,7 +3,6 @@
 using System;
 using Kern.Core;
 using Kern.Core.Interfaces;
-using Kern.UI.HUD.Player.Model;
 using Kern.World;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -31,7 +30,7 @@ namespace Kern.UI
         private const float PositionWriteEpsilon = 0.5f;
 
         [Inject] private UIDocument _doc = null!;
-        [Inject] private PlayerStatsModel _playerStats = null!;
+        [Inject] private IPlayerStats _playerStats = null!;
         [Inject] private MapManager _mapManager = null!;
         [Inject] private ILocalPlayerState _localPlayerState = null!;
 
@@ -78,7 +77,7 @@ namespace Kern.UI
             {
                 throw new InvalidOperationException(
                     "[MissionArrowUI] Required injection missing: " +
-                    $"{(_doc == null ? "UIDocument" : _playerStats == null ? "PlayerStatsModel" : _mapManager == null ? "MapManager" : _localPlayerState == null ? "ILocalPlayerState" : "UIDocument root")}. " +
+                    $"{(_doc == null ? "UIDocument" : _playerStats == null ? "IPlayerStats" : _mapManager == null ? "MapManager" : _localPlayerState == null ? "ILocalPlayerState" : "UIDocument root")}. " +
                     "MissionArrowUI must be registered in the Game scope before Start.");
             }
 

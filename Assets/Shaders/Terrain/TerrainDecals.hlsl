@@ -1,6 +1,8 @@
 #ifndef KERN_TERRAIN_DECALS_INCLUDED
 #define KERN_TERRAIN_DECALS_INCLUDED
 
+#include "Assets/Shaders/Terrain/TerrainCellFormat.hlsl"
+
 TEXTURE2D(_TerrainDecalAtlas);
 SAMPLER(sampler_TerrainDecalAtlas);
 
@@ -32,11 +34,7 @@ float2 TerrainTransformDecalUV(float2 uv, uint rotation, bool mirror)
     return uv;
 }
 
-// Бит 12 (= 4096) кодирует «использовать rock-атлас».
-// Биты 0..10 — variant/rotation/mirror/offsetX/offsetY — идентичны ground.
-// Ground-код доходит до 2048, поэтому бит 11 не свободен: он уже занят
-// старшей ground-декалью, и флаг на нём уводил бы её в чужой атлас.
-static const uint STONE_ATLAS_BIT = 4096u;
+// Код декали — DecalCode в TerrainCellFormat.hlsl.
 
 // Ground-декали — пыль по полу: только осветляют и лишь на треть. Силу
 // приносит свойство _GroundDecalStrength.
@@ -62,14 +60,14 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
     }
 
     uint rawCode   = (uint)round(packedPlacement);
-    bool useRock  = (rawCode & STONE_ATLAS_BIT) != 0u;
-    uint code      = (rawCode & ~STONE_ATLAS_BIT) - 1u;
+    bool useRock  = (rawCode & KERN_TERRAIN_DECAL_ROCK_ATLAS) != 0u;
+    uint code      = (rawCode & ~KERN_TERRAIN_DECAL_ROCK_ATLAS) - 1u;
 
-    uint variant   = code & 15u;
-    uint rotation  = (code >> 4u) & 3u;
-    bool mirror    = ((code >> 6u) & 1u) != 0u;
-    uint offsetX   = (code >> 7u) & 3u;
-    uint offsetY   = (code >> 9u) & 3u;
+    uint variant   = code & KERN_TERRAIN_DECAL_VARIANT_MASK;
+    uint rotation  = (code >> KERN_TERRAIN_DECAL_ROTATION_SHIFT) & 3u;
+    bool mirror    = ((code >> KERN_TERRAIN_DECAL_MIRROR_SHIFT) & 1u) != 0u;
+    uint offsetX   = (code >> KERN_TERRAIN_DECAL_OFFSET_X_SHIFT) & 3u;
+    uint offsetY   = (code >> KERN_TERRAIN_DECAL_OFFSET_Y_SHIFT) & 3u;
 
     float2 transformedUV = TerrainTransformDecalUV(localUV, rotation, mirror);
     float2 placementOffset = float2(offsetX, offsetY) / 3.0 - 0.5;

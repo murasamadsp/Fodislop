@@ -13,29 +13,27 @@ public sealed class TerrainDecalCatalogTests
 {
     // Семья — из cells.json. Камень — только красно- и черноскал: атлас
     // нарисован под их гамму.
-    [TestCase(CellType.Empty, TerrainDecalFamily.Ground)]
-    [TestCase(CellType.RedRock, TerrainDecalFamily.Rock)]
-    [TestCase(CellType.BlackRock, TerrainDecalFamily.Rock)]
-    [TestCase(CellType.Rock, TerrainDecalFamily.None)]
-    [TestCase(CellType.WhiteSand, TerrainDecalFamily.None)]
-    [TestCase(CellType.Road, TerrainDecalFamily.None)]
-    [TestCase(CellType.Lava, TerrainDecalFamily.None)]
-    [TestCase(CellType.BuildingWall, TerrainDecalFamily.None)]
-    public void GetFamily_ComesFromCellConfig(CellType cellType, TerrainDecalFamily expected)
+    [TestCase(CellType.Empty, CellDecalAtlas.Ground)]
+    [TestCase(CellType.RedRock, CellDecalAtlas.Rock)]
+    [TestCase(CellType.BlackRock, CellDecalAtlas.Rock)]
+    [TestCase(CellType.Rock, CellDecalAtlas.None)]
+    [TestCase(CellType.WhiteSand, CellDecalAtlas.None)]
+    [TestCase(CellType.Road, CellDecalAtlas.None)]
+    [TestCase(CellType.Lava, CellDecalAtlas.None)]
+    [TestCase(CellType.BuildingWall, CellDecalAtlas.None)]
+    public void Decal_ComesFromCellConfig(CellType cellType, CellDecalAtlas expected)
     {
-        Assert.That(TerrainDecalCatalog.GetFamily(cellType), Is.EqualTo(expected));
+        Assert.That(BlockRegistry.Get(cellType).DecalAtlas, Is.EqualTo(expected));
     }
 
     [Test]
-    public void GetSurfaceRule_GroundUnderEveryBackgroundAndRockOnRedAndBlackRock()
+    public void RuleOf_FollowsTheDrawnTypeFamily()
     {
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Empty, isBackground: false), Is.EqualTo(TerrainDecalCatalog.GroundRule));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Rock, isBackground: true), Is.EqualTo(TerrainDecalCatalog.GroundRule));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.RedRock, isBackground: true), Is.EqualTo(TerrainDecalCatalog.GroundRule));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.RedRock, isBackground: false), Is.EqualTo(TerrainDecalCatalog.RockRule));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.BlackRock, isBackground: false), Is.EqualTo(TerrainDecalCatalog.RockRule));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Rock, isBackground: false), Is.EqualTo(default(TerrainDecalRule)));
-        Assert.That(TerrainDecalCatalog.GetSurfaceRule(CellType.Unloaded, isBackground: true), Is.EqualTo(default(TerrainDecalRule)));
+        Assert.That(TerrainDecalCatalog.RuleOf(BlockRegistry.Get(CellType.Empty).DecalAtlas), Is.EqualTo(TerrainDecalCatalog.GroundRule));
+        Assert.That(TerrainDecalCatalog.RuleOf(BlockRegistry.Get(CellType.RedRock).DecalAtlas), Is.EqualTo(TerrainDecalCatalog.RockRule));
+        Assert.That(TerrainDecalCatalog.RuleOf(BlockRegistry.Get(CellType.BlackRock).DecalAtlas), Is.EqualTo(TerrainDecalCatalog.RockRule));
+        Assert.That(TerrainDecalCatalog.RuleOf(BlockRegistry.Get(CellType.Rock).DecalAtlas), Is.EqualTo(default(TerrainDecalRule)));
+        Assert.That(TerrainDecalCatalog.RuleOf(BlockRegistry.Get(CellType.Road).DecalAtlas), Is.EqualTo(default(TerrainDecalRule)));
     }
 
     [Test]

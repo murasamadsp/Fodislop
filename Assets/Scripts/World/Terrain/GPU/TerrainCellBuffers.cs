@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Kern.Core;
+using Kern.Core.Interfaces;
 using Kern.Core.Interfaces.Diagnostics;
 using MinesServer.Data;
 
@@ -35,17 +36,22 @@ public sealed class TerrainCellBuffers : IDisposable
     public static readonly int OrganicVerticalSeedId = Shader.PropertyToID("_TerrainOrganicVerticalSeed");
     public static readonly int GroundDecalRuleId = Shader.PropertyToID("_TerrainGroundDecalRule");
     public static readonly int RockDecalRuleId = Shader.PropertyToID("_TerrainRockDecalRule");
-    public static readonly int DistortionModeId = Shader.PropertyToID("_TerrainDistortionMode");
+    public static readonly int UnderlayTypeId = Shader.PropertyToID("_TerrainUnderlayType");
+    public static readonly int DistortionStyleId = Shader.PropertyToID("_TerrainDistortionStyle");
     public static readonly int DistortionId = Shader.PropertyToID("_TerrainDistortion");
 
     private static readonly Vector4[] s_distortion = TerrainCellData.PackDistortion();
+    private const int CellsPerWord = (int)TerrainCellFormat.CellsPerWord;
+    private const int CellBits = (int)TerrainCellFormat.CellBits;
     private static readonly int s_typeStride = System.Runtime.InteropServices.Marshal.SizeOf<TerrainTypeRow>();
 
     private readonly TerrainTextureUploadCounters _uploadCounters = new();
     private readonly TerrainDirtyRegion _dirty = new();
     private readonly List<(int Start, int Count)> _segments = [];
-    private readonly TerrainTypeRow[] _types = new TerrainTypeRow[TerrainCellData.TypeCount];
-    // Клетки по ushort; на GPU — по две в uint. Слова собираются из клеток
+    // До прихода метаданных строка несёт всё из cells.json, но без текстуры
+    // и тайлгруппы; строка Unloaded так и остаётся.
+    private readonly TerrainTypeRow[] _types = PackAuthoredTypes();
+    // Клетки по байту; на GPU — по четыре в uint. Слова собираются из клеток
     // только при выгрузке: так заливка из Parallel.For не пишет в общее слово.
     private TerrainCell[] _cells = [];
     private uint[] _words = [];
@@ -99,7 +105,7 @@ public sealed class TerrainCellBuffers : IDisposable
         RingHeight = meshHeight + (2 * TerrainCellData.RingMargin);
         int count = checked(RingWidth * RingHeight);
         _cells = new TerrainCell[count];
-        _words = new uint[(count + 1) / 2];
+        _words = new uint[(count + CellsPerWord - 1) / CellsPerWord];
         _cellBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, _words.Length, sizeof(uint))
         {
             name = "TerrainCells",
@@ -139,16 +145,22 @@ public sealed class TerrainCellBuffers : IDisposable
 
     internal TerrainTypeRow GetTypeRow(CellType type) => _types[(byte)type];
 
-    // Строка меняется, только когда у типа поменялся вид (приехала текстура,
-    // пришёл конфиг); таблица тогда уходит целиком — 8 КБ. Строка 0 остаётся
-    // нулевой: незагруженный сосед не должен ничего значить.
-    public void SetType(CellType type, TerrainTypeRow row)
+    private static TerrainTypeRow[] PackAuthoredTypes()
     {
-        if (type == CellType.Unloaded)
+        var rows = new TerrainTypeRow[TerrainCellData.TypeCount];
+        for (int index = 0; index < rows.Length; index++)
         {
-            return;
+            rows[index] = TerrainCellData.PackType(
+                TerrainCellPacker.ResolveTypeFields((CellType)index, default, Array.Empty<IAtlasDescriptor>()));
         }
 
+        return rows;
+    }
+
+    // Строка меняется, только когда у типа поменялся вид (приехала текстура,
+    // пришёл конфиг); таблица тогда уходит целиком — 4 КБ.
+    public void SetType(CellType type, TerrainTypeRow row)
+    {
         ref TerrainTypeRow slot = ref _types[(byte)type];
         if (slot != row)
         {
@@ -210,8 +222,8 @@ public sealed class TerrainCellBuffers : IDisposable
             {
                 (int start, int count) = _segments[i];
                 // Отрезок клеток → слова, задевающие его края.
-                int firstWord = start >> 1;
-                int wordCount = ((start + count + 1) >> 1) - firstWord;
+                int firstWord = start / CellsPerWord;
+                int wordCount = ((start + count + CellsPerWord - 1) / CellsPerWord) - firstWord;
                 PackWords(firstWord, wordCount);
                 _cellBuffer!.SetData(_words, firstWord, firstWord, wordCount);
                 _uploadCounters.RecordApply(wordCount, 1, sizeof(uint), Time.frameCount);
@@ -222,14 +234,19 @@ public sealed class TerrainCellBuffers : IDisposable
         _dirty.Clear();
     }
 
-    // Слово i — клетки 2i (младшие 16 бит) и 2i + 1 (старшие).
+    // Слово i — клетки 4i..4i + 3, младшая — в младшем байте.
     private void PackWords(int firstWord, int wordCount)
     {
         for (int word = firstWord; word < firstWord + wordCount; word++)
         {
-            int cell = word << 1;
-            uint high = cell + 1 < _cells.Length ? _cells[cell + 1].Bits : 0u;
-            _words[word] = _cells[cell].Bits | (high << 16);
+            int first = word * CellsPerWord;
+            uint packed = 0u;
+            for (int i = 0; i < CellsPerWord && first + i < _cells.Length; i++)
+            {
+                packed |= (uint)_cells[first + i].Bits << (i * CellBits);
+            }
+
+            _words[word] = packed;
         }
     }
 
@@ -256,7 +273,7 @@ public sealed class TerrainCellBuffers : IDisposable
     // краю мира; режим и константы искажения — чтобы считать узлы и рёбра
     // как TerrainVertexDistortionCalculator; правила декалей — чтобы ставить
     // их тем же хэшем, что TerrainDecalCatalog.Place.
-    public void BindGlobals(float cellSize, int originX, int originY, int worldWidth, int worldHeight, int distortionMode)
+    public void BindGlobals(float cellSize, int originX, int originY, int worldWidth, int worldHeight, int distortionStyle)
     {
         if (!IsAllocated)
         {
@@ -268,7 +285,8 @@ public sealed class TerrainCellBuffers : IDisposable
         Shader.SetGlobalBuffer(TileDescriptorsId, _tileDescriptorBuffer);
         Shader.SetGlobalVector(GridSizeId, new Vector4(RingWidth, RingHeight, cellSize, 0f));
         Shader.SetGlobalVector(OriginId, new Vector4(originX, originY, worldHeight, worldWidth));
-        Shader.SetGlobalInteger(DistortionModeId, distortionMode);
+        Shader.SetGlobalInteger(DistortionStyleId, distortionStyle);
+        Shader.SetGlobalInteger(UnderlayTypeId, (int)BlockRegistry.UnderlayType);
         Shader.SetGlobalVectorArray(DistortionId, s_distortion);
         Shader.SetGlobalInteger(OrganicHorizontalSeedId, (int)TerrainConfigHolder.OrganicEdgeHorizontalSeed);
         Shader.SetGlobalInteger(OrganicVerticalSeedId, (int)TerrainConfigHolder.OrganicEdgeVerticalSeed);

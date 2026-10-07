@@ -12,7 +12,7 @@ public static class FrameProbeCatalog
     [
         new("Свет — весь блок", "Kern.RadianceCascades", gpu: true),
         new("· поле материалов", "Kern.Lighting.MaterialField", isDetail: true, gpu: true),
-        new("· сборка эмиссии", "Kern.Lighting.ComposeEmission", isDetail: true, gpu: true),
+        new("· сборка свечения", "Kern.Lighting.ComposeGlow", isDetail: true, gpu: true),
         new("· статическая половина", "Kern.Lighting.StaticRadiance", isDetail: true, gpu: true),
         new("· динамическая половина", "Kern.Lighting.DynamicRadiance", isDetail: true, gpu: true),
         new("· каскады", "Kern.Lighting.RadianceCascades", isDetail: true, gpu: true),
@@ -61,6 +61,7 @@ public static class FrameProbeCatalog
         new("· запись композита", "Kern.Lighting.Composite.Record.CPU", isDetail: true),
         new("Поверхность", "Kern.Surface.LateUpdate"),
         new("Сущности мира", "Kern.WorldEntities.LateUpdate"),
+        new("Мировые подписи", "Kern.WorldLabels.PostLateTick"),
         new("Сеть — разбор очереди", "Kern.Net.DrainPacketQueue"),
     ];
 

@@ -30,8 +30,8 @@ public static class TerrainSurfaceShaderGlobals
     // Кайма включена по умолчанию. Публикуется на старте, потому что
     // глобаль живёт в нативной части: до первого ApplyClientConfig она
     // была бы нулём, и кайма молча не рисовалась бы.
-    private static readonly int s_reliefRimEnabledId =
-        Shader.PropertyToID("_TerrainReliefRimEnabled");
+    private static readonly int s_rimEnabledId =
+        Shader.PropertyToID("_TerrainRimEnabled");
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     public static void ApplyShaderGlobals()
@@ -41,6 +41,6 @@ public static class TerrainSurfaceShaderGlobals
         Shader.SetGlobalFloat(
             s_ambientOcclusionDistanceId,
             TerrainConfigHolder.AmbientOcclusionDistanceCells);
-        Shader.SetGlobalFloat(s_reliefRimEnabledId, 1f);
+        Shader.SetGlobalFloat(s_rimEnabledId, 1f);
     }
 }

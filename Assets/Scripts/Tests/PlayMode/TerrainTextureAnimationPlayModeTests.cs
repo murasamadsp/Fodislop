@@ -112,30 +112,21 @@ public sealed class TerrainTextureAnimationPlayModeTests
         material.SetFloat("_RockDecalStrength", 0f);
 
         Mesh mesh = Own(CreateTerrainAnimationQuad());
-        // Атлас 4×4 с двумя кадрами по половине высоты; тайл — полатласа.
+        // Атлас 64×64: клетка 32×32 (тайл — полатласа, как выводит шейдер из
+        // 32 текселей на клетку), два кадра по 32 строки.
         UploadSingleCell(
-            new TerrainTypeSurface(
-                AtlasSlot: 0,
+            new TerrainTypeFields(
+                Type: (MinesServer.Data.CellType)1,
+                Block: Block(CellSurfaceEffect.Plain, 1f),
+                Slot: 0,
                 AtlasRect: new Vector4(0f, 0f, 0.5f, 0.5f),
                 TileSize: 0.5f,
                 FrameCount: 2,
                 FrameHeightTiles: 1f,
-                Animation: MinesServer.Data.CellAnimationType.None,
-                AnimationSettings: new TerrainAnimationSettings(TerrainAnimationProfile.Default, 1f),
+                OpaqueOwn: false,
+                OpaqueAny: false,
                 HasTileGroup: false,
-                TileGroupId: 0,
-                ContinuousSheet: false,
-                ReliefGroup: 0,
-                LightColor: default,
-                IsGlowing: false,
-                EmissionPower: 0f,
-                Solid: false,
-                ForegroundRoundable: false,
-                ForegroundDecal: TerrainDecalFamily.None,
-                IsBuildingWall: false,
-                IsBuildingCorner: false,
-                OpaqueInOwnAtlas: false,
-                OpaqueInAnyAtlas: false),
+                TileGroupId: 0),
             originX: 0,
             worldHeight: 1);
         RenderTexture target = Own(new RenderTexture(32, 32, 0, RenderTextureFormat.ARGB32)
@@ -183,7 +174,7 @@ public sealed class TerrainTextureAnimationPlayModeTests
         Assert.That(shader!.isSupported, Is.True, "Production terrain shader is unsupported on this graphics device.");
 
         Material material = Own(new Material(shader));
-        Texture2D lavaAtlas = CreateSolidTexture(new Color(0.9f, 0.12f, 0.015f, 1f));
+        Texture2D lavaAtlas = CreateSolidTexture(new Color(0.9f, 0.12f, 0.015f, 1f), 32);
         material.SetTexture("_TerrainAtlas0", lavaAtlas);
         material.SetTexture("_TerrainDecalAtlas", CreateSolidTexture(Color.clear));
         material.SetTexture("_TerrainDecalRockAtlas", CreateSolidTexture(Color.clear));
@@ -194,30 +185,20 @@ public sealed class TerrainTextureAnimationPlayModeTests
         material.SetFloat("_RockDecalStrength", 0f);
 
         Mesh mesh = Own(CreateTerrainAnimationQuad());
-        // Лава: профиль расплава, мировая клетка (4, 4) — фаза потока от неё.
+        // Лава: поверхность расплава, мировая клетка (4, 4) — фаза потока от неё.
         UploadSingleCell(
-            new TerrainTypeSurface(
-                AtlasSlot: 0,
+            new TerrainTypeFields(
+                Type: (MinesServer.Data.CellType)1,
+                Block: Block(CellSurfaceEffect.Molten, 10f),
+                Slot: 0,
                 AtlasRect: new Vector4(0f, 0f, 1f, 1f),
                 TileSize: 1f,
                 FrameCount: 1,
                 FrameHeightTiles: 1f,
-                Animation: MinesServer.Data.CellAnimationType.None,
-                AnimationSettings: new TerrainAnimationSettings(TerrainAnimationProfile.MoltenSurface, 10f),
+                OpaqueOwn: false,
+                OpaqueAny: false,
                 HasTileGroup: false,
-                TileGroupId: 0,
-                ContinuousSheet: false,
-                ReliefGroup: 0,
-                LightColor: default,
-                IsGlowing: false,
-                EmissionPower: 0f,
-                Solid: false,
-                ForegroundRoundable: false,
-                ForegroundDecal: TerrainDecalFamily.None,
-                IsBuildingWall: false,
-                IsBuildingCorner: false,
-                OpaqueInOwnAtlas: false,
-                OpaqueInAnyAtlas: false),
+                TileGroupId: 0),
             originX: 4,
             worldHeight: 5);
 
@@ -254,31 +235,45 @@ public sealed class TerrainTextureAnimationPlayModeTests
 
     // Одна клетка переднего плана типа 1 через рабочий формат и рабочую
     // выгрузку: строка типа, клетка (кайма вокруг пуста), глобальные адреса окна.
-    private void UploadSingleCell(TerrainTypeSurface surface, int originX, int worldHeight)
+    // Тип 1 — квадрат на земле: передний план, без каймы и свечения.
+    private static BlockDefinition Block(CellSurfaceEffect surfaceEffect, float animationSpeed) => new(
+        DrawLayer: CellDrawLayer.Background,
+        Glow: 0f,
+        Outline: CellOutline.Pliant,
+        TextureAnchor: CellTextureAnchor.Cell,
+        AnimationType: MinesServer.Data.CellAnimationType.None,
+        AnimationSpeed: animationSpeed,
+        SurfaceEffect: surfaceEffect,
+        SurfaceEffectPalette: 0,
+        DecalAtlas: CellDecalAtlas.None,
+        RimMass: 0,
+        MapColor: default);
+
+    private void UploadSingleCell(TerrainTypeFields surface, int originX, int worldHeight)
     {
-        var type = (MinesServer.Data.CellType)1;
+        var type = surface.Type;
         _cellData = new TerrainCellBuffers();
         _cellData.EnsureCapacity(1, 1);
         _cellData.SetType(type, TerrainCellData.PackType(surface));
         _cellData.SetCell(
             originX,
             0,
-            TerrainCellData.PackCell(type, MinesServer.Data.CellType.Unloaded));
+            TerrainCellData.PackCell(type));
         _cellData.MarkAllDirty();
         _cellData.Apply();
-        _cellData.BindGlobals(cellSize: 2f, originX, originY: 0, worldWidth: originX + 1, worldHeight, distortionMode: 0);
+        _cellData.BindGlobals(cellSize: 2f, originX, originY: 0, worldWidth: originX + 1, worldHeight, distortionStyle: TerrainCellFormat.DistortionStyleOff);
         Shader.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, Vector4.zero);
     }
 
     private Texture2D CreateTwoFrameAtlas()
     {
         var atlas = Own(RuntimeTextureFactory.CreateRGBA32NoMip(
-            4, 4, "TerrainAnimationRegressionAtlas", RuntimeTextureColorSpace.Srgb,
+            64, 64, "TerrainAnimationRegressionAtlas", RuntimeTextureColorSpace.Srgb,
             FilterMode.Point, TextureWrapMode.Clamp));
-        var pixels = new Color32[16];
+        var pixels = new Color32[64 * 64];
         for (int index = 0; index < pixels.Length; index++)
         {
-            pixels[index] = index < 8
+            pixels[index] = index < 32 * 64
                 ? new Color32(255, 0, 0, 255)
                 : new Color32(0, 0, 255, 255);
         }
@@ -288,12 +283,14 @@ public sealed class TerrainTextureAnimationPlayModeTests
         return atlas;
     }
 
-    private Texture2D CreateSolidTexture(Color color)
+    private Texture2D CreateSolidTexture(Color color, int size = 1)
     {
         var texture = Own(RuntimeTextureFactory.CreateRGBA32NoMip(
-            1, 1, "TerrainAnimationSolid", RuntimeTextureColorSpace.Srgb,
+            size, size, "TerrainAnimationSolid", RuntimeTextureColorSpace.Srgb,
             FilterMode.Point, TextureWrapMode.Clamp));
-        texture.SetPixel(0, 0, color);
+        var pixels = new Color[size * size];
+        System.Array.Fill(pixels, color);
+        texture.SetPixels(pixels);
         texture.Apply(false, false);
         return texture;
     }

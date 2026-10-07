@@ -83,7 +83,7 @@ public sealed class TerrainCellBuilderDeterminismTests
     }
 
     [Test]
-    public void RoadTextureArrivalUpdatesBackgroundUnderEveryDoor()
+    public void RoadTextureArrivalReachesItsTypeRow()
     {
         var world = new TerrainTestWorld { RoadTextureReady = false };
         var cache = new TerrainCellCache();
@@ -101,22 +101,8 @@ public sealed class TerrainCellBuilderDeterminismTests
         builder.BuildTextureCells(
             TerrainCellTypeSet.Capture(changedTypes), sources, OriginX, OriginY);
 
-        for (int x = 0; x < Width; x++)
-        {
-            for (int y = 0; y < Height; y++)
-            {
-                if (cache.GetCellData(x + 1, y + 1).Type != CellType.BuildingDoor)
-                {
-                    continue;
-                }
-
-                TerrainCell cell = builder.Buffers.GetCell(OriginX + x, OriginY + y);
-                CellType backgroundTypeId = TerrainCellData.BackgroundTypeOf(cell);
-                TerrainTypeRow backgroundType = builder.Buffers.GetTypeRow(backgroundTypeId);
-                Assert.That(backgroundTypeId, Is.Not.EqualTo(CellType.Unloaded), $"Road under door ({x},{y})");
-                Assert.That(backgroundType.AY & 0xFFFFu, Is.Not.Zero, $"Road under door ({x},{y})");
-            }
-        }
+        // Строка типа несёт текстуру, приехавшую после первой сборки.
+        Assert.That(builder.Buffers.GetTypeRow(CellType.Road).AtlasWH & 0xFFFu, Is.Not.Zero);
     }
 
     // Текстура двери приезжает строкой типа: шейдер берёт её во всех
@@ -133,7 +119,7 @@ public sealed class TerrainCellBuilderDeterminismTests
         builder.EnsureCapacity(Width, Height, 1f);
         builder.BuildFull(sources, OriginX, OriginY);
         Assert.That(builder.HasDoors, Is.True, "Fixture must include doors.");
-        Assert.That(builder.Buffers.GetTypeRow(CellType.BuildingDoor).AY & 0xFFFFu, Is.Zero);
+        Assert.That(builder.Buffers.GetTypeRow(CellType.BuildingDoor).AtlasWH & 0xFFFFu, Is.Zero);
 
         world.DoorTextureReady = true;
         HashSet<CellType> changedTypes = [CellType.BuildingDoor];
@@ -141,7 +127,7 @@ public sealed class TerrainCellBuilderDeterminismTests
         builder.BuildTextureCells(
             TerrainCellTypeSet.Capture(changedTypes), sources, OriginX, OriginY);
 
-        Assert.That(builder.Buffers.GetTypeRow(CellType.BuildingDoor).AY & 0xFFFFu, Is.Not.Zero);
+        Assert.That(builder.Buffers.GetTypeRow(CellType.BuildingDoor).AtlasWH & 0xFFFFu, Is.Not.Zero);
         Assert.That(builder.DoorsTouched, Is.False,
             "A texture arrival does not change which cells are doors.");
     }

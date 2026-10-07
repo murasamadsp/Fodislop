@@ -18,13 +18,13 @@ CBUFFER_START(UnityPerMaterial)
     float4 _ShimmerColor;
     float4 _FlowScale;
     float _ShimmerSpeedScale;
-    float _PulseSpeedScale;
+    float _BlinkingSpeedScale;
     float _OrganicBendStrength;
     float _OrganicBendPivot;
     float _RoundableCornerRadius;
-    float _ReliefRimDistanceScale;
-    float _ReliefRimFalloff;
-    float _ReliefRimQuantizationEnabled;
+    float _RimDistanceScale;
+    float _RimFalloff;
+    float _RimQuantizationEnabled;
 
     // Авторский вид поверхности: числа лежат в TerrainConfigHolder и приезжают
     // свойствами материала. Блок один на все проходы, поэтому раскладку держит

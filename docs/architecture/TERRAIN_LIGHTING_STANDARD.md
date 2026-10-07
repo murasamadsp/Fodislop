@@ -43,7 +43,7 @@ Lighting domain ── derives and owns light fields / solve caches ──→ pr
 | Concern | Sole owner | Other domain may do |
 | --- | --- | --- |
 | Cell contents, terrain window, residency, terrain mesh and terrain data textures | Terrain | Read published facts through the declared geometry contract |
-| Terrain geometry/emission revision and changed world regions | Terrain | Lighting consumes revisions and regions; it cannot mutate terrain state |
+| Terrain geometry/glow revision and changed world regions | Terrain | Lighting consumes revisions and regions; it cannot mutate terrain state |
 | Lighting field dimensions/origin, GPU resources, invalidation policy, solve order, radiance caches, output texture | Lighting | Terrain contributes geometry through the contract; presentation samples published output |
 | Composition and subscription wiring | Game composition root | Register each implementation exactly once and own teardown order |
 | Screen/display composition | Presentation/post-processing | Read the published lighting result; do not trigger geometry collection or solving |
@@ -74,7 +74,7 @@ boundary (`Assets/Scripts/World/Terrain/**/*.cs` → Lighting implementation and
   to evade the contract.
 
 During migration, the only permitted cross-domain source symbols are the existing
-`ILightingGeometryContributor`, `LightingMaterialEmissionContext`, and
+`ILightingGeometryContributor`, `LightingMaterialGlowContext`, and
 `LightingAmbientOcclusionContext` contract symbols. They
 are recorded debt because they currently live in the lighting implementation
 namespace/assembly; do not add contract members or new callsites except as part
@@ -120,7 +120,7 @@ The contract consists of these records and ownership rules:
 | --- | --- | --- |
 | `LightingTerrainRequirements` | `PolicyRevision`; `RequiredTerrainPaddingCells`; `StableLightingPaddingCells` | Lighting publishes after initialization/configuration; Terrain reads before planning each frame |
 | `TerrainLightingFrameSnapshot` | `WorldGeneration`; contiguous `FrameSequence` starting at 1 per generation; `State` (`Ready` or `HoldingPublishedView`); `TerrainGeometryRevision`; half-open `CameraViewportCells`; half-open `LightingViewportCells`; borrowed `Camera`; borrowed neutral `ILightingGeometryContributor` | Terrain publishes after the frame's terrain commit and presentation decision; Lighting consumes the newest frame demand after Terrain LateUpdate |
-| `TerrainLightingChange` | `WorldGeneration`; contiguous `Sequence`; `TerrainGeometryRevision`; `Kind` (`Region` or `FullReset`); `Channels` (`Occupancy`, `Material`, `Emission` flags); half-open world-cell `Region` for `Region`; named `FullResetReason` for `FullReset` | Terrain publishes; Lighting reads in sequence and acknowledges only after durable transfer to lighting-owned state |
+| `TerrainLightingChange` | `WorldGeneration`; contiguous `Sequence`; `TerrainGeometryRevision`; `Kind` (`Region` or `FullReset`); `Channels` (`Occupancy`, `Material`, `Glow` flags); half-open world-cell `Region` for `Region`; named `FullResetReason` for `FullReset` | Terrain publishes; Lighting reads in sequence and acknowledges only after durable transfer to lighting-owned state |
 | `LightingOutputSnapshot` | `OutputGeneration`; `WorldGeneration`; `State` (`Published` or `Disabled`); `WorldRectCells` | Lighting publishes after command execution/presentation; Terrain reads before validating its material binding |
 
 `ITerrainLightingExchange` MUST expose only these operations:
@@ -187,7 +187,7 @@ must not silently clamp, wrap, coalesce away, or reinterpret malformed data.
 `TerrainRenderer` MUST NOT call `LightingEngine`, `LightingUpdateCoordinator`,
 or any lighting invalidation/capture API after this migration. Lighting MUST NOT
 cast the snapshot contributor to `TerrainRenderer`. `ILightingGeometryContributor`,
-`LightingMaterialEmissionContext`, and `LightingAmbientOcclusionContext` live in
+`LightingMaterialGlowContext`, and `LightingAmbientOcclusionContext` live in
 the neutral contract namespace; render methods receive only their named targets.
 Terrain's contributor is selected from the snapshot, while other contributors
 remain owned and registered by Lighting's registry.
@@ -277,14 +277,14 @@ Terrain owns source truth; lighting owns derived state. The boundary MUST preser
 that distinction.
 
 - A terrain revision advances if and only if lighting-visible geometry or
-  emission data changed. Camera movement, mesh presentation, unrelated chunk
+  glow data changed. Camera movement, mesh presentation, unrelated chunk
   metadata, and diagnostic state MUST NOT advance it.
 - A revision MUST be monotonic for the lifetime of its publisher. Overflow is a
   fatal invariant violation, not silent wraparound. Registry membership changes
   are distinct from content changes.
 - A change record MUST carry a revision and a world-space half-open rectangle
   `[min, max)`, or an explicit full-domain invalidation reason. It MUST identify
-  whether occupancy, material/albedo, emission, or multiple channels changed.
+  whether occupancy, material/albedo, glow, or multiple channels changed.
   Empty/invalid rectangles MUST be rejected at the boundary.
 - Change records MUST be retained until every relevant consumer acknowledges the
   revision. Coalescing may enlarge a region but MUST NOT drop its identity or
@@ -317,7 +317,7 @@ Keep the pipeline one-way and make intermediate data ownership visible:
 
 ```text
 terrain contributors
-  → geometry/material/emission fields
+  → geometry/material/glow fields
   → static transport (CascadeTrace)
   → static lookup (CascadeResolve)
   → dynamic transport/composition
@@ -369,10 +369,10 @@ binding code, and shader declaration blocks merge.
   extent, scale, texture dimensions, and pixel-center convention MUST be derived
   together and validated at allocation/bind time.
 - Material RGB is linear albedo; alpha is physical occupancy under the current
-  lighting contract. Emission, extinction/transmission, radiance, and AO remain
+  lighting contract. Glow, extinction/transmission, radiance, and AO remain
   separate quantities and MUST NOT be repurposed or silently clamped into one
   another.
-- Scene-referred light and emission buffers MUST preserve the HDR/color contract.
+- Scene-referred light and glow buffers MUST preserve the HDR/color contract.
   Color-space conversion, paper-white scaling, and display transform each have one
   owner; lighting shaders MUST NOT duplicate the URP display transform.
 - Texture formats, color-space flags, filtering, wrapping, mip policy, clear
@@ -380,7 +380,7 @@ binding code, and shader declaration blocks merge.
   read/write support and expected numeric range on the production path.
 - CPU encoders and shader decoders for packed terrain lighting data MUST be
   changed together and verified against independent expected values, including
-  edge values and occupancy/emission separation.
+  edge values and occupancy/glow separation.
 
 Coordinate, color, HDR, and DDA details in `project-context.md`,
 `hdr-color-contract`, and `lighting-guide` remain mandatory; this standard adds
@@ -418,7 +418,7 @@ not evidence of low cost.
 | Terrain geometry encoding or coordinate mapping | Independent known-value tests at boundaries, negative/origin cases, and encode/decode parity |
 | Revision/invalidation | Tests proving each input invalidates the right outputs, unchanged input invalidates nothing, and regions survive until acknowledged |
 | Solver/stage order or compute binding | Production shader/compute path with real resources and dispatch bounds; stage counters and output comparison |
-| Color, emission, occupancy, AO, or texture format | Independent numerical oracle plus production-path image/data validation in linear HDR |
+| Color, glow, occupancy, AO, or texture format | Independent numerical oracle plus production-path image/data validation in linear HDR |
 | Performance-sensitive path | Production-path before/after captures and frame-local stage/dispatch counters |
 | Documentation-only architecture change | `git diff --check`; document links and claims checked against current source |
 
@@ -586,7 +586,7 @@ concrete wiring in `TerrainRenderer` (including `LightingEngine` access), and
 now remove those implementation references and old invalidation/update entry
 points; terrain surface shader globals are owned by the shared
 `Kern.World.Common.Rendering` namespace. `ILightingGeometryContributor` and its
-material/emission and ambient-occlusion contexts live in the neutral contract.
+material/glow and ambient-occlusion contexts live in the neutral contract.
 
 Migration evidence as of 2026-09-24:
 

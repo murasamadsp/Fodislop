@@ -2,7 +2,6 @@
 
 using Kern.Core;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
@@ -138,7 +137,7 @@ public static class TerrainVertexDistortionCalculator
 
         // Узел на внешней границе массива остаётся в своей клеточной сетке.
         // Иначе смещение угла увеличивает силуэт даже при врезанных рёбрах.
-        if (!IsCause(tl) || !IsCause(tr) || !IsCause(bl) || !IsCause(br))
+        if (!IsWavy(tl) || !IsWavy(tr) || !IsWavy(bl) || !IsWavy(br))
         {
             return TerrainVertexOffset.Zero;
         }
@@ -224,14 +223,15 @@ public static class TerrainVertexDistortionCalculator
         return (int)System.Math.Min((hash * 5u) >> 24, 4u) - 2;
     }
 
-    public static bool IsCause(CachedCellData data)
+    public static bool IsWavy(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Cause;
+        return data.Outline == CellOutline.Wavy;
     }
 
-    public static bool IsBlock(CachedCellData data)
+    // Держит узлы всё, кроме гибкого и волнистого контура.
+    public static bool Holds(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Block;
+        return data.Outline is not (CellOutline.Pliant or CellOutline.Wavy);
     }
 
     public static int RandXd(int x, int y)
@@ -265,59 +265,59 @@ public static class TerrainVertexDistortionCalculator
         int ry,
         int freeJitterCenter)
     {
-        // Внутри сплошного массива узел колышется свободно в обе стороны:
+        // Внутри массы узел колышется свободно в обе стороны:
         // здесь нет внешней стороны, к которой нужно привязывать знак.
-        if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
+        if (IsWavy(tl) && IsWavy(tr) && IsWavy(bl) && IsWavy(br))
         {
             return Units(rx - freeJitterCenter, -(ry - freeJitterCenter));
         }
 
-        if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))
+        if (Holds(tl) || Holds(tr) || Holds(bl) || Holds(br))
         {
             return TerrainVertexOffset.Zero;
         }
 
-        if (worldY == 0 || (IsCause(tl) && IsCause(br)) || (IsCause(tr) && IsCause(bl)))
+        if (worldY == 0 || (IsWavy(tl) && IsWavy(br)) || (IsWavy(tr) && IsWavy(bl)))
         {
             return TerrainVertexOffset.Zero;
         }
 
-        if (IsCause(tl) && IsCause(tr))
+        if (IsWavy(tl) && IsWavy(tr))
         {
             return Units(0, -ry);
         }
 
-        if (IsCause(tl) && IsCause(bl))
+        if (IsWavy(tl) && IsWavy(bl))
         {
             return Units(-rx, 0);
         }
 
-        if (IsCause(tr) && IsCause(br))
+        if (IsWavy(tr) && IsWavy(br))
         {
             return Units(rx, 0);
         }
 
-        if (IsCause(bl) && IsCause(br))
+        if (IsWavy(bl) && IsWavy(br))
         {
             return Units(0, ry);
         }
 
-        if (IsCause(tl))
+        if (IsWavy(tl))
         {
             return Units(-rx, -ry);
         }
 
-        if (IsCause(tr))
+        if (IsWavy(tr))
         {
             return Units(rx, -ry);
         }
 
-        if (IsCause(bl))
+        if (IsWavy(bl))
         {
             return Units(-rx, ry);
         }
 
-        if (IsCause(br))
+        if (IsWavy(br))
         {
             return Units(rx, ry);
         }

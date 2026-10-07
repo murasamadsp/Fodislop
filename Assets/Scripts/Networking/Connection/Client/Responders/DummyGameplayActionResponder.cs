@@ -1,6 +1,10 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using Kern;
 using Kern.Audio;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -26,10 +30,17 @@ internal sealed class DummyGameplayActionResponder(
     DummyChatSimulator chatSimulator,
     IDummyClock clock,
     Action<ServerPacket> sendPacket,
-    ushort playerBotId)
+    ushort playerBotId,
+    IAsyncOperationSupervisor operations,
+    Func<int> getLifecycleVersion,
+    Func<int, bool> loopAlive)
 {
     private const ushort SpawnX = 25;
     private const ushort SpawnY = 50;
+    private const int MilitaryBlockAssemblyDelayMilliseconds = 5000;
+
+    private readonly Dictionary<(ushort X, ushort Y), long> _militaryBuildVersions = [];
+    private long _nextMilitaryBuildVersion;
 
     public void Handle(ActionClientPacket packet)
     {
@@ -60,7 +71,7 @@ internal sealed class DummyGameplayActionResponder(
                 sendPacket(new ServerPacket(new HealthPacket(playerState.Heal(50), 500)));
                 break;
             case BuildCyanPacket:
-                HandleBuild(CellType.MilitaryBlock);
+                HandleMilitaryBlockBuild();
                 break;
             case BuildGrayPacket:
                 HandleRoadBuild();
@@ -224,6 +235,62 @@ internal sealed class DummyGameplayActionResponder(
             frontX,
             frontY,
             cellType);
+    }
+
+    private void HandleMilitaryBlockBuild()
+    {
+        if (!TryGetFrontCell(out ushort frontX, out ushort frontY) ||
+            !DummyBuildHandler.TryBuild(
+                worldState.Layer,
+                worldState.GetCell,
+                worldState.SetCell,
+                sendPacket,
+                frontX,
+                frontY,
+                CellType.MilitaryBlockFrame))
+        {
+            return;
+        }
+
+        long buildVersion = ++_nextMilitaryBuildVersion;
+        (ushort X, ushort Y) position = (frontX, frontY);
+        _militaryBuildVersions[position] = buildVersion;
+        int lifecycleVersion = getLifecycleVersion();
+        operations.Run(
+            "dummy_military_block_assembly",
+            cancellationToken => CompleteMilitaryBlockAssemblyAsync(
+                frontX,
+                frontY,
+                buildVersion,
+                lifecycleVersion,
+                cancellationToken));
+    }
+
+    private async UniTask CompleteMilitaryBlockAssemblyAsync(
+        ushort x,
+        ushort y,
+        long buildVersion,
+        int lifecycleVersion,
+        CancellationToken cancellationToken)
+    {
+        await clock.Delay(MilitaryBlockAssemblyDelayMilliseconds, cancellationToken);
+
+        (ushort X, ushort Y) position = (x, y);
+        if (!_militaryBuildVersions.TryGetValue(position, out long currentBuildVersion) ||
+            currentBuildVersion != buildVersion)
+        {
+            return;
+        }
+
+        _militaryBuildVersions.Remove(position);
+        if (!loopAlive(lifecycleVersion) ||
+            !worldState.TryGetCell(x, y, out CellType cellType) ||
+            cellType != CellType.MilitaryBlockFrame)
+        {
+            return;
+        }
+
+        SendCellUpdate(x, y, CellType.MilitaryBlock);
     }
 
     private void HandleRoadBuild()

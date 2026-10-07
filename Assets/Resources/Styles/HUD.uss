@@ -543,13 +543,16 @@
 
 .hud-bonus-panel {
     position: absolute;
-    top: var(--space-5);
+    top: 66px;
     left: 256px;
     width: 260px;
+    max-width: 90%;
+    max-height: 90%;
     padding: var(--space-5);
     background-color: var(--surface-panel);
     border-color: var(--border-subtle);
     border-width: var(--space-1);
+    border-radius: var(--radius-md);
     flex-direction: column;
 }
 

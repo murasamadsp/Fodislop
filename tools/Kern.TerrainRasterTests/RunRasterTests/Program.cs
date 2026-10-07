@@ -10,7 +10,7 @@ internal static class Program
         "double-quantize-fragments",
         "ao-flat-contact",
         "ao-to-black",
-        "relief-merges-any-groups",
+        "rim-merges-any-masses",
         "background-ignores-occlusion",
         "wall-variant-ignores-bottom",
         "node-edge-jitter-sign",
@@ -22,6 +22,7 @@ internal static class Program
     {
         string root = FindProjectRoot();
         string shim = Read(root, "tools/Kern.LightingTests/NativeTransportShim.cpp");
+        string format = Read(root, "Assets/Shaders/Terrain/TerrainCellFormat.hlsl");
         string loader = Read(root, "Assets/Shaders/Terrain/TerrainCellData.hlsl");
         string terrainContour = Read(root, "Assets/Shaders/Terrain/TerrainContour.hlsl");
         string terrainGeometryContract = Read(root, "Assets/Shaders/Terrain/TerrainGeometryContract.hlsl");
@@ -43,10 +44,10 @@ internal static class Program
             return Fail("Production terrain geometry UV remap was not found");
         }
 
-        if (terrainShader.Contains("TerrainReliefRimRaw(", StringComparison.Ordinal) ||
-            terrainShader.Contains("TerrainReliefRim(surface", StringComparison.Ordinal))
+        if (terrainShader.Contains("TerrainRimRaw(", StringComparison.Ordinal) ||
+            terrainShader.Contains("TerrainRim(surface", StringComparison.Ordinal))
         {
-            return Fail("Terrain.shader must not apply the retired relief rim to visible albedo");
+            return Fail("Terrain.shader must not apply the retired rim to visible albedo");
         }
 
         if (Regex.Matches(terrainShader, "BuildTerrainSurfaceInputs\\(").Count != 3)
@@ -72,11 +73,11 @@ internal static class Program
             !ambientOcclusionPass.Contains("TerrainGeometrySignedDistance", StringComparison.Ordinal) ||
             !ambientOcclusionPass.Contains("if (exteriorDistance >= _TerrainAmbientOcclusionDistance)", StringComparison.Ordinal) ||
             !ambientOcclusionPass.Contains("_TerrainAmbientOcclusionDistance, exteriorDistance)", StringComparison.Ordinal) ||
-            !ambientOcclusionPass.Contains("ColorMask A", StringComparison.Ordinal) ||
+            !ambientOcclusionPass.Contains("ColorMask R", StringComparison.Ordinal) ||
             ambientOcclusionPass.Contains("TerrainAnimationSampling.hlsl", StringComparison.Ordinal) ||
             ambientOcclusionPass.Contains("_PrismaticFlowMap", StringComparison.Ordinal))
         {
-            return Fail("AO must have an alpha-only geometry pass without transport or flow-map dependencies");
+            return Fail("AO must write its single-channel red field without transport or flow-map dependencies");
         }
 
         int debugAt = terrainShader.IndexOf("if (KernTerrainDebugActive())", StringComparison.Ordinal);
@@ -135,10 +136,12 @@ internal static class Program
             float _OrganicBendStrength = 1.0;
             float _OrganicBendPivot = 0.35;
             float _RoundableCornerRadius = 0.51;
-            float _ReliefRimQuantizationEnabled = 0.0;
+            float _RimQuantizationEnabled = 0.0;
             float _TerrainAmbientOcclusionDistance = 0.25;
-            float _ReliefRimDistanceScale = 2.0;
-            float _ReliefRimFalloff = 0.5;
+            float _RimDistanceScale = 2.0;
+            float _RimFalloff = 0.5;
+            float4 _ShimAtlasTexelSize[8] = {};
+            float4 TerrainMaterialAtlasTexelSize(int slot) { return _ShimAtlasTexelSize[slot]; }
             """;
 
         string temporaryDirectory = Path.Combine(Path.GetTempPath(), $"kern-terrain-raster-{Guid.NewGuid():N}");
@@ -191,14 +194,14 @@ internal static class Program
                     if (candidateGeometry == terrainGeometry) return Fail("double-quantize-fragments mutation is stale");
                 }
 
-                if (mutation is "relief-merges-any-groups" or "background-ignores-occlusion" or "wall-variant-ignores-bottom"
+                if (mutation is "rim-merges-any-masses" or "background-ignores-occlusion" or "wall-variant-ignores-bottom"
                     or "node-edge-jitter-sign" or "organic-noise-truncates")
                 {
                     (string before, string after) = mutation switch
                     {
-                        "relief-merges-any-groups" => (
-                            "return otherGroup != 0u && ((own >> 16) & 0xFFu) == otherGroup;",
-                            "return otherGroup != 0u;"),
+                        "rim-merges-any-masses" => (
+                            "return otherMass != 0u && TerrainTypeRimMass(own) == otherMass;",
+                            "return otherMass != 0u;"),
                         "background-ignores-occlusion" => (
                             "        if (occluded)\n        {\n            return v;\n        }",
                             "        if (false)\n        {\n            return v;\n        }"),
@@ -242,9 +245,10 @@ internal static class Program
 
                 candidateAo = candidateAo
                     .Replace("Texture2D<float4>", "AoTexture", StringComparison.Ordinal)
+                    .Replace("Texture2D<float>", "AoTexture", StringComparison.Ordinal)
                     .Replace("SamplerState", "int", StringComparison.Ordinal);
                 string source = shim + extra + aoShim + terrainUniforms + Translate(
-                    terrainGeometryContract + candidateGeometry + candidateLoader + lighting +
+                    terrainGeometryContract + candidateGeometry + format + candidateLoader + lighting +
                     contour + quantizeUv + candidateRim + terrainGeometryUv + candidateAo) + scenario;
                 File.WriteAllText(cppPath, source);
 

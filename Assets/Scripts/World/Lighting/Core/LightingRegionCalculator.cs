@@ -18,7 +18,7 @@ public static class LightingRegionCalculator
     ///
     /// Dynamic sources are rasterized as one-cell emitters. Their propagation
     /// distance is solved by the same extinction and cascade intervals as
-    /// terrain emission, not by a source halo.
+    /// terrain glow, not by a source halo.
     public static int TerrainPaddingCells => 3;
 
     /// <summary>Регион задевает стабильное окно — с каймой ровно в одну клетку.</summary>
@@ -51,7 +51,7 @@ public static class LightingRegionCalculator
 
     /// <summary>Кадр максимального отдаления в клетках — по нему меряется регион.</summary>
     ///
-    /// Террейн уже держит окно на этот кадр (TerrainViewportCalculator). Регион
+    /// Террейн уже держит окно на этот кадр по контракту области видимости. Регион
     /// света от текущего зума рос рекордами отдаления, и каждый рост пересоздавал
     /// все ресурсы и запускал полный статический расчёт с AO целиком — провис
     /// около секунды на колесе мыши. Зум внутри контракта камеры размер не

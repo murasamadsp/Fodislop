@@ -66,4 +66,28 @@ struct DynamicTileInfo
     int reserved;
 };
 
+// One source dispatch, mirrored by DynamicLightBatch.WorkItem (32 bytes).
+// Receiver origin/size use the light lattice; polar size is angles/radial rows.
+struct DynamicLightWorkItem
+{
+    int2 receiverOrigin;
+    int2 receiverSize;
+    int2 polarSize;
+    int lightIndex;
+    int slot;
+};
+
+// Explicit per-invocation state shared by serial and batched transport.
+struct DynamicTraceContext
+{
+    int2 receiverOrigin;
+    int2 receiverSize;
+    int2 tileOffset;
+    int2 polarSize;
+    int lightIndex;
+    int slot;
+    int polarLayerOffset;
+    int horizonBase;
+};
+
 #endif // KERN_LIGHTING_TYPES_HLSL

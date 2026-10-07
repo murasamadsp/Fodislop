@@ -158,6 +158,9 @@ public sealed class ShaderWarmupContractTests
         "ResolveTransmissionDebug",
         "CompositeLighting",
         "BuildCellSolidMask",
+        "SeedDynamicDistanceField",
+        "JumpFloodDynamicDistanceField",
+        "ResolveDynamicDistanceField",
     ];
 
     [Test]

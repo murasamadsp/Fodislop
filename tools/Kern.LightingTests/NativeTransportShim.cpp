@@ -37,7 +37,9 @@ std::vector<uint> _ReanchorChanges(1,0);
 std::vector<uint> _LightingCounters(3);
 int _LightingCountersEnabled=0;
 int _UniformCellTraversalEnabled=1;
+int _UniformSourceTraversalEnabled=0;
 int _DynamicPolarScalarExtinction=0;
+int _DynamicSdfTransportEnabled=0;
 int _NeutralExtinction=0;
 int _DynamicTilesScalarRadiance=0;
 void InterlockedAdd(uint& target, uint value) { target += value; }
@@ -132,10 +134,29 @@ struct Texture {
              +(at(b.x,b.y+1)*(1-f.x)+at(b.x+1,b.y+1)*f.x)*f.y;
     }
 };
-Texture _MaterialField, _EmissionField, _DirectInput, _StaticDirectInput;
+struct ScalarTexture {
+    int width=1,height=1;
+    std::vector<float> data;
+    void reset(int w,int h) { width=w; height=h; data.assign(w*h,0.0f); }
+    float Load(int3 p) const {
+        ++textureReads;
+        if(p.x<0 || p.y<0 || p.z!=0 || p.x>=width || p.y>=height)
+            throw std::runtime_error("out-of-bounds scalar texture read " +
+                std::to_string(p.x) + "," + std::to_string(p.y));
+        return data.at(p.y*width+p.x);
+    }
+};
+Texture _MaterialField, _GlowField, _DirectInput, _StaticDirectInput;
 int2 _CompositeDispatchOrigin, _CompositeDispatchSize;
 Texture _Result,_DirectTexture;
 struct DynamicLight { float4 positionRadius,colorIntensity; };
+struct DynamicLightWorkItem { int2 receiverOrigin,receiverSize,polarSize; int lightIndex,slot; };
+struct DynamicTraceContext {
+    int2 receiverOrigin,receiverSize,tileOffset,polarSize;
+    int lightIndex,slot,polarLayerOffset,horizonBase;
+};
+std::vector<DynamicLightWorkItem> _DynamicLightWorkItems;
+int _DynamicBatchOffset=0;
 std::vector<DynamicLight> _DynamicLights;
 int _DynamicLightCount=0;
 float4 _AmbientColor={.25f,.25f,.25f,0};
@@ -145,7 +166,7 @@ int2 _FieldSize;
 int2 _LightSize;
 int _FieldTexelsPerLightTexel=1;
 float4 _WorldRect, _EmptyExtinctionRGB, _SolidExtinctionRGB;
-float _CellSize=1, _EmissionScale=1;
+float _CellSize=1, _GlowScale=1;
 float _InvisibleDynamicRadiance = 1e-6f;
 float _SolidOccupancyThreshold = 0.5f;
 float _TransportSolidThreshold = 0.4f;
@@ -172,9 +193,15 @@ int _DynamicHorizonStride = 64;
 std::vector<uint>& _DynamicHorizonInput = _DynamicHorizon;
 int _DynamicHorizonBase = 0;
 Texture _DynamicPolar,_DynamicPolarInput;
+ScalarTexture _DynamicSdfInput;
 Texture _CellSolidMask,_CellSolidMaskOutput;
 Texture _SurfaceAirCache,_SurfaceAirCacheOutput;
-std::vector<uint2> _CleanCellRowsOutput,_CleanCellRows,_CleanCellPrefixOutput,_CleanCellPrefix;
+std::vector<uint2> _CleanCellRowsOutput,_CleanCellRows,_CleanCellPrefixOutput;
+// Count the candidate's proof traffic as well as its material texture loads.
+struct CountedPrefix : std::vector<uint2> {
+    using std::vector<uint2>::operator=;
+    uint2 operator[](size_t index) const { ++textureReads; return at(index); }
+} _CleanCellPrefix;
 int2 _CellGridSize;
 bool sameAtlas(const std::vector<uint3>& left,const std::vector<uint3>& right) {
     if(left.size()!=right.size()) return false;

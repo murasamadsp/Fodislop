@@ -48,7 +48,12 @@ internal sealed class CascadeBufferManager
         if (RadianceAtlas == null || AtlasCapacity < requiredCapacity) { plannedBytes += (long)requiredCapacity * 12; }
         if (CascadeChangedMask == null || CascadeChangedMask.count < requiredCapacity) { plannedBytes += (long)requiredCapacity * 4; }
         if (DynamicLightBuffer == null || DynamicLightBuffer.count != clampedLightCount) { plannedBytes += (long)clampedLightCount * 32; }
-        if (plannedBytes > 0) { MemoryAllocationGuard.Require("Lighting persistent buffers", plannedBytes + 24); }
+        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != LightingComputeBinder.LightingCounterCount ||
+            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != LightingComputeBinder.LightingCounterCount)
+        {
+            plannedBytes += (long)LightingComputeBinder.LightingCounterCount * sizeof(uint) * _lightingCounterBuffers.Length;
+        }
+        if (plannedBytes > 0) { MemoryAllocationGuard.Require("Lighting persistent buffers", plannedBytes); }
 
         if (RadianceAtlas == null || AtlasCapacity < requiredCapacity)
         {
@@ -78,14 +83,14 @@ internal sealed class CascadeBufferManager
                 ComputeBufferType.Structured);
         }
 
-        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != 3 ||
-            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != 3)
+        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != LightingComputeBinder.LightingCounterCount ||
+            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != LightingComputeBinder.LightingCounterCount)
         {
             for (int index = 0; index < _lightingCounterBuffers.Length; index++)
             {
                 _lightingCounterBuffers[index]?.Release();
                 _lightingCounterBuffers[index] = new ComputeBuffer(
-                    3,
+                    LightingComputeBinder.LightingCounterCount,
                     sizeof(uint),
                     ComputeBufferType.Structured);
             }

@@ -152,7 +152,10 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _chatSimulator,
             clock,
             SendPacket,
-            _mockBotId);
+            _mockBotId,
+            operations,
+            () => _session.LifecycleVersion,
+            LoopAlive);
         _blockSpawner = new DummyBlockSpawner(
             operations,
             clock,
@@ -160,7 +163,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _playerState,
             SendPacket,
             LoopAlive,
-            type => _textureStorage.HasTexture($"cells/{(int)type}"));
+            type => _textureStorage.HasTexture($"cells/{type}"));
         _windowResponder = new DummyWindowResponder(
             SendPacket,
             _buffManager,

@@ -1,7 +1,7 @@
 #nullable enable
 
+using Kern.Core.Interfaces;
 using Kern.Core.Localization;
-using Kern.UI.HUD.Player.Model;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -30,7 +30,7 @@ public sealed class PlayerHUDMissionPanel
         _missionProgressLabel = root.Q<Label>("MissionProgressLabel");
     }
 
-    public void Update(PlayerStatsModel? stats)
+    public void Update(IPlayerStats? stats)
     {
         if (_missionPanel == null || stats == null)
         {

@@ -15,12 +15,23 @@ public sealed class BlockRegistry : IBlockRegistry
     private const string RelativeFilePath = "Assets/Resources/Config/cells.json";
 
     private static readonly BlockDefinition[] s_blockArray = new BlockDefinition[256];
+    private static CellType s_underlayType;
     private static readonly Dictionary<CellType, BlockDefinition> s_blocks = LoadRegistry();
     private static readonly BlockRegistry s_defaultInstance = new();
 
     public static IBlockRegistry Default => s_defaultInstance;
 
     public static IReadOnlyDictionary<CellType, BlockDefinition> Blocks => s_blocks;
+
+    /// <summary>Тип с drawLayer: Underlay — подложка под каждым передним планом.</summary>
+    public static CellType UnderlayType
+    {
+        get
+        {
+            _ = s_blocks;
+            return s_underlayType;
+        }
+    }
 
     IReadOnlyDictionary<CellType, BlockDefinition> IBlockRegistry.All => s_blocks;
 
@@ -57,6 +68,7 @@ public sealed class BlockRegistry : IBlockRegistry
             throw new InvalidDataException($"Failed to deserialize block config from '{RelativeFilePath}'.");
         }
 
+        RejectUnknownKeys(json);
         var result = new Dictionary<CellType, BlockDefinition>(rawMap.Count);
         Array.Clear(s_blockArray, 0, s_blockArray.Length);
 
@@ -64,42 +76,113 @@ public sealed class BlockRegistry : IBlockRegistry
         {
             if (!Enum.TryParse(cellName, out CellType cellType))
             {
-                continue;
+                throw new InvalidDataException($"Cell '{cellName}': no such CellType.");
             }
 
-            var def = new BlockDefinition
+            var def = new BlockDefinition(
+                DrawLayer: ParseEnum<CellDrawLayer>(raw.DrawLayer, cellName, "drawLayer"),
+                Outline: ParseEnum<CellOutline>(raw.Outline, cellName, "outline"),
+                TextureAnchor: ParseEnum<CellTextureAnchor>(raw.TextureAnchor, cellName, "textureAnchor"),
+                AnimationType: ParseEnum<CellAnimationType>(raw.AnimationType, cellName, "animationType"),
+                AnimationSpeed: Required(raw.AnimationSpeed, cellName, "animationSpeed"),
+                SurfaceEffect: ParseEnum<CellSurfaceEffect>(raw.SurfaceEffect, cellName, "surfaceEffect"),
+                SurfaceEffectPalette: Required(raw.SurfaceEffectPalette, cellName, "surfaceEffectPalette"),
+                DecalAtlas: ParseEnum<CellDecalAtlas>(raw.DecalAtlas, cellName, "decalAtlas"),
+                RimMass: Required(raw.RimMass, cellName, "rimMass"),
+                Glow: Required(raw.Glow, cellName, "glow"),
+                MapColor: ParseColor(raw.MapColor, cellName, "mapColor"));
+            if (def.Glow is < 0f or > 1f)
             {
-                Passable = raw.Passable,
-                EmitsLight = raw.EmitsLight,
-                Surface = ParseEnum(raw.Surface, CellSurface.Plain, cellName),
-                SurfaceSpeed = raw.SurfaceSpeed,
-                SurfacePalette = raw.SurfacePalette,
-                DecalFamily = ParseEnum(raw.DecalFamily, TerrainDecalFamily.None, cellName),
-                RimGroup = raw.RimGroup,
-                Shape = ParseEnum(raw.Shape, CellShape.Flat, cellName),
-                MapColorHEX = raw.MapColorHEX,
-            };
+                throw new InvalidDataException($"Cell '{cellName}': glow {def.Glow} is outside 0..1.");
+            }
 
             result[cellType] = def;
             s_blockArray[(byte)cellType] = def;
         }
 
+        s_underlayType = ResolveUnderlay(result);
         return result;
     }
 
-    // Неизвестное имя — ошибка конфига, а не повод тихо нарисовать тип
-    // значением по умолчанию.
-    private static T ParseEnum<T>(string? value, T fallback, string cellName)
+    // Подложка — ровно один тип с drawLayer: Underlay.
+    private static CellType ResolveUnderlay(Dictionary<CellType, BlockDefinition> blocks)
+    {
+        var underlays = new List<CellType>();
+        foreach ((CellType type, BlockDefinition def) in blocks)
+        {
+            if (def.DrawLayer == CellDrawLayer.Underlay)
+            {
+                underlays.Add(type);
+            }
+        }
+
+        if (underlays.Count != 1)
+        {
+            throw new InvalidDataException(
+                $"cells.json: exactly one cell must have \"drawLayer\": \"Underlay\", found {underlays.Count}.");
+        }
+
+        return underlays[0];
+    }
+
+    // Ключ с опечаткой иначе молча пропал бы, а поле упало бы на «missing».
+    private static void RejectUnknownKeys(string json)
+    {
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Reflection.PropertyInfo property in typeof(RawCellDefinition).GetProperties())
+        {
+            known.Add(property.Name);
+        }
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        foreach (JsonProperty cell in document.RootElement.EnumerateObject())
+        {
+            foreach (JsonProperty field in cell.Value.EnumerateObject())
+            {
+                if (!known.Contains(field.Name))
+                {
+                    throw new InvalidDataException($"Cell '{cell.Name}': unknown key '{field.Name}'.");
+                }
+            }
+        }
+    }
+
+    // Каждый ключ обязателен: пропуск — ошибка конфига, а не повод тихо
+    // подставить значение, выведенное из других полей.
+    private static T Required<T>(T? value, string cellName, string key)
+        where T : struct =>
+        value ?? throw new InvalidDataException($"Cell '{cellName}': missing '{key}'.");
+
+    private static T ParseEnum<T>(string? value, string cellName, string key)
         where T : struct, Enum
     {
         if (string.IsNullOrEmpty(value))
         {
-            return fallback;
+            throw new InvalidDataException($"Cell '{cellName}': missing '{key}'.");
         }
 
-        return Enum.TryParse(value, ignoreCase: true, out T parsed)
+        return Enum.TryParse(value, ignoreCase: true, out T parsed) && Enum.IsDefined(typeof(T), parsed)
             ? parsed
-            : throw new InvalidDataException($"Cell '{cellName}': unknown {typeof(T).Name} '{value}'.");
+            : throw new InvalidDataException($"Cell '{cellName}': unknown {key} '{value}'.");
+    }
+
+    // #RRGGBB или #RRGGBBAA.
+    private static Color32 ParseColor(string? value, string cellName, string key)
+    {
+        ReadOnlySpan<char> hex = value.AsSpan();
+        if (hex.StartsWith("#"))
+        {
+            hex = hex[1..];
+        }
+
+        if ((hex.Length == 6 || hex.Length == 8) &&
+            uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out uint bits))
+        {
+            uint rgba = hex.Length == 6 ? (bits << 8) | 0xFFu : bits;
+            return new Color32((byte)(rgba >> 24), (byte)(rgba >> 16), (byte)(rgba >> 8), (byte)rgba);
+        }
+
+        throw new InvalidDataException($"Cell '{cellName}': '{key}' must be #RRGGBB or #RRGGBBAA, got '{value}'.");
     }
 
     private static string LoadJsonContent()
@@ -138,29 +221,29 @@ public sealed class BlockRegistry : IBlockRegistry
             $"Master block config file not found at '{RelativeFilePath}' or Resources '{ResourcePath}'.");
     }
 
+    // Ключи cells.json — те же имена, что у BlockDefinition.
     private sealed class RawCellDefinition
     {
-        // 1. Физика и базовые свойства
-        public bool Passable { get; set; }
+        public string? DrawLayer { get; set; }
 
-        // 2. Светотень и освещение
-        public bool EmitsLight { get; set; }
+        public string? Outline { get; set; }
 
-        // 3. Поверхность и декаль
-        public string? Surface { get; set; }
+        public string? TextureAnchor { get; set; }
 
-        public byte SurfaceSpeed { get; set; }
+        public string? AnimationType { get; set; }
 
-        public byte SurfacePalette { get; set; }
+        public float? AnimationSpeed { get; set; }
 
-        public string? DecalFamily { get; set; }
+        public string? SurfaceEffect { get; set; }
 
-        // 4. Геометрия и кайма
-        public byte RimGroup { get; set; }
+        public byte? SurfaceEffectPalette { get; set; }
 
-        public string? Shape { get; set; }
+        public string? DecalAtlas { get; set; }
 
-        // 5. Карта
-        public string? MapColorHEX { get; set; }
+        public byte? RimMass { get; set; }
+
+        public float? Glow { get; set; }
+
+        public string? MapColor { get; set; }
     }
 }

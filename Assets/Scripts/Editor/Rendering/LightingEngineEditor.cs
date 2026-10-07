@@ -34,7 +34,7 @@ public sealed class LightingEngineEditor : UnityEditor.Editor
         EditorGUILayout.ColorField(new GUIContent("_AmbientColor"), engine.ComputeAmbientColor, true, true, true);
         EditorGUILayout.ColorField(new GUIContent("_EmptyExtinctionRGB"), engine.ComputeEmptyExtinction, true, true, true);
         EditorGUILayout.ColorField(new GUIContent("_SolidExtinctionRGB"), engine.ComputeSolidExtinction, true, true, true);
-        EditorGUILayout.FloatField("_EmissionScale", engine.EmissionScale);
+        EditorGUILayout.FloatField("_GlowScale", engine.GlowScale);
         EditorGUILayout.FloatField("_MaximumLightMultiplier", engine.MaximumLightMultiplier);
         EditorGUILayout.FloatField("_CellSize", engine.CellSize);
         EditorGUILayout.FloatField("_TransmittanceDebugDistanceCells", engine.TransmittanceDebugDistanceCells);

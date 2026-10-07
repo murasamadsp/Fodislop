@@ -1,32 +1,38 @@
 #include <filesystem>
 #include <fstream>
-// Клетка кодируется здесь по таблице битов из TerrainCellData.cs, а не
-// рабочим C#: так проверяется, что шейдер читает ту же раскладку. Клетки —
-// ushort, по две в слове, как в TerrainCellBuffers.
+// Клетка кодируется здесь по раскладке TerrainCellFormat.hlsl, а не рабочим
+// C#: так проверяется, что шейдер читает ту же раскладку. Клетка — байт,
+// по четыре в слове, как в TerrainCellBuffers.
 static const int RingSize = 4;
 static void setCell(int gridX, int unityY, uint bits)
 {
     int x = ((gridX % RingSize) + RingSize) % RingSize;
     int y = ((unityY % RingSize) + RingSize) % RingSize;
     uint index = (uint)(y * RingSize + x);
-    uint& word = _TerrainCells.data.at(index >> 1);
-    uint shift = (index & 1u) * 16u;
-    word = (word & ~(0xFFFFu << shift)) | ((bits & 0xFFFFu) << shift);
+    uint& word = _TerrainCells.data.at(index / KERN_TERRAIN_CELLS_PER_WORD);
+    uint shift = (index % KERN_TERRAIN_CELLS_PER_WORD) * KERN_TERRAIN_CELL_BITS;
+    uint mask = KERN_TERRAIN_CELL_TYPE_MASK;
+    word = (word & ~(mask << shift)) | ((bits & mask) << shift);
 }
-static const uint TypeCause = 1u << 20;
+// Передний план (бит фона 0) лежит на подложке, тип 2 этого сценария.
+static const uint onUnderlay = KERN_TERRAIN_OUTLINE_PLIANT << KERN_TERRAIN_TYPE_OUTLINE_SHIFT;
+static const uint wavyOnUnderlay =
+    (KERN_TERRAIN_OUTLINE_WAVY << KERN_TERRAIN_TYPE_OUTLINE_SHIFT) |
+    (KERN_TERRAIN_TEXTURE_ANCHOR_WORLD << KERN_TERRAIN_TYPE_TEXTURE_ANCHOR_SHIFT);
 static void resetCells()
 {
-    _TerrainCells.reset(RingSize * RingSize / 2);
+    _TerrainCells.reset(RingSize * RingSize / KERN_TERRAIN_CELLS_PER_WORD);
     _TerrainTypes.reset(256);
     _TerrainCellGridSize = {RingSize, RingSize, 1, 0};
     _TerrainCellOrigin = {0, 0, 1, 1};
     _TerrainCellViewOffset = {0, 0, 0, 0};
-    _TerrainDistortionMode = 0;
+    _TerrainDistortionStyle = KERN_TERRAIN_DISTORTION_STYLE_OFF;
+    _TerrainUnderlayType = 2;
     _TerrainTileDescriptors.reset(64);
-    // Передний план — тип 1 (слот атласа 0, искажает), фон — тип 2: разные
-    // типы, поэтому фон рисуется под каждой клеткой.
-    for (int y = 0; y < RingSize; ++y) for (int x = 0; x < RingSize; ++x) setCell(x, y, 1u | (2u << 8));
-    _TerrainTypes.data[1].b.z = TypeCause;
+    // Передний план — тип 1 (слот атласа 0, искажает), под ним подложка: типы
+    // разные, поэтому фон рисуется под каждой клеткой.
+    for (int y = 0; y < RingSize; ++y) for (int x = 0; x < RingSize; ++x) setCell(x, y, 1u);
+    _TerrainTypes.data[1].look = wavyOnUnderlay;
 }
 
 // Independent triangle rasterization, followed by the production fragment mask.
@@ -103,10 +109,10 @@ static void checkAmbientOcclusionFloor()
     _KernFieldRowsTopDown=0;
     _TerrainAmbientOcclusionStrength=1;
     _TerrainAmbientOcclusionFloor=0.51f;
-    Texture solid;
-    solid.reset(64,64);
-    for(int i=0;i<64*64;++i) solid.data[i].a=1;
-    _WorldAmbientOcclusionTexture.generate(std::move(solid));
+    Texture occupied;
+    occupied.reset(64,64);
+    for(int i=0;i<64*64;++i) occupied.data[i].x=1;
+    _WorldAmbientOcclusionTexture.generate(std::move(occupied));
     float darkest=KernTerrainAmbientOcclusionMultiplier(
         0, float2{4.0f,4.0f}, float4{0,0,8,8});
     if(std::fabs(darkest-0.51f)>1e-3f)
@@ -115,7 +121,7 @@ static void checkAmbientOcclusionFloor()
 
     Texture empty;
     empty.reset(64,64);
-    for(int i=0;i<64*64;++i) empty.data[i].a=0;
+    for(int i=0;i<64*64;++i) empty.data[i].x=0;
     _WorldAmbientOcclusionTexture.generate(std::move(empty));
     float brightest=KernTerrainAmbientOcclusionMultiplier(
         0, float2{4.0f,4.0f}, float4{0,0,8,8});
@@ -125,21 +131,21 @@ static void checkAmbientOcclusionFloor()
 }
 
 // Упаковка слова контура — та же арифметика, что в TerrainLightingData.Pack:
-// бит 0 — флаг контура, 1-4 — диагональные соседи, 5+ — код рельефа. Хендмейдный
-// reliefCode*32 проверял только шейдер и молчал о том, переживает ли код
+// бит 0 — флаг контура, 1-4 — диагональные соседи, 5+ — код каймы. Хендмейдный
+// rimCode*32 проверял только шейдер и молчал о том, переживает ли код
 // соседство с занятыми младшими битами.
-static float packContourFull(int reliefCode, int contourFlags, int solidDiagonal)
+static float packContourFull(int rimCode, int contourFlags, int foregroundDiagonal)
 {
-    return float(contourFlags + solidDiagonal * 2 + reliefCode * 32);
+    return float(contourFlags + foregroundDiagonal * 2 + rimCode * 32);
 }
 
-static float packContour(int reliefCode) { return packContourFull(reliefCode, 0, 0); }
+static float packContour(int rimCode) { return packContourFull(rimCode, 0, 0); }
 
-// Код рельефа из маски своих соседей — как это делает TerrainQuadBuilder:
-// маска + 1, ноль оставлен под «клетка без рельефа».
-static float packReliefMask(int reliefMask, int contourFlags, int solidDiagonal)
+// Код каймы из маски своих соседей — как это делает TerrainQuadBuilder:
+// маска + 1, ноль оставлен под «клетка без каймы».
+static float packRimMask(int rimMask, int contourFlags, int foregroundDiagonal)
 {
-    return packContourFull((reliefMask & 0x0F) + 1, contourFlags, solidDiagonal);
+    return packContourFull((rimMask & 0x0F) + 1, contourFlags, foregroundDiagonal);
 }
 
 // Канонические углы: несмещённая клетка.
@@ -150,7 +156,7 @@ static float rim(float2 p, float packed)
     surface.cornersX=float4{0,1,1,0};
     surface.cornersY=float4{0,0,1,1};
     surface.packedContour=packed;
-    return TerrainReliefRim(surface);
+    return TerrainRim(surface);
 }
 
 // Смещённая клетка: падение обязано растянуться на её реальные границы, а
@@ -162,13 +168,13 @@ static float displacedRim(float2 p, float4 xs, float4 ys, float packed)
     surface.cornersX=xs;
     surface.cornersY=ys;
     surface.packedContour=packed;
-    return TerrainReliefRim(surface);
+    return TerrainRim(surface);
 }
 
 // Кайма: три стороны, верх не затемняется никогда, дно падения 0.125, и
 // координата несущего прямоугольника не должна выводить её из диапазона.
-// Круглый блок: координата контура — UV тайла, сплошные соседи — флаги света.
-static float roundRim(float2 p, float packed, int solidMask)
+// Круглый блок: координата контура — UV тайла, соседи-блоки — флаги света.
+static float roundRim(float2 p, float packed, int foregroundSides)
 {
     TerrainSurfaceInputs surface{};
     surface.cellSample=p;
@@ -176,53 +182,53 @@ static float roundRim(float2 p, float packed, int solidMask)
     surface.cornersX=float4{0,1,1,0};
     surface.cornersY=float4{0,0,1,1};
     surface.packedContour=packed;
-    surface.packedLightingFlags=(float)solidMask;
-    return TerrainReliefRim(surface);
+    surface.packedLightingFlags=(float)foregroundSides;
+    return TerrainRim(surface);
 }
 
 // Кайма круглого блока идёт по дуге силуэта, а не по сторонам клетки: точка
 // у дуги на диагонали далеко от сторон, но обязана темнеть; сторона той же
 // поверхности, к которой силуэт прирастает, края не имеет.
-static void checkRoundReliefRim()
+static void checkRoundRim()
 {
-    const float saved = _ReliefRimDistanceScale;
-    _ReliefRimDistanceScale = 8.0f;
+    const float saved = _RimDistanceScale;
+    _RimDistanceScale = 8.0f;
     const int roundable = 1;
-    float allForeign = packReliefMask(0, roundable, 0);
+    float allForeign = packRimMask(0, roundable, 0);
     if(roundRim(float2{0.846f, 0.846f}, allForeign, 0) >= 0.5f)
-        throw std::runtime_error("Relief rim does not follow the round block silhouette");
+        throw std::runtime_error("Rim does not follow the round block silhouette");
     if(roundRim(float2{0.5f, 0.5f}, allForeign, 0) < 0.99f)
-        throw std::runtime_error("Relief rim darkens the middle of a round block");
-    float sameTop = packReliefMask(1, roundable, 0);
+        throw std::runtime_error("Rim darkens the middle of a round block");
+    float sameTop = packRimMask(1, roundable, 0);
     if(roundRim(float2{0.5f, 0.98f}, sameTop, 1) < 0.99f)
-        throw std::runtime_error("Relief rim darkens a round block side merged with the same surface");
+        throw std::runtime_error("Rim darkens a round block side merged with the same surface");
     if(roundRim(float2{0.5f, 0.98f}, allForeign, 1) >= 0.5f)
-        throw std::runtime_error("Relief rim missing on a round block side facing a foreign surface");
-    _ReliefRimDistanceScale = saved;
+        throw std::runtime_error("Rim missing on a round block side facing a foreign surface");
+    _RimDistanceScale = saved;
 }
 
-static void checkReliefRim()
+static void checkRim()
 {
-    _TerrainReliefRimEnabled = 1.0f;
+    _TerrainRimEnabled = 1.0f;
     const float2 nearTop{0.5f, 0.99f};
     const float2 nearBottom{0.5f, 0.01f};
     const float2 nearLeft{0.01f, 0.5f};
     const float2 nearRight{0.99f, 0.5f};
     const float2 centre{0.5f, 0.5f};
 
-    // Нет рельефной группы — кайма не трогает ничего.
+    // Нет массы каймы — кайма не трогает ничего.
     for(float2 p : {centre, nearTop, nearBottom, nearLeft, nearRight})
         if(rim(p, packContour(0)) != 1.0f)
-            throw std::runtime_error("Relief rim darkened a cell without a relief group");
+            throw std::runtime_error("Rim darkened a cell without a rim mass");
 
     // Вся семья вокруг: код 16 — маска 15 со сдвигом.
     for(float2 p : {centre, nearTop, nearBottom, nearLeft, nearRight})
         if(rim(p, packContour(16)) != 1.0f)
-            throw std::runtime_error("Relief rim darkened the interior of a solid mass");
+            throw std::runtime_error("Rim darkened the interior of a block mass");
 
     // Середина клетки не трогается ни при каких чужих сторонах.
     if(rim(centre, packContour(1)) < 0.99f)
-        throw std::runtime_error("Relief rim reached the centre of the cell");
+        throw std::runtime_error("Rim reached the centre of the cell");
 
     // Все четыре соседа чужие: маска 0, код 1. Низ, лево и право темнеют,
     // верх обязан остаться нетронутым.
@@ -231,9 +237,9 @@ static void checkReliefRim()
     {
         float v = rim(p, allForeign);
         if(v >= 0.25f)
-            throw std::runtime_error("Relief rim missing on a foreign side");
+            throw std::runtime_error("Rim missing on a foreign side");
         if(v <= 0.1f)
-            throw std::runtime_error("Relief rim is darker than the original scale allows");
+            throw std::runtime_error("Rim is darker than the original scale allows");
     }
 
     // Ровно одна сторона чужая — темнеет только её сектор.
@@ -247,16 +253,16 @@ static void checkReliefRim()
             float v = rim(probes[other], one);
             bool expectDark = other == side;
             if(expectDark && v >= 0.25f)
-                throw std::runtime_error("Relief rim missing on the single foreign side");
+                throw std::runtime_error("Rim missing on the single foreign side");
             // Не ровно единица: квантование сдвигает середину клетки на
             // полтексела, и противоположная грань даёт 0.9985. Утечкой это
             // не является, а вот заметное затемнение — является.
             if(!expectDark && v < 0.99f)
-                throw std::runtime_error("Relief rim leaked onto a side of the same family");
+                throw std::runtime_error("Rim leaked onto a side of the same family");
         }
     }
     if(rim(centre, allForeign) < 0.99f)
-        throw std::runtime_error("Relief rim reached the centre of the cell");
+        throw std::runtime_error("Rim reached the centre of the cell");
 
     // Смещённая клетка. Выступающая грань не имеет права темнеть сильнее
     // такой же грани ровной клетки: падение нормируется по границам
@@ -284,12 +290,12 @@ static void checkReliefRim()
             std::fabs(displaced - sideFalloff(span.y*.25f)) > 1e-4f)
         {
             throw std::runtime_error(
-                "Relief rim does not follow the displaced edge distance: flat=" +
+                "Rim does not follow the displaced edge distance: flat=" +
                 std::to_string(flat) + " displaced=" + std::to_string(displaced));
         }
 
         if(displacedRim(polygonCentre, xs, ys, allForeign) < 0.99f)
-            throw std::runtime_error("Relief rim reached the centre of a displaced cell");
+            throw std::runtime_error("Rim reached the centre of a displaced cell");
     }
 
     // Кайма обязана тайлиться. Вдоль чужой грани значение постоянно по всей
@@ -307,7 +313,7 @@ static void checkReliefRim()
             float v = rim(float2{along, 0.02f}, bottomForeign);
             if(std::fabs(v - reference) > 1e-4f)
                 throw std::runtime_error(
-                    "Relief rim is not constant along a foreign edge: at " +
+                    "Rim is not constant along a foreign edge: at " +
                     std::to_string(along) + " it is " + std::to_string(v) +
                     " against " + std::to_string(reference));
         }
@@ -330,28 +336,28 @@ static void checkReliefRim()
     //
     // Это и есть шов, на котором кайма могла бы включаться через клетку.
     // Флаги контура и маска диагональных соседей меняются от клетки к клетке,
-    // и если бы код рельефа стоял не на своём месте, кайма то появлялась бы,
+    // и если бы код каймы стоял не на своём месте, кайма то появлялась бы,
     // то исчезала по соседству, которое к ней отношения не имеет. Здесь
     // прогоняются все 16 масок против всех 16 масок диагональных соседей.
     // Флаг контура сюда не входит: круглый блок кладёт кайму по своему
-    // силуэту, и это проверяет checkRoundReliefRim.
+    // силуэту, и это проверяет checkRoundRim.
     {
         const float2 sideProbes[4] = {nearTop, nearLeft, nearBottom, nearRight};
-        for(int reliefMask = 0; reliefMask <= 0x0F; ++reliefMask)
+        for(int rimMask = 0; rimMask <= 0x0F; ++rimMask)
         {
-            float clean = packReliefMask(reliefMask, 0, 0);
-            for(int solidDiagonal = 0; solidDiagonal <= 0x0F; ++solidDiagonal)
+            float clean = packRimMask(rimMask, 0, 0);
+            for(int foregroundDiagonal = 0; foregroundDiagonal <= 0x0F; ++foregroundDiagonal)
             {
-                float packed = packReliefMask(reliefMask, 0, solidDiagonal);
+                float packed = packRimMask(rimMask, 0, foregroundDiagonal);
                 for(int side = 0; side < 4; ++side)
                 {
                     float expected = rim(sideProbes[side], clean);
                     float actual = rim(sideProbes[side], packed);
                     if(std::fabs(expected - actual) > 1e-5f)
                         throw std::runtime_error(
-                            "Relief code does not survive the packed word: mask=" +
-                            std::to_string(reliefMask) + " diagonal=" +
-                            std::to_string(solidDiagonal) + " side=" +
+                            "Rim code does not survive the packed word: mask=" +
+                            std::to_string(rimMask) + " diagonal=" +
+                            std::to_string(foregroundDiagonal) + " side=" +
                             std::to_string(side) + " expected=" +
                             std::to_string(expected) + " actual=" +
                             std::to_string(actual));
@@ -360,26 +366,26 @@ static void checkReliefRim()
                 // И содержательно: своя сторона не темнеет, чужая темнеет.
                 for(int side = 0; side < 4; ++side)
                 {
-                    bool sameFamily = (reliefMask & (1 << side)) != 0;
+                    bool sameFamily = (rimMask & (1 << side)) != 0;
                     float v = rim(sideProbes[side], packed);
                     if(sameFamily && v < 0.99f)
                         throw std::runtime_error(
-                            "Relief rim darkens a side whose neighbour is the same family: mask=" +
-                            std::to_string(reliefMask) + " side=" + std::to_string(side));
+                            "Rim darkens a side whose neighbour is the same family: mask=" +
+                            std::to_string(rimMask) + " side=" + std::to_string(side));
                     if(!sameFamily && v >= 0.25f)
                         throw std::runtime_error(
-                            "Relief rim missing on a foreign side: mask=" +
-                            std::to_string(reliefMask) + " side=" + std::to_string(side));
+                            "Rim missing on a foreign side: mask=" +
+                            std::to_string(rimMask) + " side=" + std::to_string(side));
                 }
             }
         }
     }
 
     // Выключатель снимает кайму целиком.
-    _TerrainReliefRimEnabled = 0.0f;
+    _TerrainRimEnabled = 0.0f;
     if(rim(nearBottom, packContour(1)) != 1.0f)
-        throw std::runtime_error("Disabled relief rim still darkens the frame");
-    _TerrainReliefRimEnabled = 1.0f;
+        throw std::runtime_error("Disabled rim still darkens the frame");
+    _TerrainRimEnabled = 1.0f;
 
     // Вырожденные углы: путь вершин без геометрии кладёт нули, и нормировка
     // по размаху обязана это пережить. Пока размах зажимался в эпсилон,
@@ -404,7 +410,7 @@ static void checkReliefRim()
             // проверки в том, что координата несущего прямоугольника не
             // выбрасывает результат за пределы вовсе.
             if(a < 0.015f || a > 1.0f || b < 0.015f || b > 1.0f)
-                throw std::runtime_error("Relief rim leaves its range on an anchored carrier sample");
+                throw std::runtime_error("Rim leaves its range on an anchored carrier sample");
         }
 }
 
@@ -433,7 +439,7 @@ void checkAo()
                     0.0f,0.5f,max(-expectedDistance,0.0f));
                 if (std::fabs(contact - expectedContact) > 1e-4f)
                     throw std::runtime_error("AO contact field differs from independent polygon-distance oracle");
-                field.data[y*field.width+x].a = contact;
+                field.data[y*field.width+x].x = contact;
             }
             _WorldAmbientOcclusionTexture.generate(std::move(field));
             samples[shape]=KernSampleTerrainAmbientOcclusion(float2{4.0625f,3.875f},float4{0,0,8,8});
@@ -691,7 +697,7 @@ static void checkThousandthsPhase()
 }
 
 // Миры стенда (TerrainCellEquivalenceHarnessTests.ExportWorldsForHlslShim):
-// пёстрые типы, автотайл, стены пака, рельеф, органика, перекрытие фона.
+// пёстрые типы, автотайл, стены пака, кайма, органика, перекрытие фона.
 // Настоящий LoadTerrainCellVertex на каждом кваде обязан дать ровно
 // атрибуты вершин TerrainQuadBuilder.FillQuad — эталона прежнего вида.
 template <typename T> static T readValue(std::ifstream& in)
@@ -716,7 +722,7 @@ static long checkWorld(const std::string& path)
     if (!in) throw std::runtime_error("cannot open " + path);
     int worldWidth = readValue<int>(in);
     int worldHeight = readValue<int>(in);
-    _TerrainDistortionMode = readValue<int>(in);
+    _TerrainDistortionStyle = readValue<int>(in);
     for (float4& vector : _TerrainDistortion)
         vector = float4{readValue<float>(in), readValue<float>(in), readValue<float>(in), readValue<float>(in)};
     _TerrainOrganicHorizontalSeed = (int)readValue<uint>(in);
@@ -729,16 +735,25 @@ static long checkWorld(const std::string& path)
     int ringHeight = readValue<int>(in);
     _TerrainTileDescriptors.reset(64);
     for (uint& word : _TerrainTileDescriptors.data) word = readValue<uint>(in);
+    for (int slot = 0; slot < 8; ++slot)
+    {
+        float size = (float)readValue<int>(in);
+        _ShimAtlasTexelSize[slot] = {1.0f / size, 1.0f / size, size, size};
+    }
     _TerrainTypes.reset(256);
     for (TerrainTypeRow& row : _TerrainTypes.data)
     {
-        row.a = uint4{readValue<uint>(in), readValue<uint>(in), readValue<uint>(in), readValue<uint>(in)};
-        row.b = uint4{readValue<uint>(in), readValue<uint>(in), readValue<uint>(in), readValue<uint>(in)};
+        row.atlasXY = readValue<uint>(in);
+        row.atlasWH = readValue<uint>(in);
+        row.look = readValue<uint>(in);
+        row.speedGlowTile = readValue<uint>(in);
     }
+    _TerrainUnderlayType = readValue<int>(in);
     int cells = ringWidth * ringHeight;
-    _TerrainCells.reset((cells + 1) / 2);
+    _TerrainCells.reset((cells + KERN_TERRAIN_CELLS_PER_WORD - 1) / KERN_TERRAIN_CELLS_PER_WORD);
     for (int i = 0; i < cells; ++i)
-        _TerrainCells.data[i >> 1] |= (uint)readValue<uint16_t>(in) << ((i & 1) * 16);
+        _TerrainCells.data[i / KERN_TERRAIN_CELLS_PER_WORD] |=
+            (uint)readValue<uint8_t>(in) << ((i % KERN_TERRAIN_CELLS_PER_WORD) * KERN_TERRAIN_CELL_BITS);
     _TerrainCellGridSize = {(float)ringWidth, (float)ringHeight, 1, 0};
     _TerrainCellOrigin = {(float)originX, (float)originY, (float)worldHeight, (float)worldWidth};
     _TerrainCellViewOffset = {0, 0, 0, 0};
@@ -766,12 +781,12 @@ static long checkWorld(const std::string& path)
                 v.worldPos.x, v.worldPos.y, v.worldPos.z, v.worldPos.w,
                 v.animData.x, v.animData.y, v.animData.z, v.animData.w,
                 v.packedData.x, v.geometryCornersX[corner], v.geometryCornersY[corner], v.packedData.w,
-                v.glowData.x, v.glowData.y, v.glowData.z, v.glowData.w,
+                v.lightContourDecal.x, v.lightContourDecal.y, v.lightContourDecal.z, v.lightContourDecal.w,
             };
             static const char* names[26] = {
                 "u", "v", "rect x", "rect y", "rect z", "rect w", "tile x", "tile y", "frames", "frame height",
                 "world x", "server y", "column", "autotile", "animation", "speed", "phase", "profile",
-                "anchored", "corner x", "corner y", "organic", "light colour", "light flags", "contour", "decal",
+                "anchored", "corner x", "corner y", "organic", "light colour", "light flags", "contour", "decalAtlas",
             };
             for (int i = 0; i < 26; ++i) expectAttribute(actual[i], e[i], at + ": " + names[i]);
             ++compared;
@@ -794,7 +809,7 @@ static long checkWorld(const std::string& path)
                     if (other->atlasIndex != v.atlasIndex ||
                         other->positionOS.x != v.positionOS.x || other->positionOS.y != v.positionOS.y ||
                         other->positionOS.z != v.positionOS.z ||
-                        other->glowData.z != v.glowData.z || other->uvBits != v.uvBits)
+                        other->lightContourDecal.z != v.lightContourDecal.z || other->uvBits != v.uvBits)
                         throw std::runtime_error(at + ": view offset or door overlay address differs");
                 }
             }
@@ -964,12 +979,12 @@ static void checkBufferReads()
 {
     resetCells();
     _TerrainCellOrigin = {5, 5, 100, 100};
-    _TerrainTypes.data[1].b.z = 0u;
+    _TerrainTypes.data[1].look = onUnderlay;
     bufferReads = 0;
     LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
     long flat = bufferReads;
-    _TerrainTypes.data[1].b.z = TypeCause;
-    _TerrainDistortionMode = 2;
+    _TerrainTypes.data[1].look = wavyOnUnderlay;
+    _TerrainDistortionStyle = KERN_TERRAIN_DISTORTION_STYLE_ORGANIC;
     bufferReads = 0;
     LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
     long organic = bufferReads;
@@ -998,8 +1013,8 @@ int runChecks(const char* worldDirectory)
     checkOrganicGeometryCoverage();
     checkOrganicSignedDistance();
     checkFlatCellDistance();
-    checkReliefRim();
-    checkRoundReliefRim();
+    checkRim();
+    checkRoundRim();
     checkAmbientOcclusionFloor();
     std::cout << "HLSL shim displaced autotile UV continuity, geometry quantization, phase and AO geometry edge passed.\n";
     return 0;

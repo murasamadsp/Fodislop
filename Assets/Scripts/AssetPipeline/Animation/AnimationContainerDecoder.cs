@@ -21,9 +21,9 @@ public static class AnimationContainerDecoder
             { "vfx/bz", (16, 32, 15, 15f) },
             { "vfx/death", (64, 64, 39, 40f) },
             { "vfx/destroy", (1, 1, 1, 0f) },
-            { "cells/66", (32, 32, 6, 5f) },
-            { "cells/67", (32, 32, 6, 5f) },
-            { "cells/90", (32, 32, 4, 4f) },
+            { "cells/GrayAcid", (32, 32, 6, 5f) },
+            { "cells/PurpleAcid", (32, 32, 6, 5f) },
+            { "cells/Box", (32, 32, 4, 4f) },
         };
 
     public static ContainerType DetectType(byte[] data)

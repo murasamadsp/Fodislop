@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Kern.Core.Interfaces;
 using Kern.Networking.Processors;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -60,6 +61,26 @@ public sealed class PacketHandler(
     private readonly AuthTokenProcessor _authToken = authToken;
     private readonly ClientConfigProcessor _clientConfig = clientConfig;
     private readonly List<Action> _unsubscribers = [];
+    private readonly IBatchAwareProcessor[] _batchAwareProcessors = new object[]
+    {
+        worldInit,
+        playerInfo,
+        windowProcessor,
+        mapRegion,
+        building,
+        playerStats,
+        chat,
+        status,
+        audio,
+        vfx,
+        inventory,
+        clan,
+        mission,
+        missionArrow,
+        connection,
+        authToken,
+        clientConfig,
+    }.OfType<IBatchAwareProcessor>().ToArray();
 
     public bool IsSubscribed { get; private set; }
 
@@ -72,9 +93,21 @@ public sealed class PacketHandler(
 
     public void Dispose() => Unsubscribe();
 
-    private void BeginPacketBatch() => _mapRegion.BeginBatch();
+    private void BeginPacketBatch()
+    {
+        for (int i = 0; i < _batchAwareProcessors.Length; i++)
+        {
+            _batchAwareProcessors[i].BeginBatch();
+        }
+    }
 
-    private void EndPacketBatch() => _mapRegion.EndBatch();
+    private void EndPacketBatch()
+    {
+        for (int i = 0; i < _batchAwareProcessors.Length; i++)
+        {
+            _batchAwareProcessors[i].EndBatch();
+        }
+    }
 
     // Protocol packets may be value types, so this helper must remain unconstrained.
     private void On<T>(Action<T> handler)

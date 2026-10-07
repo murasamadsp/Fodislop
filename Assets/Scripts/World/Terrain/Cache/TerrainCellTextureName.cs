@@ -10,7 +10,7 @@ namespace Kern.World.Terrain;
 /// </summary>
 ///
 /// Сервис текстур сообщает о загрузке именем файла, а террейну нужен тип
-/// клетки: «Cells/42.png» — это CellType 42. Отдельным типом, потому что это
+/// клетки: «Cells/Rock.png» — это CellType Rock. Отдельным типом, потому что это
 /// разбор строки, а не работа рендерера, и его видно в тесте.
 public static class TerrainCellTextureName
 {
@@ -30,12 +30,14 @@ public static class TerrainCellTextureName
         ReadOnlySpan<char> id = filename.AsSpan(
             CellPrefix.Length,
             (extensionIndex >= 0 ? extensionIndex : filename.Length) - CellPrefix.Length);
-        if (!int.TryParse(id, out int cellTypeId) || (uint)cellTypeId > ushort.MaxValue)
+        string cellName = id.ToString();
+        if (!Enum.TryParse(cellName, ignoreCase: true, out cellType) ||
+            !Enum.IsDefined(typeof(CellType), cellType))
         {
+            cellType = default;
             return false;
         }
 
-        cellType = (CellType)cellTypeId;
         return true;
     }
 

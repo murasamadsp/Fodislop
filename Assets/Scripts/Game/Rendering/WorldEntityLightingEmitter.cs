@@ -9,13 +9,13 @@ using UnityEngine.Rendering;
 namespace Kern.Game
 {
     /// <summary>
-    /// Builds the emissive-only mesh that light-emitting batch sprites contribute
-    /// to the lighting material fields. The revision follows emissive state only —
+    /// Builds the glowing-only mesh that light-emitting batch sprites contribute
+    /// to the lighting material fields. The revision follows glowing state only —
     /// camera motion rebuilds the visible batch every frame and must not re-solve light.
     /// </summary>
     internal sealed class WorldEntityLightingEmitter : IDisposable
     {
-        private const int EmptyEmissiveStateHash = 17;
+        private const int EmptyGlowStateHash = 17;
 
         private readonly List<WorldEntityBatchRenderer.SpriteHandle> _sprites;
         private readonly Func<Material?> _batchMaterial;
@@ -27,7 +27,7 @@ namespace Kern.Game
         private Color32[] _lightingColors = new Color32[4];
         private int[] _lightingTris = new int[6];
         private ulong _revision = 1;
-        private int _emissiveStateHash = EmptyEmissiveStateHash;
+        private int _glowStateHash = EmptyGlowStateHash;
 
         public WorldEntityLightingEmitter(
             List<WorldEntityBatchRenderer.SpriteHandle> sprites,
@@ -43,7 +43,7 @@ namespace Kern.Game
 
         public void UpdateRevision()
         {
-            int hash = EmptyEmissiveStateHash;
+            int hash = EmptyGlowStateHash;
             for (int i = 0; i < _sprites.Count; i++)
             {
                 WorldEntityBatchRenderer.SpriteHandle handle = _sprites[i];
@@ -59,23 +59,23 @@ namespace Kern.Game
                     handle.Color);
             }
 
-            if (hash != _emissiveStateHash)
+            if (hash != _glowStateHash)
             {
-                _emissiveStateHash = hash;
+                _glowStateHash = hash;
                 _revision++;
             }
         }
 
-        public void RenderMaterialEmissionFields(
+        public void RenderMaterialGlowFields(
             CommandBuffer commandBuffer,
-            in Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext context) =>
+            in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context) =>
             RenderField(commandBuffer);
 
         public void RenderAmbientOcclusionField(
             CommandBuffer commandBuffer,
             in Kern.Core.Interfaces.WorldLighting.LightingAmbientOcclusionContext context)
         {
-            // This contributor contains emission-only sprites. Its material
+            // This contributor contains glow-only sprites. Its material
             // pass writes zero physical occupancy, so drawing it into the AO
             // target only rebuilds the mesh and issues an MRT pass against a
             // single render target.
@@ -89,16 +89,16 @@ namespace Kern.Game
                 return;
             }
 
-            int emissiveCount = 0;
+            int glowCount = 0;
             for (int i = 0; i < _sprites.Count; i++)
             {
                 if (_sprites[i].EmitsLight && IsRenderable(_sprites[i]))
                 {
-                    emissiveCount++;
+                    glowCount++;
                 }
             }
 
-            if (emissiveCount == 0)
+            if (glowCount == 0)
             {
                 return;
             }
@@ -110,8 +110,8 @@ namespace Kern.Game
                     $"World-entity material '{batchMaterial.name}' is missing the {ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField} pass.");
             }
 
-            int vertexCount = emissiveCount * 4;
-            int indexCount = emissiveCount * 6;
+            int vertexCount = glowCount * 4;
+            int indexCount = glowCount * 6;
             if (_lightingVerts.Length < vertexCount)
             {
                 Array.Resize(ref _lightingVerts, vertexCount);

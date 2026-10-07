@@ -1,8 +1,6 @@
 #nullable enable
 
 using System;
-using Kern.Persistence;
-using MinesServer.Data;
 using UnityEngine;
 
 namespace Kern.World;
@@ -19,16 +17,12 @@ internal sealed class MapStorageRegionBatcher
 
     public int Depth => _regionBatchDepth;
 
-    public void BeginBatch(WorldLayer<CellType>? cellLayer)
+    public void BeginBatch()
     {
         _regionBatchDepth++;
-        if (_regionBatchDepth == 1)
-        {
-            cellLayer?.BeginChunkLoadBatch();
-        }
     }
 
-    public void EndBatch(WorldLayer<CellType>? cellLayer, Action<int, int, int, int>? onRegionChanged)
+    public void EndBatch()
     {
         if (_regionBatchDepth <= 0)
         {
@@ -36,21 +30,34 @@ internal sealed class MapStorageRegionBatcher
         }
 
         _regionBatchDepth--;
-        if (_regionBatchDepth != 0)
+    }
+
+    public bool TryConsumeDirtyRegion(out int startX, out int startY, out int width, out int height)
+    {
+        if (!_batchedRegionChanged)
         {
-            return;
+            startX = 0;
+            startY = 0;
+            width = 0;
+            height = 0;
+            return false;
         }
 
-        cellLayer?.EndChunkLoadBatch();
-        if (_batchedRegionChanged)
-        {
-            _batchedRegionChanged = false;
-            onRegionChanged?.Invoke(
-                _batchedRegionMinX,
-                _batchedRegionMinY,
-                _batchedRegionMaxX - _batchedRegionMinX,
-                _batchedRegionMaxY - _batchedRegionMinY);
-        }
+        startX = _batchedRegionMinX;
+        startY = _batchedRegionMinY;
+        width = _batchedRegionMaxX - _batchedRegionMinX;
+        height = _batchedRegionMaxY - _batchedRegionMinY;
+        _batchedRegionChanged = false;
+        return true;
+    }
+
+    public void Reset()
+    {
+        _batchedRegionChanged = false;
+        _batchedRegionMinX = 0;
+        _batchedRegionMinY = 0;
+        _batchedRegionMaxX = 0;
+        _batchedRegionMaxY = 0;
     }
 
     public void RecordRegionChange(int startX, int startY, int width, int height)

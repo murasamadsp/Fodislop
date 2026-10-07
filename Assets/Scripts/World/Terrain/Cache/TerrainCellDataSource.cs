@@ -5,14 +5,12 @@ using System.Collections.Generic;
 using Kern.Core.Interfaces;
 #endif
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Kern.World.Terrain;
 
 public struct CachedCellInfo
 {
     public CellType Type;
-    public CellConfigProperties Properties;
 }
 
 public interface ICachedCellDataProvider

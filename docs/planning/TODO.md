@@ -17,10 +17,17 @@
   - Отрисовка всех динамических визуальных объектов через `Graphics.RenderMeshIndirect` / `DrawMeshInstancedIndirect` за 1 Draw Call.
   - Освобождение CPU от обхода GameObject/Transform и матричных трансформаций Unity.
 
-- [ ] **4. Клетка террейна на GPU — 1 байт вместо 2**
-  - Фон клетки теперь чистая функция её типа (`TerrainCellLayers.ResolveBackground`: пол сам на себе, проходимая часть пака на дороге, остальное на земле), поэтому хранить его в клетке не нужно.
-  - В строку типа (`TerrainCellData.PackType`, `b.w`) — код фона из трёх вариантов; шейдер выводит фон сам. Клетка — только тип переднего плана, четыре клетки на `uint`.
-  - Обновить `TerrainCellData.hlsl` (`TerrainLoadCell`, фон соседей), `TerrainCellBuffers`, экспорт стенда и шим; проверить шимом и в Unity.
+- [x] **4. Клетка террейна на GPU — 1 байт вместо 2**
+  - Сделано 06.10: клетка — только тип, четыре на `uint`; проверено стендом и шимом, в Unity не проверено.
+
+- [x] **5. Что рисовать фоном там, где сквозь клетку виден фон**
+  - Решено 06.10: `layer` в `cells.json` — перечисление `Foreground` / `Background` / `Underlay`. Фон (`Background`, `Underlay`) лежит сам на себе; под передним планом — тип с `Underlay` (ровно один, проверка при загрузке). Отдельного флага и константы типа нет.
+
+- [ ] **6. PR в сетевую библиотеку: вид клетки — в протокол (клиент server-driven)**
+  - Сейчас клиент читает вид клетки из своего `cells.json` мимо протокола: `drawLayer`, `outline`, `textureAnchor`, `animation`, `animationSpeed`, `surfaceEffect`, `surfaceEffectPalette`, `decalAtlas`, `rimMass`, `glow`, `mapColor`. Должен присылать сервер в `CellConfigurationPacket`.
+  - Устаревшие поля пакета, которые клиент не читает: `Distortion` (как флаг сервера), `ReliefGroup`, флаги `DropsShadow` / `ReceivesShadow` / `Blending` / `Glowing`, `Animation` + `AnimationSpeed` (только проверка при загрузке), `Color` (заглушка `0xFFFFFFFF`). Заменить полями вида из списка выше.
+  - Остаются с сервера и уже читаются: `Passable`, `Breakable`, тайлгруппы, кулдауны движения. Проходимость для движения (`Passable`) и слой для рисования (`layer`) сейчас из разных источников — свести.
+  - После PR: `BlockRegistry` наполняется из пакета, `cells.json` остаётся конфигом сервера.
 
 ## Провисы кадра в игре
 

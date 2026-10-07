@@ -112,9 +112,27 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     public event Action<int, int>? CellChanged;
     public event Action<int, int, int, int>? RegionChanged;
 
-    public void BeginRegionBatch() => _regionBatcher.BeginBatch(_cellLayer);
+    public void BeginRegionBatch()
+    {
+        _regionBatcher.BeginBatch();
+        if (_regionBatcher.Depth == 1)
+        {
+            _cellLayer?.BeginChunkLoadBatch();
+        }
+    }
 
-    public void EndRegionBatch() => _regionBatcher.EndBatch(_cellLayer, RegionChanged);
+    public void EndRegionBatch()
+    {
+        _regionBatcher.EndBatch();
+        if (_regionBatcher.Depth == 0)
+        {
+            _cellLayer?.EndChunkLoadBatch();
+            if (_cellLayer != null && _regionBatcher.TryConsumeDirtyRegion(out int x, out int y, out int w, out int h))
+            {
+                RegionChanged?.Invoke(x, y, w, h);
+            }
+        }
+    }
 
     public void EnsureEditorInitialized()
     {
@@ -171,6 +189,11 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 _operations,
                 _openMapFile,
                 backupPath);
+            if (_regionBatcher.Depth > 0)
+            {
+                _cellLayer.BeginChunkLoadBatch();
+            }
+
             _mapFilePath = path;
             _isInitialized = true;
             IsDisposed = false;
@@ -518,6 +541,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             writtenLayer.CompleteDirty(writtenSnapshot);
             try
             {
+                _regionBatcher.Reset();
                 writtenLayer.DisposeAfterDurableSnapshot();
             }
             finally
@@ -540,6 +564,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         Exception? disposeFailure = null;
         try
         {
+            _regionBatcher.Reset();
             _cellLayer?.Dispose();
         }
         catch (Exception ex) when (

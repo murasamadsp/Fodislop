@@ -26,7 +26,7 @@ public class TerrainCellCache : ITerrainCellDataSource
     public CachedCellInfo GetCell(int x, int y)
     {
         CachedCellData data = GetCellData(x, y);
-        return new CachedCellInfo { Type = data.Type, Properties = data.Properties };
+        return new CachedCellInfo { Type = data.Type };
     }
 
     public CachedCellData GetCellData(int x, int y)
@@ -63,12 +63,9 @@ public class TerrainCellCache : ITerrainCellDataSource
             for (int y = 0; y < CacheHeight; y++)
             {
                 ref CachedCellData cell = ref _cells[x, y];
-                cell.MinimapColor = new UnityEngine.Color32(128, 128, 128, 255);
                 cell.AtlasRect = new UnityEngine.Vector4(0f, 0f, 0.0625f, 0.0625f);
                 cell.AtlasIndex = 0;
-                cell.UVTileSize = 1f / 1024f;
                 cell.AnimationFrameCount = 1;
-                cell.FrameHeightTiles = 1f;
                 cell.IsTextureReady = true;
             }
         }
@@ -116,9 +113,8 @@ public class TerrainCellCache : ITerrainCellDataSource
             {
                 ref CachedCellData cell = ref _cells[cx + 1, cy + 1];
                 cell.Type = CellType.Empty;
-                cell.Properties = CellConfigProperties.Passable;
-                cell.Distortion = 0;
-                cell.ReliefGroup = 0;
+                cell.Outline = 0;
+                cell.RimMass = 0;
             }
         }
     }
@@ -131,14 +127,12 @@ public class TerrainCellCache : ITerrainCellDataSource
         bool solid = noise < 62;
         bool road = !solid && noise > 94;
         CellType type = solid ? (CellType)(10 + (noise % 6)) : road ? CellType.Road : CellType.Empty;
-        CellConfigProperties properties = solid ? 0 : CellConfigProperties.Passable;
         return new CachedCellData
         {
             State = TerrainCellState.Loaded,
             Type = type,
-            Properties = properties,
-            ReliefGroup = (byte)(solid ? 1 + (noise % 3) : 0),
-            Distortion = solid && noise % 7 == 0 ? (CellDistortionType)1 : 0,
+            RimMass = (byte)(solid ? 1 + (noise % 3) : 0),
+            Outline = solid && noise % 7 == 0 ? CellOutline.Wavy : 0,
             HasTileGroup = solid && noise % 5 == 0,
             TileGroupId = solid ? noise % 4 : 0,
             AtlasIndex = 0,

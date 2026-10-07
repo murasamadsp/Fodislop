@@ -122,8 +122,8 @@ internal sealed class LightingAmbientOcclusionUpdater
             _state, terrainGeometry.LightingGeometryRevision, fieldWasDirty,
             entering || resized, regionChanged,
             _state.LastContributorGeometryRevision != contributorRevision);
-        RectInt? rasterRect = allowPartial
-            ? LightingAmbientOcclusionUpdatePolicy.ResolveRasterRect(
+        IReadOnlyList<RectInt>? rasterRects = allowPartial
+            ? LightingAmbientOcclusionUpdatePolicy.ResolveRasterRects(
                 _state.ActiveRegionInvalidations,
                 new RectInt(Mathf.RoundToInt(region.x), Mathf.RoundToInt(region.y),
                     Mathf.RoundToInt(region.z), Mathf.RoundToInt(region.w)),
@@ -137,7 +137,7 @@ internal sealed class LightingAmbientOcclusionUpdater
         commands.Clear();
         try
         {
-            _frameExecutor.RecordAmbientOcclusionField(commands, terrainGeometry, worldRect, rasterRect);
+            _frameExecutor.RecordAmbientOcclusionField(commands, terrainGeometry, worldRect, rasterRects);
             Graphics.ExecuteCommandBuffer(commands);
             _presentation.PublishAmbientOcclusionOnly(field, region, cellSize);
             _telemetry.LightingFieldRebuildCount++;
