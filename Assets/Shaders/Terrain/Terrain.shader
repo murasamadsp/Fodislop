@@ -622,10 +622,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/Terrain/TerrainContour.hlsl"
             #include "Assets/Shaders/Terrain/TerrainCellData.hlsl"
             #include "Assets/Shaders/Terrain/TerrainLightingData.hlsl"
-            #include "Assets/Shaders/Terrain/TerrainAtlasSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainSampling.hlsl"
-            #include "Assets/Shaders/Terrain/TerrainAnimationProfile.hlsl"
-
 
             #include "Assets/Shaders/Terrain/TerrainMaterialCBuffer.hlsl"
             #include "Assets/Shaders/Terrain/TerrainPassCommon.hlsl"
@@ -634,8 +631,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 AmbientOcclusionFieldFrag(TerrainLightingFieldVaryings input) : SV_Target
             {
-                // До квантования, ветвлений и clip: см. TerrainPixelArtWidthTexels.
-                float2 carrierPixelWidth = fwidth(input.packedData.yz);
                 // Evaluate coverage and falloff at the native 1/32-cell sample.
                 // No resampling/quantization pass follows this field calculation.
                 input.packedData.yz = QuantizeTerrainPixelCenter(input.packedData.yz);
@@ -704,42 +699,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (exteriorDistance >= _TerrainAmbientOcclusionDistance)
                 {
                     clip(-1.0);
-                }
-
-                // Снаружи клетки прозрачность читается в ближайшей точке
-                // силуэта, сдвинутой на полтекселя внутрь: точка ровно на
-                // кромке смещённой клетки попадает за край листа (у
-                // анимированного — в соседний кадр) и срезает спад АО.
-                {
-                    float2 inward = closestGeometryPosition - surface.cellSample;
-                    float2 opacityCellPosition = geometryDistance < 0.0
-                        ? closestGeometryPosition + inward *
-                            (0.5 / KERN_TERRAIN_FACE_GRID_SIZE / max(length(inward), 1e-5))
-                        : surface.cellSample;
-                    int atlasSlot = (int)round(input.atlasIndex);
-                    float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(atlasSlot);
-                    float2 geometryTileUv = TerrainResolveGeometryTileUV(
-                        input.uv,
-                        opacityCellPosition,
-                        input.geometryCornersX,
-                        input.geometryCornersY,
-                        input.uvBits,
-                        input.packedData.x);
-                    half4 albedoTexel = SampleTerrainLightingFieldAlbedoTexel(
-                        geometryTileUv,
-                        opacityCellPosition,
-                        input.subAtlasRect,
-                        input.tileSizeUV,
-                        input.worldPos,
-                        input.animData,
-                        input.packedData,
-                        atlasSlot,
-                        atlasTexelSize,
-                        carrierPixelWidth);
-                    if (albedoTexel.a < _AlphaCutoff)
-                    {
-                        clip(-1.0);
-                    }
                 }
 
                 float contact = 1.0 - smoothstep(
