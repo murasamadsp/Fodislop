@@ -818,17 +818,41 @@
 }
 .hud-toggle-collision { bottom: 347px; }
 
+/* Кнопки верхнего ряда - иконки 32x32 без текста. Рамка и подложка темы
+   (.hud-btn-action) скрыты: поверх фона остаётся только сам спрайт. */
 .hud-btn-top-row {
     position: absolute;
     top: var(--space-5);
-    width: 100px;
-    height: var(--space-11);
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+    border-radius: 0;
+    background-color: rgba(0, 0, 0, 0);
+    -unity-background-scale-mode: scale-to-fit;
 }
 
-/* Смещения кнопок верхнего ряда (были inline right в C#-версии) */
-.hud-btn-top-row--respawn { right: 222px; }
-.hud-btn-top-row--buildings { right: 116px; }
-.hud-btn-top-row--faq { right: 10px; }
+/* Смещения и спрайты кнопок верхнего ряда. Порядок от правого верхнего угла
+   влево: Помощь -> Мои здания -> Респаун. Шаг 38px = 32px спрайт + 6px зазор
+   (--space-3), правый край ряда - --space-5.
+   Все три иконки векторные: тип импорта SVG (VectorImage) рисуется USS-фоном
+   через UIRUtility.IsVectorImageBackground. */
+.hud-btn-top-row--faq {
+    right: var(--space-5);
+    background-image: url("project://database/Assets/Textures/UI/FAQ.svg");
+}
+.hud-btn-top-row--buildings {
+    right: 48px;
+    background-image: url("project://database/Assets/Textures/UI/myBuildings.svg");
+}
+.hud-btn-top-row--respawn {
+    right: 86px;
+    background-image: url("project://database/Assets/Textures/UI/respawn.svg");
+}
+
+/* Hover-подложка темы перекрыла бы спрайт - на иконках её нет. */
+.hud-btn-top-row:hover { background-color: rgba(0, 0, 0, 0); }
 
 .hud-bonus-button {
     position: absolute;

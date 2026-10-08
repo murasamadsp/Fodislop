@@ -79,10 +79,12 @@
         <ui:Button name="ProgrammatorButton" class="hud-btn-action hud-programmator-button"  text="" picking-mode="Position" />
         <ui:Button name="ProgramRunButton" class="hud-btn-action hud-program-run-btn" text="▶" tooltip="hud.tooltip.program_start" picking-mode="Position" />
 
-        <!-- ════════════ КНОПКИ ВЕРХНЕГО РЯДА: РЕСПАВН / ЗДАНИЯ / FAQ ════════════ -->
-        <ui:Button name="RespawnButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--respawn" text="hud.respawn" picking-mode="Position" />
-        <ui:Button name="BuildingsButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--buildings" text="hud.buildings" picking-mode="Position" />
-        <ui:Button name="FaqButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--faq" text="FAQ" picking-mode="Position" />
+        <!-- ════════════ КНОПКИ ВЕРХНЕГО РЯДА: FAQ / ЗДАНИЯ / РЕСПАВН ════════════ -->
+        <!-- Порядок от правого верхнего угла влево: Помощь, Мои здания, Респаун.
+             Размер 32x32 и спрайты заданы в HUD.uss, классами hud-btn-top-row, текста нет. -->
+        <ui:Button name="FaqButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--faq" picking-mode="Position" />
+        <ui:Button name="BuildingsButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--buildings" picking-mode="Position" />
+        <ui:Button name="RespawnButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--respawn" picking-mode="Position" />
 
         <!-- ════════════ НАВЫКИ И ПРОГРЕСС (справа снизу) ════════════ -->
         <ui:VisualElement name="SkillContainer" class="hud-skill-container" />
