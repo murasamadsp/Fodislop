@@ -6,7 +6,6 @@ using Cysharp.Threading.Tasks;
 using Kern.Core.Interfaces;
 using Kern.World;
 using Kern.World.Terrain;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
@@ -58,8 +57,7 @@ public sealed class TerrainTestWorld
         set => _textures.RoadTextureReady = value;
     }
 
-    // Порода с полостями из хеша координаты: те же клетки, что у соседних
-    // тестов заливки фона, чтобы один и тот же мир читался узнаваемо.
+    // Порода с полостями из хеша координаты.
     public static CellType CellAt(int worldX, int serverY)
     {
         if ((uint)worldX >= WorldWidth || (uint)serverY >= WorldHeight)
@@ -82,31 +80,21 @@ public sealed class TerrainTestWorld
     }
 
     // Собранный вход сборки клеток для окна (minX, minY) размера w×h:
-    // кэш, предрасчёт и заливка фона уже посчитаны, как в LateUpdate.
+    // кэш уже заполнен, как в LateUpdate.
     public TerrainCellSources BuildSources(
         TerrainCellCache cache,
-        TerrainPrecalculator precalc,
-        BackgroundFloodFill floodFill,
+        TerrainDistortionSettings distortion,
         int minX,
         int minY,
         int width,
         int height)
     {
         cache.EnsureCapacity(width, height);
-        precalc.EnsureCapacity(width, height);
-        floodFill.Allocate(width, height);
-
         cache.PopulateFull(minX, minY, _storage, _mapData, _textures, _atlases);
-        precalc.PrecalculateFull(new TerrainPrecalculationInput(
-            cache,
-            new Vector2Int(width, height),
-            new Vector2Int(WorldWidth, WorldHeight)));
-        floodFill.ComputeFull(cache);
 
         return new TerrainCellSources(
             cache,
-            precalc,
-            floodFill,
+            distortion,
             WorldWidth,
             WorldHeight,
             _atlases);
@@ -152,7 +140,7 @@ public sealed class TerrainTestWorld
                 CellType.BuildingWall or CellType.BuildingDoor => CellDistortionType.Block,
                 _ => CellDistortionType.Neutral,
             };
-            byte reliefGroup = type switch
+            byte rimMass = type switch
             {
                 CellType.Rock => 1,
                 CellType.RedRock => 4,
@@ -165,20 +153,23 @@ public sealed class TerrainTestWorld
                 AnimationSpeed: 0,
                 FrameOffset: 0,
                 Color: unchecked((int)0xFF204060),
-                reliefGroup);
+                rimMass);
         }
 
         public float GetMoveCooldown(CellType cellType) => 0f;
 
-        public bool TryGetTileGroup(CellType type, out int groupID)
+
+        public float GetMinMoveCooldown() => 0f;
+
+        public bool TryGetTileGroup(CellType type, out int groupId)
         {
             if (type == CellType.Rock)
             {
-                groupID = 1;
+                groupId = 1;
                 return true;
             }
 
-            groupID = 0;
+            groupId = 0;
             return false;
         }
 
@@ -212,7 +203,7 @@ public sealed class TerrainTestWorld
         public Texture2D? FlowMapTexture => null;
 
         public Texture2D? TerrainDecalAtlasTexture => null;
-        public Texture2D? TerrainDecalStoneAtlasTexture => null;
+        public Texture2D? TerrainDecalRockAtlasTexture => null;
 
         public void RequestTexture(CellType cellType)
         {
@@ -240,9 +231,6 @@ public sealed class TerrainTestWorld
 
         public int GetAnimationFrameCount(CellType cellType) => 1;
 
-        public int GetFrameSize(CellType cellType) => 32;
-
-        public float GetAnimationSpeedForCell(CellType cellType) => 0f;
 
         public UniTask<AtlasCoordinate> GetCellTextureCoordinate(
             CellType cellType,
@@ -325,6 +313,14 @@ public sealed class TerrainTestWorld
         {
         }
 #endif
+
+        public void BeginRegionBatch()
+        {
+        }
+
+        public void EndRegionBatch()
+        {
+        }
     }
 
     private sealed class FakeLayer : IWorldLayer<CellType>
@@ -370,7 +366,7 @@ public sealed class TerrainTestWorld
             return true;
         }
 
-        public ChunkReadResult<CellType> ReadChunk(int chunkIndex, bool touchLru = true)
+        public ChunkReadResult<CellType> ReadChunk(int chunkIndex, bool touchLRU = true)
         {
             if (chunkIndex < 0)
             {
@@ -398,9 +394,9 @@ public sealed class TerrainTestWorld
             return new ChunkReadResult<CellType>(ChunkReadStatus.Available, chunk, null);
         }
 
-        public CellType GetCell(int x, int y, bool touchLru = true) => CellAt(x, y);
+        public CellType GetCell(int x, int y, bool touchLRU = true) => CellAt(x, y);
 
-        public CellType GetCellSync(int x, int y, bool touchLru = true) => CellAt(x, y);
+        public CellType GetCellSync(int x, int y, bool touchLRU = true) => CellAt(x, y);
 
         public bool TryGetCell(int x, int y, out CellType value)
         {
@@ -408,8 +404,8 @@ public sealed class TerrainTestWorld
             return value != CellType.Unloaded;
         }
 
-        public CellType[] GetOrCreateChunk(int chunkIndex, bool touchLru = true) =>
-            ReadChunk(chunkIndex, touchLru).Data!;
+        public CellType[] GetOrCreateChunk(int chunkIndex, bool touchLRU = true) =>
+            ReadChunk(chunkIndex, touchLRU).Data!;
 
         public IEnumerable<int> GetLoadedChunkIndices() => _chunks.Keys;
 

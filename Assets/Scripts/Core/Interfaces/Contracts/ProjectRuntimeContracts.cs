@@ -46,7 +46,7 @@ public static class ProjectRuntimeContracts
 
     public static class Authentication
     {
-        public const string VKClientID = "";
+        public const string VKClientId = "";
         public const string VKBackendURL = "";
     }
 
@@ -91,12 +91,21 @@ public static class ProjectRuntimeContracts
         public const int LargeAssetRequestTimeoutSeconds = 10;
         public const long AssetCacheCapacityBytes = 256L * 1024 * 1024;
         public const long DecodedAssetCacheCapacityBytes = 256L * 1024 * 1024;
+
+        // Картинки приходят от сервера и по ссылкам из его окон. Крупнейшая своя
+        // картинка — 2496 по стороне, крупнейший ассет сервера — PNG 320×320
+        // на 270 КБ. Без пределов ответ на гигабайт держался бы в памяти
+        // целиком, а PNG 16384×16384 весом в килобайты распаковывался бы в
+        // гигабайт RGBA.
+        public const int MaximumWebAssetBytes = 16 * 1024 * 1024;
+        public const int MaximumEncodedImageSide = 4096;
     }
 
     public static class ResourcePaths
     {
         public const string PrismaticFlowMap = "PrismaticFlowMap";
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";
+        public const string WorldMapCompute = "Shaders/UI/WorldMap";
         public const string PostProcessCompute = "Shaders/PostProcessing/PostProcess";
         public const string ScopesCompute = "Shaders/PostProcessing/Scopes";
 
@@ -195,5 +204,10 @@ public static class ProjectRuntimeContracts
         public const int MaximumPacketBatchPerFrame = 250;
         public const int MaximumQueuedPacketCount = 4096;
         public const long MaximumQueuedPacketBytes = 16L * 1024 * 1024;
+
+        // Роботов создаёт поток пакетов сервера: каждый новый botId — объект
+        // на сцене. Предел с большим запасом над видимой толпой не даёт
+        // потоку уникальных id исчерпать память за окно до удаления устаревших.
+        public const int MaximumRobots = 2048;
     }
 }

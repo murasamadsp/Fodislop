@@ -85,36 +85,36 @@ internal sealed class PauseMenuAdvancedTabBuilder
             8f,
             _refreshers));
         worldMaterialsSection.Add(PauseMenuUIFactory.CreateBoundSlider<TerrainSettings>(
-            nameof(TerrainSettings.PulseSpeedScale),
+            nameof(TerrainSettings.BlinkingSpeedScale),
             _loc,
-            () => _clientConfig.Config.Terrain.PulseSpeedScale,
-            value => SaveShaderSetting(config => config.Terrain.PulseSpeedScale = value),
+            () => _clientConfig.Config.Terrain.BlinkingSpeedScale,
+            value => SaveShaderSetting(config => config.Terrain.BlinkingSpeedScale = value),
             _refreshers));
         worldMaterialsSection.Add(PauseMenuUIFactory.CreateBoundSlider<TerrainSettings>(
-            nameof(TerrainSettings.TransitEmissionStrength),
+            nameof(TerrainSettings.TransitGlowStrength),
             _loc,
-            () => _clientConfig.Config.Terrain.TransitEmissionStrength,
-            value => SaveShaderSetting(config => config.Terrain.TransitEmissionStrength = value),
+            () => _clientConfig.Config.Terrain.TransitGlowStrength,
+            value => SaveShaderSetting(config => config.Terrain.TransitGlowStrength = value),
             _refreshers));
         worldMaterialsSection.Add(PauseMenuUIFactory.CreateBoundColorControls(
-            _loc.Get("settings.world.surface_emission_color"),
-            () => _clientConfig.Config.Terrain.TransitEmissionColor,
-            value => SaveShaderSetting(config => config.Terrain.TransitEmissionColor = value),
+            _loc.Get("settings.world.surface_glow_color"),
+            () => _clientConfig.Config.Terrain.TransitGlowColor,
+            value => SaveShaderSetting(config => config.Terrain.TransitGlowColor = value),
             0f,
             8f,
             _refreshers));
         worldMaterialsSection.Add(PauseMenuUIFactory.CreateBoundSlider<TerrainSettings>(
-            nameof(TerrainSettings.PerspectiveEmissionStrength),
+            nameof(TerrainSettings.PerspectiveGlowStrength),
             _loc,
-            () => _clientConfig.Config.Terrain.PerspectiveEmissionStrength,
+            () => _clientConfig.Config.Terrain.PerspectiveGlowStrength,
             value => SaveShaderSetting(
-                config => config.Terrain.PerspectiveEmissionStrength = value),
+                config => config.Terrain.PerspectiveGlowStrength = value),
             _refreshers));
         worldMaterialsSection.Add(PauseMenuUIFactory.CreateBoundColorControls(
             _loc.Get("settings.world.far_surface_color"),
-            () => _clientConfig.Config.Terrain.PerspectiveEmissionColor,
+            () => _clientConfig.Config.Terrain.PerspectiveGlowColor,
             value => SaveShaderSetting(
-                config => config.Terrain.PerspectiveEmissionColor = value),
+                config => config.Terrain.PerspectiveGlowColor = value),
             0f,
             8f,
             _refreshers));

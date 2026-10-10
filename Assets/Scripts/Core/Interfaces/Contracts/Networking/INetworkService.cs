@@ -11,6 +11,9 @@ public interface INetworkService
     event Action? PacketBatchStarted;
     event Action? PacketBatchCompleted;
 
+    void BeginBatch();
+    void EndBatch();
+
     void Subscribe<T>(Action<T> handler);
     void Unsubscribe<T>(Action<T> handler);
     void SendAction(IActionClientPacket action);

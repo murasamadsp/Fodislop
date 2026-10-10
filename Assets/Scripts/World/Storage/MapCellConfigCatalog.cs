@@ -17,20 +17,6 @@ public sealed class MapCellConfigCatalog
     private readonly Dictionary<CellType, int> _cellToTileGroup = new();
     private readonly Dictionary<CellType, ushort> _cellMoveSpeeds = new();
 
-    public static CellVisualProperties GetVisualProperties(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type);
-
-    // Совместимый фасад для старых статических потребителей. Новые системы
-    // должны получать профиль через MapCellConfigCatalog и не знать legacy-таблицу.
-    public static bool IsRoundableLoose(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).IsRoundableLoose;
-
-    public static bool IsRoad(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).IsRoad;
-
-    public static bool IsContinuousSheet(CellType type) =>
-        CellVisualProtocolRegistry.Current.Get(type).IsContinuousSheet;
-
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {
         ValidateCellConfigurations(configurations);
@@ -47,9 +33,9 @@ public sealed class MapCellConfigCatalog
                     continue;
                 }
 
-                foreach (byte cellID in tileGroups[i])
+                foreach (byte cellId in tileGroups[i])
                 {
-                    _cellToTileGroup[(CellType)cellID] = i;
+                    _cellToTileGroup[(CellType)cellId] = i;
                 }
             }
         }
@@ -66,6 +52,25 @@ public sealed class MapCellConfigCatalog
         {
             _cellMoveSpeeds[entry.Key] = entry.Value;
         }
+    }
+
+    public float GetMinMoveCooldown()
+    {
+        int min = int.MaxValue;
+        foreach (ushort speed in _cellMoveSpeeds.Values)
+        {
+            if (speed > 0 && speed < min)
+            {
+                min = speed;
+            }
+        }
+
+        if (min == int.MaxValue)
+        {
+            throw new InvalidOperationException("Movement cooldowns were not received from the server.");
+        }
+
+        return min / 1000f;
     }
 
     public float GetMoveCooldown(CellType cellType)
@@ -102,14 +107,14 @@ public sealed class MapCellConfigCatalog
         return _cellConfigurations[(int)type];
     }
 
-    public bool TryGetTileGroup(CellType type, out int groupID)
+    public bool TryGetTileGroup(CellType type, out int groupId)
     {
-        return _cellToTileGroup.TryGetValue(type, out groupID);
+        return _cellToTileGroup.TryGetValue(type, out groupId);
     }
 
     /// <summary>
     /// Разрешает цвет клетки для мини-карты, большой карты и fallback-текстуры
-    /// рельефа.
+    /// террейна.
     ///
     /// Палитра клиента — источник правды. Сервер цвета не присылает: в
     /// <c>CellConfigurationPacket.Color</c> он кладёт <c>0xFFFFFFFF</c> для всех
@@ -155,18 +160,6 @@ public sealed class MapCellConfigCatalog
     {
         var config = GetCellConfig(cellType);
         return (int)config.FrameOffset * RenderingConstants.CELL_SIZE;
-    }
-
-    public byte GetAnimationSpeed(CellType cellType)
-    {
-        var config = GetCellConfig(cellType);
-        return config.AnimationSpeed;
-    }
-
-    public bool HasAnimation(CellType cellType)
-    {
-        var config = GetCellConfig(cellType);
-        return config.Animation != CellAnimationType.None;
     }
 
     public void Reset()

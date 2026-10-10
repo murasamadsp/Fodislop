@@ -10,21 +10,29 @@ namespace MinesServer.Networking.Connection.Client;
 
 internal static class DummyBuildHandler
 {
-    public static void TryBuild(IWorldLayer<CellType>? worldLayer, Func<ushort, ushort, CellType> getCell, Action<ushort, ushort, CellType> setCell, Action<ServerPacket> sendPacket, ushort x, ushort y, CellType placeType)
+    public static bool TryBuild(
+        IWorldLayer<CellType>? worldLayer,
+        Func<ushort, ushort, CellType> getCell,
+        Action<ushort, ushort, CellType> setCell,
+        Action<ServerPacket> sendPacket,
+        ushort x,
+        ushort y,
+        CellType placeType)
     {
         if (worldLayer == null)
         {
-            return;
+            return false;
         }
 
         CellType current = getCell(x, y);
         if (current != CellType.Empty && current != CellType.Road)
         {
-            return;
+            return false;
         }
 
         setCell(x, y, placeType);
         sendPacket(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { placeType }) })));
+        return true;
     }
 
     public static void TryUpgradeBuild(IWorldLayer<CellType>? worldLayer, Func<ushort, ushort, CellType> getCell, Action<ushort, ushort, CellType> setCell, Action<ServerPacket> sendPacket, ushort x, ushort y, params (CellType From, CellType To)[] upgrades)

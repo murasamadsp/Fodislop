@@ -58,6 +58,8 @@ namespace Kern.Networking
             if (_subscribedConnection != null)
             {
                 _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+                _subscribedConnection.OnPacketBatchStarted -= BeginBatch;
+                _subscribedConnection.OnPacketBatchCompleted -= EndBatch;
                 _subscribedConnection = null;
             }
 
@@ -73,6 +75,10 @@ namespace Kern.Networking
             // describes a dead connection event source.
             _connectionService.OnPacketReceived -= OnPacketReceived;
             _connectionService.OnPacketReceived += OnPacketReceived;
+            _connectionService.OnPacketBatchStarted -= BeginBatch;
+            _connectionService.OnPacketBatchStarted += BeginBatch;
+            _connectionService.OnPacketBatchCompleted -= EndBatch;
+            _connectionService.OnPacketBatchCompleted += EndBatch;
             _subscribedConnection = _connectionService;
             _connectionSubscribed = true;
             lock (_subscribersLock)
@@ -90,8 +96,11 @@ namespace Kern.Networking
             }
 
             _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+            _subscribedConnection.OnPacketBatchStarted -= BeginBatch;
+            _subscribedConnection.OnPacketBatchCompleted -= EndBatch;
             _subscribedConnection = null;
             _connectionSubscribed = false;
+            _batchDepth = 0;
         }
 
         public bool IsConnected
@@ -220,7 +229,7 @@ namespace Kern.Networking
 
             if (payload is HBPacket hbPacket && hbPacket.Payload != null)
             {
-                PacketBatchStarted?.Invoke();
+                BeginBatch();
                 // Размер пачки считается перебором, а не свойством длины:
                 // тип полезной нагрузки задан протоколом, и обращаться к его
                 // внутреннему устройству ради одного числа значит привязать
@@ -236,7 +245,7 @@ namespace Kern.Networking
                 }
                 finally
                 {
-                    PacketBatchCompleted?.Invoke();
+                    EndBatch();
                 }
 
                 PacketTelemetry.RecordBatch(batched);
@@ -247,8 +256,34 @@ namespace Kern.Networking
             }
         }
 
+        private int _batchDepth;
+
         public event Action? PacketBatchStarted;
         public event Action? PacketBatchCompleted;
+
+        public void BeginBatch()
+        {
+            if (_batchDepth == 0)
+            {
+                PacketBatchStarted?.Invoke();
+            }
+
+            _batchDepth++;
+        }
+
+        public void EndBatch()
+        {
+            if (_batchDepth <= 0)
+            {
+                return;
+            }
+
+            _batchDepth--;
+            if (_batchDepth == 0)
+            {
+                PacketBatchCompleted?.Invoke();
+            }
+        }
 
         private void Dispatch(object packet)
         {
@@ -315,14 +350,14 @@ namespace Kern.Networking
 
         // Одна запись учёта аллокаций на тип пакета; строка имени строится один
         // раз на тип, а не на пакет.
-        private static readonly Dictionary<Type, Kern.Core.Interfaces.Diagnostics.AllocationLedger.Entry> _PacketAllocationEntries = new();
+        private static readonly Dictionary<Type, Kern.Core.Interfaces.Diagnostics.AllocationLedger.Entry> s_packetAllocationEntries = new();
 
         private static Kern.Core.Interfaces.Diagnostics.AllocationLedger.Entry PacketAllocationEntry(Type packetType)
         {
-            if (!_PacketAllocationEntries.TryGetValue(packetType, out var entry))
+            if (!s_packetAllocationEntries.TryGetValue(packetType, out var entry))
             {
                 entry = Kern.Core.Interfaces.Diagnostics.AllocationLedger.Register("Пакет · " + packetType.Name);
-                _PacketAllocationEntries[packetType] = entry;
+                s_packetAllocationEntries[packetType] = entry;
             }
 
             return entry;

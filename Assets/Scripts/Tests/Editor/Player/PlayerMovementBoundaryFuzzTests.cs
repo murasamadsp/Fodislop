@@ -69,12 +69,13 @@ public class PlayerMovementBoundaryFuzzTests
     }
 
     [Test]
-    public void IsPassable_Empty_True()
+    public void IsPassable_EmptyWithoutPassableFlag_False()
     {
+        // Проходимость решает флаг сервера, у Empty исключения нет.
         bool p = PlayerMovementValidator.IsPassable(
             CellType.Empty,
             new CellConfigurationPacket(CellConfigProperties.None, CellDistortionType.Neutral, CellAnimationType.None, 0, 0, 0, 0));
-        Assert.IsTrue(p);
+        Assert.IsFalse(p);
     }
 
     [Test]

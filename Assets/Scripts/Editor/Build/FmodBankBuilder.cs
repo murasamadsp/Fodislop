@@ -14,11 +14,11 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
 {
     private const string FmodSourceBuildPath = "KernAudio/Build/Desktop";
     private const string StreamingAssetsAudioPath = "Assets/StreamingAssets/Audio";
-    private static readonly string[] _requiredBanks = ["Master.bank", "Master.strings.bank"];
+    private static readonly string[] s_requiredBanks = ["Master.bank", "Master.strings.bank"];
 
     public int callbackOrder => 0;
 
-    public void OnPreprocessBuild(BuildReport report) => SyncBanksForBuild();
+    public void OnPreprocessBuild(BuildReport report) => SyncBanksCore(throwOnFailure: true);
 
     [MenuItem("Kern/Audio/Sync FMOD Banks")]
     public static void SyncBanks()
@@ -32,8 +32,6 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             Debug.LogError($"[FmodBankBuilder] {ex.Message}");
         }
     }
-
-    private static void SyncBanksForBuild() => SyncBanksCore(throwOnFailure: true);
 
     private static void SyncBanksCore(bool throwOnFailure)
     {
@@ -88,7 +86,7 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
         if (!RequiredBanksExist(targetDir))
         {
             Fail(throwOnFailure,
-                $"Required FMOD banks are missing from '{targetDir}'. Expected: {string.Join(", ", _requiredBanks)}.");
+                $"Required FMOD banks are missing from '{targetDir}'. Expected: {string.Join(", ", s_requiredBanks)}.");
             return;
         }
 
@@ -98,7 +96,7 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
 
     private static bool RequiredBanksExist(string directory)
     {
-        foreach (string bank in _requiredBanks)
+        foreach (string bank in s_requiredBanks)
         {
             if (!File.Exists(Path.Combine(directory, bank)))
             {
@@ -124,18 +122,29 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             return false;
         }
 
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        bool macCommandLine = fmodCliPath.EndsWith(".app/Contents/MacOS/fmodstudio", StringComparison.Ordinal);
+        string arguments = macCommandLine
+            ? $"-working-dir \"{projectRoot}\" -build -ignore-warnings \"{fsproPath}\""
+            : $"-build -ignore-warnings \"{fsproPath}\"";
+
         try
         {
-            Log($"Invoking FMOD Studio CLI compiler: '{fmodCliPath}' -build -ignore-warnings \"{fsproPath}\"...");
+            Log($"Invoking FMOD Studio CLI compiler: '{fmodCliPath}' {arguments}...");
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = fmodCliPath,
-                Arguments = $"-build -ignore-warnings \"{fsproPath}\"",
+                Arguments = arguments,
+                WorkingDirectory = projectRoot,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
             };
+            if (macCommandLine)
+            {
+                psi.EnvironmentVariables["FMODSTUDIOCMDLINE"] = "1";
+            }
 
             using var process = System.Diagnostics.Process.Start(psi) ??
                 throw new BuildFailedException("FMOD Studio CLI could not be started.");
@@ -155,29 +164,27 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             Task.WhenAll(standardOutputTask, standardErrorTask).GetAwaiter().GetResult();
             if (process.ExitCode != 0)
             {
-                string error = standardErrorTask.Result;
+                string details = standardErrorTask.Result + standardOutputTask.Result;
                 throw new BuildFailedException(
-                    $"FMOD Studio CLI build failed with exit code {process.ExitCode}: {error}");
+                    $"FMOD Studio CLI build failed with exit code {process.ExitCode}: {details}");
             }
 
             Log("FMOD Studio CLI build completed successfully.");
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not BuildFailedException)
         {
-            if (ex is BuildFailedException)
-            {
-                throw;
-            }
-
             throw new BuildFailedException($"Could not run FMOD Studio CLI compiler: {ex.Message}");
         }
     }
 
     private static string? ResolveFmodStudioCliPath()
     {
-        // macOS default installation path
-        const string macos = "/Applications/FMOD Studio.app/Contents/MacOS/fmodstudiocl";
+        // macOS fmodstudiocl is only a shell wrapper: it relaunches the app
+        // through `open -W ... --stdout $(tty)`, so it fails whenever the
+        // caller has no controlling terminal — which is every Unity build.
+        // Run the real binary in command-line mode instead.
+        const string macos = "/Applications/FMOD Studio.app/Contents/MacOS/fmodstudio";
 
         // Windows default installation path (64-bit)
         const string windows = @"C:\Program Files (x86)\FMOD SoundSystem\FMOD Studio\fmodstudiocl.exe";

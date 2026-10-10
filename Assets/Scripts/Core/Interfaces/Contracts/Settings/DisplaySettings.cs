@@ -2,6 +2,7 @@
 
 using System;
 using Kern.Rendering.PostProcessing;
+using UnityEngine.Serialization;
 
 namespace Kern.Core;
 
@@ -50,7 +51,7 @@ public sealed class DisplaySettings
 
     [SettingUnbounded("Тумблер HDR-вывода.")]
     [SettingLabel("menu.settings.hdr")]
-    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetHDREnabled / HDROutput")]
+    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetHDREnabled / HdrOutput")]
     public bool HDREnabled = ProjectRuntimeContracts.ClientConfiguration.DefaultHDREnabled;
 
     // Безопасный старт. Ставится перед переключением режима вывода и
@@ -61,6 +62,7 @@ public sealed class DisplaySettings
     // в рабочую картинку, а не в чёрный экран по кругу.
     [SettingUnbounded("Метка незавершённого переключения режима вывода.")]
     [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetHDREnabled / DisplayManager.ApplyInitialSettings")]
+    [FormerlySerializedAs("HdrSwitchPending")]
     public bool HDRSwitchPending;
 
     // −1 означает «без ограничения». Отрезком это не выражается.
@@ -81,4 +83,10 @@ public sealed class DisplaySettings
     [SettingLabel("settings.display.peak_brightness")]
     [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPeakBrightnessNits / PostProcessRuntimeState.SetDisplayCalibration")]
     public float PeakBrightnessNits = DefaultPeakBrightness;
+
+    // Пиковую яркость сообщает сам дисплей, пока человек не сдвинул ползунок:
+    // авторская 1300 у XDR-экрана занижает пики, у HDR400-монитора завышает.
+    [SettingUnbounded("Признак: пиковая яркость берётся с дисплея.")]
+    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPeakBrightnessNits / HDROutput.AutoDetectDisplayCapabilities")]
+    public bool PeakBrightnessFromDisplay = true;
 }

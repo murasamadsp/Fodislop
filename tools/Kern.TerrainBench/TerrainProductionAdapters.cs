@@ -1,7 +1,6 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 
 namespace Kern.World.Terrain;
@@ -15,8 +14,7 @@ public interface ITerrainMetadataLookup
 // interfaces and asset-backed atlas implementations out of the benchmark.
 public readonly record struct TerrainCellSources(
     ITerrainCellDataSource CellCache,
-    TerrainPrecalculator Precalc,
-    BackgroundFloodFill FloodFill,
+    TerrainDistortionSettings Distortion,
     int WorldWidth,
     int WorldHeight,
     IReadOnlyList<Kern.Core.Interfaces.IAtlasDescriptor> Atlases,
@@ -40,15 +38,11 @@ public sealed class BenchTerrainMetadataLookup : ITerrainMetadataLookup
         {
             metadata[index] = new CellMetadata
             {
-                Properties = 0,
                 HasTileGroup = index % 5 == 0,
-                TileGroupID = index % 4,
-                MinimapColor = new UnityEngine.Color32(128, 128, 128, 255),
+                TileGroupId = index % 4,
                 AtlasRect = new UnityEngine.Vector4(0f, 0f, 0.0625f, 0.0625f),
                 AtlasIndex = 0,
-                UVTileSize = 1f / 1024f,
                 AnimationFrameCount = 1,
-                FrameHeightTiles = 1f,
                 IsTextureReady = true,
                 IsPopulated = true,
             };

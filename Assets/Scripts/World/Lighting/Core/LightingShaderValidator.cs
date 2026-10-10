@@ -22,7 +22,12 @@ internal static class LightingShaderValidator
         int ResolveTransmissionDebugKernel,
         int CompositeLightingKernel,
         int BuildCellSolidMaskKernel,
-        int BuildSurfaceAirCacheKernel);
+        int BuildSurfaceAirCacheKernel,
+        int TraceDynamicPolarBatchKernel,
+        int SolveDynamicLightingBatchKernel,
+        int SeedDynamicDistanceFieldKernel,
+        int JumpFloodDynamicDistanceFieldKernel,
+        int ResolveDynamicDistanceFieldKernel);
 
     public static LoadedLightingCompute LoadComputeShader()
     {
@@ -62,7 +67,12 @@ internal static class LightingShaderValidator
             resolveTransmissionDebugKernel,
             compositeLightingKernel,
             buildCellSolidMaskKernel,
-            buildSurfaceAirCacheKernel);
+            buildSurfaceAirCacheKernel,
+            FindAndValidateKernel(compute, "TraceDynamicPolarBatch"),
+            FindAndValidateKernel(compute, "SolveDynamicLightingBatch"),
+            FindAndValidateKernel(compute, "SeedDynamicDistanceField"),
+            FindAndValidateKernel(compute, "JumpFloodDynamicDistanceField"),
+            FindAndValidateKernel(compute, "ResolveDynamicDistanceField"));
     }
 
     private static int FindAndValidateKernel(ComputeShader compute, string kernelName)
@@ -83,7 +93,7 @@ internal static class LightingShaderValidator
         return kernelIndex;
     }
 
-    public static void ValidateGpuRequirements()
+    public static void ValidateGPURequirements()
     {
         if (SystemInfo.supportedRenderTargetCount < 2 ||
             !SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGB32) ||

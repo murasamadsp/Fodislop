@@ -48,7 +48,7 @@ description: >-
 ## Architectural constraints
 
 - Do not add "quality step budget" or frame skipping to DDA — walls must be accurate.
-- Static/dynamic split is preserved: cascades are cached until terrain/emission changes; dynamic light is solved per-frame.
+- Static/dynamic split is preserved: cascades are cached until terrain/glow changes; dynamic light is solved per-frame.
 
 ## Research materials
 

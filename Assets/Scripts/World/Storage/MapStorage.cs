@@ -51,21 +51,56 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         _openMapFile = openMapFile ?? WorldLayer<CellType>.OpenMapFile;
     }
 
-    private string _DataRoot => _dataRoot ?? Application.persistentDataPath;
+    private string DataRoot => _dataRoot ?? Application.persistentDataPath;
 
     private bool _isInitialized;
+    private bool _disposeAsyncInProgress;
     private string _worldCodeName = string.Empty;
     private int _worldWidth;
     private int _worldHeight;
     private readonly MapStorageRegionBatcher _regionBatcher = new();
 
-    public IWorldLayer<CellType>? CellLayer => _cellLayer;
+    public IWorldLayer<CellType>? CellLayer => _isInitialized ? _cellLayer : null;
 
     public string MapFilePath => _mapFilePath ?? throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
 
     public string BackupMapFilePath => _isInitialized
-        ? Path.Combine(_DataRoot, _worldCodeName + BackupMapSuffix)
+        ? Path.Combine(DataRoot, _worldCodeName + BackupMapSuffix)
         : throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
+
+    public static async UniTask PrepareWorldCacheAsync(
+        string worldCodeName,
+        int widthChunks,
+        int heightChunks,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(worldCodeName))
+        {
+            throw new ArgumentException("World code name is required.", nameof(worldCodeName));
+        }
+
+        if (widthChunks <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(widthChunks));
+        }
+
+        if (heightChunks <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(heightChunks));
+        }
+
+        string safeWorldCodeName = MapStorageDiskWriter.SanitizeWorldCodeName(worldCodeName);
+        string mapPath = Path.Combine(Application.persistentDataPath, safeWorldCodeName + MapExtension);
+        string backupPath = Path.Combine(Application.persistentDataPath, safeWorldCodeName + BackupMapSuffix);
+        await MapStorageDiskWriter.PrepareWorldLayerFileAsync(
+            mapPath,
+            widthChunks,
+            heightChunks,
+            ProjectRuntimeContracts.World.ChunkSize,
+            backupPath,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
 
     public bool IsReady => _isInitialized && _cellLayer != null;
     public bool HasDirtyChunks => _cellLayer?.HasDirtyChunks == true;
@@ -77,9 +112,27 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
     public event Action<int, int>? CellChanged;
     public event Action<int, int, int, int>? RegionChanged;
 
-    public void BeginRegionBatch() => _regionBatcher.BeginBatch(_cellLayer);
+    public void BeginRegionBatch()
+    {
+        _regionBatcher.BeginBatch();
+        if (_regionBatcher.Depth == 1)
+        {
+            _cellLayer?.BeginChunkLoadBatch();
+        }
+    }
 
-    public void EndRegionBatch() => _regionBatcher.EndBatch(_cellLayer, RegionChanged);
+    public void EndRegionBatch()
+    {
+        _regionBatcher.EndBatch();
+        if (_regionBatcher.Depth == 0)
+        {
+            _cellLayer?.EndChunkLoadBatch();
+            if (_cellLayer != null && _regionBatcher.TryConsumeDirtyRegion(out int x, out int y, out int w, out int h))
+            {
+                RegionChanged?.Invoke(x, y, w, h);
+            }
+        }
+    }
 
     public void EnsureEditorInitialized()
     {
@@ -125,8 +178,8 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             throw new ArgumentOutOfRangeException($"[MapStorage] Invalid chunk calculation: {widthChunks}x{heightChunks}");
         }
 
-        string path = Path.Combine(_DataRoot, worldCodeName + MapExtension);
-        string backupPath = Path.Combine(_DataRoot, worldCodeName + BackupMapSuffix);
+        string path = Path.Combine(DataRoot, worldCodeName + MapExtension);
+        string backupPath = Path.Combine(DataRoot, worldCodeName + BackupMapSuffix);
         try
         {
             _cellLayer = MapStorageDiskWriter.OpenWorldLayer(
@@ -136,6 +189,11 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 _operations,
                 _openMapFile,
                 backupPath);
+            if (_regionBatcher.Depth > 0)
+            {
+                _cellLayer.BeginChunkLoadBatch();
+            }
+
             _mapFilePath = path;
             _isInitialized = true;
             IsDisposed = false;
@@ -168,7 +226,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 $"Cell coordinate ({x}, {y}) is outside the world bounds {_worldWidth}x{_worldHeight}.");
         }
 
-        return _cellLayer.GetCell(x, y, touchLru: true);
+        return _cellLayer.GetCell(x, y, touchLRU: true);
     }
 
     public bool TryGetCell(int x, int y, out CellType cellType)
@@ -407,14 +465,22 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
 
     public void Dispose()
     {
-        _persistenceGate.Run(DisposeCore);
+        _persistenceGate.Run(() =>
+        {
+            if (_disposeAsyncInProgress)
+            {
+                throw new InvalidOperationException(
+                    "[MapStorage] Synchronous dispose cannot run while asynchronous dispose is in progress.");
+            }
+
+            DisposeCore();
+        });
     }
 
     public async UniTask DisposeAsync(CancellationToken cancellationToken = default)
     {
         WorldLayer<CellType>? writtenLayer = null;
         List<(int Index, CellType[] Chunk)>? writtenSnapshot = null;
-        bool disposed = false;
         try
         {
             await _persistenceGate.RunAsync(
@@ -422,14 +488,24 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                 {
                     // Тот же снимок, что во FlushAsync: WorldLayer.Dispose иначе
                     // перебирал бы грязные чанки в пуле потоков. Снимок снимается
-                    // на главном потоке, в пул уходят только его запись и закрытие
-                    // файла.
-                    WorldLayer<CellType>? layer = _isInitialized && !IsDisposed ? _cellLayer : null;
-                    var snapshot = layer?.TakeDirtySnapshot();
+                    // на главном потоке, в пул уходит только запись снимка; кэш
+                    // очищается после возврата сюда.
+                    WorldLayer<CellType>? layer =
+                        _isInitialized && !IsDisposed && !_disposeAsyncInProgress ? _cellLayer : null;
+                    var snapshot = layer?.TakeDirtySnapshot(includeDetachedSnapshots: true);
                     writtenLayer = layer;
                     writtenSnapshot = snapshot;
                     string? mapFilePath = layer != null ? MapFilePath : null;
                     string? backupMapFilePath = layer != null ? BackupMapFilePath : null;
+                    if (layer != null)
+                    {
+                        _disposeAsyncInProgress = true;
+                        _cellLayer = null;
+                        _isInitialized = false;
+                        IsDisposed = true;
+                        Revision++;
+                    }
+
                     return () =>
                     {
                         if (layer != null && snapshot != null)
@@ -441,23 +517,45 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
                                 mapFilePath: mapFilePath!,
                                 backupMapFilePath: backupMapFilePath!);
                         }
-
-                        disposed = true;
-                        DisposeCore();
                     };
                 },
                 cancellationToken);
         }
         catch
         {
-            // Запись не дошла до закрытия: слой жив, и его чанки обязаны
-            // остаться грязными, чтобы синхронный Dispose на выходе их записал.
-            if (!disposed && writtenLayer != null && writtenSnapshot != null)
+            if (writtenLayer != null && writtenSnapshot != null)
             {
                 writtenLayer.RestoreDirty(writtenSnapshot);
+                _cellLayer = writtenLayer;
+                _isInitialized = true;
+                IsDisposed = false;
+                _disposeAsyncInProgress = false;
+                Revision++;
             }
 
             throw;
+        }
+
+        if (writtenLayer != null && writtenSnapshot != null)
+        {
+            writtenLayer.CompleteDirty(writtenSnapshot);
+            try
+            {
+                _regionBatcher.Reset();
+                writtenLayer.DisposeAfterDurableSnapshot();
+            }
+            finally
+            {
+                _cellLayer = null;
+                _isInitialized = false;
+                _worldCodeName = string.Empty;
+                _worldWidth = 0;
+                _worldHeight = 0;
+                _mapFilePath = null;
+                IsDisposed = true;
+                _disposeAsyncInProgress = false;
+                Revision++;
+            }
         }
     }
 
@@ -466,6 +564,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         Exception? disposeFailure = null;
         try
         {
+            _regionBatcher.Reset();
             _cellLayer?.Dispose();
         }
         catch (Exception ex) when (

@@ -13,6 +13,7 @@ using Kern.Networking;
 using Kern.Networking.Auth;
 using Kern.Networking.Connection;
 using Kern.Rendering;
+using Kern.World;
 using MinesServer.Networking.Connection.Client;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -241,6 +242,24 @@ namespace Kern.Core
             {
                 ticket.Fail(ex);
                 _currentSceneName = previousScene?.name;
+                if (string.Equals(sceneName, ProjectRuntimeContracts.SceneNames.MainGame, StringComparison.Ordinal))
+                {
+                    // The connection and DummyConnection outlive the candidate
+                    // scene. If world initialization times out, keeping that
+                    // transport alive would make the next Connect() a no-op
+                    // after its WorldInit packet was already lost with this scope.
+                    try
+                    {
+                        _connectionManager.Disconnect();
+                    }
+                    catch (Exception disconnectException)
+                    {
+                        Debug.LogError(
+                            $"[Bootstrap] Failed to disconnect after '{sceneName}' transition failure: " +
+                            disconnectException);
+                    }
+                }
+
                 // LoadSceneAsync can finish loading the scene and then a later
                 // step (scene lookup, ticket attach, activation, or readiness)
                 // can fail before candidateScene is assigned. Recover the
@@ -382,6 +401,7 @@ namespace Kern.Core
             // identity providers do not route authentication through it.
             builder.Register<RealtimeDummyClock>(Lifetime.Singleton).As<IDummyClock>();
             builder.Register<DummyConnection>(Lifetime.Singleton).AsSelf().AsImplementedInterfaces();
+            builder.Register<ConnectionTransportFactory>(Lifetime.Singleton);
             builder.Register<DummyWorldMapSource>(Lifetime.Singleton);
             builder.RegisterEntryPoint<Kern.Networking.Connection.WorldEntryPreparation>()
                 .As<IWorldEntryPreparation>();
@@ -401,6 +421,7 @@ namespace Kern.Core
             builder.Register<WorldLoadProgress>(Lifetime.Singleton).As<IWorldLoadProgress>();
             builder.Register<WindowCommandStream>(Lifetime.Singleton);
             builder.Register<ItemRegistry>(Lifetime.Singleton).As<IItemCatalog>();
+            builder.RegisterInstance(BlockRegistry.Default).As<IBlockRegistry>();
 
             // The persistent application camera as a typed DI dependency.
             // RegisterComponent(applicationCamera) below exposes the Camera

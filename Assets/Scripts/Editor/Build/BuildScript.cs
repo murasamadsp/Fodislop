@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Kern.Core;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
@@ -14,12 +15,20 @@ public static class BuildScript
     private const string ProductName = "Kern";
     private const string DevArg = "-kernDev";
 
-    private static string[] _EnabledScenes =>
+    private static string[] EnabledScenes =>
         EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
 
     [MenuItem("Kern/Build/macOS (Apple Silicon)")]
     public static void BuildMacOS() =>
         BuildPlayerArtifact(BuildTarget.StandaloneOSX, $"Build/macOS/{ProductName}.app", isApple: true);
+
+    [MenuItem("Kern/Build/macOS (Apple Silicon, development)")]
+    public static void BuildMacOSDevelopment() =>
+        BuildPlayerArtifact(
+            BuildTarget.StandaloneOSX,
+            $"Build/macOS-Development/{ProductName}.app",
+            isApple: true,
+            development: true);
 
     // Сборка для замеров: профайлер подключён, маркеры и счётчики живые.
     // AllowDebugging не ставится — отладочный код исказил бы сами замеры.
@@ -49,11 +58,12 @@ public static class BuildScript
         BuildTarget target,
         string relativeOutput,
         bool isApple = false,
-        bool profiling = false)
+        bool profiling = false,
+        bool development = false)
     {
         BuildSceneOrder.Validate();
 
-        var scenes = _EnabledScenes;
+        var scenes = EnabledScenes;
         if (scenes.Length == 0)
         {
             Fail("No enabled scenes in EditorBuildSettings — nothing to build.");
@@ -77,7 +87,8 @@ public static class BuildScript
             TrySetAppleSiliconArchitecture();
         }
 
-        bool development = Environment.GetCommandLineArgs().Contains(DevArg);
+        bool commandLineDevelopment = Environment.GetCommandLineArgs().Contains(DevArg);
+        bool isDevelopment = development || commandLineDevelopment;
 
         UnityEditor.Build.NamedBuildTarget namedTarget =
             UnityEditor.Build.NamedBuildTarget.FromBuildTargetGroup(
@@ -100,7 +111,7 @@ public static class BuildScript
         PlayerSettings.SetIl2CppCompilerConfiguration(
             namedTarget,
             profiling ? Il2CppCompilerConfiguration.Release
-            : development ? Il2CppCompilerConfiguration.Debug
+            : isDevelopment ? Il2CppCompilerConfiguration.Debug
             : Il2CppCompilerConfiguration.Master);
         PlayerSettings.SetIl2CppCodeGeneration(
             namedTarget,
@@ -111,23 +122,36 @@ public static class BuildScript
         // нет статических ссылок, и DI падает только в билде.
         PlayerSettings.SetManagedStrippingLevel(namedTarget, ManagedStrippingLevel.Minimal);
 
-        var options = new BuildPlayerOptions
+        // В редакторе useHDRDisplay следует выбору разработчика (HDROutput),
+        // а игрок стартует в режиме по умолчанию из контракта.
+        PlayerSettings.useHDRDisplay = ProjectRuntimeContracts.ClientConfiguration.DefaultHDREnabled;
+
+        BuildOptions buildOptions = BuildOptions.None;
+        if (profiling)
+        {
+            buildOptions = BuildOptions.Development | BuildOptions.ConnectWithProfiler;
+        }
+        else if (development)
+        {
+            buildOptions = BuildOptions.Development;
+        }
+        else if (commandLineDevelopment)
+        {
+            // ConnectWithProfiler — без него профайлер к билду не цепляется,
+            // хотя AllowDebugging создаёт впечатление, что всё включено.
+            buildOptions = BuildOptions.Development | BuildOptions.AllowDebugging | BuildOptions.ConnectWithProfiler;
+        }
+
+        var playerOptions = new BuildPlayerOptions
         {
             scenes = scenes,
             locationPathName = output,
             target = target,
-            options = profiling
-                ? BuildOptions.Development | BuildOptions.ConnectWithProfiler
-                : development
-                // ConnectWithProfiler — без него профайлер к билду не
-                // цепляется, хотя AllowDebugging создаёт впечатление, что
-                // всё включено.
-                ? BuildOptions.Development | BuildOptions.AllowDebugging | BuildOptions.ConnectWithProfiler
-                : BuildOptions.None,
+            options = buildOptions,
         };
 
-        Log($"Building {target} -> {output} (development={development}, profiling={profiling}, scenes={scenes.Length})");
-        BuildSummary summary = BuildPipeline.BuildPlayer(options).summary;
+        Log($"Building {target} -> {output} (development={isDevelopment}, profiling={profiling}, scenes={scenes.Length})");
+        BuildSummary summary = BuildPipeline.BuildPlayer(playerOptions).summary;
         Log($"Result={summary.result} size={summary.totalSize}B " +
             $"time={summary.totalTime} warnings={summary.totalWarnings} errors={summary.totalErrors}");
 
@@ -138,7 +162,7 @@ public static class BuildScript
         }
 
         Log($"Build succeeded: {output}");
-        Log($"Версия {PlayerSettings.bundleVersion}{(development ? " (development)" : string.Empty)}");
+        Log($"Версия {PlayerSettings.bundleVersion}{(isDevelopment ? " (development)" : string.Empty)}");
         Log($"Запуск: {LaunchHint(target, output)}");
     }
 

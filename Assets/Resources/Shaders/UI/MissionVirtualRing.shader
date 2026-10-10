@@ -141,7 +141,7 @@ Shader "Kern/UI/MissionVirtualRing"
                 // выглядит размытым пятном и не даёт точного направления.
                 float core = Bell(radius - _RingRadius, thickness * _ArcCoreWidth) * taper;
 
-                float3 emissive =
+                float3 glowing =
                     (_Color.rgb * arc * _ArcEnergy) +
                     (_CoreColor.rgb * core * _CoreEnergy);
                 float weight = (arc * _ArcEnergy) + (core * _CoreEnergy);
@@ -149,7 +149,7 @@ Shader "Kern/UI/MissionVirtualRing"
                 // Делим на сырую сумму весов, а не на итоговую альфу: после
                 // домножения на прозрачность нормировка цвета перестала бы
                 // быть нормировкой и ядро бы выбеливало.
-                float3 color = saturate(emissive / max(weight, 1e-4));
+                float3 color = saturate(glowing / max(weight, 1e-4));
 
                 // Прозрачность элемента уже лежит в альфе вершинного цвета:
                 // uie_std_vert домножает на неё color.a для сплошного типа.

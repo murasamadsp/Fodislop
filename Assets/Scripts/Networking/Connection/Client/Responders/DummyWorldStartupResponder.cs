@@ -7,6 +7,7 @@ using Cysharp.Threading.Tasks;
 using Kern;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.World;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -33,18 +34,22 @@ internal sealed class DummyWorldStartupResponder(
     DummyMissionRunner missionRunner,
     List<(ushort X, ushort Y)> teleportPositions,
     Action<ServerPacket> sendPacket,
-    Func<int, bool> loopAlive)
+    Func<int, bool> loopAlive,
+    DummyBlockSpawner blockSpawner,
+    IRuntimeAssetPaths? assetPaths = null)
 {
+
     public async UniTask InitializeAsync(
         string worldCodeName,
         int lifecycleVersion,
         string playerName,
         long level,
         long currency,
-        ushort playerBotID)
+        ushort playerBotId)
     {
         DummyWorldDescriptor world = await worldState.OpenAsync(worldCodeName);
-        SendWorldIdentity(worldCodeName, world, playerName, playerBotID);
+        SendWorldIdentity(worldCodeName, world, playerName, playerBotId);
+        SendClientConfig();
 
         playerState.SetPosition(25, 50);
         StartBotSimulation(lifecycleVersion);
@@ -59,6 +64,7 @@ internal sealed class DummyWorldStartupResponder(
         sendPacket(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
         sendPacket(new ServerPacket(new LevelPacket(level)));
         await worldState.SendChunksAroundAsync(playerState.X, playerState.Y, sendPacket);
+        blockSpawner.Start(lifecycleVersion, world);
 
         SendSkillProgress();
         chatSimulator.SendChatMock(lifecycleVersion);
@@ -117,7 +123,7 @@ internal sealed class DummyWorldStartupResponder(
         string worldCodeName,
         DummyWorldDescriptor world,
         string playerName,
-        ushort playerBotID)
+        ushort playerBotId)
     {
         sendPacket(new ServerPacket(new WorldInitPacket(
             worldCodeName,
@@ -125,17 +131,17 @@ internal sealed class DummyWorldStartupResponder(
             (ushort)world.Width,
             (ushort)world.Height,
             world.CellConfigurations,
-            [[37, 38, 106]])));
-        sendPacket(new ServerPacket(new PlayerInfoPacket(999, playerBotID, playerName)));
+            DummyCellConfigurationUtilities.CreateTileGroups())));
+        sendPacket(new ServerPacket(new PlayerInfoPacket(999, playerBotId, playerName)));
         sendPacket(new ServerPacket(new RobotInfoPacket(
-            playerBotID,
+            playerBotId,
             999,
             1,
             "Skin/bee.png",
             "Tail/default.png",
             string.Empty)));
         sendPacket(new ServerPacket(new HBPacket([
-            new RobotPositionPacket(playerBotID, 25, 50, 0),
+            new RobotPositionPacket(playerBotId, 25, 50, 0),
         ])));
     }
 
@@ -212,5 +218,57 @@ internal sealed class DummyWorldStartupResponder(
             sendPacket(new ServerPacket(new OnlinePacket(players, 3)));
             await clock.Delay(12000, cancellationToken);
         }
+    }
+
+    private void SendClientConfig()
+    {
+        IReadOnlyList<string> textures = GetAvailableTextures();
+        sendPacket(new ServerPacket(new ClientConfigPacket(
+            new SoundConfigPacket(255, new Dictionary<string, byte>()),
+            RendererMode.Default,
+            Array.Empty<StringPairPacket>(),
+            textures)));
+    }
+
+    private IReadOnlyList<string> GetAvailableTextures()
+    {
+        if (assetPaths == null)
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            string root = assetPaths.BundledTexturesRoot;
+            if (!System.IO.Directory.Exists(root))
+            {
+                return Array.Empty<string>();
+            }
+
+            var list = new List<string>();
+            foreach (string filePath in System.IO.Directory.EnumerateFiles(root, "*.*", System.IO.SearchOption.AllDirectories))
+            {
+                if (IsTextureFile(filePath))
+                {
+                    string relative = System.IO.Path.GetRelativePath(root, filePath).Replace('\\', '/');
+                    list.Add(relative);
+                }
+            }
+
+            return list;
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static bool IsTextureFile(string path)
+    {
+        string ext = System.IO.Path.GetExtension(path);
+        return ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".exr", StringComparison.OrdinalIgnoreCase);
     }
 }

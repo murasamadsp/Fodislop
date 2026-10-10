@@ -79,6 +79,22 @@ public class WorldLayerFileHeaderTests
     }
 
     [Test]
+    public void TryValidateOffsetTable_RejectsOffsetsOutsideTheChunkDataRegion()
+    {
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(1);
+            writer.Write(1);
+            writer.Write(16);
+            writer.Write(WorldLayerFileHeader.CurrentFormatVersion);
+            writer.Write(1024L);
+        }
+
+        Assert.IsFalse(WorldLayerFileHeader.TryValidateOffsetTable(memory, 1));
+    }
+
+    [Test]
     public void WriteChunkOffset_UpdatesSpecifiedEntry()
     {
         const int width = 2;
@@ -117,7 +133,7 @@ public class WorldLayerFileHeaderTests
             writer.Write(width);
             writer.Write(height);
             writer.Write(chunkSize);
-            writer.Write(0); // v0 format: legacy, never migrated
+            writer.Write(0); // v0 format: legacy header with v1-compatible payload
             writer.Write(-1L);
             writer.Write(-1L);
             writer.Write(-1L);
@@ -129,7 +145,7 @@ public class WorldLayerFileHeaderTests
             Assert.AreEqual(0, WorldLayerFileHeader.TryReadFormatVersion(fs));
         }
 
-        // v0 header is rejected by TryReadHeader: no legacy support.
+        // The current reader does not accept a v0 header before explicit migration.
         long[] offsets = new long[4];
         using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
         {
@@ -140,7 +156,7 @@ public class WorldLayerFileHeaderTests
     [Test]
     public void TryReadFormatVersion_CurrentFormat_ReturnsCurrent()
     {
-        string filePath = Path.Combine(_tempDir, "v1.map");
+        string filePath = Path.Combine(_tempDir, "v2.map");
         const int width = 2;
         const int height = 2;
         const int chunkSize = 16;
@@ -195,32 +211,42 @@ public class WorldLayerFileHeaderTests
         string backupPath = filePath + ".v0.backup";
         Assert.IsTrue(File.Exists(backupPath));
 
-        // Verify migrated file has version 1
-        long[] offsets = new long[4];
+        // Header-only legacy migration preserves the RLE payload as v1; the
+        // WorldLayer constructor performs the full v1-to-current conversion.
         using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
         {
-            bool success = WorldLayerFileHeader.TryReadHeader(fs, width, height, chunkSize, offsets);
-            Assert.IsTrue(success);
+            Assert.AreEqual(WorldLayerFileHeader.LegacyRLEFormatVersion, WorldLayerFileHeader.TryReadFormatVersion(fs));
         }
     }
 
     [Test]
-    public void MigrateLegacyFormat_AlreadyV1_LeavesUntouched()
+    public void MigrateLegacyFormat_AlreadyV2_LeavesUntouched()
     {
-        string filePath = Path.Combine(_tempDir, "v1.map");
+        string filePath = Path.Combine(_tempDir, "v2.map");
         const int width = 2;
         const int height = 2;
         const int chunkSize = 16;
 
         using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+        using (var writer = new BinaryWriter(fs))
         {
-            long[] offsets = new long[4];
-            WorldLayerFileHeader.WriteHeader(fs, width, height, chunkSize, offsets);
+            writer.Write(width);
+            writer.Write(height);
+            writer.Write(chunkSize);
+            writer.Write(WorldLayerFileHeader.LegacyFramedFormatVersion);
+            writer.Write(-1L);
+            writer.Write(-1L);
+            writer.Write(-1L);
+            writer.Write(-1L);
         }
 
         WorldLayerFileHeader.MigrateLegacyFormatIfRequired(filePath, width, height, chunkSize);
 
         string backupPath = filePath + ".v0.backup";
         Assert.IsFalse(File.Exists(backupPath));
+        using var migrated = File.OpenRead(filePath);
+        Assert.AreEqual(
+            WorldLayerFileHeader.LegacyFramedFormatVersion,
+            WorldLayerFileHeader.TryReadFormatVersion(migrated));
     }
 }

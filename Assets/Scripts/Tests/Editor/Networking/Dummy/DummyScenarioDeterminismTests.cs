@@ -302,6 +302,10 @@ public sealed class DummyScenarioDeterminismTests
 
         public UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default) =>
             UniTask.FromResult<byte[]?>(null);
+
+        public UniTask PreloadTexturesAsync(
+            IReadOnlyList<string> filenames,
+            CancellationToken cancellationToken = default) => UniTask.CompletedTask;
     }
 
     private sealed class NoItems : IItemCatalog

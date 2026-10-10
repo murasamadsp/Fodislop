@@ -8,12 +8,12 @@
 
 ```
 меш террейна ──[LightingMaterialField, MRT]──┬──► MaterialField  (F, RGBA32, без мипов)
-                                             └──► StaticEmission (F, ARGBHalf)
+                                             └──► StaticGlow (F, ARGBHalf)
 
-меш террейна ──[LightingAmbientOcclusionField, alpha only]──► AmbientOcclusionField (A, RGBA32)
+меш террейна ──[LightingAmbientOcclusionField, red only]──► AmbientOcclusionField (A, R8)
 
                       ┌── MaterialField
-StaticEmission ──────┴──[SolveCascade]──► RadianceAtlas (uint3 × N)
+StaticGlow ──────┴──[SolveCascade]──► RadianceAtlas (uint3 × N)
                                               │
                                               ▼
                                        [ResolveDirect]
@@ -80,7 +80,7 @@ AmbientOcclusionField ──[8 radial taps + mean + sqrt]──► AO ─┤
 | 1  | Поле материалов     | меш террейна + атлас + анимация цвета   | Material + Emis | F      | геометрия/регион/текстуры|
 | 2  | Поле AO             | меш террейна + атлас            | AO occupancy    | A      | геометрия/регион/текстуры|
 | 3  | Геометрические кэши | Material                        | SolidMask/Taps  | F      | геометрия/регион|
-| 4  | Каскады (стат.)     | Material, StaticEmission        | RadianceAtlas   | N зап. | мир изменился   |
+| 4  | Каскады (стат.)     | Material, StaticGlow        | RadianceAtlas   | N зап. | мир изменился   |
 | 5  | Resolve (стат.)     | RadianceAtlas                   | StaticDirect    | F      | мир изменился   |
 | 6  | Полярное динамич.   | Material, DynamicLights         | Direct          | F      | источник изменился|
 | 7  | Диффузный отскок    | Direct, StaticDirect, Material  | Bounce          | F/2    | свет изменился  |
@@ -107,5 +107,5 @@ AmbientOcclusionField ──[8 radial taps + mean + sqrt]──► AO ─┤
 | Что                                | Статус                                     |
 |------------------------------------|--------------------------------------------|
 | Нормали поверхности                | Снесены полностью: объём даёт AO вокруг блоков |
-| Эмиссия в стадии 9                 | Читается только отладочными видами         |
+| Свечение в стадии 9                 | Читается только отладочными видами         |
 | Детали мельче клетки в освещении   | Невозможны: F ≤ 4 текселя на клетку, тайл 32 px |

@@ -273,21 +273,17 @@ namespace Kern.World
 
         public float GetMoveCooldown(CellType cellType) => _cellCatalog.GetMoveCooldown(cellType);
 
+        public float GetMinMoveCooldown() => _cellCatalog.GetMinMoveCooldown();
+
         public CellConfigurationPacket GetCellConfig(CellType type) => _cellCatalog.GetCellConfig(type);
 
-        public static bool IsRoundableLoose(CellType type) => MapCellConfigCatalog.IsRoundableLoose(type);
-
-        public bool TryGetTileGroup(CellType type, out int groupID) => _cellCatalog.TryGetTileGroup(type, out groupID);
+        public bool TryGetTileGroup(CellType type, out int groupId) => _cellCatalog.TryGetTileGroup(type, out groupId);
 
         public Color GetCellMinimapColor(CellType type) => _cellCatalog.GetCellMinimapColor(type);
 
         public Color32 GetCellMinimapColor32(CellType type) => _cellCatalog.GetCellMinimapColor32(type);
 
         public int GetAnimationFrameHeight(CellType cellType) => _cellCatalog.GetAnimationFrameHeight(cellType);
-
-        public byte GetAnimationSpeed(CellType cellType) => _cellCatalog.GetAnimationSpeed(cellType);
-
-        public bool HasAnimation(CellType cellType) => _cellCatalog.HasAnimation(cellType);
 
         public string WorldCodeName => _worldCodeName;
         public ushort WorldWidth => _width;

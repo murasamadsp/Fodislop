@@ -29,17 +29,21 @@ Shader "Kern/World Entity"
             "CanUseSpriteAtlas" = "True"
         }
 
-        Cull Off
-        Lighting Off
-        ZWrite Off
-        Blend One OneMinusSrcAlpha
-
         Pass
         {
+            Name "Universal2D"
+            Tags { "LightMode" = "Universal2D" }
+
+            Cull Off
+            ZWrite Off
+            Blend One OneMinusSrcAlpha
+
             HLSLPROGRAM
+            #pragma target 4.5
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile _ KERN_WORLD_LIGHTING
+            #pragma multi_compile _ KERN_GPU_INSTANCING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -74,21 +78,47 @@ Shader "Kern/World Entity"
             // Пороги отсечения одинаковы для всех материалов мира сущностей,
             // поэтому это глобальные юниформы: код кладёт их Shader.SetGlobalFloat.
             float _SpriteAlphaCull;
-            float _EmissiveFieldThreshold;
+            float _GlowFieldThreshold;
+
+            #if defined(KERN_GPU_INSTANCING)
+            struct EntityGpuInstance
+            {
+                float4 positionAndScale;
+                float4 uvRect;
+                float4 color;
+                float4 rotationAndPivot;
+            };
+
+            StructuredBuffer<EntityGpuInstance> _EntityInstances;
+            #endif
 
             #include "Assets/Shaders/World/WorldLightSampling.hlsl"
 
-            Varyings vert(Attributes input)
+            Varyings vert(Attributes input, uint instanceID : SV_InstanceID)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+#if defined(KERN_GPU_INSTANCING)
+                EntityGpuInstance inst = _EntityInstances[instanceID];
+                float2 localPos = (input.positionOS.xy - inst.rotationAndPivot.zw) * inst.positionAndScale.zw;
+                float2 rotatedPos = float2(
+                    localPos.x * inst.rotationAndPivot.x - localPos.y * inst.rotationAndPivot.y,
+                    localPos.x * inst.rotationAndPivot.y + localPos.y * inst.rotationAndPivot.x);
+                float3 worldPosition = KernWorldGridVertex(float3(rotatedPos + inst.positionAndScale.xy, input.positionOS.z));
+                output.positionCS = KernWorldGridClipPosition(worldPosition);
+                output.uv = lerp(inst.uvRect.xy, inst.uvRect.zw, input.uv);
+                output.color = inst.color;
+                output.worldPos = worldPosition.xy;
+#else
+                float3 worldPosition = KernWorldGridVertex(TransformObjectToWorld(input.positionOS.xyz));
+                output.positionCS = KernWorldGridClipPosition(worldPosition);
                 output.uv = input.uv;
                 output.color = input.color;
                 // Batch-mesh vertices are pre-transformed world positions, so
                 // object space equals world space when rendering with identity matrix.
                 // Using TransformObjectToWorld ensures correct light sampling if an entity
                 // or preview is rendered with a non-identity GameObject transform.
-                output.worldPos = TransformObjectToWorld(input.positionOS.xyz).xy;
+                output.worldPos = worldPosition.xy;
+#endif
                 return output;
             }
 
@@ -101,7 +131,7 @@ Shader "Kern/World Entity"
                 half4 color = texColor * input.color * _Color;
                 if (color.a > _SpriteAlphaCull)
                 {
-                    float3 worldLight = GetWorldLightColor(input.worldPos);
+                    float3 worldLight = GetWorldLightColor(input.worldPos).rgb;
                     color.rgb *= worldLight;
                     // Premultiplied output, matching Sprites/Default's blend.
                     color.rgb *= color.a;
@@ -116,7 +146,7 @@ Shader "Kern/World Entity"
             ENDHLSL
         }
 
-        // Light-emitting sprites (buildings) in the lighting fields. Emission
+        // Light-emitting sprites (buildings) in the lighting fields. Glow
         // is the sprite's own colour, the way glowing terrain emits its
         // albedo. Material output stays zero: with Max blending it keeps the
         // occupancy and albedo the terrain wrote, so a building glows without
@@ -137,7 +167,10 @@ Shader "Kern/World Entity"
             #pragma vertex LightingFieldVert
             #pragma fragment LightingFieldFrag
 
+            #pragma multi_compile _ KERN_GPU_INSTANCING
+
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/Shaders/World/LightingFieldRaster.hlsl"
 
             struct Attributes
             {
@@ -156,7 +189,7 @@ Shader "Kern/World Entity"
             struct LightingFieldOutput
             {
                 half4 material : SV_Target0;
-                half4 emission : SV_Target1;
+                half4 glow : SV_Target1;
             };
 
             TEXTURE2D(_MainTex);
@@ -168,14 +201,38 @@ Shader "Kern/World Entity"
             CBUFFER_END
 
             float _SpriteAlphaCull;
-            float _EmissiveFieldThreshold;
+            float _GlowFieldThreshold;
 
-            Varyings LightingFieldVert(Attributes input)
+            #if defined(KERN_GPU_INSTANCING)
+            struct EntityGpuInstance
+            {
+                float4 positionAndScale;
+                float4 uvRect;
+                float4 color;
+                float4 rotationAndPivot;
+            };
+
+            StructuredBuffer<EntityGpuInstance> _EntityInstances;
+            #endif
+
+            Varyings LightingFieldVert(Attributes input, uint instanceID : SV_InstanceID)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+#if defined(KERN_GPU_INSTANCING)
+                EntityGpuInstance inst = _EntityInstances[instanceID];
+                float2 localPos = (input.positionOS.xy - inst.rotationAndPivot.zw) * inst.positionAndScale.zw;
+                float2 rotatedPos = float2(
+                    localPos.x * inst.rotationAndPivot.x - localPos.y * inst.rotationAndPivot.y,
+                    localPos.x * inst.rotationAndPivot.y + localPos.y * inst.rotationAndPivot.x);
+                float3 worldPosition = float3(rotatedPos + inst.positionAndScale.xy, input.positionOS.z);
+                output.positionCS = KernLightingFieldClipPositionWorld(worldPosition);
+                output.uv = lerp(inst.uvRect.xy, inst.uvRect.zw, input.uv);
+                output.color = inst.color;
+#else
+                output.positionCS = KernLightingFieldClipPositionWorld(TransformObjectToWorld(input.positionOS.xyz));
                 output.uv = input.uv;
                 output.color = input.color;
+#endif
                 return output;
             }
 
@@ -188,16 +245,16 @@ Shader "Kern/World Entity"
                 // интерполяцией, а текстура остаётся точечной намеренно.
                 half4 color = SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_PointClamp, input.uv, 0) *
                     input.color * _Color;
-                float strength = step(_EmissiveFieldThreshold, color.a) * color.a;
+                float strength = step(_GlowFieldThreshold, color.a) * color.a;
 
                 LightingFieldOutput output;
                 output.material = half4(0.0, 0.0, 0.0, 0.0);
-                output.emission = half4(color.rgb * strength, strength);
+                output.glow = half4(color.rgb * strength, strength);
                 return output;
             }
             ENDHLSL
         }
     }
 
-    FallBack "Sprites/Default"
+    FallBack Off
 }

@@ -697,7 +697,6 @@ MonoBehaviour:
   components:
   - {fileID: -1083910812058648046}
   - {fileID: 589368484139133588}
-  - {fileID: 4119909782479700770}
   - {fileID: -6165366111512881764}
   - {fileID: 2620290625453124485}
   - {fileID: -1629418828966726489}
@@ -717,6 +716,7 @@ MonoBehaviour:
   - {fileID: -3249425112775911864}
   - {fileID: -3291442341143893385}
   - {fileID: -3502402503355023550}
+  - {fileID: 7548981618602931949}
 --- !u!114 &549961647254572129
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -842,34 +842,6 @@ MonoBehaviour:
   noiseScale:
     m_OverrideState: 1
     m_Value: 1
-  animationSpeed:
-    m_OverrideState: 1
-    m_Value: 18
---- !u!114 &4119909782479700770
-MonoBehaviour:
-  m_ObjectHideFlags: 3
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2fa40d9b75c3f4178a67936681d8c115, type: 3}
-  m_Name: ColorGradingComponent
-  m_EditorClassIdentifier: Assembly-CSharp::Kern.Rendering.PostProcessing.ColorGradingComponent
-  active: 1
-  exposure:
-    m_OverrideState: 1
-    m_Value: 0
-  colorFilter:
-    m_OverrideState: 1
-    m_Value: {r: 1, g: 1, b: 1, a: 1}
-  contrast:
-    m_OverrideState: 1
-    m_Value: 0
-  saturation:
-    m_OverrideState: 1
-    m_Value: 1
 --- !u!114 &6867689974412642954
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -895,6 +867,31 @@ MonoBehaviour:
   texture:
     m_OverrideState: 1
     m_Value: {fileID: 0}
+--- !u!114 &7548981618602931949
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ccf1aba9553839d41ae37dd52e9ebcce, type: 3}
+  m_Name: MotionBlur
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.MotionBlur
+  active: 1
+  mode:
+    m_OverrideState: 1
+    m_Value: 0
+  quality:
+    m_OverrideState: 1
+    m_Value: 0
+  intensity:
+    m_OverrideState: 1
+    m_Value: 0
+  clamp:
+    m_OverrideState: 1
+    m_Value: 0.05
 --- !u!114 &8186967007110362811
 MonoBehaviour:
   m_ObjectHideFlags: 3

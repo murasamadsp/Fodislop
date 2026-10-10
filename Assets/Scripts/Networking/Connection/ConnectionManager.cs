@@ -2,7 +2,6 @@
 
 using Kern.Core.Interfaces.Diagnostics;
 using System;
-using System.Net;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kern.Networking.Diagnostics;
@@ -26,10 +25,10 @@ namespace Kern.Networking.Connection
 {
     public class ConnectionManager : MonoBehaviour, IConnectionService, IWorldRegionRequester
     {
-        private static readonly ProfilerMarker _PacketDrainMarker =
+        private static readonly ProfilerMarker s_packetDrainMarker =
             new("Kern.Net.DrainPacketQueue");
 
-        private static readonly AllocationLedger.Entry _AllocationEntry =
+        private static readonly AllocationLedger.Entry s_allocationEntry =
             AllocationLedger.Register("Сеть — разбор очереди");
 
         // Бюджет на обработку входящих пакетов — доля времени КАДРА, а не стены часов.
@@ -54,6 +53,8 @@ namespace Kern.Networking.Connection
 
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;
+        public event Action? OnPacketBatchStarted;
+        public event Action? OnPacketBatchCompleted;
         public event Action<string>? OnReconnectStatusChanged;
         public event Action<string>? OnDisconnectReason;
         public event Action? OnReconnectHidden;
@@ -61,8 +62,6 @@ namespace Kern.Networking.Connection
         private readonly InboundPacketBuffer _inboundPackets = new();
         private readonly ReconnectBackoff _reconnectBackoff = new();
 
-        [Inject]
-        private IClientConfigManager _clientConfigManager = null!;
         [Inject]
         private ISceneNavigator _sceneNavigator = null!;
         [Inject]
@@ -74,6 +73,8 @@ namespace Kern.Networking.Connection
 
         [Inject]
         private DummyConnection _dummyConnection = null!;
+        [Inject]
+        private ConnectionTransportFactory _transportFactory = null!;
 
         private bool _shouldAutoReconnect;
         private float _reconnectCountdown;
@@ -103,8 +104,8 @@ namespace Kern.Networking.Connection
 
         private void DrainPacketQueue()
         {
-            using var marker = _PacketDrainMarker.Auto();
-            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
+            using var marker = s_packetDrainMarker.Auto();
+            using var allocationScope = AllocationLedger.Measure(s_allocationEntry);
             float budgetSeconds = Mathf.Min(
                 Time.unscaledDeltaTime * PacketDrainBudgetFractionOfFrame,
                 PacketDrainBudgetMaximumSeconds);
@@ -112,35 +113,52 @@ namespace Kern.Networking.Connection
             int processedCount = 0;
             bool stoppedByBudget = false;
             bool stoppedByCap = false;
-            while (processedCount < ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
+
+            bool batchActive = _inboundPackets.Count > 1;
+            if (batchActive)
             {
-                // A handler cannot be preempted. Stop before dequeuing the next
-                // packet so one expensive handler is the only unavoidable overrun.
-                float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-                if (processedCount > 0 && elapsedMs >= budgetSeconds * 1000f)
-                {
-                    stoppedByBudget = true;
-                    break;
-                }
+                OnPacketBatchStarted?.Invoke();
+            }
 
-                if (!_inboundPackets.TryTake(out ServerPacket packet))
+            try
+            {
+                while (processedCount < ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
                 {
-                    break;
-                }
+                    // A handler cannot be preempted. Stop before dequeuing the next
+                    // packet so one expensive handler is the only unavoidable overrun.
+                    float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                    if (processedCount > 0 && elapsedMs >= budgetSeconds * 1000f)
+                    {
+                        stoppedByBudget = true;
+                        break;
+                    }
 
-                processedCount++;
-                try
-                {
-                    OnPacketReceived?.Invoke(packet);
+                    if (!_inboundPackets.TryTake(out ServerPacket packet))
+                    {
+                        break;
+                    }
+
+                    processedCount++;
+                    try
+                    {
+                        OnPacketReceived?.Invoke(packet);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogException(
+                            new InvalidOperationException(
+                                "A server packet could not be processed. Disconnecting to avoid continuing with corrupted state.",
+                                ex));
+                        TriggerDisconnect("Client packet processing failed.");
+                        break;
+                    }
                 }
-                catch (Exception ex)
+            }
+            finally
+            {
+                if (batchActive)
                 {
-                    Debug.LogException(
-                        new InvalidOperationException(
-                            "A server packet could not be processed. Disconnecting to avoid continuing with corrupted state.",
-                            ex));
-                    TriggerDisconnect("Client packet processing failed.");
-                    break;
+                    OnPacketBatchCompleted?.Invoke();
                 }
             }
 
@@ -209,7 +227,7 @@ namespace Kern.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            Connection = CreateConnection();
+            Connection = _transportFactory.Create();
             Connection.OnReceived += OnReceived;
             Connection.OnConnected += OnConnected;
             Connection.OnDisconnected += OnDisconnected;
@@ -217,40 +235,6 @@ namespace Kern.Networking.Connection
 
             _reconnectStatus = _loc.Get("network.connecting");
             OnReconnectStatusChanged?.Invoke(_reconnectStatus);
-        }
-
-        private IServerConnection CreateConnection()
-        {
-            // Config может быть ещё не загружен (ClientConfigManager грузит его в Start).
-            ClientConfig? config = _clientConfigManager.Config;
-            if (config == null)
-            {
-                Debug.LogWarning(
-                    "[Connection] Client config is not initialized yet; using the Bootstrap-registered DummyConnection.");
-                return _dummyConnection;
-            }
-
-            ConnectionSettings connection = config.Connection;
-            if (ConnectionTransportConfig.SelectTransport(connection.UseDummyConnection) == ConnectionTransportKind.Dummy)
-            {
-                Debug.Log(
-                    "[Connection] Transport: DummyConnection (offline stub). Set UseDummyConnection=false in client config for the real server.");
-                return _dummyConnection;
-            }
-
-            if (!ConnectionTransportConfig.TryResolveEndpoint(
-                    connection.ServerHost,
-                    connection.ServerPort,
-                    out IPAddress address,
-                    out int port))
-            {
-                throw new InvalidOperationException(
-                    $"[Connection] Invalid server endpoint '{connection.ServerHost}:{connection.ServerPort}' in client config. " +
-                    "Expected a valid host/IP and a port in [1, 65535].");
-            }
-
-            Debug.Log($"[Connection] Transport: ManagedTcpConnection {address}:{port} (fallback transport, NetCoreServer receive-loop is broken).");
-            return new ManagedTcpConnection(address, port);
         }
 
         public void Disconnect()
@@ -474,22 +458,5 @@ namespace Kern.Networking.Connection
             _inboundPackets.Enqueue(obj);
         }
 
-        private sealed class ReconnectBackoff
-        {
-            private static readonly float[] _Steps = [1f, 2f, 4f, 8f, 16f, 30f];
-
-            private int _attempt;
-            public float CurrentDelay => _Steps[Math.Min(_attempt, _Steps.Length - 1)];
-
-            public void RecordFailure()
-            {
-                _attempt++;
-            }
-
-            public void Reset()
-            {
-                _attempt = 0;
-            }
-        }
     }
 }

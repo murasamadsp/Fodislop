@@ -10,13 +10,13 @@ namespace Kern.World.Terrain;
 /// </summary>
 ///
 /// Сервис текстур сообщает о загрузке именем файла, а террейну нужен тип
-/// клетки: «Cells/42.png» — это CellType 42. Отдельным типом, потому что это
+/// клетки: «Cells/Rock.png» — это CellType Rock. Отдельным типом, потому что это
 /// разбор строки, а не работа рендерера, и его видно в тесте.
 public static class TerrainCellTextureName
 {
     private const string CellPrefix = "Cells/";
     private const string DecalAtlas = "terrain-decals.png";
-    private const string DecalStoneAtlas = "terrain-decals-stone.png";
+    private const string DecalRockAtlas = "terrain-decals-rock.png";
 
     public static bool TryParseCellType(string filename, out CellType cellType)
     {
@@ -30,19 +30,21 @@ public static class TerrainCellTextureName
         ReadOnlySpan<char> id = filename.AsSpan(
             CellPrefix.Length,
             (extensionIndex >= 0 ? extensionIndex : filename.Length) - CellPrefix.Length);
-        if (!int.TryParse(id, out int cellTypeID) || (uint)cellTypeID > ushort.MaxValue)
+        string cellName = id.ToString();
+        if (!Enum.TryParse(cellName, ignoreCase: true, out cellType) ||
+            !Enum.IsDefined(typeof(CellType), cellType))
         {
+            cellType = default;
             return false;
         }
 
-        cellType = (CellType)cellTypeID;
         return true;
     }
 
     // Второй атлас обязан попадать сюда наравне с первым: без этого его
-    // загрузка не перебиндит материалы, и stone-декали останутся сэмплить
-    // незаполненный _TerrainDecalStoneAtlas, если он приехал вторым.
+    // загрузка не перебиндит материалы, и rock-декали останутся сэмплить
+    // незаполненный _TerrainDecalRockAtlas, если он приехал вторым.
     public static bool IsDecalAtlas(string filename) =>
         string.Equals(filename, DecalAtlas, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(filename, DecalStoneAtlas, StringComparison.OrdinalIgnoreCase);
+        string.Equals(filename, DecalRockAtlas, StringComparison.OrdinalIgnoreCase);
 }

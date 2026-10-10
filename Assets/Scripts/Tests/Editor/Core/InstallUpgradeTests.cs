@@ -25,8 +25,8 @@ public sealed class InstallUpgradeTests
     private const int WorldWidth = 64;
     private const int WorldHeight = 32;
     private const string CachedAsset = "Cells/117.png";
-    private static readonly CellType _StoredCell = (CellType)123;
-    private static readonly byte[] _CachedPayload = [1, 2, 3, 4];
+    private static readonly CellType s_storedCell = (CellType)123;
+    private static readonly byte[] s_cachedPayload = [1, 2, 3, 4];
 
     private string _dataRoot = null!;
 
@@ -60,7 +60,7 @@ public sealed class InstallUpgradeTests
     {
         ClientConfigLoader.Result config = LoadConfig();
         _ = new PersistentAssetCache(CachePath);
-        WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(_StoredCell)));
+        WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(s_storedCell)));
 
         Assert.That(config.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.CreatedDefaults));
         Assert.That(new ClientConfigRepository(ConfigPath).Load().Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
@@ -141,10 +141,96 @@ public sealed class InstallUpgradeTests
         Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
         Assert.That(result.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 1));
         Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
-        Assert.That(result.Config.Terrain.EnableReliefRim, Is.True);
+        Assert.That(result.Config.Terrain.EnableRim, Is.True);
         Assert.That(result.Config.Terrain.DistortionStyle, Is.EqualTo(TerrainDistortionStyle.Organic));
         Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Overdrive));
         Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(previousJson));
+    }
+
+    [Test]
+    public void Schema37WithoutHdrSwitchPending_MigratesAndKeepsBackup()
+    {
+        ClientConfig legacy = ClientConfigDefaults.Create(_profile);
+        legacy.SchemaVersion = 37;
+        legacy.Display.HDRSwitchPending = true;
+        string sourceJson = JsonUtility.ToJson(legacy, prettyPrint: true);
+        string legacyJson = Regex.Replace(
+            sourceJson,
+            @"^[ \t]*""HDRSwitchPending""[ \t]*:[ \t]*(?:true|false),?\r?\n",
+            string.Empty,
+            RegexOptions.Multiline);
+        Assert.That(legacyJson, Does.Not.Contain("HDRSwitchPending"));
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, legacyJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.SourceSchemaVersion, Is.EqualTo(37));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Display.HDRSwitchPending, Is.False);
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
+        Assert.That(
+            new ClientConfigRepository(ConfigPath).Load().Config.Display.HDRSwitchPending,
+            Is.False);
+    }
+
+    [Test]
+    public void Schema38WithoutPeakBrightnessFromDisplay_MigratesToDisplayPeak()
+    {
+        ClientConfig legacy = ClientConfigDefaults.Create(_profile);
+        legacy.SchemaVersion = 38;
+        legacy.Display.PeakBrightnessFromDisplay = false;
+        string sourceJson = JsonUtility.ToJson(legacy, prettyPrint: true);
+        string legacyJson = Regex.Replace(
+            sourceJson,
+            @",?\r?\n[ \t]*""PeakBrightnessFromDisplay""[ \t]*:[ \t]*(?:true|false)",
+            string.Empty);
+        Assert.That(legacyJson, Does.Not.Contain("PeakBrightnessFromDisplay"));
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, legacyJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.SourceSchemaVersion, Is.EqualTo(38));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Display.PeakBrightnessFromDisplay, Is.True);
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
+    }
+
+    [Test]
+    public void Schema39TerrainNames_MigrateToRimGlowAndBlinking()
+    {
+        ClientConfig legacy = ClientConfigDefaults.Create(_profile);
+        legacy.SchemaVersion = 39;
+        legacy.Terrain.EnableRim = false;
+        legacy.Terrain.BlinkingSpeedScale = 3.25f;
+        legacy.Terrain.TransitGlowColor = new Color(0.25f, 0.5f, 0.75f, 1f);
+        legacy.Terrain.TransitGlowStrength = 2.5f;
+        legacy.Terrain.PerspectiveGlowColor = new Color(0.5f, 0.25f, 0.125f, 1f);
+        legacy.Terrain.PerspectiveGlowStrength = 1.5f;
+        string legacyJson = JsonUtility.ToJson(legacy, prettyPrint: true)
+            .Replace("\"EnableRim\"", "\"EnableReliefRim\"")
+            .Replace("\"BlinkingSpeedScale\"", "\"PulseSpeedScale\"")
+            .Replace("GlowColor\"", "EmissionColor\"")
+            .Replace("GlowStrength\"", "EmissionStrength\"");
+        Assert.That(legacyJson, Does.Contain("\"EnableReliefRim\""));
+        Assert.That(legacyJson, Does.Contain("\"PerspectiveEmissionStrength\""));
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, legacyJson);
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.Terrain.EnableRim, Is.False);
+        Assert.That(result.Config.Terrain.BlinkingSpeedScale, Is.EqualTo(3.25f));
+        Assert.That(result.Config.Terrain.TransitGlowColor, Is.EqualTo(new Color(0.25f, 0.5f, 0.75f, 1f)));
+        Assert.That(result.Config.Terrain.TransitGlowStrength, Is.EqualTo(2.5f));
+        Assert.That(result.Config.Terrain.PerspectiveGlowColor, Is.EqualTo(new Color(0.5f, 0.25f, 0.125f, 1f)));
+        Assert.That(result.Config.Terrain.PerspectiveGlowStrength, Is.EqualTo(1.5f));
+        Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(legacyJson));
     }
 
     [Test]
@@ -152,7 +238,7 @@ public sealed class InstallUpgradeTests
     {
         WriteMap(formatVersion: 0);
 
-        WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(_StoredCell)));
+        WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(s_storedCell)));
         Assert.That(ReadMapFormatVersion(), Is.EqualTo(WorldLayerFileHeader.CurrentFormatVersion));
         Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Empty);
     }
@@ -165,7 +251,7 @@ public sealed class InstallUpgradeTests
         _ = new PersistentAssetCache(CachePath);
 
         Assert.That(ReadCacheMarker(), Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion));
-        Assert.That(File.ReadAllBytes(Path.Combine(CachePath, CachedAsset)), Is.EqualTo(_CachedPayload));
+        Assert.That(File.ReadAllBytes(Path.Combine(CachePath, CachedAsset)), Is.EqualTo(s_cachedPayload));
     }
 
     [Test]
@@ -176,7 +262,7 @@ public sealed class InstallUpgradeTests
         _ = new PersistentAssetCache(CachePath);
 
         Assert.That(ReadCacheMarker(), Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion));
-        Assert.That(File.ReadAllBytes(Path.Combine(CachePath, CachedAsset)), Is.EqualTo(_CachedPayload));
+        Assert.That(File.ReadAllBytes(Path.Combine(CachePath, CachedAsset)), Is.EqualTo(s_cachedPayload));
     }
 
     [Test]
@@ -193,7 +279,7 @@ public sealed class InstallUpgradeTests
 
         Assert.That(File.ReadAllText(ConfigPath), Is.EqualTo(newerJson));
         Assert.That(ReadCacheMarker(), Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion));
-        WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(_StoredCell)));
+        WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(s_storedCell)));
         Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Empty);
     }
 
@@ -233,7 +319,7 @@ public sealed class InstallUpgradeTests
     {
         string assetPath = Path.Combine(CachePath, CachedAsset);
         Directory.CreateDirectory(Path.GetDirectoryName(assetPath)!);
-        File.WriteAllBytes(assetPath, _CachedPayload);
+        File.WriteAllBytes(assetPath, s_cachedPayload);
         if (markerVersion.HasValue)
         {
             File.WriteAllText(
@@ -251,7 +337,7 @@ public sealed class InstallUpgradeTests
     {
         WithMap(storage =>
         {
-            storage.SetCell(0, 0, _StoredCell);
+            storage.SetCell(0, 0, s_storedCell);
             storage.Flush(durable: true);
         });
 

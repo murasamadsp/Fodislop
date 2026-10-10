@@ -371,6 +371,11 @@ namespace Kern.UI
         {
             _isOpen = true;
             _uiInput.IsPauseMenuOpen = true;
+            if (_doc?.rootVisualElement != null && _menuTree != null && !_doc.rootVisualElement.Contains(_menuTree))
+            {
+                _doc.rootVisualElement.Add(_menuTree);
+            }
+
             if (_menuTree != null)
             {
                 _menuTree.BringToFront();

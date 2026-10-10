@@ -11,12 +11,9 @@ namespace Kern.Editor;
 internal static class UnityVersionGate
 {
     private const string RequiredVersion = "6000.6.0f1";
-    private static readonly Regex _VersionPattern = new(
+    private static readonly Regex s_versionPattern = new(
         "^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?<channel>[abfp])(?<revision>\\d+)$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static bool _isBlocked;
-    private static bool _hasReported;
 
     static UnityVersionGate()
     {
@@ -25,18 +22,11 @@ internal static class UnityVersionGate
             return;
         }
 
-        _isBlocked = true;
         EditorApplication.delayCall += Enforce;
     }
 
     private static void Enforce()
     {
-        if (!_isBlocked)
-        {
-            return;
-        }
-
-        EditorApplication.delayCall -= Enforce;
         EditorApplication.isPlaying = false;
 
         string message =
@@ -46,9 +36,8 @@ internal static class UnityVersionGate
 
         Debug.LogError($"[UnityVersionGate] {message}");
 
-        if (!Application.isBatchMode && !_hasReported)
+        if (!Application.isBatchMode)
         {
-            _hasReported = true;
             EditorUtility.DisplayDialog("Unsupported Unity version", message, "Close");
         }
 
@@ -68,7 +57,7 @@ internal static class UnityVersionGate
 
     private static bool TryParse(string value, out ParsedVersion version)
     {
-        Match match = _VersionPattern.Match(value);
+        Match match = s_versionPattern.Match(value);
         if (!match.Success ||
             !int.TryParse(match.Groups["major"].Value, out int major) ||
             !int.TryParse(match.Groups["minor"].Value, out int minor) ||

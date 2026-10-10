@@ -76,6 +76,12 @@ internal sealed class PauseMenuDebugSectionBuilder
         {
             SendElementClick("open_missions");
         }));
+        // Заглушка 20 раз в секунду меняет твёрдые клетки вокруг игрока —
+        // нагрузка на правку мира. По умолчанию выключено.
+        debugSection.Add(PauseMenuUIFactory.CreateButton(_loc.Get("settings.debug.block_spawner"), () =>
+        {
+            SendElementClick("toggle_block_spawner");
+        }));
         debugSection.Add(PauseMenuUIFactory.CreateButton(_loc.Get("settings.debug.walls_off"), () =>
         {
             var player = _localPlayer.Current;

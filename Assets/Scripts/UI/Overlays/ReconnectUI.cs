@@ -134,6 +134,11 @@ namespace Kern.UI
                 return;
             }
 
+            if (_doc.rootVisualElement != null && !_doc.rootVisualElement.Contains(_reconnectOverlay))
+            {
+                _doc.rootVisualElement.Add(_reconnectOverlay);
+            }
+
             HideOverlay(_disconnectOverlay);
 
             _reconnectLabel.text = Resolve(status);
@@ -154,6 +159,11 @@ namespace Kern.UI
             if (_doc == null || _disconnectOverlay == null || _disconnectLabel == null)
             {
                 return;
+            }
+
+            if (_doc.rootVisualElement != null && !_doc.rootVisualElement.Contains(_disconnectOverlay))
+            {
+                _doc.rootVisualElement.Add(_disconnectOverlay);
             }
 
             HideOverlay(_reconnectOverlay);

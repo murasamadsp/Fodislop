@@ -4,40 +4,16 @@ namespace Kern.Tests.World;
 
 using Kern.World.Terrain;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using NUnit.Framework;
 
 [TestFixture]
 public class TerrainCellMaskCalculatorTests
 {
     [Test]
-    public void EnsureCapacity_AllocatesCorrectArraySizes()
-    {
-        var calculator = new TerrainCellMaskCalculator();
-        calculator.EnsureCapacity(16, 32);
-
-        Assert.IsNotNull(calculator.CellTilingDescriptors);
-        Assert.AreEqual(16, calculator.CellTilingDescriptors.GetLength(0));
-        Assert.AreEqual(32, calculator.CellTilingDescriptors.GetLength(1));
-
-        Assert.IsNotNull(calculator.CellCornerVariants);
-        Assert.AreEqual(16, calculator.CellCornerVariants.GetLength(0));
-        Assert.AreEqual(32, calculator.CellCornerVariants.GetLength(1));
-
-        Assert.IsNotNull(calculator.CellReliefMasks);
-        Assert.AreEqual(16, calculator.CellReliefMasks.GetLength(0));
-        Assert.AreEqual(32, calculator.CellReliefMasks.GetLength(1));
-
-        Assert.IsNotNull(calculator.CellSolidBoundaryMasks);
-        Assert.AreEqual(16, calculator.CellSolidBoundaryMasks.GetLength(0));
-        Assert.AreEqual(32, calculator.CellSolidBoundaryMasks.GetLength(1));
-    }
-
-    [Test]
     public void CalculateTilingDescriptor_WithoutTileGroup_ReturnsZero()
     {
-        var empty = new CachedCellData { HasTileGroup = false, TileGroupID = 0 };
-        var neighbor = new CachedCellData { HasTileGroup = true, TileGroupID = 1 };
+        var empty = new CachedCellData { HasTileGroup = false, TileGroupId = 0 };
+        var neighbor = new CachedCellData { HasTileGroup = true, TileGroupId = 1 };
 
         int descriptor = TerrainCellMaskCalculator.CalculateTilingDescriptor(
             empty, neighbor, neighbor, neighbor, neighbor, neighbor, neighbor, neighbor, neighbor);
@@ -64,46 +40,46 @@ public class TerrainCellMaskCalculatorTests
     }
 
     [Test]
-    public void CalculateReliefMask_OnlyEqualNeighbors_SetBitmask()
+    public void CalculateRimMask_OnlyEqualNeighbors_SetBitmask()
     {
-        var center = new CachedCellData { ReliefGroup = 5 };
-        var equal = new CachedCellData { ReliefGroup = 5 };
-        var foreign = new CachedCellData { ReliefGroup = 6 };
+        var center = new CachedCellData { RimMass = 5 };
+        var equal = new CachedCellData { RimMass = 5 };
+        var foreign = new CachedCellData { RimMass = 6 };
 
-        byte allEqual = TerrainCellMaskCalculator.CalculateReliefMask(center, equal, equal, equal, equal);
+        byte allEqual = TerrainCellMaskCalculator.CalculateRimMask(center, equal, equal, equal, equal);
         Assert.AreEqual(1 | 2 | 4 | 8, (int)allEqual);
 
-        byte allForeign = TerrainCellMaskCalculator.CalculateReliefMask(center, foreign, foreign, foreign, foreign);
+        byte allForeign = TerrainCellMaskCalculator.CalculateRimMask(center, foreign, foreign, foreign, foreign);
         Assert.AreEqual(0, (int)allForeign);
 
-        byte topAndRight = TerrainCellMaskCalculator.CalculateReliefMask(center, equal, foreign, foreign, equal);
+        byte topAndRight = TerrainCellMaskCalculator.CalculateRimMask(center, equal, foreign, foreign, equal);
         Assert.AreEqual(1 | 8, (int)topAndRight);
     }
 
     [Test]
-    public void CalculateSolidBoundaryMask_DropsShadowFlag_Sets8NeighborBits()
+    public void CalculateForegroundSidesMask_BlockNeighbor_Sets4NeighborBits()
     {
-        var shadow = new CachedCellData { Properties = CellConfigProperties.DropsShadow };
-        var empty = new CachedCellData { Properties = CellConfigProperties.None };
+        var shadow = new CachedCellData { Type = CellType.Rock };
+        var empty = new CachedCellData { Type = CellType.Empty };
 
-        byte allShadow = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            shadow, shadow, shadow, shadow, shadow, shadow, shadow, shadow);
-        Assert.AreEqual(255, (int)allShadow);
+        byte allShadow = TerrainCellMaskCalculator.CalculateForegroundSidesMask(
+            shadow, shadow, shadow, shadow);
+        Assert.AreEqual(15, (int)allShadow);
 
-        byte noneShadow = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            empty, empty, empty, empty, empty, empty, empty, empty);
+        byte noneShadow = TerrainCellMaskCalculator.CalculateForegroundSidesMask(
+            empty, empty, empty, empty);
         Assert.AreEqual(0, (int)noneShadow);
 
-        byte topOnly = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            shadow, empty, empty, empty, empty, empty, empty, empty);
+        byte topOnly = TerrainCellMaskCalculator.CalculateForegroundSidesMask(
+            shadow, empty, empty, empty);
         Assert.AreEqual(1, (int)topOnly);
 
-        byte leftOnly = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            empty, shadow, empty, empty, empty, empty, empty, empty);
+        byte leftOnly = TerrainCellMaskCalculator.CalculateForegroundSidesMask(
+            empty, shadow, empty, empty);
         Assert.AreEqual(2, (int)leftOnly);
 
-        byte bottomRightOnly = TerrainCellMaskCalculator.CalculateSolidBoundaryMask(
-            empty, empty, empty, empty, empty, empty, empty, shadow);
-        Assert.AreEqual(128, (int)bottomRightOnly);
+        byte rightOnly = TerrainCellMaskCalculator.CalculateForegroundSidesMask(
+            empty, empty, empty, shadow);
+        Assert.AreEqual(8, (int)rightOnly);
     }
 }

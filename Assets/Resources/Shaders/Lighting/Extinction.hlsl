@@ -3,7 +3,7 @@
 
 // Математика экстинкции и пропускания среды.
 //
-// READS: _EmptyExtinctionRGB, _SolidExtinctionRGB
+// READS: _EmptyExtinctionRGB, _SolidExtinctionRGB, _NeutralExtinction
 // WRITES: ничего
 // MUST NOT: читать/писать текстуры, знать о геометрии
 
@@ -13,9 +13,27 @@ float3 SegmentExtinction(float solid)
     return lerp(max(_EmptyExtinctionRGB.rgb, 0.0), max(_SolidExtinctionRGB.rgb, 0.0), solid);
 }
 
+// The binder enables this only when both media have identical R/G/B extinction.
+// Radiance stays RGB; identical attenuation needs one exponential, not three.
+float3 OpticalDepthTransmission(float3 opticalDepth)
+{
+    float3 result = 1.0;
+    if (_NeutralExtinction != 0)
+    {
+        float transmission = exp(-opticalDepth.r);
+        result = float3(transmission, transmission, transmission);
+    }
+    else
+    {
+        result = exp(-opticalDepth);
+    }
+
+    return result;
+}
+
 float3 SegmentTransmission(float solid, float physicalLength)
 {
-    return exp(-SegmentExtinction(solid) * physicalLength);
+    return OpticalDepthTransmission(SegmentExtinction(solid) * physicalLength);
 }
 
 // Stable 1 - exp(-x), including nearly transparent media.
@@ -34,15 +52,34 @@ float AbsorbedFraction(float opticalDepth)
     return result;
 }
 
-// EmissionField is the radiance emitted by one cell. Normalizing by the
+// GlowField is the radiance emitted by one cell. Normalizing by the
 // one-cell integral keeps glowing rock bright without bypassing intervening
 // rock, and makes splitting a segment leave the answer unchanged.
-float CellEmissionWeight(float extinction, float distanceCells)
+float CellGlowWeight(float extinction, float distanceCells)
 {
     float result = distanceCells;
     if (extinction > 0.0)
     {
         result = AbsorbedFraction(extinction * distanceCells) / AbsorbedFraction(extinction);
+    }
+
+    return result;
+}
+
+float3 MediumGlowWeight(float3 extinction, float distanceCells)
+{
+    float3 result = distanceCells;
+    if (_NeutralExtinction != 0)
+    {
+        float weight = CellGlowWeight(extinction.r, distanceCells);
+        result = float3(weight, weight, weight);
+    }
+    else
+    {
+        result = float3(
+            CellGlowWeight(extinction.r, distanceCells),
+            CellGlowWeight(extinction.g, distanceCells),
+            CellGlowWeight(extinction.b, distanceCells));
     }
 
     return result;

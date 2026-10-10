@@ -8,7 +8,7 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Kern.UI.HUD.Player.Model;
-public sealed class PlayerStatsModel : IPlayerStats
+public sealed class PlayerStatsModel : IPlayerStats, IBatchAwareProcessor
 {
     private readonly Dictionary<string, StatusLineEntry> _statusLines = new();
 
@@ -27,16 +27,16 @@ public sealed class PlayerStatsModel : IPlayerStats
         }
 
         _statusLines[tag] = new StatusLineEntry((string[])text.Clone(), color, blinkRate, expiry);
-        OnStatusLinesChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatusLinesChanged();
+        NotifyStatsChanged();
     }
 
     public void RemoveStatusLine(string tag)
     {
         if (_statusLines.Remove(tag))
         {
-            OnStatusLinesChanged?.Invoke();
-            OnStatsChanged?.Invoke();
+            NotifyStatusLinesChanged();
+            NotifyStatsChanged();
         }
     }
 
@@ -48,8 +48,8 @@ public sealed class PlayerStatsModel : IPlayerStats
         }
 
         _statusLines.Clear();
-        OnStatusLinesChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatusLinesChanged();
+        NotifyStatsChanged();
     }
 
     public bool IsReady => MaxHealth > 0 && BasketCapacity > 0 && !string.IsNullOrEmpty(Nickname) && Level > 0;
@@ -59,7 +59,7 @@ public sealed class PlayerStatsModel : IPlayerStats
     public int MaxHealth { get; private set; }
     public float HealthPercent => MaxHealth > 0 ? (float)Health / MaxHealth : 0f;
     public long Money { get; private set; }
-    public long Creds { get; private set; }
+    public long Credits { get; private set; }
     public int GeologyCurrent { get; private set; }
     public int GeologyMax { get; private set; }
     public string GeologyText { get; private set; } = string.Empty;
@@ -68,7 +68,7 @@ public sealed class PlayerStatsModel : IPlayerStats
     public int BasketMaxPercent { get; private set; }
     public int OnlinePlayers { get; private set; }
     public int OnlineProgrammator { get; private set; }
-    public int ClanID { get; private set; }
+    public int ClanId { get; private set; }
     public int MaxDepth { get; private set; }
     public int CurrentDepth { get; private set; }
 
@@ -82,7 +82,9 @@ public sealed class PlayerStatsModel : IPlayerStats
 
     public event Action? OnStatsChanged;
     public event Action? OnHealthChanged;
+    public event Action<int, int>? OnHealthUpdated;
     public event Action? OnCurrencyChanged;
+    public event Action<long, long>? OnCurrencyUpdated;
     public event Action? OnGeologyChanged;
     public event Action? OnLevelChanged;
     public event Action? OnNicknameChanged;
@@ -91,6 +93,63 @@ public sealed class PlayerStatsModel : IPlayerStats
     public event Action? OnDailyBonusChanged;
     public event Action? OnMissionChanged;
     public event Action? OnMissionArrowChanged;
+
+    private int _batchDepth;
+    private bool _hasPendingStatsChanged;
+    private bool _hasPendingStatusLinesChanged;
+
+    public void BeginBatch()
+    {
+        _batchDepth++;
+    }
+
+    public void EndBatch()
+    {
+        if (_batchDepth <= 0)
+        {
+            return;
+        }
+
+        _batchDepth--;
+        if (_batchDepth == 0)
+        {
+            if (_hasPendingStatusLinesChanged)
+            {
+                _hasPendingStatusLinesChanged = false;
+                OnStatusLinesChanged?.Invoke();
+            }
+
+            if (_hasPendingStatsChanged)
+            {
+                _hasPendingStatsChanged = false;
+                OnStatsChanged?.Invoke();
+            }
+        }
+    }
+
+    private void NotifyStatsChanged()
+    {
+        if (_batchDepth > 0)
+        {
+            _hasPendingStatsChanged = true;
+        }
+        else
+        {
+            OnStatsChanged?.Invoke();
+        }
+    }
+
+    private void NotifyStatusLinesChanged()
+    {
+        if (_batchDepth > 0)
+        {
+            _hasPendingStatusLinesChanged = true;
+        }
+        else
+        {
+            OnStatusLinesChanged?.Invoke();
+        }
+    }
 
     public bool DailyBonusAvailable { get; private set; }
 
@@ -103,7 +162,7 @@ public sealed class PlayerStatsModel : IPlayerStats
 
         DailyBonusAvailable = available;
         OnDailyBonusChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetNickname(string nickname)
@@ -116,7 +175,7 @@ public sealed class PlayerStatsModel : IPlayerStats
 
         Nickname = nickname;
         OnNicknameChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetLevel(long level)
@@ -128,7 +187,7 @@ public sealed class PlayerStatsModel : IPlayerStats
 
         Level = level;
         OnLevelChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetHealth(int current, int max)
@@ -141,20 +200,22 @@ public sealed class PlayerStatsModel : IPlayerStats
         Health = current;
         MaxHealth = max;
         OnHealthChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        OnHealthUpdated?.Invoke(current, max);
+        NotifyStatsChanged();
     }
 
-    public void SetCurrency(long money, long creds)
+    public void SetCurrency(long money, long credits)
     {
-        if (Money == money && Creds == creds)
+        if (Money == money && Credits == credits)
         {
             return;
         }
 
         Money = money;
-        Creds = creds;
+        Credits = credits;
         OnCurrencyChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        OnCurrencyUpdated?.Invoke(money, credits);
+        NotifyStatsChanged();
     }
 
     public void SetGeology(int current, int max, CellType cell, string text)
@@ -170,7 +231,7 @@ public sealed class PlayerStatsModel : IPlayerStats
         GeologyMax = max;
         GeologyText = text;
         OnGeologyChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetBasket(uint capacity, long[] contents)
@@ -205,7 +266,7 @@ public sealed class PlayerStatsModel : IPlayerStats
         // верхнего клампа нет — отсекаются только отрицательные значения.
         BasketMaxPercent = maxPct < 0 ? 0 : maxPct;
         OnBasketChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetSkillProgress(SkillType skill, long current, long max)
@@ -222,18 +283,18 @@ public sealed class PlayerStatsModel : IPlayerStats
 
         OnlinePlayers = players;
         OnlineProgrammator = programmator;
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
-    public void SetClanID(int clanID)
+    public void SetClanId(int clanId)
     {
-        if (ClanID == clanID)
+        if (ClanId == clanId)
         {
             return;
         }
 
-        ClanID = clanID;
-        OnStatsChanged?.Invoke();
+        ClanId = clanId;
+        NotifyStatsChanged();
     }
 
     public void SetMaxDepth(int depth)
@@ -244,7 +305,7 @@ public sealed class PlayerStatsModel : IPlayerStats
         }
 
         MaxDepth = depth;
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
     public void SetMission(string title, string description, long max)
     {
@@ -263,7 +324,7 @@ public sealed class PlayerStatsModel : IPlayerStats
         MissionProgress = 0;
         MissionMaxProgress = max;
         OnMissionChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetMissionProgress(long current)
@@ -275,7 +336,7 @@ public sealed class PlayerStatsModel : IPlayerStats
 
         MissionProgress = current;
         OnMissionChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetMissionMaxProgress(long max)
@@ -287,7 +348,7 @@ public sealed class PlayerStatsModel : IPlayerStats
 
         MissionMaxProgress = max;
         OnMissionChanged?.Invoke();
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     public void SetMissionArrow(ushort x, ushort y)
@@ -325,7 +386,7 @@ public sealed class PlayerStatsModel : IPlayerStats
             OnMissionArrowChanged?.Invoke();
         }
 
-        OnStatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     private static bool AreContentsEqual(long[] left, long[] right)

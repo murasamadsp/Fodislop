@@ -1,15 +1,16 @@
 #ifndef KERN_TERRAIN_LIGHTING_FIELD_COMMON_INCLUDED
 #define KERN_TERRAIN_LIGHTING_FIELD_COMMON_INCLUDED
 
+#include "Assets/Shaders/World/LightingFieldRaster.hlsl"
+
 struct TerrainLightingFieldVaryings
 {
     float4 positionCS   : SV_POSITION;
     float2 uv           : TEXCOORD0;
-    float4 color        : COLOR;
     float4 worldPos     : TEXCOORD1;
     float4 animData     : TEXCOORD2;
     float4 packedData   : TEXCOORD3;
-    float4 glowData     : TEXCOORD4;
+    float4 lightContourDecal : TEXCOORD4;
     nointerpolation float isForeground : TEXCOORD5;
     float4 subAtlasRect : TEXCOORD6;
     float4 tileSizeUV   : TEXCOORD7;
@@ -22,22 +23,23 @@ struct TerrainLightingFieldVaryings
 TerrainLightingFieldVaryings TerrainLightingFieldVert(TerrainVertexInput input)
 {
     TerrainLightingFieldVaryings output = (TerrainLightingFieldVaryings)0;
-#if defined(KERN_TERRAIN_CELLS)
-    // Background contributes neither material, emission nor occupancy.
+#if defined(KERN_TERRAIN_AO_FIELD)
+    // Фон не масса и контактной тени не даёт.
     if (input.positionOS.z < 0.5)
     {
         output.positionCS = TerrainCulledPosition();
         return output;
     }
+#endif
 
     TERRAIN_RESOLVE_CELL_VERTEX(input, output)
-#else
-    TERRAIN_RESOLVE_ATTRIBUTE_VERTEX(input, output)
-#endif
+    output.positionCS = cell.atlasIndex >= 0.0
+        ? KernLightingFieldClipPosition(cell.positionOS)
+        : TerrainCulledPosition();
 #if defined(KERN_TERRAIN_AO_FIELD)
     // A non-physical foreground cell cannot contribute contact occlusion.
     // Cull its quad before rasterization, including its expanded AO carrier.
-    if (!KernTerrainIsPhysicalMass(KernTerrainLightingFlags(output.glowData.y)))
+    if (!KernTerrainIsPhysicalMass(KernTerrainLightingFlags(output.lightContourDecal.y)))
     {
         output.positionCS = TerrainCulledPosition();
     }
@@ -54,7 +56,8 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
     float4 animData,
     float4 packedData,
     int atlasSlot,
-    float4 atlasTexelSize)
+    float4 atlasTexelSize,
+    float2 carrierPixelWidth)
 {
     TerrainTileUvResult tileUV = ResolveTerrainTileUV(
         geometryUv,
@@ -64,7 +67,7 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
         worldPos,
         animData,
         packedData,
-        _Time.y,
+        0.0,
         atlasTexelSize.xy);
 
     if (!tileUV.isValid)
@@ -72,9 +75,11 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
         return half4(0.0, 0.0, 0.0, 0.0);
     }
 
-    float2 finalUV = PixelArtSampleUV(tileUV.finalUV, atlasTexelSize.zw);
+    float2 finalUV = PixelArtSampleUV(
+        tileUV.finalUV,
+        atlasTexelSize.zw,
+        TerrainPixelArtWidthTexels(carrierPixelWidth, tileSize, atlasTexelSize));
     finalUV = ClampTerrainTileUV(finalUV, tileUV);
-#if defined(KERN_TERRAIN_CELLS)
     [branch]
     if (_PixelArtFiltering < 0.5)
     {
@@ -82,15 +87,6 @@ half4 SampleTerrainLightingFieldAlbedoTexel(
     }
 
     return TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
-#else
-    [branch]
-    if (_PixelArtFiltering < 0.5)
-    {
-        return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, finalUV, 0);
-    }
-
-    return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, finalUV, 0);
-#endif
 }
 
 #endif

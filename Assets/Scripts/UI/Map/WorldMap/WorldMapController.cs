@@ -175,6 +175,13 @@ namespace Kern.UI
             _cameraFollow.SetScrollEnabled(false);
 
             _mapRenderer.Show();
+            if (!_mapRenderer.enabled)
+            {
+                _isInMapMode = false;
+                _cameraFollow.SetScrollEnabled(true);
+                _mapModeState.SetOpen(false);
+                return;
+            }
 
             SetHudVisible(false);
 
@@ -197,8 +204,8 @@ namespace Kern.UI
 
         private void SetHudVisible(bool visible)
         {
-            _playerHud.enabled = visible;
-            _inventory.enabled = visible;
+            _playerHud.SetVisible(visible);
+            _inventory.SetVisible(visible);
         }
     }
 }

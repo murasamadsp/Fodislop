@@ -23,6 +23,28 @@ public static class LightingFrameDumper
         public long maximumStaticCascadeRayWorkUnits;
         public int fieldWidth;
         public int fieldHeight;
+        public int lightWidth;
+        public int lightHeight;
+        public int atlasCapacity;
+        public int atlasEntryCount;
+        public string dynamicTransportMode = "";
+        public bool batchDynamicLights;
+        public bool dynamicExecutionModeApplied;
+        public int fieldPixelsPerCell;
+        public int lightPixelsPerCell;
+        public int cascadeProbePixelsPerCell;
+        public int maximumStaticCascadeDirections;
+        public float dynamicNearCells;
+        public int dynamicAngularSampleCount;
+        public int dynamicEmitterPointsPerAxis;
+        public int dynamicPolarDirectionCount;
+        public int ambientOcclusionPixelsPerCell;
+        public float emptyExtinctionMultiplier;
+        public float solidExtinctionMultiplier;
+        public float surfaceReflectionReachCells;
+        public float dynamicLightIntensity;
+        public float maximumLightMultiplier;
+        public long maximumDynamicPolarRayWorkUnits;
         public int ambientOcclusionWidth;
         public int ambientOcclusionHeight;
         public int cellGridWidth;
@@ -31,7 +53,7 @@ public static class LightingFrameDumper
         public float cellSize;
         public Color ambientColor;
         public float ambientIntensity;
-        public float emissionScale;
+        public float glowScale;
         public Color emptyExtinctionRGB;
         public Color solidExtinctionRGB;
         public string enabledFeatures = "";
@@ -65,8 +87,12 @@ public static class LightingFrameDumper
         public int ddaSegments;
         public long ddaTexelVisits;
         public int cascadeMergeSamples;
+        public long dynamicSdfSamples;
         public int activeDynamicLights;
         public int dynamicTraceCount;
+        public int dynamicPolarDispatchCount;
+        public int dynamicReceiverDispatchCount;
+        public int dynamicBatchDescriptorBytes;
         public long dynamicDispatchPixels;
         public long dynamicComposePixels;
         public long compositeDispatchPixels;
@@ -96,9 +122,10 @@ public static class LightingFrameDumper
         public int lightingFieldRebuildCount;
         public float terrainMeshTimeMs;
         public float terrainCacheTimeMs;
-        public float terrainFloodFillTimeMs;
-        public float terrainGpuUploadTimeMs;
+        [UnityEngine.Serialization.FormerlySerializedAs("terrainGpuUploadTimeMs")]
+        public float terrainGPUUploadTimeMs;
         public float terrainAtlasUploadTimeMs;
+        public TerrainTextureUploadDump? terrainTextureUpload;
         public int streamingPlanKind;
         public int streamingWindowOriginX;
         public int streamingWindowOriginY;
@@ -106,6 +133,27 @@ public static class LightingFrameDumper
         public int streamingWindowHeight;
         public int streamingDeltaX;
         public int streamingDeltaY;
+    }
+
+    [Serializable]
+    public sealed class TerrainTextureUploadDump
+    {
+        public bool available;
+        public long generation;
+        public long applyCalls;
+        public long applyPayloadBytes;
+        public long copyTextureCalls;
+        public long copyTexturePayloadBytes;
+        public bool hasSourceFrame;
+        public int sourceFrameId;
+        public int observationFrameId;
+        public bool frameDeltaValid;
+        public long applyCallsFrameDelta;
+        public long applyPayloadBytesFrameDelta;
+        public long copyTextureCallsFrameDelta;
+        public long copyTexturePayloadBytesFrameDelta;
+        public int frameDeltaStartObservationFrameId;
+        public int frameDeltaEndObservationFrameId;
     }
 
     public static string DumpCurrentFrame(
@@ -151,6 +199,28 @@ public static class LightingFrameDumper
             maximumStaticCascadeRayWorkUnits = LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits,
             fieldWidth = resources.FieldWidth,
             fieldHeight = resources.FieldHeight,
+            lightWidth = resources.LightWidth,
+            lightHeight = resources.LightHeight,
+            atlasCapacity = resources.Cascade.AtlasCapacity,
+            atlasEntryCount = resources.Cascade.AtlasEntryCount,
+            dynamicTransportMode = LightingQualityTuningController.DynamicTransportMode.ToString(),
+            batchDynamicLights = LightingQualityTuningController.BatchDynamicLights,
+            dynamicExecutionModeApplied = LightingQualityTuningController.IsDynamicExecutionModeApplied,
+            fieldPixelsPerCell = LightingQualityTuningController.FieldPixelsPerCell,
+            lightPixelsPerCell = LightingQualityTuningController.LightPixelsPerCell,
+            cascadeProbePixelsPerCell = LightingQualityTuningController.CascadeProbePixelsPerCell,
+            maximumStaticCascadeDirections = LightingQualityTuningController.MaximumStaticCascadeDirections,
+            dynamicNearCells = LightingQualityTuningController.DynamicNearCells,
+            dynamicAngularSampleCount = LightingQualityTuningController.DynamicAngularSampleCount,
+            dynamicEmitterPointsPerAxis = LightingQualityTuningController.DynamicEmitterPointsPerAxis,
+            dynamicPolarDirectionCount = LightingQualityTuningController.DynamicPolarDirectionCount,
+            ambientOcclusionPixelsPerCell = LightingConfigHolder.AmbientOcclusionPixelsPerCell,
+            emptyExtinctionMultiplier = LightingConfigHolder.EmptyExtinctionMultiplier,
+            solidExtinctionMultiplier = LightingConfigHolder.SolidExtinctionMultiplier,
+            surfaceReflectionReachCells = LightingConfigHolder.SurfaceReflectionReachCells,
+            dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity,
+            maximumLightMultiplier = LightingConfigHolder.MaximumLightMultiplier,
+            maximumDynamicPolarRayWorkUnits = LightingConfigHolder.MaximumDynamicPolarRayWorkUnits,
             ambientOcclusionWidth = resources.Geometry.AmbientOcclusionWidth,
             ambientOcclusionHeight = resources.Geometry.AmbientOcclusionHeight,
             cellGridWidth = resources.Geometry.CellGridWidth,
@@ -159,7 +229,7 @@ public static class LightingFrameDumper
             cellSize = cellSize,
             ambientColor = LightingConfigHolder.AmbientColor,
             ambientIntensity = LightingConfigHolder.AmbientIntensity,
-            emissionScale = LightingConfigHolder.EmissionScale,
+            glowScale = LightingConfigHolder.GlowScale,
             emptyExtinctionRGB = LightingConfigHolder.EmptyExtinctionRGB,
             solidExtinctionRGB = LightingConfigHolder.SolidExtinctionRGB,
             enabledFeatures = LightingConfigHolder.EnabledFeatures.ToString(),
@@ -182,6 +252,9 @@ public static class LightingFrameDumper
             cascadeMergeSamples = telemetry.LightingCascadeMergeSamples,
             activeDynamicLights = telemetry.ActiveDynamicLights,
             dynamicTraceCount = telemetry.LightingDynamicTraceCount,
+            dynamicPolarDispatchCount = telemetry.LightingDynamicPolarDispatchCount,
+            dynamicReceiverDispatchCount = telemetry.LightingDynamicReceiverDispatchCount,
+            dynamicBatchDescriptorBytes = telemetry.LightingDynamicBatchDescriptorBytes,
             dynamicDispatchPixels = telemetry.LightingDynamicDispatchPixels,
             dynamicComposePixels = telemetry.LightingDynamicComposePixels,
             compositeDispatchPixels = telemetry.LightingCompositeDispatchPixels,
@@ -215,9 +288,9 @@ public static class LightingFrameDumper
             lightingFieldRebuildCount = telemetry.LightingFieldRebuildCount,
             terrainMeshTimeMs = telemetry.TerrainMeshTimeMs,
             terrainCacheTimeMs = telemetry.TerrainCacheTimeMs,
-            terrainFloodFillTimeMs = telemetry.TerrainFloodFillTimeMs,
-            terrainGpuUploadTimeMs = telemetry.TerrainGpuUploadTimeMs,
+            terrainGPUUploadTimeMs = telemetry.TerrainGPUUploadTimeMs,
             terrainAtlasUploadTimeMs = telemetry.TerrainAtlasUploadTimeMs,
+            terrainTextureUpload = CreateTerrainTextureUploadDump(telemetry),
             streamingPlanKind = telemetry.StreamingPlanKind,
             streamingWindowOriginX = telemetry.StreamingWindowOriginX,
             streamingWindowOriginY = telemetry.StreamingWindowOriginY,
@@ -228,7 +301,7 @@ public static class LightingFrameDumper
         };
         if (includeTextures)
         {
-            TryReadGpuCounters(lightingCounters, counters);
+            TryReadGPUCounters(lightingCounters, counters);
         }
         File.WriteAllText(Path.Combine(dir, "counters.json"), JsonUtility.ToJson(counters, true));
 
@@ -239,7 +312,7 @@ public static class LightingFrameDumper
 
         // 3. Textures Dump
         SaveRenderTexture(resources.Geometry.Material, Path.Combine(dir, "MaterialField.png"));
-        SaveRenderTexture(resources.Geometry.StaticEmission, Path.Combine(dir, "StaticEmissionField.png"));
+        SaveRenderTexture(resources.Geometry.StaticGlow, Path.Combine(dir, "StaticGlowField.png"));
         SaveRenderTexture(resources.Geometry.CellSolidMask, Path.Combine(dir, "CellSolidMask.png"));
         SaveRenderTexture(resources.Geometry.AmbientOcclusion, Path.Combine(dir, "AmbientOcclusionField.png"));
         SaveRenderTexture(resources.Direct.Static, Path.Combine(dir, "StaticDirect.png"));
@@ -248,6 +321,40 @@ public static class LightingFrameDumper
 
         DiagnosticReport.Announce("Дамп кадра света", dir);
         return dir;
+    }
+
+    private static TerrainTextureUploadDump? CreateTerrainTextureUploadDump(IFrameTelemetry telemetry)
+    {
+        if (telemetry is not FrameTelemetry frameTelemetry ||
+            frameTelemetry.TerrainTextureUploadSnapshot is not { } snapshot)
+        {
+            return null;
+        }
+
+        var dump = new TerrainTextureUploadDump
+        {
+            available = snapshot.IsAvailable,
+            generation = snapshot.Generation,
+            applyCalls = snapshot.IsAvailable ? snapshot.ApplyCalls : 0L,
+            applyPayloadBytes = snapshot.IsAvailable ? snapshot.ApplyPayloadBytes : 0L,
+            copyTextureCalls = snapshot.IsAvailable ? snapshot.CopyTextureCalls : 0L,
+            copyTexturePayloadBytes = snapshot.IsAvailable ? snapshot.CopyTexturePayloadBytes : 0L,
+            hasSourceFrame = snapshot.HasSourceFrame,
+            sourceFrameId = snapshot.SourceFrameId,
+            observationFrameId = snapshot.ObservationFrameId,
+        };
+        if (frameTelemetry.TerrainTextureUploadFrameDelta is { } delta)
+        {
+            dump.frameDeltaValid = true;
+            dump.applyCallsFrameDelta = delta.ApplyCalls;
+            dump.applyPayloadBytesFrameDelta = delta.ApplyPayloadBytes;
+            dump.copyTextureCallsFrameDelta = delta.CopyTextureCalls;
+            dump.copyTexturePayloadBytesFrameDelta = delta.CopyTexturePayloadBytes;
+            dump.frameDeltaStartObservationFrameId = delta.StartObservationFrameId;
+            dump.frameDeltaEndObservationFrameId = delta.EndObservationFrameId;
+        }
+
+        return dump;
     }
 
     private static long EstimateCascadeDispatchThreads(LightingResources resources)
@@ -261,7 +368,7 @@ public static class LightingFrameDumper
         return total;
     }
 
-    private static void TryReadGpuCounters(ComputeBuffer? lightingCounters, CountersDump counters)
+    private static void TryReadGPUCounters(ComputeBuffer? lightingCounters, CountersDump counters)
     {
         if (lightingCounters == null)
         {
@@ -270,11 +377,12 @@ public static class LightingFrameDumper
 
         try
         {
-            var values = new uint[3];
-            lightingCounters.GetData(values);
+            var values = new uint[4];
+            lightingCounters.GetData(values, 0, 0, values.Length);
             counters.ddaSegments = (int)Math.Min(values[0], int.MaxValue);
             counters.ddaTexelVisits = values[1];
             counters.cascadeMergeSamples = (int)Math.Min(values[2], int.MaxValue);
+            counters.dynamicSdfSamples = values[3];
         }
         catch (Exception exception)
         {

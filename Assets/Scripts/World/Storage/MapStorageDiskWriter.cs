@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Persistence;
@@ -50,13 +52,13 @@ internal static class MapStorageDiskWriter
             Directory.CreateDirectory(directory);
         }
 
-        RestoreBackupWhenPrimaryHeaderIsDamaged(
+        PrepareWorldLayerFile(
             path,
-            backupMapFilePath,
             widthChunks,
             heightChunks,
-            ProjectRuntimeContracts.World.ChunkSize);
-        CreateBackup(path, backupMapFilePath);
+            ProjectRuntimeContracts.World.ChunkSize,
+            backupMapFilePath);
+
         try
         {
             return new WorldLayer<CellType>(
@@ -78,6 +80,36 @@ internal static class MapStorageDiskWriter
         }
     }
 
+    internal static UniTask PrepareWorldLayerFileAsync(
+        string path,
+        int widthChunks,
+        int heightChunks,
+        int chunkSize,
+        string backupMapFilePath,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return UniTask.RunOnThreadPool(
+            () => PrepareWorldLayerFile(path, widthChunks, heightChunks, chunkSize, backupMapFilePath));
+    }
+
+    private static void PrepareWorldLayerFile(
+        string path,
+        int widthChunks,
+        int heightChunks,
+        int chunkSize,
+        string backupMapFilePath)
+    {
+        RestoreBackupWhenPrimaryHeaderIsDamaged(
+            path,
+            backupMapFilePath,
+            widthChunks,
+            heightChunks,
+            chunkSize);
+        CreateBackup(path, backupMapFilePath);
+        WorldLayer<CellType>.MigrateLegacyFileIfRequired(path, widthChunks, heightChunks, chunkSize);
+    }
+
     private static void RestoreBackupWhenPrimaryHeaderIsDamaged(
         string mapPath,
         string backupMapFilePath,
@@ -97,10 +129,28 @@ internal static class MapStorageDiskWriter
             return;
         }
 
-        if (primaryFormatVersion == 0)
+        if (primaryFormatVersion == 0 &&
+            HasRecoverableHeader(mapPath, widthChunks, heightChunks, chunkSize))
         {
             // Version zero has an explicit migration path. Let that migration
-            // preserve the source instead of replacing it from an older backup.
+            // preserve a structurally valid source instead of replacing it
+            // from an older backup.
+            return;
+        }
+
+        if (primaryFormatVersion == WorldLayerFileHeader.LegacyRLEFormatVersion &&
+            HasRecoverableHeader(mapPath, widthChunks, heightChunks, chunkSize))
+        {
+            // A valid v1 header has an explicit payload converter. Keep its
+            // data as the migration source instead of replacing it with backup.
+            return;
+        }
+
+        if (primaryFormatVersion == WorldLayerFileHeader.LegacyFramedFormatVersion &&
+            HasRecoverableHeader(mapPath, widthChunks, heightChunks, chunkSize))
+        {
+            // V2 framed chunks have an explicit v2-to-current converter. Keep
+            // the compatible source so migration can add chunk-index binding.
             return;
         }
 
@@ -150,12 +200,12 @@ internal static class MapStorageDiskWriter
             int height = reader.ReadInt32();
             int storedChunkSize = reader.ReadInt32();
             int formatVersion = reader.ReadInt32();
-            long tableLength = (long)widthChunks * heightChunks * sizeof(long);
-
             return width == widthChunks && height == heightChunks &&
                 storedChunkSize == chunkSize &&
                 formatVersion == WorldLayerFileHeader.CurrentFormatVersion &&
-                stream.Length >= WorldLayerFileHeader.HeaderSize + tableLength;
+                WorldLayerFileHeader.TryValidateOffsetTable(
+                    stream,
+                    checked(widthChunks * heightChunks));
         }
         catch (IOException)
         {
@@ -187,14 +237,13 @@ internal static class MapStorageDiskWriter
                 return false;
             }
 
-            if (formatVersion == 0)
-            {
-                return true;
-            }
-
-            long tableLength = (long)widthChunks * heightChunks * sizeof(long);
-            return formatVersion == WorldLayerFileHeader.CurrentFormatVersion &&
-                stream.Length >= WorldLayerFileHeader.HeaderSize + tableLength;
+            return (formatVersion == 0 ||
+                    formatVersion == WorldLayerFileHeader.LegacyRLEFormatVersion ||
+                    formatVersion == WorldLayerFileHeader.LegacyFramedFormatVersion ||
+                    formatVersion == WorldLayerFileHeader.CurrentFormatVersion) &&
+                WorldLayerFileHeader.TryValidateOffsetTable(
+                    stream,
+                    checked(widthChunks * heightChunks));
         }
         catch (IOException)
         {
@@ -219,7 +268,9 @@ internal static class MapStorageDiskWriter
                        FileShare.None))
             {
                 source.CopyTo(destination);
-                destination.Flush(flushToDisk: true);
+                // Flush managed buffers to OS file system cache without blocking
+                // on physical drive sync (F_FULLFSYNC on macOS), preventing main thread stalls.
+                destination.Flush(flushToDisk: false);
             }
 
             if (File.Exists(destinationPath))

@@ -16,8 +16,6 @@ public interface ITextureService
     AtlasCoordinate GetCellTextureCoordinate(CellType cellType);
     Vector4 GetCellFrameRect(CellType cellType);
     int GetAnimationFrameCount(CellType cellType);
-    int GetFrameSize(CellType cellType);
-    float GetAnimationSpeedForCell(CellType cellType);
     UniTask<AtlasCoordinate> GetCellTextureCoordinate(
         CellType cellType,
         int globalX,
@@ -25,7 +23,7 @@ public interface ITextureService
     Texture2D? PrismaticFlowMapTexture { get; }
     Texture2D? FlowMapTexture { get; }
     Texture2D? TerrainDecalAtlasTexture { get; }
-    Texture2D? TerrainDecalStoneAtlasTexture { get; }
+    Texture2D? TerrainDecalRockAtlasTexture { get; }
     IReadOnlyList<IAtlasDescriptor> GetAllAtlases();
     string GetCacheStats();
     void FlushDirtyAtlases();

@@ -49,10 +49,19 @@ namespace Kern.UI
             // (мост, фаза Awake), и панель UIDocument (создаётся в OnEnable
             // документа). Здесь — только реактивация уже построенного UI:
             // переприменяем текст, не перестраивая.
-            if (_initialized && _root != null && _loc != null)
+            if (_initialized && _root != null)
             {
-                _loc.RegisterLocalizable(this);
-                ApplyLocalizedText();
+                _document = GetComponent<UIDocument>();
+                if (_document?.rootVisualElement != null && !_document.rootVisualElement.Contains(_root))
+                {
+                    _document.rootVisualElement.Add(_root);
+                }
+
+                if (_loc != null)
+                {
+                    _loc.RegisterLocalizable(this);
+                    ApplyLocalizedText();
+                }
             }
         }
 
@@ -109,7 +118,12 @@ namespace Kern.UI
             // некому и форма входа осталась бы видимой поверх онбординга.
             _gatewayRoot = _root.Q<VisualElement>("GatewayRoot") ?? _root;
 
-            _authGate = AuthGate.TryCreate(_root, _clientConfig, _authentication, _loc);
+            _authGate = AuthGate.TryCreate(
+                _root,
+                _clientConfig,
+                _authentication,
+                _operations,
+                _loc);
             if (_authGate == null)
             {
                 Debug.LogWarning("[Gateway] Ворота входа не собрались — сразу уходим в меню.");
@@ -152,6 +166,12 @@ namespace Kern.UI
 
         private void OnDestroy()
         {
+            if (_authGate != null)
+            {
+                _authGate.Passed -= OnAuthPassed;
+                _authGate.Dispose();
+            }
+
             if (_loc != null)
             {
                 _loc.UnregisterLocalizable(this);

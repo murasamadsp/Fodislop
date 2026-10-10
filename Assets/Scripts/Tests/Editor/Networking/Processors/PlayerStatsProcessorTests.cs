@@ -43,13 +43,13 @@ public class PlayerStatsProcessorTests
     }
 
     [Test]
-    public void Process_CurrencyPacket_UpdatesMoneyAndCreds()
+    public void Process_CurrencyPacket_UpdatesMoneyAndCredits()
     {
         var packet = new CurrencyPacket(1500, 250);
         _processor.Process(packet);
 
         Assert.AreEqual(1500, _stats.Money);
-        Assert.AreEqual(250, _stats.Creds);
+        Assert.AreEqual(250, _stats.Credits);
     }
 
     [Test]
@@ -70,5 +70,23 @@ public class PlayerStatsProcessorTests
         _processor.Process(packet);
 
         Assert.AreEqual(512, _stats.MaxDepth);
+    }
+
+    [Test]
+    public void BeginBatch_EndBatch_CoalescesMutationsIntoSingleStatsChangedEvent()
+    {
+        int statsChangedCount = 0;
+        _stats.OnStatsChanged += () => statsChangedCount++;
+
+        _processor.BeginBatch();
+        _processor.Process(new LevelPacket(5));
+        _processor.Process(new HealthPacket(80, 100));
+        _processor.Process(new CurrencyPacket(500, 20));
+        _processor.EndBatch();
+
+        Assert.AreEqual(1, statsChangedCount);
+        Assert.AreEqual(5, _stats.Level);
+        Assert.AreEqual(80, _stats.Health);
+        Assert.AreEqual(500, _stats.Money);
     }
 }

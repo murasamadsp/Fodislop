@@ -9,9 +9,12 @@
 #define PI 3.14159265359
 #define PI2 6.28318530718
 
-// Dynamic light below this absolute radiance cannot move any display level
-// (see TraceLightSegment). Not a tuning value: derived from output precision.
-static const float InvisibleDynamicRadiance = 1e-6;
+// Angular horizon slack (TraceDynamicPolar / DynamicHorizonContains). The far
+// gather subtracts the optical depth at the ray's entry into the source cell,
+// at most this many solid cells; one source chord weighs below this factor.
+// Derived bounds, not tuning values.
+static const float DynamicHorizonSourceDepthCells = 1.5;
+static const float DynamicHorizonWeightMargin = 1.5;
 
 // Плотность сэмплирования эмиттера по оси — юниформа
 // _DynamicEmitterPointsPerAxis, объявленная в WorldLighting.compute.
@@ -59,6 +62,32 @@ struct DynamicTileInfo
     int2 fieldOrigin;
     int2 size;
     int2 tileOffset;
+    int reachIndex;
+    int reserved;
+};
+
+// One source dispatch, mirrored by DynamicLightBatch.WorkItem (32 bytes).
+// Receiver origin/size use the light lattice; polar size is angles/radial rows.
+struct DynamicLightWorkItem
+{
+    int2 receiverOrigin;
+    int2 receiverSize;
+    int2 polarSize;
+    int lightIndex;
+    int slot;
+};
+
+// Explicit per-invocation state shared by serial and batched transport.
+struct DynamicTraceContext
+{
+    int2 receiverOrigin;
+    int2 receiverSize;
+    int2 tileOffset;
+    int2 polarSize;
+    int lightIndex;
+    int slot;
+    int polarLayerOffset;
+    int horizonBase;
 };
 
 #endif // KERN_LIGHTING_TYPES_HLSL
