@@ -35,7 +35,7 @@ namespace Kern.Game
             new("Kern.WorldEntities.LateUpdate");
 
         private static readonly AllocationLedger.Entry _AllocationEntry =
-            AllocationLedger.Register("РЎСѓС‰РЅРѕСЃС‚Рё РјРёСЂР° вЂ” LateUpdate");
+            AllocationLedger.Register("Сущности мира — LateUpdate");
 
         private static readonly int _SpriteAlphaCullID =
             Shader.PropertyToID("_SpriteAlphaCull");
@@ -72,7 +72,7 @@ namespace Kern.Game
 
         // Light-emitting sprites are drawn into the lighting fields from their
         // own mesh; see WorldEntityLightingEmitter. The revision follows only
-        // their state вЂ” camera motion may rebuild the visible batch when it
+        // their state — camera motion may rebuild the visible batch when it
         // leaves the cached coverage and must not re-solve light.
         private Material? _batchMaterial;
         private bool _lightingContributorRegistered;
@@ -260,8 +260,8 @@ namespace Kern.Game
                 OVERLAY_BATCH_SORTING_ORDER);
         }
 
-        // РџРѕСЂРѕРіРё РѕС‚СЃРµС‡РµРЅРёСЏ РѕРґРёРЅР°РєРѕРІС‹ РґР»СЏ РІСЃРµС… РјР°С‚РµСЂРёР°Р»РѕРІ РјРёСЂР° СЃСѓС‰РЅРѕСЃС‚РµР№, РїРѕСЌС‚РѕРјСѓ
-        // СѓС…РѕРґСЏС‚ РіР»РѕР±Р°Р»СЊРЅС‹РјРё СЋРЅРёС„РѕСЂРјР°РјРё, Р° РЅРµ РІ РєР°Р¶РґС‹Р№ РјР°С‚РµСЂРёР°Р» РїРѕ РѕС‚РґРµР»СЊРЅРѕСЃС‚Рё.
+        // Пороги отсечения одинаковы для всех материалов мира сущностей, поэтому
+        // уходят глобальными юниформами, а не в каждый материал по отдельности.
         private static void ApplyTuningGlobals()
         {
             if (_tuningGlobalsApplied)
