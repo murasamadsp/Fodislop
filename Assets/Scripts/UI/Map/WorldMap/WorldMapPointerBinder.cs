@@ -5,13 +5,19 @@ using UnityEngine.UIElements;
 
 namespace Kern.UI;
 
-internal sealed class WorldMapPointerBinder(WorldMapPanel panel) : IDisposable
+internal sealed class WorldMapPointerBinder : IDisposable
 {
+    private readonly WorldMapPanel _panel;
     private bool _bound;
     private EventCallback<PointerDownEvent>? _onDown;
     private EventCallback<PointerMoveEvent>? _onMove;
     private EventCallback<PointerUpEvent>? _onUp;
     private EventCallback<ClickEvent>? _onClick;
+
+    public WorldMapPointerBinder(WorldMapPanel panel)
+    {
+        _panel = panel;
+    }
 
     public void Bind(
         EventCallback<PointerDownEvent> onDown,
@@ -19,7 +25,7 @@ internal sealed class WorldMapPointerBinder(WorldMapPanel panel) : IDisposable
         EventCallback<PointerUpEvent> onUp,
         EventCallback<ClickEvent> onClick)
     {
-        Image? image = panel.Image;
+        Image? image = _panel.Image;
         if (image == null || _bound)
         {
             return;
@@ -52,15 +58,15 @@ internal sealed class WorldMapPointerBinder(WorldMapPanel panel) : IDisposable
         EventCallback<PointerUpEvent> onUp,
         EventCallback<ClickEvent> onClick)
     {
-        if (!_bound || panel.Image == null)
+        if (!_bound || _panel.Image == null)
         {
             return;
         }
 
-        panel.Image.UnregisterCallback(onDown);
-        panel.Image.UnregisterCallback(onMove);
-        panel.Image.UnregisterCallback(onUp);
-        panel.Image.UnregisterCallback(onClick);
+        _panel.Image.UnregisterCallback(onDown);
+        _panel.Image.UnregisterCallback(onMove);
+        _panel.Image.UnregisterCallback(onUp);
+        _panel.Image.UnregisterCallback(onClick);
         _bound = false;
         _onDown = null;
         _onMove = null;

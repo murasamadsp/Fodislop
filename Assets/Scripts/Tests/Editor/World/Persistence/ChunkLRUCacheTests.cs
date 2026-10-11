@@ -14,7 +14,9 @@ public class ChunkLRUCacheTests
     public void AddAndGet_SingleChunk_StoresAndRetrieves()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 10);
-        int[] chunk = [1, 2, 3];
+        int[] chunk = new[] {
+1, 2, 3
+ };
 
         cache.AddOrUpdate(5, chunk);
 
@@ -28,9 +30,15 @@ public class ChunkLRUCacheTests
     public void Add_ExceedingCapacity_EvictsOldestChunk()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 2);
-        int[] c1 = [1];
-        int[] c2 = [2];
-        int[] c3 = [3];
+        int[] c1 = new[] {
+1
+ };
+        int[] c2 = new[] {
+2
+ };
+        int[] c3 = new[] {
+3
+ };
 
         cache.AddOrUpdate(1, c1);
         cache.AddOrUpdate(2, c2);
@@ -46,9 +54,15 @@ public class ChunkLRUCacheTests
     public void Touch_RefreshesLRUOrder_EvictsOldestInstead()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 2);
-        int[] c1 = [1];
-        int[] c2 = [2];
-        int[] c3 = [3];
+        int[] c1 = new[] {
+1
+ };
+        int[] c2 = new[] {
+2
+ };
+        int[] c3 = new[] {
+3
+ };
 
         cache.AddOrUpdate(1, c1);
         cache.AddOrUpdate(2, c2);
@@ -73,14 +87,18 @@ public class ChunkLRUCacheTests
             maxCapacity: 1,
             onEvictDirty: (index, data) => evicted.Add((index, data)));
 
-        int[] c1 = [10];
+        int[] c1 = new[] {
+10
+ };
         cache.AddOrUpdate(1, c1);
         cache.MarkDirty(1);
 
         Assert.IsTrue(cache.IsDirty(1));
         Assert.IsTrue(cache.HasDirtyChunks);
 
-        int[] c2 = [20];
+        int[] c2 = new[] {
+20
+ };
         cache.AddOrUpdate(2, c2); // triggers eviction of 1
 
         Assert.AreEqual(1, evicted.Count);
@@ -93,8 +111,8 @@ public class ChunkLRUCacheTests
     public void Clear_EmptiesAllLoadedAndDirtyState()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 5);
-        cache.AddOrUpdate(1, [1]);
-        cache.AddOrUpdate(2, [2]);
+        cache.AddOrUpdate(1, new[] { 1 });
+        cache.AddOrUpdate(2, new[] { 2 });
         cache.MarkDirty(1);
 
         cache.Clear();
@@ -135,7 +153,7 @@ public class ChunkLRUCacheTests
         var cache = new ChunkLRUCache<int>(maxCapacity: 2, allowDirtyEviction: false);
         for (int index = 0; index < 5; index++)
         {
-            cache.AddOrUpdate(index, [index]);
+        cache.AddOrUpdate(index, new[] { index });
             cache.MarkDirty(index);
         }
 
@@ -143,7 +161,7 @@ public class ChunkLRUCacheTests
 
         var snapshot = cache.DetachDirtySnapshot();
         cache.CompleteDirtySnapshot(snapshot);
-        cache.AddOrUpdate(5, [5]);
+        cache.AddOrUpdate(5, new[] { 5 });
 
         Assert.That(cache.LoadedCount, Is.EqualTo(2), "The cache stayed at its dirty high-water mark after the write.");
         Assert.That(cache.Contains(5), Is.True);
@@ -162,7 +180,7 @@ public class ChunkLRUCacheTests
 
         for (int index = 0; index < 32; index++)
         {
-            cache.AddOrUpdate(index, [index]);
+        cache.AddOrUpdate(index, new[] { index });
             cache.MarkDirty(index);
         }
 
@@ -179,12 +197,12 @@ public class ChunkLRUCacheTests
         var cache = new ChunkLRUCache<int>(maxCapacity: 4, allowDirtyEviction: false);
         for (int index = 0; index < 8; index++)
         {
-            cache.AddOrUpdate(index, [index]);
+        cache.AddOrUpdate(index, new[] { index });
             cache.MarkDirty(index);
         }
 
         cache.ClearDirty();
-        cache.AddOrUpdate(100, [100]);
+        cache.AddOrUpdate(100, new[] { 100 });
 
         Assert.AreEqual(4, cache.LoadedCount);
         Assert.IsTrue(cache.Contains(100));
@@ -194,16 +212,16 @@ public class ChunkLRUCacheTests
     public void ADetachedChunkIsNotEvictedUntilItsWriteCompletes()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 2, allowDirtyEviction: false);
-        cache.AddOrUpdate(1, [1]);
+        cache.AddOrUpdate(1, new[] { 1 });
         cache.MarkDirty(1);
         List<(int Index, int[] Chunk)> snapshot = cache.DetachDirtySnapshot();
 
-        cache.AddOrUpdate(2, [2]);
-        cache.AddOrUpdate(3, [3]);
+        cache.AddOrUpdate(2, new[] { 2 });
+        cache.AddOrUpdate(3, new[] { 3 });
         Assert.IsTrue(cache.Contains(1), "чанк вытеснен, пока его писали на диск");
 
         cache.CompleteDirtySnapshot(snapshot);
-        cache.AddOrUpdate(4, [4]);
+        cache.AddOrUpdate(4, new[] { 4 });
 
         Assert.IsFalse(cache.Contains(1));
     }
@@ -215,7 +233,7 @@ public class ChunkLRUCacheTests
     public void CompletingAnOlderSnapshotKeepsTheNewerSnapshotDetached()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 4, allowDirtyEviction: false);
-        cache.AddOrUpdate(1, [1]);
+        cache.AddOrUpdate(1, new[] { 1 });
         cache.MarkDirty(1);
         List<(int Index, int[] Chunk)> first = cache.DetachDirtySnapshot();
 
@@ -237,7 +255,7 @@ public class ChunkLRUCacheTests
     public void RestoringAFailedSnapshotMarksTheChunkDirtyAgain()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 4, allowDirtyEviction: false);
-        cache.AddOrUpdate(1, [1]);
+        cache.AddOrUpdate(1, new[] { 1 });
         cache.MarkDirty(1);
         List<(int Index, int[] Chunk)> snapshot = cache.DetachDirtySnapshot();
         Assert.IsFalse(cache.IsDirty(1));
@@ -251,7 +269,7 @@ public class ChunkLRUCacheTests
     public void DetachingForDispose_IncludesSnapshotAwaitingMainThreadCompletion()
     {
         var cache = new ChunkLRUCache<int>(maxCapacity: 4, allowDirtyEviction: false);
-        cache.AddOrUpdate(1, [11]);
+        cache.AddOrUpdate(1, new[] { 11 });
         cache.MarkDirty(1);
         List<(int Index, int[] Chunk)> inFlight = cache.DetachDirtySnapshot();
 

@@ -10,18 +10,26 @@ using UnityEngine;
 
 namespace Kern.Networking.Connection;
 
-public sealed class ConnectionTransportFactory(
+public sealed class ConnectionTransportFactory
+{
+    private readonly IClientConfigManager _clientConfigManager;
+    private readonly DummyConnection _dummyConnection;
+    public ConnectionTransportFactory(
     IClientConfigManager clientConfigManager,
     DummyConnection dummyConnection)
-{
+    {
+        _clientConfigManager = clientConfigManager;
+        _dummyConnection = dummyConnection;
+    }
+
     public IServerConnection Create()
     {
-        ClientConfig? config = clientConfigManager.Config;
+        ClientConfig? config = _clientConfigManager.Config;
         if (config == null)
         {
             Debug.LogWarning(
                 "[Connection] Client config is not initialized yet; using the Bootstrap-registered DummyConnection.");
-            return dummyConnection;
+            return _dummyConnection;
         }
 
         ConnectionSettings settings = config.Connection;
@@ -30,7 +38,7 @@ public sealed class ConnectionTransportFactory(
         {
             Debug.Log(
                 "[Connection] Transport: DummyConnection (offline stub). Set UseDummyConnection=false in client config for the real server.");
-            return dummyConnection;
+            return _dummyConnection;
         }
 
         if (!ConnectionTransportConfig.TryResolveEndpoint(

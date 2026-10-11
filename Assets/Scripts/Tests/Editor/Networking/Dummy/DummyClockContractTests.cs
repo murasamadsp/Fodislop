@@ -13,13 +13,15 @@ public sealed class DummyClockContractTests
     // Файловый ввод-вывод карты и покадровая подкачка мира не относятся к
     // сценарию: их паузы — повторная попытка открыть файл и бюджет кадра.
     private static readonly string[] s_exempt =
-    [
+    new[] {
+
         "Simulation/DummyClock.cs",
         "Simulation/DummyWorldMapArchive.cs",
         "Simulation/DummyWorldSimulationState.cs",
         "Simulation/DummyWorldStreamingCoordinator.cs",
         "Systems/DummyMapStreamer.cs",
-    ];
+
+    };
 
     private static readonly Regex s_ambientTimeOrRandomness = new(
         @"UniTask\.(Delay|Yield)\(|DateTime(Offset)?\.(Utc)?Now|System\.Random|UnityEngine\.Random|new Random\(|Guid\.NewGuid",

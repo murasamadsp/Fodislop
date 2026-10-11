@@ -9,6 +9,8 @@ using Kern.Core.Localization;
 using Kern.Core.Models;
 using Kern.Networking;
 using Kern.Networking.Processors;
+using Kern.Player.Input;
+using Kern.Player.Interfaces;
 using Kern.Player.Logic;
 using Kern.UI.HUD.Player.Model;
 using Kern.UI.Programmator;
@@ -100,6 +102,14 @@ namespace Kern.UI.HUD.Player.View
         private IProgrammatorTextureCatalog _programmatorTextures = null!;
         [Inject]
         private IClientConfigManager _clientConfig = null!;
+        [Inject]
+        private PlayerInputHandler _playerInput = null!;
+
+        [Inject]
+        private TouchCommands _touchCommands = null!;
+        [Inject]
+        private MapModeState _mapModeState = null!;
+        private PlayerHUDTouchControls? _touchControls;
 
         protected void Start()
         {
@@ -114,6 +124,11 @@ namespace Kern.UI.HUD.Player.View
         public void SetVisible(bool visible)
         {
             _isVisible = visible;
+            if (!visible)
+            {
+                CancelMobileInput();
+            }
+
             if (_hudContent != null)
             {
                 SetDisplayed(_hudContent, visible);
@@ -128,7 +143,13 @@ namespace Kern.UI.HUD.Player.View
         {
             if (_doc != null && !_doc.enabled)
             {
+                CancelMobileInput();
                 return;
+            }
+
+            if (_inputBlocker != null && _inputBlocker.IsInputBlockedExcludingMapMode)
+            {
+                CancelMobileInput();
             }
 
             _programmatorGrid?.Tick();
@@ -226,6 +247,8 @@ namespace Kern.UI.HUD.Player.View
 
             _modeController?.Dispose();
             _modeController = null;
+            _touchControls?.Dispose();
+            _touchControls = null;
 
             if (_programmatorGrid?.Programs is { } closingPrograms)
             {
@@ -327,9 +350,10 @@ namespace Kern.UI.HUD.Player.View
             TemplateContainer tree = template.Instantiate();
             tree.AddToClassList("ui-fullscreen");
             tree.pickingMode = PickingMode.Ignore;
-            UILayoutTier.Attach(tree);
             _hudRoot = tree;
             root.Add(tree);
+
+            InitializeTouchControls(tree);
 
             _hudContent = tree.Q<VisualElement>("HUDContent") ?? _hudRoot;
             SetDisplayed(_hudContent, _isVisible);
@@ -433,6 +457,17 @@ namespace Kern.UI.HUD.Player.View
             }
 
             UpdateProgrammatorButtonLabel();
+        }
+
+        private void InitializeTouchControls(VisualElement tree)
+        {
+            _touchControls = new PlayerHUDTouchControls(_playerInput, _inputBlocker, _localPlayer, _touchCommands, _mapModeState);
+            _touchControls.Bind(tree);
+        }
+
+        private void CancelMobileInput()
+        {
+            _touchControls?.Cancel();
         }
 
         // Подпись кнопки программатора: имя активной программы вместо "Программатор".

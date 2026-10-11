@@ -302,7 +302,9 @@ namespace Kern.UI
                 return;
             }
 
-            string[] frames = ["\u25D0", "\u25D3", "\u25D1", "\u25D2"];
+            string[] frames = new[] {
+"\u25D0", "\u25D3", "\u25D1", "\u25D2"
+ };
             _spinnerSchedule = _loadingSpinnerLabel.schedule.Execute(() =>
             {
                 if (_loadingSpinnerLabel == null)

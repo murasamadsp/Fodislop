@@ -5,27 +5,33 @@ using MinesServer.Networking.Server.Packets.Mission;
 
 namespace Kern.Networking.Processors;
 
-public sealed class MissionProcessor(IPlayerStats playerStats) :
+public sealed class MissionProcessor :
     IPacketProcessor<MissionInitPacket>,
     IPacketProcessor<MissionProgressPacket>
 {
+    private readonly IPlayerStats _playerStats;
+    public MissionProcessor(IPlayerStats playerStats)
+    {
+        _playerStats = playerStats;
+    }
+
     public void Process(MissionInitPacket packet)
     {
         if (string.IsNullOrEmpty(packet.Title))
         {
-            playerStats.ClearMission();
+            _playerStats.ClearMission();
             return;
         }
 
-        playerStats.SetMission(packet.Title, packet.Description, 0);
+        _playerStats.SetMission(packet.Title, packet.Description, 0);
     }
 
     public void Process(MissionProgressPacket packet)
     {
-        playerStats.SetMissionProgress(packet.Current);
+        _playerStats.SetMissionProgress(packet.Current);
         if (packet.Max > 0)
         {
-            playerStats.SetMissionMaxProgress(packet.Max);
+            _playerStats.SetMissionMaxProgress(packet.Max);
         }
     }
 }

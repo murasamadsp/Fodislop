@@ -21,8 +21,8 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
     // Слой адреса накладки (TerrainCellData.hlsl).
     private const int OverlayLayer = 2;
 
-    private readonly List<TerrainCellIdVertex> _vertices = [];
-    private readonly List<int> _indices = [];
+    private readonly List<TerrainCellIdVertex> _vertices = new();
+    private readonly List<int> _indices = new();
     private GameObject? _gameObject;
     private Mesh? _mesh;
     private MeshRenderer? _renderer;

@@ -1,8 +1,7 @@
 // Standalone C# generator for the crystal phase-map fixture.
 // Extracts the original OpenMines phase map without resizing or recoloring.
 
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using StbImageSharp;
 
 // Root is three levels above this binary's source directory
 // (tools/Kern.TerrainCrystalTests/GenerateCrystalFixtures → project root)
@@ -12,7 +11,8 @@ string root = Path.GetFullPath(Path.Combine(thisDir, "..", "..", "..", ".."));
 string sourceFile = Path.GetFullPath(Path.Combine(root, "../OpenMines/client/Assets/Images/terrain.png"));
 string targetFile = Path.GetFullPath(Path.Combine(root, "Assets/Resources/PrismaticFlowMap.bytes"));
 
-using var image = Image.Load<Rgba32>(sourceFile);
+using FileStream source = File.OpenRead(sourceFile);
+ImageResult image = ImageResult.FromStream(source, ColorComponents.RedGreenBlueAlpha);
 
 if (image.Width != 2048 || image.Height != 2048)
 {
@@ -32,12 +32,9 @@ for (int row = 0; row < CropH; row++)
     int destRow = CropH - 1 - row;
     for (int col = 0; col < CropW; col++)
     {
-        var pixel = image[CropX + col, CropY + row];
+        int sourceIdx = ((CropY + row) * image.Width + CropX + col) * 4;
         int destIdx = (destRow * CropW + col) * 4;
-        result[destIdx + 0] = pixel.R;
-        result[destIdx + 1] = pixel.G;
-        result[destIdx + 2] = pixel.B;
-        result[destIdx + 3] = pixel.A;
+        Buffer.BlockCopy(image.Data, sourceIdx, result, destIdx, 4);
     }
 }
 

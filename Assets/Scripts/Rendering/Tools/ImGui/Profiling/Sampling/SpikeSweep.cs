@@ -30,9 +30,9 @@ public sealed class SpikeSweep : IDisposable
     public readonly record struct Hit(MarkerInfo Marker, double ExcessMilliseconds, double BaselineMilliseconds, int SpikeFrames);
 
     private readonly MarkerBatch _batch = new(BatchSize, FramesPerBatch);
-    private readonly List<Hit> _hits = [];
-    private readonly List<Hit> _pendingHits = [];
-    private readonly List<int> _spikeIndices = [];
+    private readonly List<Hit> _hits = new();
+    private readonly List<Hit> _pendingHits = new();
+    private readonly List<int> _spikeIndices = new();
     private readonly double[] _frame = new double[FramesPerBatch];
     private readonly double[] _values = new double[FramesPerBatch];
     private readonly double[] _sorted = new double[FramesPerBatch];

@@ -109,6 +109,32 @@ public sealed class SceneTransitionPlayModeTests
     }
 
     [UnityTest]
+    public IEnumerator MainMenuPlayCommand_PreparesLocalMapAndEntersWorld()
+    {
+        IClientConfigManager config = _bootstrap.Container.Resolve<IClientConfigManager>();
+        config.UpdateSection(value => value.Connection, settings => settings.UseDummyConnection = true);
+        yield return Await(_bootstrap.TransitionAsync("MainMenu"), PlayModeHarness.UITimeoutSeconds);
+
+        UIDocument document = FindComponentInScene<UIDocument>(SceneManager.GetSceneByName("MainMenu"))!;
+        Button play = document.rootVisualElement.Q<Button>("PlayButton");
+        Assert.That(play, Is.Not.Null);
+        using (NavigationSubmitEvent submit = NavigationSubmitEvent.GetPooled())
+        {
+            submit.target = play;
+            play.SendEvent(submit);
+        }
+        yield return PlayModeHarness.WaitUntil(
+            () => _bootstrap.CurrentSceneName == ProjectRuntimeContracts.SceneNames.MainGame,
+            PlayModeHarness.WorldTimeoutSeconds,
+            "The menu Play command did not enter the local world.");
+
+        GameManager manager = PlayModeHarness.RequireInGame<GameManager>();
+        Assert.That(manager.IsWorldLoaded, Is.True);
+        Assert.That(_bootstrap.Container.Resolve<IConnectionService>().IsOffline, Is.True);
+        Assert.That(SceneManager.GetSceneByName("MainMenu").isLoaded, Is.False);
+    }
+
+    [UnityTest]
     [Timeout(90_000)]
     public IEnumerator MainGameWorldInitializationTimeout_DisconnectsStaleTransport()
     {
@@ -118,6 +144,10 @@ public sealed class SceneTransitionPlayModeTests
         IOfflineScenarioSettings scenario = _bootstrap.Container.Resolve<IOfflineScenarioSettings>();
         scenario.Scenario = OfflineScenario.WorldInitializationTimeout;
 
+        LogAssert.Expect(LogType.Error,
+            "[GameBootstrap] Startup failed in scene 'MainGame' during transition phase 'Failed'.");
+        LogAssert.Expect(LogType.Exception,
+            "TimeoutException: Scene transition to 'MainGame' timed out after 30 seconds.");
         UniTask transition = _bootstrap.TransitionAsync("MainGame").Preserve();
         float deadline = Time.realtimeSinceStartup + 40f;
         while (!transition.Status.IsCompleted() && Time.realtimeSinceStartup < deadline)

@@ -18,10 +18,10 @@ public sealed class UIRenderStatsCollector
         "unity-scroll-view__content-viewport",
     };
 
-    private readonly List<(VisualElement Element, string Subtree)> _statsStack = [];
-    private readonly List<GameObject> _sceneRoots = [];
-    private readonly List<UIDocument> _documents = [];
-    private readonly List<UIDocument> _documentScratch = [];
+    private readonly List<(VisualElement Element, string Subtree)> _statsStack = new();
+    private readonly List<GameObject> _sceneRoots = new();
+    private readonly List<UIDocument> _documents = new();
+    private readonly List<UIDocument> _documentScratch = new();
 
     public UILayoutTracker.RenderStats Stats { get; private set; } = new();
 

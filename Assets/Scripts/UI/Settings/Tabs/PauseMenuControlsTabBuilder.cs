@@ -30,8 +30,9 @@ internal sealed class PauseMenuControlsTabBuilder
         Action<InterfaceSettings, string> Set,
         string DefaultKey);
 
-    private static readonly KeyAction[] s_keyActions =
-    [
+    private static readonly KeyAction[] s_keyActions = new KeyAction[]
+    {
+
         new(
             "settings.controls.key_dig",
             settings => settings.KeyDig,
@@ -77,7 +78,8 @@ internal sealed class PauseMenuControlsTabBuilder
             settings => settings.KeyBuildWhite,
             (settings, key) => settings.KeyBuildWhite = key,
             InterfaceSettings.DefaultKeyBuildWhite),
-    ];
+
+    };
 
     private readonly UIDocument _doc;
     private readonly IClientConfigManager _clientConfig;

@@ -78,7 +78,7 @@ public static class AllocationLedger
 
     private const double AverageWeight = 0.05;
 
-    private static readonly List<Entry> s_entries = [];
+    private static readonly List<Entry> s_entries = new();
     private static readonly Dictionary<string, Entry> s_byName = new(StringComparer.Ordinal);
     private static int s_frame = -1;
 

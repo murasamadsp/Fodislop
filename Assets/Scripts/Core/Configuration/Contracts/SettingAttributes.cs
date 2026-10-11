@@ -26,19 +26,29 @@ public sealed class SettingRangeAttribute : Attribute
 }
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
-public sealed class SettingLabelAttribute(string localizationKey) : Attribute
+public sealed class SettingLabelAttribute : Attribute
 {
-    public string LocalizationKey { get; } = string.IsNullOrWhiteSpace(localizationKey)
-        ? throw new ArgumentException("Localization key must not be empty.", nameof(localizationKey))
-        : localizationKey;
+    public SettingLabelAttribute(string localizationKey)
+    {
+        LocalizationKey = string.IsNullOrWhiteSpace(localizationKey)
+            ? throw new ArgumentException("Localization key must not be empty.", nameof(localizationKey))
+            : localizationKey;
+    }
+
+    public string LocalizationKey { get; }
 }
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
-public sealed class SettingUnboundedAttribute(string reason) : Attribute
+public sealed class SettingUnboundedAttribute : Attribute
 {
-    public string Reason { get; } = string.IsNullOrWhiteSpace(reason)
-        ? throw new ArgumentException("Reason must not be empty.", nameof(reason))
-        : reason;
+    public SettingUnboundedAttribute(string reason)
+    {
+        Reason = string.IsNullOrWhiteSpace(reason)
+            ? throw new ArgumentException("Reason must not be empty.", nameof(reason))
+            : reason;
+    }
+
+    public string Reason { get; }
 }
 
 public enum SettingConsumerTarget
@@ -56,11 +66,17 @@ public enum SettingConsumerTarget
 }
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
-public sealed class SettingConsumerAttribute(SettingConsumerTarget target, string mechanism) : Attribute
+public sealed class SettingConsumerAttribute : Attribute
 {
-    public SettingConsumerTarget Target { get; } = target;
+    public SettingConsumerAttribute(SettingConsumerTarget target, string mechanism)
+    {
+        Target = target;
+        Mechanism = string.IsNullOrWhiteSpace(mechanism)
+            ? throw new ArgumentException("Mechanism must not be empty.", nameof(mechanism))
+            : mechanism;
+    }
 
-    public string Mechanism { get; } = string.IsNullOrWhiteSpace(mechanism)
-        ? throw new ArgumentException("Mechanism must not be empty.", nameof(mechanism))
-        : mechanism;
+    public SettingConsumerTarget Target { get; }
+
+    public string Mechanism { get; }
 }

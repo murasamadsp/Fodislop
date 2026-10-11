@@ -17,17 +17,31 @@ namespace Kern.World.Terrain;
 /// один раз, и снимать её надо ровно с того объекта, на который её повесили.
 /// Пока это жило в рендерере, оно занимало четыре поля «на что подписаны» и
 /// две почти одинаковые процедуры — подписку и отписку в OnDestroy.
-public sealed class TerrainSubscriptions(
-    Action<int, int> onCellChanged,
-    Action<int, int, int, int> onRegionChanged,
-    Action<string, Texture2D> onTextureLoaded,
-    Action onWorldDataLoaded,
-    Action<int, int, int, int> onChunkLoaded) : IDisposable
+public sealed class TerrainSubscriptions : IDisposable
 {
+    private readonly Action<int, int> _onCellChanged;
+    private readonly Action<int, int, int, int> _onRegionChanged;
+    private readonly Action<string, Texture2D> _onTextureLoaded;
+    private readonly Action _onWorldDataLoaded;
+    private readonly Action<int, int, int, int> _onChunkLoaded;
     private IWorldDataStorage? _storage;
     private ITextureService? _textureService;
     private IMapDataProvider? _mapData;
     private IWorldLayer<CellType>? _cellLayer;
+
+    public TerrainSubscriptions(
+        Action<int, int> onCellChanged,
+        Action<int, int, int, int> onRegionChanged,
+        Action<string, Texture2D> onTextureLoaded,
+        Action onWorldDataLoaded,
+        Action<int, int, int, int> onChunkLoaded)
+    {
+        _onCellChanged = onCellChanged;
+        _onRegionChanged = onRegionChanged;
+        _onTextureLoaded = onTextureLoaded;
+        _onWorldDataLoaded = onWorldDataLoaded;
+        _onChunkLoaded = onChunkLoaded;
+    }
 
     /// <summary>
     /// Привязать подписки к текущим источникам. Вызывается повторно: что не
@@ -109,16 +123,16 @@ public sealed class TerrainSubscriptions(
         }
     }
 
-    private void OnCellChanged(int serverX, int serverY) => onCellChanged(serverX, serverY);
+    private void OnCellChanged(int serverX, int serverY) => _onCellChanged(serverX, serverY);
 
     private void OnRegionChanged(int serverX, int serverY, int width, int height) =>
-        onRegionChanged(serverX, serverY, width, height);
+        _onRegionChanged(serverX, serverY, width, height);
 
     private void OnTextureLoaded(string filename, Texture2D texture) =>
-        onTextureLoaded(filename, texture);
+        _onTextureLoaded(filename, texture);
 
-    private void OnWorldDataLoaded() => onWorldDataLoaded();
+    private void OnWorldDataLoaded() => _onWorldDataLoaded();
 
     private void OnChunkLoaded(int serverX, int serverY, int width, int height) =>
-        onChunkLoaded(serverX, serverY, width, height);
+        _onChunkLoaded(serverX, serverY, width, height);
 }

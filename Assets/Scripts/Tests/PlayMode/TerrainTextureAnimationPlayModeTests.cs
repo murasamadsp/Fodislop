@@ -7,6 +7,7 @@ using Kern.World.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.TestTools;
 
 namespace Kern.Tests.PlayMode;
@@ -17,13 +18,15 @@ public sealed class TerrainTextureAnimationPlayModeTests
 {
     private const string TerrainShaderName = "Universal Render Pipeline/Custom/Terrain";
     private const float AnimationCycleSeconds = 2.5f;
-    private readonly List<Object> _ownedObjects = [];
+    private readonly List<Object> _ownedObjects = new();
     private readonly int[] _vectorGlobalIds =
-    [
+    new[] {
+
         TerrainCellBuffers.GridSizeId,
         TerrainCellBuffers.OriginId,
         TerrainCellBuffers.ViewOffsetId,
-    ];
+
+    };
     private static readonly int s_terrainDebugViewId = Shader.PropertyToID("_TerrainDebugView");
     private static readonly int s_worldLightDebugViewId = Shader.PropertyToID("_WorldLightDebugView");
     private static readonly int s_pixelArtFilteringId = Shader.PropertyToID("_PixelArtFiltering");
@@ -35,6 +38,9 @@ public sealed class TerrainTextureAnimationPlayModeTests
     private float _previousTimeScale;
     private bool _worldLightingKeywordWasEnabled;
     private Texture2D _readback = null!;
+    private Camera? _renderCamera;
+    private MeshFilter? _renderMesh;
+    private MeshRenderer? _renderRenderer;
 
     [UnitySetUp]
     public IEnumerator SetUp()
@@ -89,6 +95,136 @@ public sealed class TerrainTextureAnimationPlayModeTests
         }
 
         _ownedObjects.Clear();
+        yield return null;
+    }
+
+    [UnityTest]
+    public IEnumerator ProductionTerrainRim_FollowsWorldNeighborsAndHonorsFalloff()
+    {
+        Material material = Own(new Material(Shader.Find(TerrainShaderName)));
+        material.SetTexture("_TerrainAtlas0", CreateSolidTexture(Color.white, 32));
+        material.SetTexture("_TerrainDecalAtlas", CreateSolidTexture(Color.clear));
+        material.SetTexture("_TerrainDecalRockAtlas", CreateSolidTexture(Color.clear));
+        material.SetFloat("_AlphaCutoff", 0.01f);
+        material.SetFloat("_GroundDecalStrength", 0f);
+        material.SetFloat("_RockDecalStrength", 0f);
+        material.SetFloat("_RoundableCornerRadius", 0.51f);
+        material.SetFloat("_RimDistanceScale", 4f);
+        material.SetFloat("_RimFalloff", 0.5f);
+        material.SetFloat("_RimQuantizationEnabled", 1f);
+        int stageId = Shader.PropertyToID("_KernTerrainBenchmarkStage");
+        int rimId = Shader.PropertyToID("_TerrainRimEnabled");
+        int previousStage = Shader.GetGlobalInteger(stageId);
+        float previousRim = Shader.GetGlobalFloat(rimId);
+        Mesh mesh = Own(CreateTerrainAnimationQuad());
+        mesh.SetVertexBufferParams(4, TerrainCellIdMesh.VertexLayout);
+        mesh.SetVertexBufferData(new[]
+        {
+            new TerrainCellIdVertex(1, 1, 1, 0),
+            new TerrainCellIdVertex(1, 1, 1, 1),
+            new TerrainCellIdVertex(1, 1, 1, 2),
+            new TerrainCellIdVertex(1, 1, 1, 3),
+        }, 0, 0, 4);
+        mesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+        _cellData = new TerrainCellBuffers();
+        _cellData.EnsureCapacity(3, 3);
+        _cellData.SetType(0, TerrainCellData.PackType(new TerrainTypeFields(
+            Type: 0, Block: Block(CellSurfaceEffect.Plain, 0f),
+            Slot: 0, AtlasRect: Vector4.zero, TileSize: 1f,
+            FrameCount: 1, FrameHeightTiles: 1f, OpaqueOwn: false, OpaqueAny: false,
+            HasTileGroup: false, TileGroupId: 0)));
+        var type = (MinesServer.Data.CellType)1;
+        _cellData.SetType(type, TerrainCellData.PackType(new TerrainTypeFields(
+            Type: type,
+            Block: new BlockDefinition(
+                DrawLayer: CellDrawLayer.Foreground, Glow: 0f, Outline: CellOutline.Round,
+                TextureAnchor: CellTextureAnchor.Cell, AnimationType: MinesServer.Data.CellAnimationType.None,
+                AnimationSpeed: 0f, SurfaceEffect: CellSurfaceEffect.Plain, SurfaceEffectPalette: 0,
+                DecalAtlas: CellDecalAtlas.None, RimMass: 1, MapColor: default),
+            Slot: 0, AtlasRect: new Vector4(0, 0, 1, 1), TileSize: 1f,
+            FrameCount: 1, FrameHeightTiles: 1f, OpaqueOwn: false, OpaqueAny: false,
+            HasTileGroup: false, TileGroupId: 0)));
+        RenderTexture target = Own(new RenderTexture(32, 32, 0, RenderTextureFormat.ARGBHalf));
+        Assert.That(target.Create(), Is.True);
+        Texture2D pixels = Own(RuntimeTextureFactory.CreateRGBAHalfNoMip(32, 32,
+            "RimProductionReadback", RuntimeTextureColorSpace.Linear, FilterMode.Point, TextureWrapMode.Clamp));
+        try
+        {
+            Shader.SetGlobalInteger(stageId, 4);
+            Shader.SetGlobalFloat(rimId, 1f);
+            // Four directed connections, a cross with four concave corners,
+            // and an isolated rounded cell.
+            for (int side = 0; side < 6; side++)
+            {
+                for (int y = 0; y < 3; y++)
+                {
+                    for (int x = 0; x < 3; x++)
+                    {
+                        bool neighbor = side == 4 ? x == 1 || y == 1
+                            : side == 5 ? false : side == 0 ? x == 2 && y == 1
+                            : side == 1 ? x == 0 && y == 1
+                            : side == 2 ? x == 1 && y == 2 : x == 1 && y == 0;
+                        _cellData.SetCell(x, y, TerrainCellData.PackCell(x == 1 && y == 1 || neighbor ? type : 0));
+                    }
+                }
+
+                _cellData.MarkAllDirty();
+                _cellData.Apply();
+                _cellData.BindGlobals(2f, 0, 0, 3, 3, TerrainCellFormat.DistortionStyleOff);
+                Shader.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, Vector4.zero);
+                using (var commands = new CommandBuffer())
+                {
+                    commands.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.Ortho(2, 4, 2, 4, -10, 10));
+                    commands.SetRenderTarget(target);
+                    commands.ClearRenderTarget(true, true, Color.clear);
+                    commands.DrawMesh(mesh, Matrix4x4.identity, material, 0, material.FindPass("Universal2D"));
+                    Graphics.ExecuteCommandBuffer(commands);
+                }
+
+                RenderTexture previous = RenderTexture.active;
+                try
+                {
+                    RenderTexture.active = target;
+                    pixels.ReadPixels(new Rect(0, 0, 32, 32), 0, 0);
+                    pixels.Apply();
+                }
+                finally
+                {
+                    RenderTexture.active = previous;
+                }
+
+                System.IO.File.WriteAllBytes(System.IO.Path.Combine(Application.temporaryCachePath,
+                    $"kern-rim-side-{side}.png"), pixels.EncodeToPNG());
+
+                for (int y = 2; y <= 29; y += 27)
+                {
+                    for (int x = 2; x <= 29; x += 27)
+                    {
+                        bool connected = side == 4 ? true : side == 5 ? false
+                            : side == 0 ? x > 16 : side == 1 ? x < 16
+                            : side == 2 ? y > 16 : y < 16;
+                        Assert.That(pixels.GetPixel(x, y).a, connected ? Is.GreaterThan(0.9f) : Is.LessThan(0.1f),
+                            $"World-oriented corner mismatch: side={side}, pixel={x},{y}.");
+                    }
+                }
+
+                foreach (Color pixel in pixels.GetPixels())
+                {
+                    if (pixel.a > 0.9f)
+                    {
+                        Assert.That(pixel.r, Is.GreaterThanOrEqualTo(0.49f),
+                            "A 50% bevel must not compound into a darker corner.");
+                    }
+                }
+
+            }
+        }
+        finally
+        {
+            Shader.SetGlobalInteger(stageId, previousStage);
+            Shader.SetGlobalFloat(rimId, previousRim);
+        }
+
         yield return null;
     }
 
@@ -298,28 +434,50 @@ public sealed class TerrainTextureAnimationPlayModeTests
     private Mesh CreateTerrainAnimationQuad()
     {
         var mesh = new Mesh { name = "TerrainAnimationRegressionMesh" };
-        mesh.vertices =
-        [
-            new Vector3(0f, 0f, 1f),
-            new Vector3(0f, 0f, 1f),
-            new Vector3(0f, 0f, 1f),
-            new Vector3(0f, 0f, 1f),
-        ];
-        mesh.uv = [Vector2.zero, Vector2.right, Vector2.one, Vector2.up];
-        mesh.triangles = [0, 1, 2, 0, 2, 3];
+        mesh.SetVertexBufferParams(4, TerrainCellIdMesh.VertexLayout);
+        mesh.SetVertexBufferData(new[]
+        {
+            new TerrainCellIdVertex(0, 0, 0, 0),
+            new TerrainCellIdVertex(0, 0, 0, 1),
+            new TerrainCellIdVertex(0, 0, 0, 2),
+            new TerrainCellIdVertex(0, 0, 0, 3),
+        }, 0, 0, 4);
+        mesh.triangles = new[] {
+0, 1, 2, 0, 2, 3
+ };
         mesh.RecalculateBounds();
         return mesh;
     }
 
     private Color RenderAndReadCenter(Mesh mesh, Material material, int pass, RenderTexture target)
     {
-        var commandBuffer = new CommandBuffer { name = "Terrain animation regression capture" };
-        commandBuffer.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
-        commandBuffer.SetRenderTarget(target);
-        commandBuffer.ClearRenderTarget(true, true, Color.black);
-        commandBuffer.DrawMesh(mesh, Matrix4x4.identity, material, 0, pass);
-        Graphics.ExecuteCommandBuffer(commandBuffer);
-        commandBuffer.Release();
+        if (_renderCamera == null)
+        {
+            GameObject cameraObject = Own(new GameObject("Terrain animation production camera"));
+            _renderCamera = cameraObject.AddComponent<Camera>();
+            _renderCamera.enabled = false;
+            _renderCamera.orthographic = true;
+            _renderCamera.orthographicSize = 1f;
+            _renderCamera.aspect = 1f;
+            _renderCamera.transform.position = new Vector3(1f, 1f, -10f);
+            _renderCamera.cullingMask = 1 << 31;
+            _renderCamera.clearFlags = CameraClearFlags.SolidColor;
+            _renderCamera.backgroundColor = Color.black;
+            _renderCamera.GetUniversalAdditionalCameraData().renderPostProcessing = false;
+            GameObject meshObject = Own(new GameObject("Terrain animation production mesh"));
+            meshObject.layer = 31;
+            _renderMesh = meshObject.AddComponent<MeshFilter>();
+            _renderRenderer = meshObject.AddComponent<MeshRenderer>();
+        }
+        _renderMesh!.sharedMesh = mesh;
+        _renderRenderer!.sharedMaterial = material;
+        // GPU-generated positions cover the cell even though the carrier stores addresses.
+        mesh.bounds = new Bounds(new Vector3(1f, 1f, 0f), new Vector3(2f, 2f, 1f));
+        _renderCamera.targetTexture = target;
+        RenderPipeline.SubmitRenderRequest(_renderCamera, new UniversalRenderPipeline.SingleCameraRequest
+        {
+            destination = target,
+        });
 
         RenderTexture previous = RenderTexture.active;
         try

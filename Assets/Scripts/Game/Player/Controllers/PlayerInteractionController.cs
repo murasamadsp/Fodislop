@@ -30,11 +30,14 @@ namespace Kern.Player
         private Kern.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
         private Kern.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
+        [Inject]
+        private Kern.Player.Input.TouchGestureTracker _touchGestures = null!;
+        private bool _touchSubscribed;
 
-        // ─── Блок клика в мир, когда ЛКМ съел интерфейс ───
+        // ─── Блок pointer-клика в мир, когда нажатие съел интерфейс ───
         // Ручной пересчёт координат (ScreenToPanel + Pick) расходится с
         // фактической раскладкой панели, а hover-трекинг залипает над пустым
-        // миром (PointerMove туда не приходит). Поэтому нажатие ЛКМ
+        // миром (PointerMove туда не приходит). Поэтому нажатие
         // запоминается, а его судьба решается через пару кадров: к этому
         // моменту диспетчер UI гарантированно раздал PointerDown, и простое
         // сравнение кадров точно говорит, съел ли интерфейс этот клик.
@@ -107,26 +110,35 @@ namespace Kern.Player
             }
         }
 
+        protected void OnDisable()
+        {
+            if (_touchSubscribed)
+            {
+                _touchGestures.WorldTapped -= OnWorldTapped;
+                _touchSubscribed = false;
+            }
+        }
+
         protected void Update()
         {
             EnsureUIEventSubscription();
+            if (!_touchSubscribed && _touchGestures != null)
+            {
+                _touchGestures.WorldTapped += OnWorldTapped;
+                _touchSubscribed = true;
+            }
 
             if (_localPlayer is not { Current: { IsGameplayVisible: true } })
             {
                 return;
             }
 
-            HandleMouseClick();
+            HandlePointerClick();
             HandleKeyboardInput();
         }
 
-        private void HandleMouseClick()
+        private void HandlePointerClick()
         {
-            if (Mouse.current == null)
-            {
-                return;
-            }
-
             // Карта — оверлей: клик-маршруты и действия работают и при ней.
             // Клик над самой картой съедает ClickGuard (PointerDown над UI).
             if (_inputBlocker == null || _inputBlocker.IsInputBlockedExcludingMapMode)
@@ -135,14 +147,17 @@ namespace Kern.Player
                 return;
             }
 
-            // Нажатие ЛКМ запоминаем и решаем его судьбу парой кадров позже:
+            // Нажатие указателя запоминаем и решаем его судьбу парой кадров позже:
             // к этому моменту диспетчер UI гарантированно раздал PointerDown по
             // собственным координатам, и совпадение кадров нажатия точно
             // говорит, съел ли интерфейс именно этот клик. Ручной пересчёт
             // координат не используется - он расходится с раскладкой панели.
-            if (Mouse.current.leftButton.wasPressedThisFrame)
+            // Касания идут через TouchGestureTracker (по пальцам): здесь —
+            // только мышь и перо.
+            Pointer? pointer = Pointer.current;
+            if (pointer != null && pointer is not Touchscreen && pointer.press.wasPressedThisFrame)
             {
-                _pendingClickPos = Mouse.current.position.ReadValue();
+                _pendingClickPos = pointer.position.ReadValue();
                 _pendingClickFrame = Time.frameCount;
                 _hasPendingClick = true;
                 return;
@@ -163,7 +178,23 @@ namespace Kern.Player
                 return;
             }
 
-            Vector2 mousePos = _pendingClickPos;
+            RouteToScreenPosition(_pendingClickPos);
+        }
+
+        // Тап пальцем по миру: интерфейс этот палец уже отфильтровал трекер.
+        private void OnWorldTapped(Vector2 screenPosition)
+        {
+            if (_localPlayer is not { Current: { IsGameplayVisible: true } } ||
+                _inputBlocker == null || _inputBlocker.IsInputBlockedExcludingMapMode)
+            {
+                return;
+            }
+
+            RouteToScreenPosition(screenPosition);
+        }
+
+        private void RouteToScreenPosition(Vector2 mousePos)
+        {
             Vector3 worldPos = _mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, -_mainCamera.transform.position.z));
 
             if (_mapManager.WorldWidth <= 0 || _mapManager.WorldHeight <= 0)

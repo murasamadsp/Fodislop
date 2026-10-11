@@ -33,8 +33,8 @@ public sealed class TerrainBuildPipeline : IDisposable
     private readonly TerrainCellCache _cellCache = new();
     private readonly TerrainDistortionSettings _distortion = new();
     private readonly TerrainCellBuilder _cellBuilder = new();
-    private readonly List<IAtlasDescriptor> _snapshotSources = [];
-    private IAtlasDescriptor[] _atlasSnapshots = [];
+    private readonly List<IAtlasDescriptor> _snapshotSources = new();
+    private IAtlasDescriptor[] _atlasSnapshots = Array.Empty<IAtlasDescriptor>();
     private ulong _atlasRevision;
 
     public TerrainCellCache CellCache => _cellCache;
@@ -170,7 +170,7 @@ public sealed class TerrainBuildPipeline : IDisposable
 
         bool buildFull = !canScrollCache || rebuildAllCells;
         TerrainWorldCellRegion[] regions = buildFull
-            ? []
+            ? Array.Empty<TerrainWorldCellRegion>()
             : new TerrainWorldCellRegion[dirtyRects.Count];
         for (int index = 0; index < regions.Length; index++)
         {

@@ -51,7 +51,7 @@ public sealed class DummyInventoryResponderTests
         return new DummyInventoryResponder(
             sent.Add,
             (_, _, _, _) => { },
-            [],
+            new System.Collections.Generic.List<(ushort X, ushort Y)>(),
             setHealth,
             (_, _) => CellType.Empty,
             (_, _, _) => { });

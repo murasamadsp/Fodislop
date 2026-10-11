@@ -10,8 +10,8 @@ namespace Kern.Tools.ImGui.Windows;
 internal sealed class FrameBreakdownRowRenderer
 {
     private const float RowCullMargin = 120f;
-    private float[] _rowHeights = [];
-    private float[] _measuredHeights = [];
+    private float[] _rowHeights = new float[0];
+    private float[] _measuredHeights = new float[0];
     private int _rowHeightsTabKey = -1;
     private float _viewportHeight = float.MaxValue;
 
@@ -38,7 +38,7 @@ internal sealed class FrameBreakdownRowRenderer
         {
             if (_rowHeightsTabKey != tabKey)
             {
-                _rowHeights = [];
+                _rowHeights = Array.Empty<float>();
             }
 
             Array.Resize(ref _rowHeights, rows.Count);

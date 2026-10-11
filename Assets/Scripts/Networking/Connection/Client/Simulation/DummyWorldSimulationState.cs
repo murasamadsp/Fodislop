@@ -17,14 +17,18 @@ using Kern.World.Streaming;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyWorldSimulationState(
-    IAsyncOperationSupervisor operations,
-    IDummyWorldMapSource worldMaps) : IDisposable
+internal sealed class DummyWorldSimulationState : IDisposable
 {
-    private readonly IDummyWorldMapSource _worldMaps = worldMaps ??
-        throw new ArgumentNullException(nameof(worldMaps));
-    private readonly IAsyncOperationSupervisor _operations = operations ??
-        throw new ArgumentNullException(nameof(operations));
+    private readonly IAsyncOperationSupervisor _operations;
+    private readonly IDummyWorldMapSource _worldMaps;
+    internal DummyWorldSimulationState(
+    IAsyncOperationSupervisor operations,
+    IDummyWorldMapSource worldMaps)
+    {
+        _operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        _worldMaps = worldMaps ?? throw new ArgumentNullException(nameof(worldMaps));
+    }
+
     private readonly SemaphoreSlim _streamingGate = new(1, 1);
     private readonly DummyWorldStreamingCoordinator _streaming = new();
     private CancellationTokenSource? _activeOpenCancellation;
@@ -73,6 +77,15 @@ internal sealed class DummyWorldSimulationState(
         {
             _initialized = false;
             gate.TrySetException(exception);
+            try
+            {
+                await gate.Task;
+            }
+            catch
+            {
+                // Observe the shared fault even when no concurrent caller awaited the gate.
+            }
+
             throw;
         }
         finally
@@ -473,13 +486,20 @@ internal sealed class DummyWorldSimulationState(
         return new StreamingGateLock(this);
     }
 
-    private readonly struct StreamingGateLock(DummyWorldSimulationState owner) : IDisposable
+    private readonly struct StreamingGateLock : IDisposable
     {
+        private readonly DummyWorldSimulationState _owner;
+
+        internal StreamingGateLock(DummyWorldSimulationState owner)
+        {
+            _owner = owner;
+        }
+
         public void Dispose()
         {
             try
             {
-                owner._streamingGate.Release();
+                _owner._streamingGate.Release();
             }
             catch (ObjectDisposedException)
             {

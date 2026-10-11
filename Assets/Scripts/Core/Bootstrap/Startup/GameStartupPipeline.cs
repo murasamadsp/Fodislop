@@ -35,7 +35,7 @@ internal readonly record struct StartupIssue(
 
 internal sealed class GameStartupReport
 {
-    private readonly List<StartupIssue> _issues = [];
+    private readonly List<StartupIssue> _issues = new();
 
     public IReadOnlyList<StartupIssue> Issues => _issues;
 
@@ -175,13 +175,7 @@ public sealed class GamePresentationStartup
         report.RunCritical("surface_settings", () => _surface.ApplyClientConfig());
         report.RunCritical("ui_scale", () =>
         {
-            if (_uiDocument.panelSettings != null)
-            {
-                float effectiveScale = UIScaleUtility.ResolveEffectiveScale(
-                    _clientConfig.Config.Interface.UIScale);
-                _uiDocument.panelSettings.scale = effectiveScale;
-                Kern.UI.DynamicAtlasConfigurator.Apply(_uiDocument.panelSettings);
-            }
+            Kern.UI.UIScreen.Bind(_uiDocument, _clientConfig.Config.Interface.UIScale);
         });
         report.RunCritical("game_ui", _gameManager.EnsureUISetup);
         report.RunCritical("player_hud", _playerHud.EnsureInitialized);
@@ -206,6 +200,9 @@ public sealed class GamePresentationStartup
                 "WorldLighting.compute has invalid or uncompiled kernels.");
         }
     }
+
+    internal UniTask BeginLightingOrientationValidationAsync() =>
+        _lighting.BeginOrientationValidationAsync();
 
     internal async UniTask WaitUntilReadyAsync(
         SceneTransitionTicket ticket,
@@ -251,9 +248,10 @@ public sealed class GamePresentationStartup
             UniTask worldReady = completion.Task.AttachExternalCancellation(cancellationToken);
             UniTask transitionFailed = ticket.WaitForFailureAsync().AttachExternalCancellation(cancellationToken);
             int winner = await UniTask.WhenAny(worldReady, transitionFailed);
+            cancellationToken.ThrowIfCancellationRequested();
             if (winner == 1)
             {
-                await ticket.WaitForPresentationAsync();
+                await ticket.WaitForPresentationAsync().AttachExternalCancellation(cancellationToken);
             }
         }
         finally
@@ -301,11 +299,67 @@ public sealed class GameStartupPipeline
         return report;
     }
 
-    internal UniTask WaitUntilReadyAsync(
+    internal UniTask PreparePersistentDataAsync(CancellationToken cancellationToken) =>
+        MapStorage.PrepareExistingWorldCachesAsync(cancellationToken);
+
+    internal UniTask BeginLightingOrientationValidationAsync() =>
+        _presentation.BeginLightingOrientationValidationAsync();
+
+    internal async UniTask WaitUntilReadyAsync(
         SceneTransitionTicket ticket,
         GameStartupReport report,
         CancellationToken cancellationToken)
     {
-        return _presentation.WaitUntilReadyAsync(ticket, report, cancellationToken);
+        var disconnected = new UniTaskCompletionSource();
+        void OnTransportDisconnected() => disconnected.TrySetResult();
+
+        _connection.OnTransportDisconnected += OnTransportDisconnected;
+        try
+        {
+            if (_connection.IsAutoReconnecting && !_connection.IsConnected)
+            {
+                throw new ConnectionStartupInterruptedException();
+            }
+
+            using CancellationTokenSource readinessCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            // WhenAny awaits each input source to observe completion. The winning
+            // task is then awaited below as well so its exception is propagated
+            // before the world is marked ready. Memoize this single-consumer
+            // UniTask because the transition path intentionally observes it twice.
+            UniTask presentationReady = _presentation.WaitUntilReadyAsync(
+                ticket,
+                report,
+                readinessCancellation.Token).Preserve();
+            UniTask connectionLost = disconnected.Task.AttachExternalCancellation(cancellationToken);
+            int winner = await UniTask.WhenAny(presentationReady, connectionLost);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (winner == 1)
+            {
+                readinessCancellation.Cancel();
+                try
+                {
+                    await presentationReady;
+                }
+                catch (OperationCanceledException)
+                {
+                    // The competing readiness wait was stopped after transport loss.
+                }
+
+                throw new ConnectionStartupInterruptedException();
+            }
+
+            await presentationReady;
+            if (!_connection.IsConnected || _connection.IsAutoReconnecting)
+            {
+                throw new ConnectionStartupInterruptedException();
+            }
+
+            _connection.MarkWorldReady();
+        }
+        finally
+        {
+            _connection.OnTransportDisconnected -= OnTransportDisconnected;
+        }
     }
 }

@@ -11,17 +11,25 @@ using VContainer.Unity;
 
 namespace Kern.UI;
 
-public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : IWorldLabels, IPostLateTickable, IDisposable
+public sealed class WorldLabels : IWorldLabels, IPostLateTickable, IDisposable
 {
     private const string TAG = "[WorldLabels]";
 
     private static readonly ProfilerMarker s_postLateTickMarker =
         new("Kern.WorldLabels.PostLateTick");
 
-    private readonly List<Entry> _entries = [];
+    private readonly List<Entry> _entries = new();
+    private readonly UIDocument _document;
+    private readonly IGameplayCamera _camera;
     private VisualElement? _root;
     private VisualElement? _container;
     private bool _zoomErrorLogged;
+
+    public WorldLabels(UIDocument document, IGameplayCamera camera)
+    {
+        _document = document;
+        _camera = camera;
+    }
 
     public IWorldLabel Create(WorldLabelKind kind)
     {
@@ -32,7 +40,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
             _root = template.CloneTree();
             _root.AddToClassList("world-labels");
             _root.pickingMode = PickingMode.Ignore;
-            document.rootVisualElement.Insert(0, _root);
+            _document.rootVisualElement.Insert(0, _root);
             _container = _root.Q("WorldLabels");
         }
 
@@ -55,14 +63,14 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
     public void PostLateTick()
     {
         using var marker = s_postLateTickMarker.Auto();
-        if (!document.enabled || _root?.panel == null)
+        if (!_document.enabled || _root?.panel == null)
         {
             return;
         }
 
         // Камера принадлежит Bootstrap и может быть уничтожена раньше этой сцены:
         // порядок разрушения сцен при выходе и в тестах не гарантирован.
-        Camera? view = camera.Camera;
+        Camera? view = _camera.Camera;
         if (view == null)
         {
             return;
@@ -126,8 +134,10 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         _container = null;
     }
 
-    private sealed class Entry(WorldLabels owner, Label label, WorldLabelKind kind) : IWorldLabel
+    private sealed class Entry : IWorldLabel
     {
+        private readonly WorldLabels _owner;
+        private readonly WorldLabelKind _kind;
         private const float PositionApplyEpsilonPx = 0.5f;
 
         // Зум квантуется пиксельной сеткой (PixelGrid.QuantizeOrthographicSize),
@@ -138,7 +148,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         private const float ScaleApplyEpsilon = 0.002f;
         private const string OffscreenClass = "world-label-offscreen";
 
-        public Label Label { get; } = label;
+        public Label Label { get; }
         public Vector3 Position { get; private set; }
         public bool Visible { get; private set; } = true;
 
@@ -161,6 +171,13 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
         private float _baseBorderRadius;
         private float _lastScale = -1f;
         private bool _sizeDirty;
+
+        public Entry(WorldLabels owner, Label label, WorldLabelKind kind)
+        {
+            _owner = owner;
+            Label = label;
+            _kind = kind;
+        }
 
         public void SetText(string text) => Label.text = text;
         public void SetPosition(Vector3 position) => Position = position;
@@ -188,7 +205,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
             }
 
             Label.style.fontSize = _baseFontSize * scale;
-            if (kind == WorldLabelKind.ChatBubble)
+            if (_kind == WorldLabelKind.ChatBubble)
             {
                 Label.style.maxWidth = _baseMaxWidth * scale;
                 Label.style.paddingTop = _basePaddingTop * scale;
@@ -231,7 +248,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
             // maxWidth — единственное разрешённое значение метки, приходящее не
             // как float, поэтому снимается через .value.
             float maxWidth = style.maxWidth.value;
-            if (kind == WorldLabelKind.ChatBubble &&
+            if (_kind == WorldLabelKind.ChatBubble &&
                 (!IsResolved(maxWidth) || maxWidth <= 0f ||
                  !IsResolved(style.paddingTop) || !IsResolved(style.paddingRight) ||
                  !IsResolved(style.paddingBottom) || !IsResolved(style.paddingLeft) ||
@@ -244,7 +261,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
             // поля облака, и рамка схлопнулась бы в линию на первый же кадр.
             _baseFontSize = style.fontSize;
             _baseShadow = style.textShadow;
-            if (kind == WorldLabelKind.ChatBubble)
+            if (_kind == WorldLabelKind.ChatBubble)
             {
                 _baseMaxWidth = maxWidth;
                 _basePaddingTop = style.paddingTop;
@@ -299,7 +316,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
             // translate двигает бокс целиком, поэтому угол привязки вычитается
             // из его размера: облако висит нижним центром над роботом,
             // никнейм — левым верхним углом от точки как есть.
-            Vector3 offset = kind == WorldLabelKind.ChatBubble
+            Vector3 offset = _kind == WorldLabelKind.ChatBubble
                 ? new Vector3(position.x - (size.x * 0.5f), position.y - size.y)
                 : position;
             Label.style.translate = new Translate(offset.x, offset.y);
@@ -331,7 +348,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
 
         public void Dispose()
         {
-            owner._entries.Remove(this);
+            _owner._entries.Remove(this);
             Label.RemoveFromHierarchy();
         }
 
@@ -344,7 +361,7 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
 
         private bool TryResolveSize(out Vector2 size)
         {
-            if (kind != WorldLabelKind.ChatBubble)
+            if (_kind != WorldLabelKind.ChatBubble)
             {
                 size = Vector2.zero;
                 return true;

@@ -19,9 +19,11 @@ internal sealed class GradingScopesWindow : ToolWindow
     private const float ColumnGap = 8f;
 
     private static readonly GUIContent s_measureContent = new();
-    private static readonly GUILayoutOption[] s_expandWidth = [GUILayout.ExpandWidth(true)];
+    private static readonly GUILayoutOption[] s_expandWidth = new[] {
+GUILayout.ExpandWidth(true)
+ };
 
-    private readonly Dictionary<string, float> _buttonWidths = [];
+    private readonly Dictionary<string, float> _buttonWidths = new();
 
     private bool _scopesEnabled;
     private bool? _scopesEnabledRequested;

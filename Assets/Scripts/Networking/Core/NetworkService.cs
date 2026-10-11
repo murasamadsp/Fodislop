@@ -10,8 +10,11 @@ using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Server.Packets;
+using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Compression;
 using MinesServer.Networking.Server.Packets.GUI;
+using MinesServer.Networking.Server.Packets.Information;
+using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using VContainer;
@@ -28,7 +31,7 @@ namespace Kern.Networking
 
         private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
         private readonly Dictionary<Type, Subscription[]> _subscriberSnapshots = new();
-        private readonly HashSet<Type> _reportedDispatchFailures = [];
+        private readonly HashSet<Type> _reportedDispatchFailures = new();
         private readonly object _subscribersLock = new();
         private bool _connectionSubscribed;
 
@@ -373,10 +376,11 @@ namespace Kern.Networking
                 }
                 catch (Exception ex)
                 {
-                    if (packetType == typeof(OpenWindowPacket))
+                    if (MustPropagateDispatchFailure(packetType))
                     {
                         Debug.LogException(new InvalidOperationException(
-                            "[NetworkService] OpenWindowPacket handler failed; GUI packet processing stopped.",
+                            $"[NetworkService] Critical {packetType.Name} handler failed; " +
+                            "packet processing stopped.",
                             ex));
                         throw;
                     }
@@ -396,6 +400,17 @@ namespace Kern.Networking
                 }
             }
         }
+
+        private static bool MustPropagateDispatchFailure(Type packetType) =>
+            packetType == typeof(OpenWindowPacket) ||
+            packetType == typeof(WorldInitPacket) ||
+            packetType == typeof(PlayerInfoPacket) ||
+            packetType == typeof(RobotInfoPacket) ||
+            packetType == typeof(RobotPositionPacket) ||
+            packetType == typeof(MapRegionPacket) ||
+            packetType == typeof(LevelPacket) ||
+            packetType == typeof(HealthPacket) ||
+            packetType == typeof(BasketPacket);
 
 
         private class Subscription

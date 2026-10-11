@@ -30,7 +30,9 @@ public sealed class FrameStallPlayModeTests
     private const int WalkRounds = 2;
     private const int MeasuredFrames = IdleFrames + (WalkFramesPerKey * 2 * WalkRounds);
 
-    private static readonly Key[] s_walkKeys = [Key.D, Key.A];
+    private static readonly Key[] s_walkKeys = new[] {
+Key.D, Key.A
+ };
 
     private BootstrapLifetimeScope _bootstrap = null!;
     private DummyAuthenticationScope _authentication = null!;

@@ -12,11 +12,17 @@ public class CascadeLayoutBuilderFuzzTests
 {
     private const string OverflowMessage = "Radiance cascade atlas exceeds the supported buffer size.";
 
-    private static readonly int[] s_seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
+    private static readonly int[] s_seeds = new[] {
+1, 7, 42, 1337, 90210, 2147483, 8675309
+ };
 
-    private static readonly int[] s_hostileDimensions = [0, 1, 2, 255, 256, 257, 1000, 1_000_000];
+    private static readonly int[] s_hostileDimensions = new[] {
+0, 1, 2, 255, 256, 257, 1000, 1_000_000
+ };
 
-    private static readonly long[] s_hostileAtlases = [0L, 1L, 64L, 256L, 257L, 1024L, 4096L];
+    private static readonly long[] s_hostileAtlases = new[] {
+0L, 1L, 64L, 256L, 257L, 1024L, 4096L
+ };
 
     // Не record struct: primary constructor record-типа требует
     // System.Runtime.CompilerServices.IsExternalInit (для init-сеттеров),

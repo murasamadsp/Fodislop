@@ -44,9 +44,9 @@ internal sealed class PauseMenuInterfaceTabBuilder
 
                 // The panel scale is what actually resizes the live UI;
                 // saving alone would only take effect on the next launch.
-                if (_doc != null && _doc.panelSettings != null)
+                if (_doc != null)
                 {
-                    _doc.panelSettings.scale = v;
+                    UIScreen.SetUserScale(_doc, v);
                 }
             },
             _refreshers));

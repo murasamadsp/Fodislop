@@ -5,8 +5,14 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace Kern.Networking.Processors;
 
-public sealed class AudioPacketProcessor(IServerAudioService audio) : IPacketProcessor<AudioPacket>
+public sealed class AudioPacketProcessor : IPacketProcessor<AudioPacket>
 {
+    private readonly IServerAudioService _audio;
+    public AudioPacketProcessor(IServerAudioService audio)
+    {
+        _audio = audio;
+    }
+
     public void Process(AudioPacket packet) =>
-        audio.PlayEffect(packet);
+        _audio.PlayEffect(packet);
 }

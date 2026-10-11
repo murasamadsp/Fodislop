@@ -13,12 +13,14 @@ namespace Kern.Editor;
 public static class BuildSceneOrder
 {
     private static readonly string[] s_requiredScenePaths =
-    [
+    new[] {
+
         ScenePath(ProjectRuntimeContracts.SceneNames.Bootstrap),
         ScenePath(ProjectRuntimeContracts.SceneNames.Gateway),
         ScenePath(ProjectRuntimeContracts.SceneNames.MainMenu),
         ScenePath(ProjectRuntimeContracts.SceneNames.MainGame),
-    ];
+
+    };
 
     public static string ScenePath(string sceneName) => $"Assets/Scenes/{sceneName}.unity";
 

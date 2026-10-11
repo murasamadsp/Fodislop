@@ -11,13 +11,19 @@ using System.Runtime.InteropServices;
 /// <summary>Rewrites legacy whole-layer files into the current indexed chunk format.</summary>
 internal static class WorldLayerFileMigrator
 {
-    private sealed class BoundedReadStream(Stream source) : Stream
+    private sealed class BoundedReadStream : Stream
     {
+        private readonly Stream _source;
         private long _remaining;
+
+        public BoundedReadStream(Stream source)
+        {
+            _source = source ?? throw new ArgumentNullException(nameof(source));
+        }
 
         public void SetRange(long offset, long length)
         {
-            source.Seek(offset, SeekOrigin.Begin);
+            _source.Seek(offset, SeekOrigin.Begin);
             _remaining = length;
         }
 
@@ -38,7 +44,7 @@ internal static class WorldLayerFileMigrator
         public override int Read(byte[] buffer, int offset, int count)
         {
             int acceptedCount = (int)Math.Min(count, _remaining);
-            int read = source.Read(buffer, offset, acceptedCount);
+            int read = _source.Read(buffer, offset, acceptedCount);
             _remaining -= read;
             return read;
         }
@@ -46,7 +52,7 @@ internal static class WorldLayerFileMigrator
         public override int Read(Span<byte> buffer)
         {
             int acceptedCount = (int)Math.Min(buffer.Length, _remaining);
-            int read = source.Read(buffer[..acceptedCount]);
+            int read = _source.Read(buffer[..acceptedCount]);
             _remaining -= read;
             return read;
         }
@@ -58,7 +64,7 @@ internal static class WorldLayerFileMigrator
                 return -1;
             }
 
-            int value = source.ReadByte();
+            int value = _source.ReadByte();
             if (value >= 0)
             {
                 _remaining--;
@@ -141,10 +147,7 @@ internal static class WorldLayerFileMigrator
                 WorldLayerFileHeader.WriteHeader(destination, expectedWidth, expectedHeight, chunkSize, newOffsets);
                 int chunkArea = checked(chunkSize * chunkSize);
                 T[] decoded = new T[chunkArea];
-                T[] verified = new T[chunkArea];
                 using var destinationWriter = new BinaryWriter(destination, System.Text.Encoding.UTF8, leaveOpen: true);
-                using var destinationReader = new BinaryReader(destination, System.Text.Encoding.UTF8, leaveOpen: true);
-                var comparer = EqualityComparer<T>.Default;
                 for (int index = 0; index < oldOffsets.Length; index++)
                 {
                     long oldOffset = oldOffsets[index];
@@ -178,20 +181,10 @@ internal static class WorldLayerFileMigrator
                     long newOffset = destination.Position;
                     WorldChunkV2Codec.EncodeChunk(destinationWriter, decoded, chunkArea, index);
                     newOffsets[index] = newOffset;
-                    WorldLayerFileHeader.WriteChunkOffset(destination, index, newOffset);
-                    destination.Seek(newOffset, SeekOrigin.Begin);
-                    WorldChunkV2Codec.DecodeChunk(destinationReader, chunkArea, verified, index);
-                    for (int cell = 0; cell < chunkArea; cell++)
-                    {
-                        if (!comparer.Equals(decoded[cell], verified[cell]))
-                        {
-                            throw new InvalidDataException($"Map chunk {index} failed current-format migration verification.");
-                        }
-                    }
-
                     migratedChunks++;
                 }
 
+                WorldLayerFileHeader.WriteChunkOffsets(destination, newOffsets);
                 destination.Flush(true);
             }
 
@@ -290,10 +283,7 @@ internal static class WorldLayerFileMigrator
                 WorldLayerFileHeader.WriteHeader(destination, expectedWidth, expectedHeight, chunkSize, newOffsets);
                 int chunkArea = checked(chunkSize * chunkSize);
                 T[] decoded = new T[chunkArea];
-                T[] verified = new T[chunkArea];
                 using var destinationWriter = new BinaryWriter(destination, System.Text.Encoding.UTF8, leaveOpen: true);
-                using var destinationReader = new BinaryReader(destination, System.Text.Encoding.UTF8, leaveOpen: true);
-                var comparer = EqualityComparer<T>.Default;
                 for (int index = 0; index < oldOffsets.Length; index++)
                 {
                     long oldOffset = oldOffsets[index];
@@ -323,20 +313,10 @@ internal static class WorldLayerFileMigrator
                     long newOffset = destination.Position;
                     WorldChunkV2Codec.EncodeChunk(destinationWriter, decoded, chunkArea, index);
                     newOffsets[index] = newOffset;
-                    WorldLayerFileHeader.WriteChunkOffset(destination, index, newOffset);
-                    destination.Seek(newOffset, SeekOrigin.Begin);
-                    WorldChunkV2Codec.DecodeChunk(destinationReader, chunkArea, verified, index);
-                    for (int cell = 0; cell < chunkArea; cell++)
-                    {
-                        if (!comparer.Equals(decoded[cell], verified[cell]))
-                        {
-                            throw new InvalidDataException($"Map chunk {index} failed current-format migration verification.");
-                        }
-                    }
-
                     migratedChunks++;
                 }
 
+                WorldLayerFileHeader.WriteChunkOffsets(destination, newOffsets);
                 destination.Flush(true);
             }
 

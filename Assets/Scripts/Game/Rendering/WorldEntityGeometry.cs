@@ -27,11 +27,11 @@ public struct WorldEntityGPUInstance
 internal static class WorldEntityGeometry
 {
     public static readonly VertexAttributeDescriptor[] VertexLayout =
-    [
+    {
         new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
         new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
         new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
-    ];
+    };
 
     public static void WriteSpriteInterleaved(
         Span<WorldEntityVertex> verts,

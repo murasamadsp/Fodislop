@@ -28,6 +28,7 @@ public sealed class ProgrammatorGrid : IDisposable
         private ProgrammatorRadialController? _radial;
         private ProgrammatorProgramStore? _programs;
         private ProgrammatorClipboardController? _clipboard;
+        private ProgrammatorEditCommands? _commands;
 
         private bool _isOpen;
 
@@ -97,12 +98,15 @@ public sealed class ProgrammatorGrid : IDisposable
             var clipboard = new ProgrammatorClipboardController(selection, view.UpdateCell, _data);
 
             view.Build(selection, radial, programs, clipboard, Hide);
+            var commands = new ProgrammatorEditCommands(_data, selection, clipboard, programs, view);
+            view.BindTouchEditing(commands, selection, radial);
 
             _view = view;
             _selection = selection;
             _radial = radial;
             _programs = programs;
             _clipboard = clipboard;
+            _commands = commands;
             programs.RunStateChanged += OnProgramRunStateChanged;
 
             if (_view == null)
@@ -191,77 +195,33 @@ public sealed class ProgrammatorGrid : IDisposable
             {
                 if (Keyboard.current.zKey.wasPressedThisFrame)
                 {
-                    if (_data.Undo())
-                    {
-                        _programs!.RefreshAllCells();
-                    }
+                    _commands!.Undo();
                 }
                 else if (Keyboard.current.yKey.wasPressedThisFrame)
                 {
-                    if (_data.Redo())
-                    {
-                        _programs!.RefreshAllCells();
-                    }
+                    _commands!.Redo();
                 }
-                else if (Keyboard.current.cKey.wasPressedThisFrame && _selection!.HasAnySelection())
+                else if (Keyboard.current.cKey.wasPressedThisFrame)
                 {
-                    _clipboard!.CopySelection();
+                    _commands!.Copy();
                 }
-                else if (Keyboard.current.xKey.wasPressedThisFrame && _selection!.HasAnySelection())
+                else if (Keyboard.current.xKey.wasPressedThisFrame)
                 {
-                    _clipboard!.CutSelection();
+                    _commands!.Cut();
                 }
-                else if (Keyboard.current.vKey.wasPressedThisFrame && _clipboard!.HasClipboard)
+                else if (Keyboard.current.vKey.wasPressedThisFrame)
                 {
-                    _clipboard.PasteClipboard();
+                    _commands!.Paste();
                 }
 
                 return;
             }
 
             // DEL clears selected cells
-            if (Keyboard.current.deleteKey.wasPressedThisFrame)
+            if (Keyboard.current.deleteKey.wasPressedThisFrame && _selection!.HasAnySelection())
             {
-                if (!_selection!.HasAnySelection())
-                { /* fall through */
-                }
-                else if (_selection.SelectedCells.Count > 0)
-                {
-                    _data.PushUndo();
-                    foreach (long key in _selection.SelectedCells)
-                    {
-                        int r = (int)(key / ProgrammatorData.COLS);
-                        int c = (int)(key % ProgrammatorData.COLS);
-                        int idx = (_data.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
-                                  + (r * ProgrammatorData.COLS) + c;
-                        _data.Codes[idx] = 0;
-                        _view!.UpdateCell(r, c);
-                    }
-
-                    _selection.SelectedCells.Clear();
-                    _selection.HasSelection = false;
-                    return;
-                }
-                else if (_selection.HasSelection)
-                {
-                    _data.PushUndo();
-                    int minRow = Mathf.Min(_selection.SelStartRow, _selection.SelEndRow);
-                    int maxRow = Mathf.Max(_selection.SelStartRow, _selection.SelEndRow);
-                    int minCol = Mathf.Min(_selection.SelStartCol, _selection.SelEndCol);
-                    int maxCol = Mathf.Max(_selection.SelStartCol, _selection.SelEndCol);
-                    for (int r = minRow; r <= maxRow; r++)
-                    {
-                        for (int c = minCol; c <= maxCol; c++)
-                        {
-                            int idx = (_data.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
-                                      + (r * ProgrammatorData.COLS) + c;
-                            _data.Codes[idx] = 0;
-                            _view!.UpdateCell(r, c);
-                        }
-                    }
-
-                    return;
-                }
+                _commands!.DeleteSelection();
+                return;
             }
 
             // Arrow keys for page navigation
@@ -292,6 +252,10 @@ public sealed class ProgrammatorGrid : IDisposable
             _isOpen = true;
             _uiInput.IsProgrammatorOpen = true;
             _view.Popup.style.display = DisplayStyle.Flex;
+
+            // Окно — поверх HUD: дерево HUD добавлено в документ позже, и без
+            // этого кнопки HUD перекрывали бы список программ и сетку.
+            _view.Popup.parent?.BringToFront();
             _programs!.ShowProgramList();
         }
 

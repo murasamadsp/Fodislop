@@ -4,7 +4,7 @@ using System;
 
 namespace Kern.Rendering;
 
-public sealed class HDROutputController(HDROutputController.IBackend backend)
+public sealed class HDROutputController
 {
     public const double RequestTimeoutSeconds = 10;
     public const int MaximumAttempts = 3;
@@ -47,7 +47,7 @@ public sealed class HDROutputController(HDROutputController.IBackend backend)
         public bool CanSwitch => Supported && PipelineSupported && Available && Switchable && !Pending;
     }
 
-    private readonly IBackend _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+    private readonly IBackend _backend;
     private bool _initialized;
     private bool _hasSnapshot;
     private bool _awaitingAcknowledgement;
@@ -56,6 +56,11 @@ public sealed class HDROutputController(HDROutputController.IBackend backend)
     private double _requestedAt;
     private double? _pendingSince;
     private double _nextAttemptAt;
+
+    public HDROutputController(IBackend backend)
+    {
+        _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+    }
 
     public bool DesiredHDR { get; private set; }
     public Snapshot Current { get; private set; }

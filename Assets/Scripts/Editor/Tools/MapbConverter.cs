@@ -3,6 +3,8 @@
 using System;
 using System.IO;
 using Kern.Core;
+using Kern.Persistence;
+using MinesServer.Data;
 using UnityEditor;
 using UnityEngine;
 
@@ -94,7 +96,7 @@ public sealed class MapbConverter : EditorWindow
         return File.Exists(Path.Combine(_serverMapPath, fileName));
     }
 
-    private void Convert()
+    private async void Convert()
     {
         long worldWidth = (long)_chunksW * _chunkSize;
         long worldHeight = (long)_chunksH * _chunkSize;
@@ -245,6 +247,14 @@ public sealed class MapbConverter : EditorWindow
                 outFs.Flush(flushToDisk: true);
             }
 
+            // Собранная карта сразу становится текущим форматом. Иначе каждый
+            // мобильный клиент перекодирует сотни тысяч чанков при первом входе.
+            await WorldLayer<CellType>.MigrateLegacyFileAsync(
+                temporaryOutputPath,
+                _chunksW,
+                _chunksH,
+                _chunkSize);
+
             if (File.Exists(outputPath))
             {
                 File.Replace(temporaryOutputPath, outputPath, destinationBackupFileName: null);
@@ -333,7 +343,9 @@ public sealed class MapbConverter : EditorWindow
 
     private static string FormatBytes(long bytes)
     {
-        string[] suffixes = ["B", "KB", "MB", "GB"];
+        string[] suffixes = new[] {
+"B", "KB", "MB", "GB"
+ };
         int i = 0;
         double size = bytes;
         while (size >= 1024 && i < suffixes.Length - 1)

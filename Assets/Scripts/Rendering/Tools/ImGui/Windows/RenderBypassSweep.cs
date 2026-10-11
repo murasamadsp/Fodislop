@@ -17,7 +17,7 @@ internal sealed class RenderBypassSweep
     private readonly IReadOnlyList<(string Label, Action<bool> Apply)> _steps;
     private readonly List<double> _frameMs = new(SweepMeasureFrames);
     private readonly List<double> _gpuMs = new(SweepMeasureFrames);
-    private readonly List<(string Label, double FrameMs, double GPUMs, int GPUSamples)> _results = [];
+    private readonly List<(string Label, double FrameMs, double GPUMs, int GPUSamples)> _results = new();
     private readonly FrameTiming[] _timings = new FrameTiming[1];
     private int _step = -1;
     private int _frame;

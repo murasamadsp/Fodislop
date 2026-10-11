@@ -51,7 +51,7 @@ internal sealed class ClientConfigRepository
         ClientConfig? config;
         try
         {
-            config = JsonUtility.FromJson<ClientConfig>(json);
+            config = JsonUtility.FromJson<ClientConfig>(NormalizeFormerlySerializedNames(json));
         }
         catch (ArgumentException ex)
         {
@@ -124,7 +124,7 @@ internal sealed class ClientConfigRepository
         }
 
         Type[] persistedTypes =
-        [
+        {
             typeof(ClientConfig),
             typeof(AudioSettings),
             typeof(DisplaySettings),
@@ -132,7 +132,7 @@ internal sealed class ClientConfigRepository
             typeof(ConnectionSettings),
             typeof(TerrainSettings),
             typeof(EffectSettings),
-        ];
+        };
         string[] missingFields = persistedTypes
             .SelectMany(type => type.GetFields(BindingFlags.Instance | BindingFlags.Public))
             .Where(field => !HasSerializedName(json, field))
@@ -152,6 +152,37 @@ internal sealed class ClientConfigRepository
         JsonHasKey(json, field.Name) ||
         field.GetCustomAttributes<FormerlySerializedAsAttribute>()
             .Any(attribute => JsonHasKey(json, attribute.oldName));
+
+    private static string NormalizeFormerlySerializedNames(string json)
+    {
+        Type[] persistedTypes =
+        {
+            typeof(ClientConfig),
+            typeof(AudioSettings),
+            typeof(DisplaySettings),
+            typeof(InterfaceSettings),
+            typeof(ConnectionSettings),
+            typeof(TerrainSettings),
+            typeof(EffectSettings),
+        };
+
+        foreach (Type type in persistedTypes)
+        {
+            foreach (FieldInfo field in type.GetFields(BindingFlags.Instance | BindingFlags.Public))
+            {
+                foreach (FormerlySerializedAsAttribute alias in field.GetCustomAttributes<FormerlySerializedAsAttribute>())
+                {
+                    json = Regex.Replace(
+                        json,
+                        "\"" + Regex.Escape(alias.oldName) + "\"(?=\\s*:)" ,
+                        "\"" + field.Name + "\"",
+                        RegexOptions.CultureInvariant);
+                }
+            }
+        }
+
+        return json;
+    }
 
     private static bool JsonHasKey(string json, string key) =>
         Regex.IsMatch(

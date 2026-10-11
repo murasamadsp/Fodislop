@@ -39,14 +39,14 @@ half4 TerrainSampleAtlas(int slot, SamplerState atlasSampler, float2 uv)
     [branch]
     switch (slot)
     {
-        case 1: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas1, atlasSampler, uv, 0);
-        case 2: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas2, atlasSampler, uv, 0);
-        case 3: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas3, atlasSampler, uv, 0);
-        case 4: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas4, atlasSampler, uv, 0);
-        case 5: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas5, atlasSampler, uv, 0);
-        case 6: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas6, atlasSampler, uv, 0);
-        case 7: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas7, atlasSampler, uv, 0);
-        default: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas0, atlasSampler, uv, 0);
+        case 1: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas1, atlasSampler, uv, 0.0);
+        case 2: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas2, atlasSampler, uv, 0.0);
+        case 3: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas3, atlasSampler, uv, 0.0);
+        case 4: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas4, atlasSampler, uv, 0.0);
+        case 5: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas5, atlasSampler, uv, 0.0);
+        case 6: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas6, atlasSampler, uv, 0.0);
+        case 7: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas7, atlasSampler, uv, 0.0);
+        default: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas0, atlasSampler, uv, 0.0);
     }
 }
 

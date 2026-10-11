@@ -115,12 +115,13 @@ public sealed class WebAssetLoaderTests
             TextureWrapMode.Clamp);
         _createdTextures.Add(source);
         source.SetPixels32(
-        [
+        new Color32[]
+        {
             new Color32(255, 0, 0, 255),
             new Color32(0, 255, 0, 255),
             new Color32(0, 0, 255, 255),
             new Color32(255, 255, 255, 255),
-        ]);
+        });
         source.Apply();
         return source.EncodeToPNG();
     }

@@ -109,7 +109,8 @@ Startup order is:
 5. initialize UI services;
 6. validate required shaders, compute shaders, and project defaults, then connect;
 7. mark startup ready;
-8. wait for world, terrain, surface, lighting, assets, and required FMOD banks;
+8. wait for world, terrain, surface, lighting, and required assets. FMOD banks
+   load in the background and audio failure is degraded, not a scene-entry gate;
 9. mark the scope and presentation ready.
 
 Adding a subsystem means registering it in `GameLifetimeScope.Configure` and in
@@ -154,7 +155,14 @@ For new or rewritten UI:
 5. Build UI and subscribe callbacks once; unsubscribe in `OnDisable`.
 6. Screen coordinates enter a panel only through `RuntimePanelUtils.ScreenToPanel`.
 7. No `EventSystem` or `InputSystemUIInputModule` is created. Keyboard navigation
-   is suppressed; UI interaction is mouse-only.
+   is suppressed; UI interaction is pointer-only: mouse and touch.
+8. Every document binds to the screen through `UIScreen.Bind` (scale, safe
+   area, form classes). On a mobile platform one panel pixel is one dp
+   (`ScreenShapeRules`); `UIScale` is a multiplier over that. Form classes on
+   `panel.visualTree`: `form--desktop|micro|phone|tablet`, `form--narrow|short`
+   (Micro), `pointer--touch`. All touch layout lives in `Styles/Touch.uss`,
+   imported last; touch targets are at least 44 dp. Contract:
+   `docs/architecture/MOBILE_STANDARD.html`.
 
 ### World, chunks, and coordinates
 
@@ -185,8 +193,12 @@ assets are intentional and must not be removed.
 
 The authoritative local position is `PlayerMovementController.Position` in
 server top-left coordinates. Movement uses WASD/arrows, Space digs, E enables
-auto-dig, L attacks, and Shift runs. `PlayerInteractionController` sends a
-`ClickCellPacket` only when the pointer is outside UI after `ScreenToPanel` conversion.
+auto-dig, L toggles aggression, Shift turns in place, and Ctrl moves fast.
+Touch: `PlayerHUDTouchControls` (stick, Dig/Heal hold, Geo/Build taps, Run
+toggle; a small stick deflection turns in place) and `TouchCommands` for
+keys without a touch equivalent (pause, chats). World taps and pinch come
+from `TouchGestureTracker` per finger — never from `Pointer.current`, which on
+a touchscreen is only the first finger.
 
 `IInputBlocker` has one implementation, `UI/InputBlockState`, composed from chat
 focus, server windows, modals, pause menu, and Programmator state. Gameplay and

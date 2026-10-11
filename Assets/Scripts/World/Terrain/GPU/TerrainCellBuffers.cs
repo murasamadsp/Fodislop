@@ -47,14 +47,14 @@ public sealed class TerrainCellBuffers : IDisposable
 
     private readonly TerrainTextureUploadCounters _uploadCounters = new();
     private readonly TerrainDirtyRegion _dirty = new();
-    private readonly List<(int Start, int Count)> _segments = [];
+    private readonly List<(int Start, int Count)> _segments = new();
     // До прихода метаданных строка несёт всё из cells.json, но без текстуры
     // и тайлгруппы; строка Unloaded так и остаётся.
     private readonly TerrainTypeRow[] _types = PackAuthoredTypes();
     // Клетки по байту; на GPU — по четыре в uint. Слова собираются из клеток
     // только при выгрузке: так заливка из Parallel.For не пишет в общее слово.
-    private TerrainCell[] _cells = [];
-    private uint[] _words = [];
+    private TerrainCell[] _cells = Array.Empty<TerrainCell>();
+    private uint[] _words = Array.Empty<uint>();
     private GraphicsBuffer? _cellBuffer;
     private GraphicsBuffer? _typeBuffer;
     private GraphicsBuffer? _tileDescriptorBuffer;
@@ -302,8 +302,8 @@ public sealed class TerrainCellBuffers : IDisposable
         _typeBuffer = null;
         _tileDescriptorBuffer?.Dispose();
         _tileDescriptorBuffer = null;
-        _cells = [];
-        _words = [];
+        _cells = Array.Empty<TerrainCell>();
+        _words = Array.Empty<uint>();
         _uploadCounters.EndGeneration();
         MeshWidth = 0;
         MeshHeight = 0;

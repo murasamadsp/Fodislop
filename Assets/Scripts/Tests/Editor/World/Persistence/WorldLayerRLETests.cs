@@ -134,7 +134,7 @@ public class WorldLayerRLETests
             operations: _operations,
             CHUNK_SIZE: 32);
 
-        reopenedLayer.SetRegion(1, 1, 1, 1, [streamedValue]);
+        reopenedLayer.SetRegion(1, 1, 1, 1, new[] { streamedValue });
 
         Assert.That(reopenedLayer.GetCellSync(0, 0), Is.EqualTo(persistedValue));
         Assert.That(reopenedLayer.GetCellSync(1, 1), Is.EqualTo(streamedValue));
@@ -150,7 +150,7 @@ public class WorldLayerRLETests
             operations: _operations,
             CHUNK_SIZE: 32);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => layer.SetRegion(0, 0, 1, 1, [42], cellsOffset: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => layer.SetRegion(0, 0, 1, 1, new ushort[] { 42 }, cellsOffset: -1));
     }
 
     [Test]
@@ -245,7 +245,7 @@ public class WorldLayerRLETests
     }
 
     [UnityTest]
-    public IEnumerator ReadChunk_CorruptOffset_TransitionsFromLoadingToFailed()
+    public IEnumerator ReadChunk_CorruptOffset_RecoversAsZeroChunk()
     {
         using var layer = new WorldLayer<ushort>(
             _tempFilePath,
@@ -258,11 +258,15 @@ public class WorldLayerRLETests
         ChunkReadResult<ushort> initial = layer.ReadChunk(0);
 
         Assert.That(initial.Status, Is.EqualTo(ChunkReadStatus.Loading));
+        LogAssert.Expect(
+            UnityEngine.LogType.Warning,
+            "[WorldLayer] Chunk 0 is corrupt; loading it as an all-zero chunk.");
         yield return UniTask.WaitUntil(
-            () => layer.ReadChunk(0).Status == ChunkReadStatus.Failed).ToCoroutine();
-        ChunkReadResult<ushort> failed = layer.ReadChunk(0);
-        Assert.That(failed.Data, Is.Null);
-        Assert.That(failed.Error, Is.TypeOf<InvalidDataException>());
+            () => layer.ReadChunk(0).Status == ChunkReadStatus.Available).ToCoroutine();
+        ChunkReadResult<ushort> recovered = layer.ReadChunk(0);
+        Assert.That(recovered.Data, Is.Not.Null);
+        Assert.That(recovered.Data, Is.All.EqualTo((ushort)0));
+        Assert.That(recovered.Error, Is.Null);
     }
 
     [Test]
@@ -336,10 +340,11 @@ public class WorldLayerRLETests
     [UnityTest]
     public IEnumerator MigrateLegacyFileAsync_ConvertsV0RLEFile()
     {
-        const int widthChunks = 1;
+        const int widthChunks = 2;
         const int heightChunks = 1;
         const int chunkSize = 4;
-        byte[] expected = [2, 2, 4, 7, 7, 7, 1, 3, 3, 3, 3, 8, 5, 5, 5, 5];
+        byte[] expected = { 2, 2, 4, 7, 7, 7, 1, 3, 3, 3, 3, 8, 5, 5, 5, 5 };
+        byte[] expectedSecond = { 11, 11, 11, 12, 13, 14, 15, 16, 16, 16, 17, 18, 19, 20, 21, 22 };
         try
         {
             using (var stream = new FileStream(
@@ -353,9 +358,19 @@ public class WorldLayerRLETests
                 writer.Write(heightChunks);
                 writer.Write(chunkSize);
                 writer.Write(0);
-                writer.Write(24L);
-                stream.Position = 24;
+                writer.Write(-1L);
+                writer.Write(-1L);
+                long[] legacyOffsets = new long[widthChunks * heightChunks];
+                legacyOffsets[0] = stream.Position;
                 WorldChunkRLECodec.EncodeChunk(writer, expected, expected.Length);
+                legacyOffsets[1] = stream.Position;
+                WorldChunkRLECodec.EncodeChunk(writer, expectedSecond, expectedSecond.Length);
+                stream.Position = WorldLayerFileHeader.HeaderSize;
+                foreach (long offset in legacyOffsets)
+                {
+                    writer.Write(offset);
+                }
+
                 writer.Flush();
                 stream.Flush(true);
             }
@@ -367,7 +382,7 @@ public class WorldLayerRLETests
                 chunkSize).ToCoroutine();
 
             using var migrated = new FileStream(_tempFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            long[] offsets = new long[1];
+            long[] offsets = new long[widthChunks * heightChunks];
             Assert.That(
                 WorldLayerFileHeader.TryReadFormatVersion(migrated),
                 Is.EqualTo(WorldLayerFileHeader.CurrentFormatVersion));
@@ -376,9 +391,14 @@ public class WorldLayerRLETests
                 Is.True);
             migrated.Position = offsets[0];
             using var reader = new BinaryReader(migrated, System.Text.Encoding.UTF8, leaveOpen: true);
+            migrated.Position = offsets[0];
             CollectionAssert.AreEqual(
                 expected,
                 WorldChunkV2Codec.DecodeChunk<byte>(reader, expected.Length, chunkIndex: 0));
+            migrated.Position = offsets[1];
+            CollectionAssert.AreEqual(
+                expectedSecond,
+                WorldChunkV2Codec.DecodeChunk<byte>(reader, expectedSecond.Length, chunkIndex: 1));
         }
         finally
         {

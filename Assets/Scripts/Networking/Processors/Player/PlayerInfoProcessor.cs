@@ -10,11 +10,7 @@ using UnityEngine;
 
 namespace Kern.Networking.Processors;
 
-public sealed class PlayerInfoProcessor(
-    IRobotService robotManager,
-    IPlayerStats playerStats,
-    IMapDataProvider mapDataProvider,
-    ILocalPlayerState localPlayer) :
+public sealed class PlayerInfoProcessor :
     IPacketProcessor<PlayerInfoPacket>,
     IPacketProcessor<MovementSpeedPacket>,
     IPacketProcessor<TeleportPacket>,
@@ -24,6 +20,22 @@ public sealed class PlayerInfoProcessor(
     IPacketProcessor<AggressionStatePacket>,
     IBatchAwareProcessor
 {
+    private readonly IRobotService _robotManager;
+    private readonly IPlayerStats _playerStats;
+    private readonly IMapDataProvider _mapDataProvider;
+    private readonly ILocalPlayerState _localPlayer;
+    public PlayerInfoProcessor(
+    IRobotService robotManager,
+    IPlayerStats playerStats,
+    IMapDataProvider mapDataProvider,
+    ILocalPlayerState localPlayer)
+    {
+        _robotManager = robotManager;
+        _playerStats = playerStats;
+        _mapDataProvider = mapDataProvider;
+        _localPlayer = localPlayer;
+    }
+
     private int _batchDepth;
     private bool _hasPendingRobotPrune;
 
@@ -43,15 +55,15 @@ public sealed class PlayerInfoProcessor(
         if (_batchDepth == 0 && _hasPendingRobotPrune)
         {
             _hasPendingRobotPrune = false;
-            robotManager.PruneStaleRobots();
+            _robotManager.PruneStaleRobots();
         }
     }
     public void Process(PlayerInfoPacket packet)
     {
-        robotManager.SetLocalPlayerBotId(packet.BotId);
-        playerStats.SetNickname(packet.Nickname);
+        _robotManager.SetLocalPlayerBotId(packet.BotId);
+        _playerStats.SetNickname(packet.Nickname);
 
-        var player = localPlayer.Current;
+        var player = _localPlayer.Current;
         if (player != null)
         {
             if (player.TryGetComponent<IRobotView>(out var robot))
@@ -64,12 +76,12 @@ public sealed class PlayerInfoProcessor(
     }
 
     public void Process(MovementSpeedPacket packet) =>
-        mapDataProvider.UpdateMovementSpeeds(packet);
+        _mapDataProvider.UpdateMovementSpeeds(packet);
 
     public void Process(TeleportPacket packet)
     {
         UnityEngine.Debug.Log($"[Probe] Teleport {UnityEngine.Time.realtimeSinceStartup:F3}");
-        var player = localPlayer.Current;
+        var player = _localPlayer.Current;
         if (player == null)
         {
             throw new InvalidOperationException("[PlayerInfoProcessor] Teleport received before local player was spawned");
@@ -88,30 +100,30 @@ public sealed class PlayerInfoProcessor(
             packet.Name,
             packet.Skin,
             packet.Tail);
-        robotManager.UpdateRobotMetadata(packet.BotId, metadata);
+        _robotManager.UpdateRobotMetadata(packet.BotId, metadata);
     }
 
     public void Process(RobotPositionPacket packet)
     {
-        robotManager.UpdateRobotPosition(packet.BotId, packet.X, packet.Y, packet.Rotation);
+        _robotManager.UpdateRobotPosition(packet.BotId, packet.X, packet.Y, packet.Rotation);
         if (_batchDepth > 0)
         {
             _hasPendingRobotPrune = true;
         }
         else
         {
-            robotManager.PruneStaleRobots();
+            _robotManager.PruneStaleRobots();
         }
 
-        if (packet.BotId != 0 && packet.BotId == robotManager.LocalPlayerBotId)
+        if (packet.BotId != 0 && packet.BotId == _robotManager.LocalPlayerBotId)
         {
-            localPlayer.Current?.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));
+            _localPlayer.Current?.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));
         }
     }
 
     public void Process(AutoMineStatePacket packet)
     {
-        var player = localPlayer.Current;
+        var player = _localPlayer.Current;
         if (player != null)
         {
             player.AutoDig = packet.Enabled;
@@ -120,7 +132,7 @@ public sealed class PlayerInfoProcessor(
 
     public void Process(AggressionStatePacket packet)
     {
-        var player = localPlayer.Current;
+        var player = _localPlayer.Current;
         if (player != null)
         {
             player.Aggression = packet.Enabled;

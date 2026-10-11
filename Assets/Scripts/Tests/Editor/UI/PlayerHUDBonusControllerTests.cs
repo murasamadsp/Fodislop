@@ -22,7 +22,11 @@ public sealed class PlayerHUDBonusControllerTests
     {
         public string CurrentLanguage => "ru";
 
-        public event Action? OnLanguageChanged;
+        public event Action? OnLanguageChanged
+        {
+            add { }
+            remove { }
+        }
 
         public bool HasKey(string key) => true;
 
@@ -47,6 +51,8 @@ public sealed class PlayerHUDBonusControllerTests
     }
 
     private VisualElement _root = null!;
+    private GameObject _host = null!;
+    private PanelSettings _panelSettings = null!;
     private Button _bonusButton = null!;
     private VisualElement _bonusPanel = null!;
     private Button _bonusCloseButton = null!;
@@ -58,7 +64,11 @@ public sealed class PlayerHUDBonusControllerTests
     [SetUp]
     public void SetUp()
     {
-        _root = new VisualElement();
+        _host = new GameObject(nameof(PlayerHUDBonusControllerTests));
+        _panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+        UIDocument document = _host.AddComponent<UIDocument>();
+        document.panelSettings = _panelSettings;
+        _root = document.rootVisualElement;
         _bonusButton = new Button { name = "BonusButton" };
         _bonusPanel = new VisualElement { name = "BonusPanel" };
         _bonusCloseButton = new Button { name = "BonusCloseButton" };
@@ -72,9 +82,16 @@ public sealed class PlayerHUDBonusControllerTests
         _root.Add(_bonusButton);
         _root.Add(_bonusPanel);
 
-        _sentPackets = [];
+        _sentPackets = new();
         _controller = new PlayerHUDBonusController(packet => _sentPackets.Add(packet), new MockLocalizationService());
         _controller.Initialize(_root);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        UnityEngine.Object.DestroyImmediate(_host);
+        UnityEngine.Object.DestroyImmediate(_panelSettings);
     }
 
     [Test]
@@ -143,21 +160,11 @@ public sealed class PlayerHUDBonusControllerTests
     [Test]
     public void ClaimButton_SendsDailyBonusClickPacket()
     {
-        // Simulate click on claim button
-        using var evt = NavigationSubmitEvent.GetPooled();
-        evt.target = _bonusClaimButton;
-        _bonusClaimButton.SendEvent(evt);
-
-        // Or directly invoking clicked
         var model = new PlayerStatsModel();
         model.SetDailyBonusAvailable(true);
         _controller.UpdateDailyBonusPanel(model);
 
-        // Click directly through the button's clicked event
-        // UI Toolkit Button has a private clicked or can invoke via click event
-        using var clickEvt = ClickEvent.GetPooled();
-        clickEvt.target = _bonusClaimButton;
-        _bonusClaimButton.SendEvent(clickEvt);
+        _controller.ClaimDailyBonus();
 
         Assert.That(_sentPackets.Count, Is.EqualTo(1));
         Assert.That(_sentPackets[0].WindowTag, Is.EqualTo("daily_bonus"));

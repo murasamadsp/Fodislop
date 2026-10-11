@@ -24,7 +24,7 @@ public sealed class TerrainMaterialManager
     private static readonly int s_worldLightTexturePropertyId = Shader.PropertyToID("_WorldLightTexture");
     private static readonly int s_worldLightRectPropertyId = Shader.PropertyToID("_WorldLightRect");
 
-    private Material[] _cellMaterials = [];
+    private Material[] _cellMaterials = Array.Empty<Material>();
 
     // Единственный материал террейна: меш идентификаторов и накладка дверей,
     // все атласы разом.
@@ -116,7 +116,7 @@ public sealed class TerrainMaterialManager
         _lightingBindingValidated = false;
         cellCache.ClearCaches();
         CleanupMaterials();
-        _cellMaterials = [CreateCellMaterial(clientConfig)];
+        _cellMaterials = new[] { CreateCellMaterial(clientConfig) };
 
         SnapshotAtlasRefs(atlases);
         FrameEventLog.Record($"террейн: материалы пересозданы, атласов {atlases.Count}");
@@ -193,14 +193,26 @@ public sealed class TerrainMaterialManager
 
     private static void RequireLightingPasses(Material material)
     {
-        if (material.FindPass("Universal2D") < 0 ||
-            material.FindPass(
-                ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField) < 0 ||
-            material.FindPass(
-                ProjectRuntimeContracts.ShaderPassNames.LightingAmbientOcclusionField) < 0)
+        string[] requiredPasses = new string[]
+        {
+            "Universal2D",
+            ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField,
+            ProjectRuntimeContracts.ShaderPassNames.LightingAmbientOcclusionField,
+        };
+        List<string> missingPasses = new(requiredPasses.Length);
+        foreach (string passName in requiredPasses)
+        {
+            if (material.FindPass(passName) < 0)
+            {
+                missingPasses.Add(passName);
+            }
+        }
+
+        if (missingPasses.Count > 0)
         {
             throw new InvalidOperationException(
-                $"Terrain material '{material.name}' is missing a required world-lighting pass.");
+                $"Terrain material '{material.name}' using shader '{material.shader.name}' " +
+                $"is missing required pass(es): {string.Join(", ", missingPasses)}.");
         }
     }
 
@@ -235,8 +247,8 @@ public sealed class TerrainMaterialManager
         }
     }
 
-    private static readonly int[] s_terrainAtlasPropertyIds =
-    [
+    private static readonly int[] s_terrainAtlasPropertyIds = new int[]
+    {
         Shader.PropertyToID("_TerrainAtlas0"),
         Shader.PropertyToID("_TerrainAtlas1"),
         Shader.PropertyToID("_TerrainAtlas2"),
@@ -245,7 +257,7 @@ public sealed class TerrainMaterialManager
         Shader.PropertyToID("_TerrainAtlas5"),
         Shader.PropertyToID("_TerrainAtlas6"),
         Shader.PropertyToID("_TerrainAtlas7"),
-    ];
+    };
 
     public void ValidateLightingBinding(in LightingOutputSnapshot output)
     {
@@ -305,13 +317,13 @@ public sealed class TerrainMaterialManager
             }
         }
 
-        _cellMaterials = [];
+        _cellMaterials = Array.Empty<Material>();
     }
 
     private static void RequireShaderProperties(Material material)
     {
-        string[] requiredProperties =
-        [
+        string[] requiredProperties = new string[]
+        {
             "_FlowMap",
             "_PrismaticFlowMap",
             "_TerrainDecalAtlas",
@@ -319,7 +331,7 @@ public sealed class TerrainMaterialManager
             "_ShimmerSpeedScale",
             "_BlinkingSpeedScale",
             "_ShimmerColor",
-        ];
+        };
         foreach (string propertyName in requiredProperties)
         {
             if (!material.HasProperty(propertyName))

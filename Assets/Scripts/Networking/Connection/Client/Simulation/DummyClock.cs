@@ -129,11 +129,17 @@ public sealed class VirtualDummyClock : IDummyClock
         return waiter.Completion.Task;
     }
 
-    private sealed class Waiter(long dueMilliseconds, long sequence)
+    private sealed class Waiter
     {
-        public long DueMilliseconds { get; } = dueMilliseconds;
+        internal Waiter(long dueMilliseconds, long sequence)
+        {
+            DueMilliseconds = dueMilliseconds;
+            Sequence = sequence;
+        }
 
-        public long Sequence { get; } = sequence;
+        public long DueMilliseconds { get; }
+
+        public long Sequence { get; }
 
         public UniTaskCompletionSource Completion { get; } = new();
 

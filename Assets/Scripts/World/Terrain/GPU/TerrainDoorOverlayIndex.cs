@@ -19,9 +19,9 @@ namespace Kern.World.Terrain;
 public sealed class TerrainDoorOverlayIndex
 {
     private readonly TerrainRingGrid<bool> _flags = new();
-    private readonly HashSet<int> _quads = [];
+    private readonly HashSet<int> _quads = new();
     private readonly object _quadLock = new();
-    private int[] _quadScratch = [];
+    private int[] _quadScratch = Array.Empty<int>();
     private int _width;
     private int _height;
     private bool _trackQuads;

@@ -138,7 +138,7 @@ public class ObserverJoystick
             item.RegisterCallback<PointerDownEvent>(evt =>
             {
                 evt.StopPropagation();
-                BeginDrag(evt.position, idx);
+                BeginDrag(evt.position, idx, evt.pointerId);
 
                 // Icon stays as Cell* until actual drag movement
             });
@@ -158,7 +158,7 @@ public class ObserverJoystick
         _centerItem.RegisterCallback<PointerDownEvent>(evt =>
         {
             evt.StopPropagation();
-            BeginDrag(evt.position, 8);
+            BeginDrag(evt.position, 8, evt.pointerId);
         });
 
         // Root-level move: threshold + angle + icon preview
@@ -290,14 +290,17 @@ public class ObserverJoystick
         });
     }
 
-    private void BeginDrag(Vector2 position, int source)
+    // Захватывается тот указатель, что нажал: id 0 — это мышь, и палец
+    // (id от PointerId.touchPointerIdBase) терял PointerMove/PointerUp, едва
+    // уходил с элемента.
+    private void BeginDrag(Vector2 position, int source, int pointerId)
     {
         _activeSource = source;
         _isActive = true;
         _isDragging = false;
         _dragTargetDir = -1;
         _pointerStart = position;
-        _root.CapturePointer(0);
+        _root.CapturePointer(pointerId);
     }
 
     private void Reset()

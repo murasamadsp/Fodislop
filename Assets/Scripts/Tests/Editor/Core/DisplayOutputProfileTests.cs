@@ -12,6 +12,15 @@ namespace Kern.Tests.Core;
 public sealed class DisplayOutputProfileTests
 {
     [Test]
+    public void ProjectUsesLinearColorForSceneLightingAndTonemapping()
+    {
+        Assert.That(PlayerSettings.colorSpace, Is.EqualTo(ColorSpace.Linear),
+            "Lighting, bloom and the URP output curve require scene-linear working color.");
+        Assert.That(PlayerSettings.allowHDRDisplaySupport, Is.True,
+            "Runtime HDR preference requires the project to permit HDR display output.");
+    }
+
+    [Test]
     public void DisplayCameraPermitsHDRWithoutCachingCurrentDisplayMode()
     {
         var owner = new GameObject("HDR camera test");
@@ -66,6 +75,7 @@ public sealed class DisplayOutputProfileTests
         {
             bool nativePostEffect = component != null &&
                 component.GetType().Namespace == typeof(Tonemapping).Namespace &&
+                component is not Tonemapping &&
                 component is IPostProcessComponent;
             Assert.That(nativePostEffect, Is.False,
                 $"{path}: {component?.GetType().Name}; artistic effects belong to Kern, output tonemapping to Bootstrap.");

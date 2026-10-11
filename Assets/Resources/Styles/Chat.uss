@@ -216,3 +216,9 @@
     font-size: var(--size-base);
     color: var(--light-solid);
 }
+
+/* Кнопка отправки локального чата нужна только пальцу: на клавиатуре
+   отправляет Enter. Показывает её Touch.uss. */
+.lchat-send {
+    display: none;
+}

@@ -11,8 +11,9 @@ internal static class GradingScopesOptions
 {
     internal readonly record struct Option(string Label, int Value);
 
-    internal static readonly Option[] DebugViewOptions =
-    [
+    internal static readonly Option[] DebugViewOptions = new Option[]
+    {
+
         new("обычный", (int)PostProcessDebugView.None),
         new("ложный цвет", (int)PostProcessDebugView.FalseColor),
         new("отсечка", (int)PostProcessDebugView.Clipping),
@@ -23,33 +24,42 @@ internal static class GradingScopesOptions
         new("виньетка", (int)PostProcessDebugView.Vignette),
         new("FilmGrain", (int)PostProcessDebugView.FilmGrain),
         new("bloom", (int)PostProcessDebugView.Bloom),
-    ];
 
-    internal static readonly Option[] CompareOptions =
-    [
+    };
+
+    internal static readonly Option[] CompareOptions = new Option[]
+    {
+
         new("выкл", (int)CompareMode.Off),
         new("верт. wipe", (int)CompareMode.VerticalWipe),
         new("гориз. wipe", (int)CompareMode.HorizontalWipe),
         new("сплит", (int)CompareMode.SideBySide),
         new("A/B", (int)CompareMode.AbToggle),
-    ];
 
-    internal static readonly Option[] SourceModeOptions =
-    [
+    };
+
+    internal static readonly Option[] SourceModeOptions = new Option[]
+    {
+
         new("Выходной сигнал", (int)ScopesSourceMode.After),
         new("Сцена до тонмаппинга", (int)ScopesSourceMode.Before),
-    ];
 
-    internal static readonly Option[] WaveformOptions =
-    [
+    };
+
+    internal static readonly Option[] WaveformOptions = new Option[]
+    {
+
         new("RGB parade", (int)ScopeWaveformMode.Parade),
         new("Overlay", (int)ScopeWaveformMode.Overlay),
         new("Luma", (int)ScopeWaveformMode.Luma),
-    ];
 
-    internal static readonly Option[] HistogramOptions =
-    [
+    };
+
+    internal static readonly Option[] HistogramOptions = new Option[]
+    {
+
         new("RGB", 0),
         new("Luma", 1),
-    ];
+
+    };
 }

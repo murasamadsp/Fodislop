@@ -133,11 +133,35 @@ namespace Kern.World.Lighting
         private ITerrainLightingExchange _terrainLightingExchange = null!;
 
         private bool _initialized;
+        private bool _orientationValidationStarted;
+        private bool _orientationValidationRequired;
         private LightingQualityTuning _appliedTuning = LightingQualityTuningController.Current;
         private ulong _appliedDynamicExecutionModeRevision =
             LightingQualityTuningController.DynamicExecutionModeRevision;
 
         public bool IsInitialized => _initialized;
+
+        public Cysharp.Threading.Tasks.UniTask BeginOrientationValidationAsync()
+        {
+            if (!DependenciesReady)
+            {
+                throw new InvalidOperationException(
+                    "LightingEngine requires all DI dependencies before orientation validation.");
+            }
+
+            ApplyQualitySettings(
+                _clientConfig.Config.GraphicsPreset,
+                _clientConfig.Config.GraphicsQualitySettings);
+            _orientationValidationStarted = true;
+            _orientationValidationRequired = QualityController.QualityMode != LightingQualityMode.Off ||
+                QualityController.ActivePreset == GraphicsPreset.Standard;
+            if (!_orientationValidationRequired)
+            {
+                return Cysharp.Threading.Tasks.UniTask.CompletedTask;
+            }
+
+            return LightingFieldOrientationValidator.ValidateBeforeWorldEntryAsync();
+        }
 
         public event Action? OnInitialized;
         private bool _forceBypassLighting;
@@ -352,6 +376,19 @@ namespace Kern.World.Lighting
             ApplyQualitySettings(
                 _clientConfig.Config.GraphicsPreset,
                 _clientConfig.Config.GraphicsQualitySettings);
+
+            // GameBootstrap starts the asynchronous raster/readback probe
+            // after scene-service activation, overlaps it with persistent-data
+            // preparation, and awaits success before Initialize can connect.
+            // Keep the validated-state check mandatory for every mode that
+            // publishes a lighting or AO field; resource setup must never
+            // proceed with unconfirmed row orientation.
+            if (QualityController.QualityMode != LightingQualityMode.Off ||
+                QualityController.ActivePreset == GraphicsPreset.Standard)
+            {
+                LightingFieldOrientationValidator.EnsureValidated();
+            }
+
             PublishTerrainRequirementsIfChanged();
 
             _initialized = true;
@@ -366,7 +403,8 @@ namespace Kern.World.Lighting
 
         private void TryInitialize()
         {
-            if (_initialized)
+            if (_initialized || !_orientationValidationStarted ||
+                (_orientationValidationRequired && !LightingFieldOrientationValidator.IsValidated))
             {
                 return;
             }

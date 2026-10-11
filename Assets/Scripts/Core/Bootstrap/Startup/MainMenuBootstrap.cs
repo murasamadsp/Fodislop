@@ -2,7 +2,6 @@
 
 using System;
 using Cysharp.Threading.Tasks;
-using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
 using Kern.UI;
 using VContainer.Unity;
@@ -13,20 +12,17 @@ public sealed class MainMenuBootstrap : IStartable
 {
     private readonly MainMenuLifetimeScope _scope;
     private readonly MainMenu _controller;
-    private readonly IAudioSystem _audioSystem;
     private readonly SceneTransitionTicket _ticket;
     private readonly AsyncOperationSupervisor _operations;
 
     public MainMenuBootstrap(
         MainMenuLifetimeScope scope,
         MainMenu controller,
-        IAudioSystem audioSystem,
         SceneTransitionTicket ticket,
         AsyncOperationSupervisor operations)
     {
         _scope = scope;
         _controller = controller;
-        _audioSystem = audioSystem;
         _ticket = ticket;
         _operations = operations;
         _ticket.Attach(_scope.gameObject.scene);
@@ -43,10 +39,6 @@ public sealed class MainMenuBootstrap : IStartable
         {
             await _ticket.WaitForActivationAsync();
             _controller.InitializeScene(_scope.Starfield, _scope.Scenery);
-            // Presentation readiness requires the required audio banks to be
-            // resident: scene audio must be live the moment the scene is shown,
-            // not pop in a second later when the background bank load lands.
-            await _audioSystem.WaitUntilBanksReadyAsync(_scope.destroyCancellationToken);
             _ticket.MarkStartupReady();
             // Гарантируем, что текстура планеты и звёздное небо готовы ДО показа меню пользователю.
             await _controller.WaitUntilReadyAsync(_scope.destroyCancellationToken);

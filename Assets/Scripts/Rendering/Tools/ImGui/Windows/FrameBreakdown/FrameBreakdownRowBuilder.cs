@@ -13,9 +13,9 @@ internal static class FrameBreakdownRowBuilder
     private const double BudgetMilliseconds = FrameBudget.TargetFrameMilliseconds;
     private const int FrameTabLoopRows = 8;
 
-    private static readonly List<(int Start, int Length, double Weight)> s_stageOrder = [];
-    private static readonly List<FrameProbe> s_reordered = [];
-    private static readonly List<Kern.Core.Interfaces.Diagnostics.AllocationLedger.Entry> s_ledgerSorted = [];
+    private static readonly List<(int Start, int Length, double Weight)> s_stageOrder = new();
+    private static readonly List<FrameProbe> s_reordered = new();
+    private static readonly List<Kern.Core.Interfaces.Diagnostics.AllocationLedger.Entry> s_ledgerSorted = new();
 
     public static void BuildFrameRows(
         List<FrameBreakdownRow> rows,

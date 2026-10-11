@@ -50,7 +50,6 @@ namespace Kern.UI
         private ILocalPlayerState _localPlayer = null!;
 
         private bool _renderRequested;
-        private long _lastRenderedStorageRevision = -1;
         private bool _followPlayer = true;
         private readonly WorldMapBounds _bounds = new();
         private bool _isInitialized;
@@ -77,8 +76,7 @@ namespace Kern.UI
             _layerBinding = new WorldMapLayerBinding(
                 _cellSampler,
                 _mipSource,
-                RequestRender,
-                RequestFullRender);
+                RequestRender);
             _playerTracker = new MapPlayerTracker(_localPlayer);
             _playerTracker.OnPlayerSpawned += () =>
             {
@@ -264,12 +262,6 @@ namespace Kern.UI
 
         private void RequestRender() => _renderRequested = true;
 
-        private void RequestFullRender()
-        {
-            _viewportRenderer.InvalidateViewState();
-            _renderRequested = true;
-        }
-
         private void OnWorldMapWheel(WheelEvent evt) =>
             _inputDispatcher.HandleWheel(evt, _maxCellsPerPixel, ref _cellsPerPixel, ref _viewCenterX, ref _viewCenterY);
 
@@ -311,7 +303,7 @@ namespace Kern.UI
             _inputDispatcher.HandlePointerDown(evt);
 
         private void OnMapPointerMove(PointerMoveEvent evt) =>
-            _inputDispatcher.HandlePointerMove(evt, _cellsPerPixel, _dragSpeed, ref _viewCenterX, ref _viewCenterY, ref _followPlayer);
+            _inputDispatcher.HandlePointerMove(evt, _maxCellsPerPixel, ref _cellsPerPixel, _dragSpeed, ref _viewCenterX, ref _viewCenterY, ref _followPlayer);
 
         private void OnMapPointerUp(PointerUpEvent evt) =>
             _inputDispatcher.HandlePointerUp(evt);
@@ -341,7 +333,6 @@ namespace Kern.UI
                 _viewCenterY = _bounds.Height * 0.5f;
             }
 
-            _lastRenderedStorageRevision = -1;
             _renderRequested = true;
         }
 
@@ -487,7 +478,6 @@ namespace Kern.UI
 
             enabled = true;
             _renderRequested = true;
-            _lastRenderedStorageRevision = -1;
             _followPlayer = true;
             _playerTracker?.ResetState();
             UpdatePlayerMarker();
@@ -529,17 +519,11 @@ namespace Kern.UI
         {
             IWorldDataStorage storage = _storage ??
                 throw new InvalidOperationException("WorldMapRenderer storage is not initialized.");
-            if (storage.Revision != _lastRenderedStorageRevision)
-            {
-                _renderRequested = true;
-            }
-
             if (!ReferenceEquals(_layerBinding.CellLayer, storage.CellLayer))
             {
                 _layerBinding.BindCellLayer(storage.CellLayer);
                 _layerBinding.BindMipScan(_manager.WorldWidth, _manager.WorldHeight, _viewportRenderer.CellColorTable);
                 _renderRequested = true;
-                _lastRenderedStorageRevision = -1;
             }
 
             if (_manager != null && !_bounds.Matches(_manager))
@@ -563,6 +547,14 @@ namespace Kern.UI
                 _mipSource.Begin();
             }
 
+            // A mip upload rewrites every level of the overview texture. Let
+            // the bounded chunk queue drain first, then upload the final state
+            // once instead of re-uploading the full pyramid on every batch.
+            if (requiresMip && _mipSource.IsReady && _mipSource.HasPendingChunks)
+            {
+                return;
+            }
+
             UpdateMipStatus(requiresMip);
 
             _viewportRenderer.Render(
@@ -579,7 +571,6 @@ namespace Kern.UI
 
             _panel.Image?.MarkDirtyRepaint();
             _renderRequested = false;
-            _lastRenderedStorageRevision = _storage.Revision;
             _pathOverlay.Draw(
                 _pathWalker?.Path,
                 _pathWalker?.PathIndex ?? 0,

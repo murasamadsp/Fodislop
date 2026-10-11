@@ -29,6 +29,18 @@
                 <ui:Button name="ProgrammatorCloseButton" class="prog-close-btn" text="×" />
             </ui:VisualElement>
 
+            <!-- Правка пальцем: на клавиатуре это Ctrl+Z/Y/C/X/V, Del и Ctrl+клик.
+                 Видна только при сенсорном вводе (Touch.uss). -->
+            <ui:VisualElement name="ProgTouchToolbar" class="prog-touch-toolbar">
+                <ui:Button name="ProgUndoButton" class="prog-touch-tool" text="programmator.touch.undo" />
+                <ui:Button name="ProgRedoButton" class="prog-touch-tool" text="programmator.touch.redo" />
+                <ui:Button name="ProgCopyButton" class="prog-touch-tool" text="programmator.touch.copy" />
+                <ui:Button name="ProgCutButton" class="prog-touch-tool" text="programmator.touch.cut" />
+                <ui:Button name="ProgPasteButton" class="prog-touch-tool" text="programmator.touch.paste" />
+                <ui:Button name="ProgDeleteButton" class="prog-touch-tool" text="programmator.touch.delete" />
+                <ui:Button name="ProgMultiSelectButton" class="prog-touch-tool" text="programmator.touch.multi" />
+            </ui:VisualElement>
+
             <!-- Сетка: ячейки создаются в коде (динамический список) -->
             <ui:VisualElement class="prog-grid-row">
                 <ui:VisualElement name="GridScroll" class="prog-grid-scroll">

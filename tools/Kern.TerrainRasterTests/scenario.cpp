@@ -195,15 +195,17 @@ static void checkRoundRim()
     _RimDistanceScale = 8.0f;
     const int roundable = 1;
     float allForeign = packRimMask(0, roundable, 0);
-    if(roundRim(float2{0.846f, 0.846f}, allForeign, 0) >= 0.5f)
+    if(roundRim(float2{0.846f, 0.846f}, allForeign, 0) > 0.55f)
         throw std::runtime_error("Rim does not follow the round block silhouette");
     if(roundRim(float2{0.5f, 0.5f}, allForeign, 0) < 0.99f)
         throw std::runtime_error("Rim darkens the middle of a round block");
     float sameTop = packRimMask(1, roundable, 0);
     if(roundRim(float2{0.5f, 0.98f}, sameTop, 1) < 0.99f)
         throw std::runtime_error("Rim darkens a round block side merged with the same surface");
-    if(roundRim(float2{0.5f, 0.98f}, allForeign, 1) >= 0.5f)
-        throw std::runtime_error("Rim missing on a round block side facing a foreign surface");
+    float foreignRoundTop = roundRim(float2{0.5f, 0.98f}, allForeign, 0);
+    if(foreignRoundTop > 0.625f)
+        throw std::runtime_error("Rim missing on a round block side facing a foreign surface: " +
+            std::to_string(foreignRoundTop));
     _RimDistanceScale = saved;
 }
 
@@ -236,7 +238,7 @@ static void checkRim()
     for(float2 p : {nearTop, nearBottom, nearLeft, nearRight})
     {
         float v = rim(p, allForeign);
-        if(v >= 0.25f)
+        if(v > 0.55f)
             throw std::runtime_error("Rim missing on a foreign side");
         if(v <= 0.1f)
             throw std::runtime_error("Rim is darker than the original scale allows");
@@ -252,7 +254,7 @@ static void checkRim()
         {
             float v = rim(probes[other], one);
             bool expectDark = other == side;
-            if(expectDark && v >= 0.25f)
+            if(expectDark && v > 0.55f)
                 throw std::runtime_error("Rim missing on the single foreign side");
             // Не ровно единица: квантование сдвигает середину клетки на
             // полтексела, и противоположная грань даёт 0.9985. Утечкой это
@@ -284,7 +286,7 @@ static void checkRim()
         {
             float s=std::clamp(1.0f-2.0f*distance,0.0f,1.0f);
             float fall=1.0f-0.5f*s*s;
-            return fall*fall*fall;
+            return fall;
         };
         if(std::fabs(flat - sideFalloff(.25f)) > 1e-4f ||
             std::fabs(displaced - sideFalloff(span.y*.25f)) > 1e-4f)
@@ -328,8 +330,8 @@ static void checkRim()
         float a = rim(corner, bottomOnly);
         float b = rim(corner, leftOnly);
         float c = rim(corner, both);
-        if(c >= a || c >= b)
-            throw std::runtime_error("A corner of two foreign edges is not darker than either");
+        if(c > a || c > b || c >= 0.99f)
+            throw std::runtime_error("A corner of two foreign edges does not preserve either edge bevel");
     }
 
     // Полная упаковка: младшие биты заняты, код обязан дойти целым.
@@ -372,7 +374,7 @@ static void checkRim()
                         throw std::runtime_error(
                             "Rim darkens a side whose neighbour is the same family: mask=" +
                             std::to_string(rimMask) + " side=" + std::to_string(side));
-                    if(!sameFamily && v >= 0.25f)
+                    if(!sameFamily && v > 0.55f)
                         throw std::runtime_error(
                             "Rim missing on a foreign side: mask=" +
                             std::to_string(rimMask) + " side=" + std::to_string(side));

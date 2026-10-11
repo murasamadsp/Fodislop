@@ -40,7 +40,9 @@ namespace Kern.Networking.Connection
         private const float PacketDrainBudgetMaximumSeconds = 0.01f;
 
         public IServerConnection? Connection { get; private set; }
-        public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
+        public bool IsConnected => Connection != null && Connection.ConnectionStatus == ConnectionStatus.Connected;
+        public bool IsAutoReconnecting => _shouldAutoReconnect;
+        public bool IsWorldStartupPending => _isWorldStartupPending;
         public bool IsOffline => Connection is IOfflineConnection;
 
         public void RequestWorldRegion(string worldCodeName, RectInt serverRegion)
@@ -55,6 +57,7 @@ namespace Kern.Networking.Connection
         public event Action<ServerPacket>? OnPacketReceived;
         public event Action? OnPacketBatchStarted;
         public event Action? OnPacketBatchCompleted;
+        public event Action? OnTransportDisconnected;
         public event Action<string>? OnReconnectStatusChanged;
         public event Action<string>? OnDisconnectReason;
         public event Action? OnReconnectHidden;
@@ -77,9 +80,11 @@ namespace Kern.Networking.Connection
         private ConnectionTransportFactory _transportFactory = null!;
 
         private bool _shouldAutoReconnect;
+        private bool _isConnectionAttemptPending;
+        private bool _isWorldStartupPending;
+        private bool _clientHelloSent;
         private float _reconnectCountdown;
         private string _reconnectStatus = string.Empty;
-        private bool _returningToMenu;
         private bool _restartWorldOnConnect;
 
         // НУЖЕН: сохраняет причину серверного дисконнекта — используется при реконнекте
@@ -149,7 +154,7 @@ namespace Kern.Networking.Connection
                             new InvalidOperationException(
                                 "A server packet could not be processed. Disconnecting to avoid continuing with corrupted state.",
                                 ex));
-                        TriggerDisconnect("Client packet processing failed.");
+                        HandleServerDisconnect("Client packet processing failed.");
                         break;
                     }
                 }
@@ -184,7 +189,7 @@ namespace Kern.Networking.Connection
                 return;
             }
 
-            _reconnectCountdown -= Time.deltaTime;
+            _reconnectCountdown -= Time.unscaledDeltaTime;
             int secsRemaining = Mathf.CeilToInt(_reconnectCountdown);
             string status = secsRemaining > 0
                 ? _loc.Get("network.reconnect.retry", secsRemaining)
@@ -206,6 +211,11 @@ namespace Kern.Networking.Connection
         {
             if (Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected)
             {
+                if (Connection.ConnectionStatus == ConnectionStatus.Connected)
+                {
+                    SendClientHelloIfNeeded();
+                }
+
                 return;
             }
 
@@ -227,6 +237,9 @@ namespace Kern.Networking.Connection
             }
 
             _useOldClient = oldClient;
+            _isConnectionAttemptPending = true;
+            _isWorldStartupPending = true;
+            _clientHelloSent = false;
             Connection = _transportFactory.Create();
             Connection.OnReceived += OnReceived;
             Connection.OnConnected += OnConnected;
@@ -239,6 +252,11 @@ namespace Kern.Networking.Connection
 
         public void Disconnect()
         {
+            _isConnectionAttemptPending = false;
+            _isWorldStartupPending = false;
+            _shouldAutoReconnect = false;
+            _restartWorldOnConnect = false;
+            _clientHelloSent = false;
             if (Connection == null)
             {
                 return;
@@ -289,27 +307,46 @@ namespace Kern.Networking.Connection
             Connection?.SendAsync(packet);
         }
 
+        public void MarkWorldReady()
+        {
+            if (!IsConnected)
+            {
+                throw new ConnectionStartupInterruptedException();
+            }
+
+            _isWorldStartupPending = false;
+            _shouldAutoReconnect = false;
+            _restartWorldOnConnect = false;
+            _reconnectBackoff.Reset();
+            _reconnectCountdown = 0f;
+            _reconnectStatus = string.Empty;
+            OnReconnectHidden?.Invoke();
+        }
+
         public void HandleServerDisconnect(string reason)
         {
             _shouldAutoReconnect = false;
             _disconnectReason = reason;
             Disconnect();
+            Debug.LogWarning($"[ConnectionManager] Server disconnected the client: {reason}");
             OnDisconnectReason?.Invoke(reason);
-            ReturnToMainMenuAfterDisconnect();
+            OnTransportDisconnected?.Invoke();
         }
 
         public void HandleServerReconnect()
         {
+            Disconnect();
             _restartWorldOnConnect = true;
             _shouldAutoReconnect = true;
             _reconnectBackoff.Reset();
             _reconnectCountdown = _reconnectBackoff.CurrentDelay;
             _reconnectStatus = _loc.Get("network.reconnect.retry", Mathf.CeilToInt(_reconnectCountdown));
-            Disconnect();
             OnReconnectStatusChanged?.Invoke(_reconnectStatus);
+            OnTransportDisconnected?.Invoke();
         }
         private void OnConnected()
         {
+            _isConnectionAttemptPending = false;
             _operations.Run("complete_connection", CompleteConnectionAsync);
         }
 
@@ -331,9 +368,20 @@ namespace Kern.Networking.Connection
                 _restartWorldOnConnect = false;
                 if (!alreadyInTargetScene)
                 {
-                    await _sceneNavigator.TransitionAsync(
-                        ProjectRuntimeContracts.SceneNames.MainGame,
-                        cancellationToken);
+                    try
+                    {
+                        await _sceneNavigator.TransitionAsync(
+                            ProjectRuntimeContracts.SceneNames.MainGame,
+                            cancellationToken);
+                    }
+                    catch (ConnectionStartupInterruptedException) when (_shouldAutoReconnect)
+                    {
+                        return;
+                    }
+                    catch (TimeoutException) when (_shouldAutoReconnect)
+                    {
+                        return;
+                    }
                 }
                 else
                 {
@@ -349,6 +397,22 @@ namespace Kern.Networking.Connection
             _reconnectStatus = string.Empty;
             OnReconnectHidden?.Invoke();
 
+            SendClientHelloIfNeeded();
+
+            // On a reconnect, startup calls Connect() after packet consumers
+            // are initialized. That call sends ClientHello while this
+            // transition is waiting for WorldInit; the guard makes this
+            // completion path safe to call it again after readiness.
+        }
+
+        private void SendClientHelloIfNeeded()
+        {
+            if (_clientHelloSent || Connection == null || !IsConnected)
+            {
+                return;
+            }
+
+            _clientHelloSent = true;
             int version = _useOldClient ? 0 : ProjectRuntimeContracts.Networking.ClientVersion;
             string token = _tokens.Load();
             Debug.Log($"[Auth] Sending ClientHello with token: {(string.IsNullOrEmpty(token) ? "EMPTY" : "PRESENT")}");
@@ -360,14 +424,6 @@ namespace Kern.Networking.Connection
                     Environment.OSVersion.Version.Major,
                     SystemInfo.deviceUniqueIdentifier,
                     token)));
-
-            // Здесь раньше безусловно уходил OpenHelpClickPacket, и сервер на
-            // каждый коннект и реконнект отвечал окном FAQ. Окно модальное:
-            // ServerWindowPresenter.Open кладёт его в стек модалок, и
-            // IInputBlocker.IsInputBlocked становится true — весь игровой ввод
-            // и T локального чата переставали работать, пока окно не закроют
-            // мышью. Кнопки помощи в интерфейсе нет, запрос был единственным
-            // источником этого окна, поэтому он убран вместе с окном.
         }
 
         private static string GetClientOperatingSystem() =>
@@ -388,53 +444,42 @@ namespace Kern.Networking.Connection
 
             ClearPendingPackets();
 
+            // Detach before forgetting the transport. DummyConnection is reused
+            // on the next attempt; retaining these handlers delivers every
+            // packet and lifecycle event multiple times after reconnecting.
+            if (Connection != null)
+            {
+                Connection.OnReceived -= OnReceived;
+                Connection.OnConnected -= OnConnected;
+                Connection.OnDisconnected -= OnDisconnected;
+                Connection = null;
+            }
+
+            if (_isConnectionAttemptPending || _isWorldStartupPending)
+            {
+                _isConnectionAttemptPending = false;
+                _shouldAutoReconnect = true;
+                _restartWorldOnConnect = true;
+            }
+
             if (_shouldAutoReconnect)
             {
                 // Сокетный транспорт может оборваться в любой момент. Забываем
                 // мёртвое соединение, чтобы UpdateReconnect создал новое.
                 Connection = null;
+                _restartWorldOnConnect = true;
                 _reconnectBackoff.RecordFailure();
                 _reconnectCountdown = _reconnectBackoff.CurrentDelay;
                 _reconnectStatus = _loc.Get("network.reconnect.retry", Mathf.CeilToInt(_reconnectCountdown));
                 OnReconnectStatusChanged?.Invoke(_reconnectStatus);
+                OnTransportDisconnected?.Invoke();
                 return;
             }
 
             Connection = null;
             _disconnectReason = _loc.Get("network.error.connection_lost");
             OnDisconnectReason?.Invoke(_disconnectReason);
-            ReturnToMainMenuAfterDisconnect();
-        }
-
-        private void ReturnToMainMenuAfterDisconnect()
-        {
-            if (_returningToMenu || string.Equals(
-                    _sceneNavigator.CurrentSceneName,
-                    ProjectRuntimeContracts.SceneNames.MainMenu,
-                    StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _returningToMenu = true;
-            _operations.Run("connection_lost_to_main_menu", ReturnToMainMenuAfterDisconnectAsync);
-        }
-
-        private async UniTask ReturnToMainMenuAfterDisconnectAsync(CancellationToken supervisorToken)
-        {
-            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                supervisorToken,
-                destroyCancellationToken);
-            try
-            {
-                await _sceneNavigator.TransitionAsync(
-                    ProjectRuntimeContracts.SceneNames.MainMenu,
-                    linkedCancellation.Token);
-            }
-            finally
-            {
-                _returningToMenu = false;
-            }
+            OnTransportDisconnected?.Invoke();
         }
 
         private void ClearPendingPackets()

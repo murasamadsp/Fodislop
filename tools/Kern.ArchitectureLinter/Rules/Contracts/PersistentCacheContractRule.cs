@@ -37,7 +37,8 @@ public sealed class PersistentCacheContractRule : IRule
             if (!cache.Contains("ConcurrentDictionary<string, SemaphoreSlim>") ||
                 !cache.Contains("ReadVerifiedAsset") ||
                 !cache.Contains("WriteAtomically") ||
-                !cache.Contains("assetPath + \".entry\""))
+                !cache.Contains("private const string ManifestSuffix = \".entry\"") ||
+                !cache.Contains("assetPath + ManifestSuffix"))
             {
                 violations.Add(new RuleViolation
                 {

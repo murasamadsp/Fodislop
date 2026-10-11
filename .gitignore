@@ -59,6 +59,7 @@ StyleCopReport.xml
 *.pgc
 *.pgd
 *.rsp
+!Assets/csc.rsp
 *.sbr
 *.tlb
 *.tli
@@ -243,6 +244,10 @@ sysinfo.txt
 mono_crash.*
 *.apk
 *.aab
+# Ключ подписи Android: Unity хранит пароли в EditorPrefs, а сам .keystore
+# не должен попадать в репозиторий.
+*.keystore
+*.jks
 *.unitypackage
 *.unitypackage.meta
 *.app

@@ -173,12 +173,9 @@ public sealed class AssetBatchDispatcher : IDisposable
         Func<IConnectionService> connectionProvider,
         Func<ITextureStorageService?> textureStorageProvider)
     {
-        bool isNew = false;
-        var tcs = _pendingRequests.GetOrAdd(filename, _ =>
-        {
-            isNew = true;
-            return new TaskCompletionSource<byte[]>();
-        });
+        var candidate = new TaskCompletionSource<byte[]>();
+        var tcs = _pendingRequests.GetOrAdd(filename, candidate);
+        bool isNew = ReferenceEquals(candidate, tcs);
 
         if (!isNew)
         {
@@ -188,13 +185,14 @@ public sealed class AssetBatchDispatcher : IDisposable
         using var registration = cancellationToken.Register(() =>
         {
             tcs.TrySetCanceled();
-            _pendingRequests.TryRemove(filename, out _);
+            TryRemovePending(filename, tcs);
         });
 
-        var connectionService = connectionProvider();
-        if (!connectionService.IsConnected)
+        try
         {
-            try
+            cancellationToken.ThrowIfCancellationRequested();
+            var connectionService = connectionProvider();
+            if (!connectionService.IsConnected)
             {
                 var tsm = textureStorageProvider();
                 if (tsm != null)
@@ -203,36 +201,30 @@ public sealed class AssetBatchDispatcher : IDisposable
                     if (localData != null)
                     {
                         tcs.TrySetResult(localData);
-                        _pendingRequests.TryRemove(filename, out _);
+                        TryRemovePending(filename, tcs);
                         return localData;
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                tcs.TrySetException(ex);
-                _pendingRequests.TryRemove(filename, out _);
-                throw;
+
+                throw new InvalidOperationException(
+                    $"No active connection and no local resource found for {filename}.");
             }
 
-            var noConnEx = new Exception($"No active connection and no local resource found for {filename}");
-            tcs.TrySetException(noConnEx);
-            _pendingRequests.TryRemove(filename, out _);
-            throw noConnEx;
-        }
-
-        _requestQueue.Enqueue(new RuntimeAssetEntryPacket(filename, etag ?? string.Empty));
-
-        try
-        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _requestQueue.Enqueue(new RuntimeAssetEntryPacket(filename, etag ?? string.Empty));
             return await tcs.Task;
         }
-        catch
+        catch (Exception exception)
         {
-            _pendingRequests.TryRemove(filename, out _);
-            throw;
+            tcs.TrySetException(exception);
+            TryRemovePending(filename, tcs);
+            return await tcs.Task;
         }
     }
+
+    private bool TryRemovePending(string filename, TaskCompletionSource<byte[]> request) =>
+        ((ICollection<KeyValuePair<string, TaskCompletionSource<byte[]>>>)_pendingRequests)
+            .Remove(new KeyValuePair<string, TaskCompletionSource<byte[]>>(filename, request));
 
     public async UniTask HandleAssetPacketAsync(
         ServerPacket obj,

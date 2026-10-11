@@ -21,7 +21,21 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyGameplayActionResponder(
+internal sealed class DummyGameplayActionResponder
+{
+    private readonly DummyPlayerSimulationState _playerState;
+    private readonly DummyWorldSimulationState _worldState;
+    private readonly DummyMovementResponder _movementResponder;
+    private readonly DummyMissionRunner _missionRunner;
+    private readonly DummyInventoryResponder _inventoryResponder;
+    private readonly DummyChatSimulator _chatSimulator;
+    private readonly IDummyClock _clock;
+    private readonly Action<ServerPacket> _sendPacket;
+    private readonly ushort _playerBotId;
+    private readonly IAsyncOperationSupervisor _operations;
+    private readonly Func<int> _getLifecycleVersion;
+    private readonly Func<int, bool> _loopAlive;
+    internal DummyGameplayActionResponder(
     DummyPlayerSimulationState playerState,
     DummyWorldSimulationState worldState,
     DummyMovementResponder movementResponder,
@@ -34,12 +48,26 @@ internal sealed class DummyGameplayActionResponder(
     IAsyncOperationSupervisor operations,
     Func<int> getLifecycleVersion,
     Func<int, bool> loopAlive)
-{
+    {
+        _playerState = playerState;
+        _worldState = worldState;
+        _movementResponder = movementResponder;
+        _missionRunner = missionRunner;
+        _inventoryResponder = inventoryResponder;
+        _chatSimulator = chatSimulator;
+        _clock = clock;
+        _sendPacket = sendPacket;
+        _playerBotId = playerBotId;
+        _operations = operations;
+        _getLifecycleVersion = getLifecycleVersion;
+        _loopAlive = loopAlive;
+    }
+
     private const ushort SpawnX = 25;
     private const ushort SpawnY = 50;
     private const int MilitaryBlockAssemblyDelayMilliseconds = 5000;
 
-    private readonly Dictionary<(ushort X, ushort Y), long> _militaryBuildVersions = [];
+    private readonly Dictionary<(ushort X, ushort Y), long> _militaryBuildVersions = new();
     private long _nextMilitaryBuildVersion;
 
     public void Handle(ActionClientPacket packet)
@@ -47,16 +75,16 @@ internal sealed class DummyGameplayActionResponder(
         switch (packet.Payload)
         {
             case MovePacket move:
-                movementResponder.HandleMove(move);
+                _movementResponder.HandleMove(move);
                 break;
             case RotatePacket rotate:
-                movementResponder.HandleRotate(rotate);
+                _movementResponder.HandleRotate(rotate);
                 break;
             case UnmappedKeyPacket:
                 break;
             case ToggleAutoDigPacket:
-                sendPacket(new ServerPacket(
-                    new AutoMineStatePacket(playerState.ToggleAutoDig())));
+                _sendPacket(new ServerPacket(
+                    new AutoMineStatePacket(_playerState.ToggleAutoDig())));
                 break;
             case BzPacket:
                 HandleDig(packet.X, packet.Y);
@@ -68,7 +96,7 @@ internal sealed class DummyGameplayActionResponder(
                 HandleGeology();
                 break;
             case HealPacket:
-                sendPacket(new ServerPacket(new HealthPacket(playerState.Heal(50), 500)));
+                _sendPacket(new ServerPacket(new HealthPacket(_playerState.Heal(50), 500)));
                 break;
             case BuildCyanPacket:
                 HandleMilitaryBlockBuild();
@@ -77,22 +105,22 @@ internal sealed class DummyGameplayActionResponder(
                 HandleRoadBuild();
                 break;
             case BuildGreenPacket:
-                HandleUpgradeBuild(
-                [
+                HandleUpgradeBuild(new[]
+                {
                     (CellType.Empty, CellType.GreenBlock),
                     (CellType.GreenBlock, CellType.YellowBlock),
                     (CellType.YellowBlock, CellType.RedBlock),
-                ]);
+                });
                 break;
             case BuildWhitePacket:
-                HandleUpgradeBuild(
-                [
+                HandleUpgradeBuild(new[]
+                {
                     (CellType.Empty, CellType.Support),
                     (CellType.Support, CellType.QuadBlock),
-                ]);
+                });
                 break;
             case ClickCellPacket click:
-                movementResponder.HandleClick(click);
+                _movementResponder.HandleClick(click);
                 break;
             default:
                 // Заглушка — штатный транспорт, а не отладочный: необработанное
@@ -109,23 +137,25 @@ internal sealed class DummyGameplayActionResponder(
     private void HandleDig(ushort cellX, ushort cellY)
     {
         SendAudio(SFX.Bz, cellX, cellY);
-        sendPacket(new ServerPacket(new HBPacket([
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
             new VFXPacket(
                 VFX.Bz,
-                playerBotId,
+                _playerBotId,
                 cellX,
                 cellY,
-                Array.Empty<StringPairPacket>())])));
+                Array.Empty<StringPairPacket>())
+        })));
 
-        if (worldState.HasLayer)
+        if (_worldState.HasLayer)
         {
-            CellType cellType = worldState.GetCell(cellX, cellY);
+            CellType cellType = _worldState.GetCell(cellX, cellY);
             if (cellType == CellType.Empty)
             {
                 return;
             }
 
-            CellConfigurationPacket? cellConfig = worldState.GetCellConfig(cellType);
+            CellConfigurationPacket? cellConfig = _worldState.GetCellConfig(cellType);
             bool isBreakable = cellConfig.HasValue &&
                 ((CellConfigProperties)cellConfig.Value.Properties)
                     .HasFlag(CellConfigProperties.Breakable);
@@ -138,8 +168,8 @@ internal sealed class DummyGameplayActionResponder(
             SendCellUpdate(cellX, cellY, CellType.Empty, SFX.Destroy);
         }
 
-        missionRunner.OnBlockMined(inventoryResponder.Items);
-        chatSimulator.SendMiningReaction();
+        _missionRunner.OnBlockMined(_inventoryResponder.Items);
+        _chatSimulator.SendMiningReaction();
     }
 
     private void AddCrystalToBasket(CellType cellType)
@@ -150,32 +180,33 @@ internal sealed class DummyGameplayActionResponder(
             return;
         }
 
-        long[]? contents = playerState.AddToBasket(
+        long[]? contents = _playerState.AddToBasket(
             (int)crystal,
-            clock.Random.Next(1, 101));
+            _clock.Random.Next(1, 101));
         if (contents != null)
         {
-            sendPacket(new ServerPacket(new BasketPacket(50000, contents)));
+            _sendPacket(new ServerPacket(new BasketPacket(50000, contents)));
         }
     }
 
     private void HandleSuicide()
     {
-        ushort effectX = playerState.X;
-        ushort effectY = playerState.Y;
-        playerState.Respawn(SpawnX, SpawnY);
-        movementResponder.CancelPath();
-        worldState.QueueChunksAround(playerState.X, playerState.Y, sendPacket);
-        sendPacket(new ServerPacket(new HealthPacket(500, 500)));
-        sendPacket(new ServerPacket(new TeleportPacket(SpawnX, SpawnY, false)));
-        sendPacket(new ServerPacket(new HBPacket([
+        ushort effectX = _playerState.X;
+        ushort effectY = _playerState.Y;
+        _playerState.Respawn(SpawnX, SpawnY);
+        _movementResponder.CancelPath();
+        _worldState.QueueChunksAround(_playerState.X, _playerState.Y, _sendPacket);
+        _sendPacket(new ServerPacket(new HealthPacket(500, 500)));
+        _sendPacket(new ServerPacket(new TeleportPacket(SpawnX, SpawnY, false)));
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
             new RobotPositionPacket(
-                playerBotId,
+                _playerBotId,
                 SpawnX,
                 SpawnY,
-                (byte)playerState.Direction),
+                (byte)_playerState.Direction),
             CreateAudioPacket(SFX.Death, effectX, effectY),
-        ])));
+        })));
     }
 
     private void HandleGeology()
@@ -185,22 +216,22 @@ internal sealed class DummyGameplayActionResponder(
             return;
         }
 
-        if (!worldState.HasLayer)
+        if (!_worldState.HasLayer)
         {
             return;
         }
 
-        CellType cellType = worldState.GetCell(frontX, frontY);
-        CellConfigurationPacket? cellConfig = worldState.GetCellConfig(cellType);
+        CellType cellType = _worldState.GetCell(frontX, frontY);
+        CellConfigurationPacket? cellConfig = _worldState.GetCellConfig(cellType);
         bool isBreakable = cellConfig.HasValue &&
             ((CellConfigProperties)cellConfig.Value.Properties)
                 .HasFlag(CellConfigProperties.Breakable);
         if (cellType != CellType.Empty && isBreakable)
         {
-            playerState.PushGeology(cellType);
+            _playerState.PushGeology(cellType);
             SetGeologyCell(frontX, frontY, CellType.Empty, cellType);
         }
-        else if (playerState.TryPopGeology(out CellType placeType))
+        else if (_playerState.TryPopGeology(out CellType placeType))
         {
             SetGeologyCell(frontX, frontY, placeType, placeType);
         }
@@ -212,8 +243,8 @@ internal sealed class DummyGameplayActionResponder(
         CellType mapCell,
         CellType reportedCell)
     {
-        sendPacket(new ServerPacket(new GeologyPacket(
-            playerState.GeologyCount,
+        _sendPacket(new ServerPacket(new GeologyPacket(
+            _playerState.GeologyCount,
             10,
             reportedCell,
             reportedCell.ToString())));
@@ -228,10 +259,10 @@ internal sealed class DummyGameplayActionResponder(
         }
 
         DummyBuildHandler.TryBuild(
-            worldState.Layer,
-            worldState.GetCell,
-            worldState.SetCell,
-            sendPacket,
+            _worldState.Layer,
+            _worldState.GetCell,
+            _worldState.SetCell,
+            _sendPacket,
             frontX,
             frontY,
             cellType);
@@ -241,10 +272,10 @@ internal sealed class DummyGameplayActionResponder(
     {
         if (!TryGetFrontCell(out ushort frontX, out ushort frontY) ||
             !DummyBuildHandler.TryBuild(
-                worldState.Layer,
-                worldState.GetCell,
-                worldState.SetCell,
-                sendPacket,
+                _worldState.Layer,
+                _worldState.GetCell,
+                _worldState.SetCell,
+                _sendPacket,
                 frontX,
                 frontY,
                 CellType.MilitaryBlockFrame))
@@ -255,8 +286,8 @@ internal sealed class DummyGameplayActionResponder(
         long buildVersion = ++_nextMilitaryBuildVersion;
         (ushort X, ushort Y) position = (frontX, frontY);
         _militaryBuildVersions[position] = buildVersion;
-        int lifecycleVersion = getLifecycleVersion();
-        operations.Run(
+        int lifecycleVersion = _getLifecycleVersion();
+        _operations.Run(
             "dummy_military_block_assembly",
             cancellationToken => CompleteMilitaryBlockAssemblyAsync(
                 frontX,
@@ -273,7 +304,7 @@ internal sealed class DummyGameplayActionResponder(
         int lifecycleVersion,
         CancellationToken cancellationToken)
     {
-        await clock.Delay(MilitaryBlockAssemblyDelayMilliseconds, cancellationToken);
+        await _clock.Delay(MilitaryBlockAssemblyDelayMilliseconds, cancellationToken);
 
         (ushort X, ushort Y) position = (x, y);
         if (!_militaryBuildVersions.TryGetValue(position, out long currentBuildVersion) ||
@@ -283,8 +314,8 @@ internal sealed class DummyGameplayActionResponder(
         }
 
         _militaryBuildVersions.Remove(position);
-        if (!loopAlive(lifecycleVersion) ||
-            !worldState.TryGetCell(x, y, out CellType cellType) ||
+        if (!_loopAlive(lifecycleVersion) ||
+            !_worldState.TryGetCell(x, y, out CellType cellType) ||
             cellType != CellType.MilitaryBlockFrame)
         {
             return;
@@ -300,7 +331,7 @@ internal sealed class DummyGameplayActionResponder(
             return;
         }
 
-        if (worldState.HasLayer && worldState.GetCell(frontX, frontY) == CellType.Road)
+        if (_worldState.HasLayer && _worldState.GetCell(frontX, frontY) == CellType.Road)
         {
             SendCellUpdate(frontX, frontY, CellType.Empty);
             return;
@@ -317,10 +348,10 @@ internal sealed class DummyGameplayActionResponder(
         }
 
         DummyBuildHandler.TryUpgradeBuild(
-            worldState.Layer,
-            worldState.GetCell,
-            worldState.SetCell,
-            sendPacket,
+            _worldState.Layer,
+            _worldState.GetCell,
+            _worldState.SetCell,
+            _sendPacket,
             frontX,
             frontY,
             upgrades);
@@ -328,7 +359,7 @@ internal sealed class DummyGameplayActionResponder(
 
     private bool TryGetFrontCell(out ushort frontX, out ushort frontY)
     {
-        Vector2Int offset = playerState.Direction switch
+        Vector2Int offset = _playerState.Direction switch
         {
             Direction.Down => new Vector2Int(0, 1),
             Direction.Up => new Vector2Int(0, -1),
@@ -337,8 +368,8 @@ internal sealed class DummyGameplayActionResponder(
             _ => Vector2Int.zero,
         };
 
-        int targetX = (int)playerState.X + offset.x;
-        int targetY = (int)playerState.Y + offset.y;
+        int targetX = (int)_playerState.X + offset.x;
+        int targetY = (int)_playerState.Y + offset.y;
 
         if (targetX < 0 || targetY < 0)
         {
@@ -347,7 +378,7 @@ internal sealed class DummyGameplayActionResponder(
             return false;
         }
 
-        if (worldState.Layer is { } layer)
+        if (_worldState.Layer is { } layer)
         {
             int worldWidth = layer.WidthChunks * layer.ChunkSize;
             int worldHeight = layer.HeightChunks * layer.ChunkSize;
@@ -366,16 +397,16 @@ internal sealed class DummyGameplayActionResponder(
 
     private void SendCellUpdate(ushort x, ushort y, CellType cell, SFX? effect = null)
     {
-        worldState.SetCell(x, y, cell);
+        _worldState.SetCell(x, y, cell);
         IHBPacket[] packets = effect.HasValue
-            ? [new MapRegionPacket(x, y, 0, 0, [cell]), CreateAudioPacket(effect.Value, x, y)]
-            : [new MapRegionPacket(x, y, 0, 0, [cell])];
-        sendPacket(new ServerPacket(new HBPacket(packets)));
+            ? new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { cell }), CreateAudioPacket(effect.Value, x, y) }
+            : new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { cell }) };
+        _sendPacket(new ServerPacket(new HBPacket(packets)));
     }
 
     private void SendAudio(SFX effect, ushort x, ushort y) =>
-        sendPacket(new ServerPacket(new HBPacket([CreateAudioPacket(effect, x, y)])));
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[] { CreateAudioPacket(effect, x, y) })));
 
     private AudioPacket CreateAudioPacket(SFX effect, ushort x, ushort y) =>
-        new(effect, playerBotId, x, y, []);
+        new(effect, _playerBotId, x, y, Array.Empty<StringPairPacket>());
 }

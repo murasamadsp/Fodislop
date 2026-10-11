@@ -23,7 +23,7 @@ public sealed class DummyMovementResponderTests
         var player = new DummyPlayerSimulationState();
         player.SetPosition(10, 20);
         using var world = new DummyWorldSimulationState(supervisor, new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
-        var teleports = new DummyTeleportManager(sent.Add, [], supervisor);
+        var teleports = new DummyTeleportManager(sent.Add, new List<(ushort X, ushort Y)>(), supervisor);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             supervisor,
@@ -48,14 +48,14 @@ public sealed class DummyMovementResponderTests
     }
 
     [Test]
-    public void AdjacentMove_UpdatesStateAndSchedulesSnapshot()
+    public void AdjacentMove_WithoutWorldLayer_SchedulesChunkPrefetch()
     {
         var sent = new List<ServerPacket>();
         var supervisor = new RecordingSupervisor();
         var player = new DummyPlayerSimulationState();
         player.SetPosition(10, 20);
         using var world = new DummyWorldSimulationState(supervisor, new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
-        var teleports = new DummyTeleportManager(sent.Add, [], supervisor);
+        var teleports = new DummyTeleportManager(sent.Add, new List<(ushort X, ushort Y)>(), supervisor);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             supervisor,
@@ -72,7 +72,7 @@ public sealed class DummyMovementResponderTests
 
         Assert.That(player.X, Is.EqualTo(10));
         Assert.That(player.Y, Is.EqualTo(20));
-        Assert.That(supervisor.OperationNames, Is.EqualTo(new[] { "dummy_move_wait_for_cell" }));
+        Assert.That(supervisor.OperationNames, Is.EqualTo(new[] { "dummy_move_prefetch" }));
     }
 
     [Test]
@@ -84,7 +84,7 @@ public sealed class DummyMovementResponderTests
         var player = new DummyPlayerSimulationState();
         player.SetPosition(10, 20);
         using var world = new DummyWorldSimulationState(supervisor, new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
-        var teleports = new DummyTeleportManager(sent.Add, [], supervisor);
+        var teleports = new DummyTeleportManager(sent.Add, new List<(ushort X, ushort Y)>(), supervisor);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         using var movement = new DummyMovementResponder(
             supervisor,
@@ -115,7 +115,7 @@ public sealed class DummyMovementResponderTests
 
     private sealed class RecordingSupervisor : IAsyncOperationSupervisor
     {
-        public List<string> OperationNames { get; } = [];
+        public List<string> OperationNames { get; } = new();
 
         public int ActiveCount => 0;
 
@@ -132,7 +132,7 @@ public sealed class DummyMovementResponderTests
 
     private sealed class ExecutingSupervisor : IAsyncOperationSupervisor
     {
-        public List<string> OperationNames { get; } = [];
+        public List<string> OperationNames { get; } = new();
 
         public int ActiveCount => 0;
 

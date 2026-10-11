@@ -19,7 +19,7 @@ public static class SettingSchema
         public string Name => Field.Name;
     }
 
-    private static readonly Dictionary<Type, SettingField[]> s_fieldCache = [];
+    private static readonly Dictionary<Type, SettingField[]> s_fieldCache = new();
 
     private static class Cache<TSection>
         where TSection : class, new()

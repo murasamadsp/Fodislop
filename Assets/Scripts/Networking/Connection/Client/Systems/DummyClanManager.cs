@@ -22,7 +22,7 @@ internal sealed class DummyClanManager
     private ushort _clanId;
     private int _closeElement = -1;
     private int _leaveElement = -1;
-    private int[] _clanElements = [];
+    private int[] _clanElements = Array.Empty<int>();
     private static readonly (ushort Id, string Name, string Desc)[] s_mockClans =
     {
         (1, "Альфа", "Старейший клан на сервере"),

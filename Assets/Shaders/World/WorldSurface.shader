@@ -58,6 +58,7 @@ Shader "Kern/World Surface"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            // sampler_LinearRepeat is owned by URP Core/GlobalSamplers.
             #include "WorldLightSampling.hlsl"
 
             float _WorldGlowScale;
@@ -67,6 +68,7 @@ Shader "Kern/World Surface"
                 float _GlowStrength;
                 float _Occupancy;
                 float4 _BaseMapTileCount;
+                float4 _BaseMap_TexelSize;
                 float4 _WorldSize;
                 float4 _SurfaceProjection;
                 float4 _SkyColor;
@@ -169,9 +171,15 @@ Shader "Kern/World Surface"
                 u_xlat0_d.y = input.uv2.x - 0.5;
                 u_xlat0_d.x = ((-u_xlat0_d.x) * u_xlat0_d.y) + input.uv.x;
                 u_xlat0_d.y = input.uv.y;
-                return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, u_xlat0_d.xy);
+                half4 surface = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, u_xlat0_d.xy);
+                float2 colorUv = KernSurfaceColorRasterUv(input.worldPosition, _WorldSize.y, _BaseMap_TexelSize.zw);
+                half3 color = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearRepeat, colorUv, 0).rgb;
+                return half4(KernOriginalSurfaceAlbedo(color), surface.a);
 #elif defined(KERN_SURFACE_TRANSIT)
-                return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+                half4 surface = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+                float2 colorUv = KernSurfaceColorRasterUv(input.worldPosition, _WorldSize.y, _BaseMap_TexelSize.zw);
+                half3 color = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearRepeat, colorUv, 0).rgb;
+                return half4(KernOriginalSurfaceAlbedo(color), surface.a);
 #elif defined(KERN_SURFACE_REDROCK)
                 float2 baseMapUV = KernResolveSurfaceUv(
                     input.uv,
@@ -245,12 +253,14 @@ Shader "Kern/World Surface"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            // sampler_LinearRepeat is owned by URP Core/GlobalSamplers.
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _GlowColor;
                 float _GlowStrength;
                 float _Occupancy;
                 float4 _BaseMapTileCount;
+                float4 _BaseMap_TexelSize;
                 float4 _WorldSize;
                 float4 _SurfaceProjection;
                 float4 _SkyColor;
@@ -289,7 +299,12 @@ Shader "Kern/World Surface"
                     _GlowStrength * input.glowMask;
 
                 LightingFieldOutput output;
-                output.material = half4(surface.rgb * coverage, occupancy);
+                half3 color = surface.rgb;
+#if defined(KERN_SURFACE_TRANSIT) || defined(KERN_SURFACE_PERSPECTIVE)
+                float2 colorUv = KernSurfaceColorRasterUv(input.worldPosition, _WorldSize.y, _BaseMap_TexelSize.zw);
+                color = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearRepeat, colorUv, 0).rgb;
+#endif
+                output.material = half4(KernOriginalSurfaceAlbedo(color) * coverage, occupancy);
                 output.glow = half4(
                     surface.rgb * _GlowColor.rgb * glowStrength,
                     glowStrength);
@@ -335,12 +350,14 @@ Shader "Kern/World Surface"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            // sampler_LinearRepeat is owned by URP Core/GlobalSamplers.
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _GlowColor;
                 float _GlowStrength;
                 float _Occupancy;
                 float4 _BaseMapTileCount;
+                float4 _BaseMap_TexelSize;
                 float4 _WorldSize;
                 float4 _SurfaceProjection;
                 float4 _SkyColor;

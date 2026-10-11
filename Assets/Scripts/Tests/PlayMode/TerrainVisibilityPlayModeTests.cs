@@ -6,9 +6,12 @@ using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.World;
 using Kern.World.Terrain;
+using Kern.Rendering.PostProcessing;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.TestTools;
 
 namespace Kern.Tests.PlayMode;
@@ -105,8 +108,38 @@ public sealed class TerrainVisibilityPlayModeTests
 
     private static IEnumerator Capture(ScreenStats stats)
     {
-        yield return new WaitForEndOfFrame();
-        Texture2D texture = ScreenCapture.CaptureScreenshotAsTexture();
+        Texture2D texture;
+        if (Application.isBatchMode)
+        {
+            Camera camera = PlayModeHarness.RequireInGame<IGameplayCamera>().Camera;
+            RenderTexture target = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight,
+                24, RenderTextureFormat.ARGBHalf);
+            Camera? previousCamera = PostProcessRuntimeState.DiagnosticOffscreenCamera;
+            RenderTexture previousTarget = RenderTexture.active;
+            try
+            {
+                PostProcessRuntimeState.DiagnosticOffscreenCamera = camera;
+                RenderPipeline.SubmitRenderRequest(camera, new UniversalRenderPipeline.SingleCameraRequest
+                {
+                    destination = target,
+                });
+                texture = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+                RenderTexture.active = target;
+                texture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                texture.Apply();
+            }
+            finally
+            {
+                RenderTexture.active = previousTarget;
+                PostProcessRuntimeState.DiagnosticOffscreenCamera = previousCamera;
+                RenderTexture.ReleaseTemporary(target);
+            }
+        }
+        else
+        {
+            yield return new WaitForEndOfFrame();
+            texture = ScreenCapture.CaptureScreenshotAsTexture();
+        }
         try
         {
             Color32[] pixels = texture.GetPixels32();

@@ -25,13 +25,22 @@ public sealed class FrameProbe : IDisposable
         Title = title;
         IsDetail = isDetail;
         _gpu = gpu;
-        _names = aliases.Length == 0 ? [markerName] : [markerName, ..aliases];
+        if (aliases.Length == 0)
+        {
+            _names = new[] { markerName };
+        }
+        else
+        {
+            _names = new string[aliases.Length + 1];
+            _names[0] = markerName;
+            Array.Copy(aliases, 0, _names, 1, aliases.Length);
+        }
     }
 
     public FrameProbe(MarkerInfo marker, string? title = null, bool isDetail = true)
     {
         _marker = marker;
-        _names = [marker.Name];
+        _names = new[] { marker.Name };
         Title = title ?? marker.Name;
         IsDetail = isDetail;
     }

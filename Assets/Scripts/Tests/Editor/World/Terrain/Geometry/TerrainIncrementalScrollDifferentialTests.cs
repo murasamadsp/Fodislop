@@ -24,11 +24,13 @@ public sealed class TerrainIncrementalScrollDifferentialTests
     // Vector2Int, а не собственный record struct: сборке тестов недоступен
     // System.Runtime.CompilerServices.IsExternalInit, без которого позиционный
     // record не компилируется.
-    private static readonly Vector2Int[] s_walk =
-    [
+    private static readonly Vector2Int[] s_walk = new Vector2Int[]
+    {
+
         new(1, 0), new(0, 1), new(1, 1), new(-1, 0), new(0, -1),
         new(3, 2), new(-2, -3), new(5, 0), new(0, 7), new(-4, 6),
-    ];
+
+    };
 
     [Test]
     public void IncrementalScroll_MatchesFullRebuild()

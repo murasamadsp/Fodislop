@@ -10,7 +10,16 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyWindowResponder(
+internal sealed class DummyWindowResponder
+{
+    private readonly Action<ServerPacket> _sendPacket;
+    private readonly DummyBuffManager _buffManager;
+    private readonly DummyInventoryResponder _inventoryResponder;
+    private readonly DummyTeleportManager _teleportManager;
+    private readonly DummyClanManager _clanManager;
+    private readonly DummyMissionRunner _missionRunner;
+    private readonly DummyBlockSpawner _blockSpawner;
+    internal DummyWindowResponder(
     Action<ServerPacket> sendPacket,
     DummyBuffManager buffManager,
     DummyInventoryResponder inventoryResponder,
@@ -18,49 +27,58 @@ internal sealed class DummyWindowResponder(
     DummyClanManager clanManager,
     DummyMissionRunner missionRunner,
     DummyBlockSpawner blockSpawner)
-{
+    {
+        _sendPacket = sendPacket;
+        _buffManager = buffManager;
+        _inventoryResponder = inventoryResponder;
+        _teleportManager = teleportManager;
+        _clanManager = clanManager;
+        _missionRunner = missionRunner;
+        _blockSpawner = blockSpawner;
+    }
+
 
     public void Handle(ElementClickPacket packet, ushort playerX, ushort playerY)
     {
         switch (packet.WindowTag)
         {
             case "daily_bonus":
-                buffManager.HandleDailyBonusClaim(inventoryResponder.Items);
+                _buffManager.HandleDailyBonusClaim(_inventoryResponder.Items);
                 break;
             case "teleport":
                 HandleTeleport(packet);
                 break;
             case "test_modal":
-                sendPacket(DummyWindowBuilder.BuildTestModalWindow());
+                _sendPacket(DummyWindowBuilder.BuildTestModalWindow());
                 break;
             case "join_clan":
             case "leave_clan":
             case "clan_list":
             case "clan_info":
-                clanManager.HandleElementClick(packet);
+                _clanManager.HandleElementClick(packet);
                 break;
             case "open_missions":
-                missionRunner.SendMissionWindow(playerX, playerY);
+                _missionRunner.SendMissionWindow(playerX, playerY);
                 break;
             case "missions":
                 HandleMission(packet, playerX, playerY);
                 break;
             case "open_url_test":
-                sendPacket(DummyWindowBuilder.BuildOpenUrlPacket("https://vk.ru/mines4reborn"));
+                _sendPacket(DummyWindowBuilder.BuildOpenUrlPacket("https://vk.ru/mines4reborn"));
                 break;
             case "toggle_block_spawner":
-                blockSpawner.Enabled = !blockSpawner.Enabled;
-                Debug.Log($"[DummyWindowResponder] Спавнер блоков: {(blockSpawner.Enabled ? "включён" : "выключен")}.");
+                _blockSpawner.Enabled = !_blockSpawner.Enabled;
+                Debug.Log($"[DummyWindowResponder] Спавнер блоков: {(_blockSpawner.Enabled ? "включён" : "выключен")}.");
                 break;
             case "test_mission_arrow":
-                sendPacket(new ServerPacket(new MissionInitPacket(
+                _sendPacket(new ServerPacket(new MissionInitPacket(
                     string.Empty,
                     0,
                     0,
                     "Тестовая миссия",
                     "Проверка центрального информационного кольца")));
-                sendPacket(new ServerPacket(new MissionProgressPacket(0, 10)));
-                sendPacket(DummyWindowBuilder.BuildTestMissionArrowPacket(playerX, playerY));
+                _sendPacket(new ServerPacket(new MissionProgressPacket(0, 10)));
+                _sendPacket(DummyWindowBuilder.BuildTestMissionArrowPacket(playerX, playerY));
                 break;
             default:
                 // Без этой ветки нажатие в незнакомом окне не делало ничего и
@@ -75,34 +93,34 @@ internal sealed class DummyWindowResponder(
 
     private void HandleTeleport(ElementClickPacket packet)
     {
-        if (!teleportManager.WindowOpen)
+        if (!_teleportManager.WindowOpen)
         {
             return;
         }
 
-        if (teleportManager.IsCloseElement(packet.ElementIndex))
+        if (_teleportManager.IsCloseElement(packet.ElementIndex))
         {
-            teleportManager.WindowOpen = false;
-            sendPacket(new ServerPacket(new CloseWindowPacket()));
+            _teleportManager.WindowOpen = false;
+            _sendPacket(new ServerPacket(new CloseWindowPacket()));
             return;
         }
 
-        teleportManager.HandleTeleportClick(teleportManager.DestinationOfElement(packet.ElementIndex));
+        _teleportManager.HandleTeleportClick(_teleportManager.DestinationOfElement(packet.ElementIndex));
     }
 
     private void HandleMission(ElementClickPacket packet, ushort playerX, ushort playerY)
     {
-        if (missionRunner.IsCloseElement(packet.ElementIndex))
+        if (_missionRunner.IsCloseElement(packet.ElementIndex))
         {
-            sendPacket(new ServerPacket(new CloseWindowPacket()));
+            _sendPacket(new ServerPacket(new CloseWindowPacket()));
         }
-        else if (missionRunner.IsCancelElement(packet.ElementIndex))
+        else if (_missionRunner.IsCancelElement(packet.ElementIndex))
         {
-            missionRunner.CancelMission();
+            _missionRunner.CancelMission();
         }
         else
         {
-            missionRunner.StartMission(missionRunner.MissionOfElement(packet.ElementIndex), playerX, playerY);
+            _missionRunner.StartMission(_missionRunner.MissionOfElement(packet.ElementIndex), playerX, playerY);
         }
     }
 }

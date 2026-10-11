@@ -46,23 +46,31 @@ public sealed class UILayoutTracker : IDisposable
         public float MaxWidth;
         public float MinHeight = float.MaxValue;
         public float MaxHeight;
-        public readonly List<string> TextSamples = [];
+        public readonly List<string> TextSamples = new();
     }
 
-    private readonly struct Change(VisualElement element, Rect oldRect, Rect newRect, string? text)
+    private readonly struct Change
     {
-        public VisualElement Element { get; } = element;
-        public Rect OldRect { get; } = oldRect;
-        public Rect NewRect { get; } = newRect;
-        public string? Text { get; } = text;
+        public Change(VisualElement element, Rect oldRect, Rect newRect, string? text)
+        {
+            Element = element;
+            OldRect = oldRect;
+            NewRect = newRect;
+            Text = text;
+        }
+
+        public VisualElement Element { get; }
+        public Rect OldRect { get; }
+        public Rect NewRect { get; }
+        public string? Text { get; }
     }
 
-    private readonly HashSet<VisualElement> _registered = [];
-    private readonly Dictionary<VisualElement, Stat> _stats = [];
-    private readonly List<Change> _pending = [];
-    private readonly HashSet<VisualElement> _pendingSet = [];
-    private readonly List<VisualElement> _scratch = [];
-    private readonly List<Stat> _sorted = [];
+    private readonly HashSet<VisualElement> _registered = new();
+    private readonly Dictionary<VisualElement, Stat> _stats = new();
+    private readonly List<Change> _pending = new();
+    private readonly HashSet<VisualElement> _pendingSet = new();
+    private readonly List<VisualElement> _scratch = new();
+    private readonly List<Stat> _sorted = new();
     private readonly EventCallback<GeometryChangedEvent> _onGeometryChanged;
     private readonly StringBuilder _label = new(256);
     private readonly StringBuilder _line = new(512);
@@ -329,7 +337,7 @@ public sealed class UILayoutTracker : IDisposable
         public int Translated;
         public int Images;
         public int AtlasLimit = 64;
-        public readonly Dictionary<Texture, int> Textures = [];
+        public readonly Dictionary<Texture, int> Textures = new();
         public readonly Dictionary<string, int> VisibleBySubtree = new(StringComparer.Ordinal);
     }
 

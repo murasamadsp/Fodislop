@@ -22,8 +22,14 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
+internal sealed class DummyMissionRunner
 {
+    private readonly Action<ServerPacket> _onReceived;
+    internal DummyMissionRunner(Action<ServerPacket> onReceived)
+    {
+        _onReceived = onReceived;
+    }
+
     private readonly record struct MissionDef(
         int Id,
         string Title,
@@ -33,16 +39,16 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         long RewardAmount);
 
     private static readonly MissionDef[] s_missions =
-    [
+    {
         new(0, "Копатель-ученик", "Сломайте 50 блоков", 50, ItemType.Cred, 25),
         new(1, "Опытный копатель", "Сломайте 200 блоков", 200, ItemType.Cred, 100),
         new(2, "Мастер-копатель", "Сломайте 500 блоков", 500, ItemType.Cred, 300),
-    ];
+    };
 
     private bool _persistentMission;
     private int _closeElement = -1;
     private int _cancelElement = -1;
-    private int[] _missionElements = [];
+    private int[] _missionElements = Array.Empty<int>();
 
     public int ActiveMissionId { get; private set; } = -1;
     public long MissionProgress { get; private set; }
@@ -94,28 +100,28 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         {
             Text = "<color=#B3B3B3>×</color>",
             OnClickContext = ".",
-            AttachedProperties = [new("DockPanel.Dock", "Right")],
+            AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Right") },
         };
         TextPacket? cancel = null;
         var rootChildren = new List<IGUIComponentPacket>
         {
             new DockPanelPacket
             {
-                AttachedProperties = [new("DockPanel.Dock", "Top")],
+                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
                 Style = new GUIStylePacket
                 {
                     Margin = new Margins(0, 0, 10, 0),
                     Padding = new Margins(0, 0, 0, 0),
                 },
-                Children =
-                [
+                Children = new IGUIComponentPacket[]
+                {
                     new TextPacket
                     {
                         Text = "<color=#B2A680>Миссии</color>",
-                        AttachedProperties = [new("DockPanel.Dock", "Left")],
+                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
                     },
                     close,
-                ],
+                },
             },
             scrollViewer,
         };
@@ -126,7 +132,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
             {
                 Text = "<color=#B08050>Отменить миссию</color>",
                 OnClickContext = ".",
-                AttachedProperties = [new("DockPanel.Dock", "Bottom")],
+                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Bottom") },
                 Style = new GUIStylePacket
                 {
                     Margin = new Margins(0, 0, 10, 0),
@@ -154,7 +160,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         _closeElement = DummyWindowElements.IndexOf(root, close);
         _cancelElement = cancel == null ? -1 : DummyWindowElements.IndexOf(root, cancel);
         _missionElements = rows.Select(row => DummyWindowElements.IndexOf(root, row)).ToArray();
-        onReceived.Invoke(new ServerPacket(new OpenWindowPacket("missions", 400, 300, root)));
+        _onReceived.Invoke(new ServerPacket(new OpenWindowPacket("missions", 400, 300, root)));
     }
 
     public bool IsCloseElement(int elementIndex) => elementIndex == _closeElement;
@@ -179,25 +185,25 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         _persistentMission = false;
         ActiveMissionId = missionId;
         MissionProgress = 0;
-        onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
-        onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, m.Title, m.Description)));
-        onReceived.Invoke(new ServerPacket(new MissionProgressPacket(0, m.Target)));
-        onReceived.Invoke(new ServerPacket(new MissionArrowPacket((ushort)(x + 2), (ushort)(y + 2))));
+        _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
+        _onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, m.Title, m.Description)));
+        _onReceived.Invoke(new ServerPacket(new MissionProgressPacket(0, m.Target)));
+        _onReceived.Invoke(new ServerPacket(new MissionArrowPacket((ushort)(x + 2), (ushort)(y + 2))));
     }
 
     public void CancelMission()
     {
         if (ActiveMissionId < 0)
         {
-            onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
+            _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
             return;
         }
 
         ActiveMissionId = -1;
         MissionProgress = 0;
         _persistentMission = false;
-        onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
-        onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
+        _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
+        _onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
     }
 
     public void OnBlockMined(Dictionary<ItemType, long> inventory)
@@ -214,7 +220,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
 
         var m = s_missions[ActiveMissionId];
         MissionProgress++;
-        onReceived.Invoke(new ServerPacket(new MissionProgressPacket(MissionProgress, m.Target)));
+        _onReceived.Invoke(new ServerPacket(new MissionProgressPacket(MissionProgress, m.Target)));
         if (MissionProgress >= m.Target)
         {
             CompleteMission(inventory);
@@ -239,7 +245,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         var m = s_missions[ActiveMissionId];
         inventory.TryGetValue(m.RewardItem, out long current);
         inventory[m.RewardItem] = current + m.RewardAmount;
-        onReceived.Invoke(new ServerPacket(new InventoryPacket(
+        _onReceived.Invoke(new ServerPacket(new InventoryPacket(
             new Dictionary<ItemType, long> { { m.RewardItem, current + m.RewardAmount } })));
 
         MissionCompleted[ActiveMissionId] = true;
@@ -250,8 +256,8 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         {
             ActiveMissionId = m.Id;
             MissionProgress = m.Target;
-            onReceived.Invoke(new ServerPacket(new MissionProgressPacket(MissionProgress, m.Target)));
-            onReceived.Invoke(new ServerPacket(new ModalWindowPacket(
+            _onReceived.Invoke(new ServerPacket(new MissionProgressPacket(MissionProgress, m.Target)));
+            _onReceived.Invoke(new ServerPacket(new ModalWindowPacket(
                 "Миссия выполнена!",
                 $"Вы завершили миссию \"{m.Title}\"!\n\nНаграда: {m.RewardAmount} кредитов.",
                 "OK",
@@ -259,8 +265,8 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
             return;
         }
 
-        onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
-        onReceived.Invoke(new ServerPacket(new ModalWindowPacket(
+        _onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
+        _onReceived.Invoke(new ServerPacket(new ModalWindowPacket(
             "Миссия выполнена!",
             $"Вы завершили миссию \"{m.Title}\"!\n\nНаграда: {m.RewardAmount} кредитов.",
             "OK",

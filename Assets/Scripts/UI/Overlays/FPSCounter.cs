@@ -17,6 +17,7 @@ namespace Kern.UI
         private int _frameIndex;
         private float _runningSum;
         private float _nextDisplayUpdate;
+        private VisualElement? _documentRoot;
         private Label? _fpsLabel;
         private Label? _versionLabel;
 
@@ -54,6 +55,7 @@ namespace Kern.UI
 
         protected void OnEnable()
         {
+            UIScreen.Changed += OnScreenChanged;
             FindLabel();
             if (_fpsLabel != null)
             {
@@ -63,14 +65,31 @@ namespace Kern.UI
 
         protected void OnDisable()
         {
+            UIScreen.Changed -= OnScreenChanged;
             if (_fpsLabel != null)
             {
                 UIState.Hide(_fpsLabel);
             }
         }
 
+        // Смена экрана (раскрыли флип, повернули, подключили мышь) меняет и
+        // формат строки, и место под неё: удержанная ширина прошлого экрана
+        // вытолкнула бы строку за край узкого.
+        private void OnScreenChanged(Kern.Core.Interfaces.ScreenShape shape)
+        {
+            _widestLabel = 0f;
+            if (_fpsLabel != null)
+            {
+                _fpsLabel.style.minWidth = StyleKeyword.Null;
+            }
+
+            FindLabel();
+            _nextDisplayUpdate = 0f;
+        }
+
         protected void OnDestroy()
         {
+            _documentRoot = null;
             _fpsLabel = null;
             _versionLabel = null;
         }
@@ -96,24 +115,36 @@ namespace Kern.UI
                 return;
             }
 
-            if (_fpsLabel == null)
-            {
-                FindLabel();
-            }
-
-            if (_fpsLabel == null || Time.unscaledTime < _nextDisplayUpdate)
+            if (Time.unscaledTime < _nextDisplayUpdate)
             {
                 return;
             }
 
             _nextDisplayUpdate = Time.unscaledTime + 0.25f;
+            RefreshLabelBindingIfNeeded();
+            if (_fpsLabel == null)
+            {
+                return;
+            }
+
             _displayBuilder.Clear();
-            _displayBuilder.Append("FPS: ").Append((int)CurrentFPS)
-                .Append(" (").Append((averageDelta * 1000f).ToString("F1"))
-                .Append("ms)  Ping: ").Append(_networkStatus.PingMs)
-                .Append("ms  Robots: ").Append(_networkStatus.OnlinePlayers)
-                .Append("  Programmator: ").Append(_networkStatus.OnlineProgrammator)
-                .Append("  [F1]");
+            // Короткая строка — по форме ввода, а не платформе: на сенсорном
+            // экране места меньше, а подсказки [F1] у пальца нет.
+            if (UIScreen.Current.IsTouch)
+            {
+                _displayBuilder.Append("FPS ").Append((int)CurrentFPS)
+                    .Append(" · ").Append((averageDelta * 1000f).ToString("F0"))
+                    .Append(" ms · Ping ").Append(_networkStatus.PingMs).Append(" ms");
+            }
+            else
+            {
+                _displayBuilder.Append("FPS: ").Append((int)CurrentFPS)
+                    .Append(" (").Append((averageDelta * 1000f).ToString("F1"))
+                    .Append("ms)  Ping: ").Append(_networkStatus.PingMs)
+                    .Append("ms  Robots: ").Append(_networkStatus.OnlinePlayers)
+                    .Append("  Programmator: ").Append(_networkStatus.OnlineProgrammator)
+                    .Append("  [F1]");
+            }
 
             string text = _displayBuilder.ToString();
             if (_fpsLabel.text != text)
@@ -144,18 +175,63 @@ namespace Kern.UI
 
         private void FindLabel()
         {
-            if (_fpsLabel != null || _document == null)
+            if (_document == null)
             {
                 return;
             }
 
             VisualElement? root = _document.rootVisualElement;
+            if (root != null &&
+                ReferenceEquals(root, _documentRoot) &&
+                _fpsLabel != null &&
+                IsWithinRoot(_fpsLabel, root))
+            {
+                return;
+            }
+
+            _documentRoot = root;
             _fpsLabel = root?.Q<Label>("FPSCounterLabel");
             _versionLabel = root?.Q<Label>("BuildVersionLabel");
+            _widestLabel = 0f;
             if (_versionLabel != null)
             {
                 _versionLabel.text = $"v{Application.version}";
             }
+        }
+
+        private void RefreshLabelBindingIfNeeded()
+        {
+            if (_document == null)
+            {
+                return;
+            }
+
+            VisualElement? root = _document.rootVisualElement;
+            if (!ReferenceEquals(root, _documentRoot) ||
+                _fpsLabel == null ||
+                root == null ||
+                !IsWithinRoot(_fpsLabel, root))
+            {
+                FindLabel();
+            }
+        }
+
+        private static bool IsWithinRoot(VisualElement element, VisualElement root)
+        {
+            if (!ReferenceEquals(element.panel, root.panel))
+            {
+                return false;
+            }
+
+            for (VisualElement? current = element; current != null; current = current.parent)
+            {
+                if (ReferenceEquals(current, root))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

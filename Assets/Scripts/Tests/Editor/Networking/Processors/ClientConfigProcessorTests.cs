@@ -62,7 +62,7 @@ public class ClientConfigProcessorTests
             new SoundConfigPacket(255, new Dictionary<string, byte>()),
             RendererMode.Default,
             Array.Empty<StringPairPacket>(),
-            ["Cells/1.png", "Cells/2.png", "Skin/bee.png"]);
+            new[] { "Cells/1.png", "Cells/2.png", "Skin/bee.png" });
 
         _processor.Process(packet);
 

@@ -91,8 +91,8 @@ public sealed class WorldMapMipPyramidTests
             cellColorTable: colors,
             unloadedColor: new Color32(32, 32, 32, 255));
 
-        cache.SetChunkCells(0, [(CellType)1, (CellType)1, (CellType)1, (CellType)1]);
-        cache.SetChunkCells(1, [(CellType)2, (CellType)2, (CellType)1, (CellType)1]);
+        cache.SetChunkCells(0, new[] { (CellType)1, (CellType)1, (CellType)1, (CellType)1 });
+        cache.SetChunkCells(1, new[] { (CellType)2, (CellType)2, (CellType)1, (CellType)1 });
 
         Color32 edgeChunk = cache.GetLevel(0)[1];
         Color32 wholeMap = cache.GetLevel(1)[0];
@@ -167,10 +167,10 @@ public sealed class WorldMapMipPyramidTests
 
         for (int chunkIndex = 0; chunkIndex < 5; chunkIndex++)
         {
-            cache.SetChunkCells(chunkIndex, [(CellType)1]);
+            cache.SetChunkCells(chunkIndex, new[] { (CellType)1 });
         }
 
-        cache.SetChunkCells(2, [(CellType)2]);
+        cache.SetChunkCells(2, new[] { (CellType)2 });
         Color32[] mipPixels = cache.GetLevel(1);
 
         Assert.That(mipPixels[0].r, Is.EqualTo(124).Within(1));
@@ -208,7 +208,7 @@ public sealed class WorldMapMipPyramidTests
             unloadedColor: new Color32(0, 0, 0, 255),
             blockSize: 1);
 
-        cache.SetChunkCells(0, [(CellType)1, (CellType)1, (CellType)2, (CellType)2]);
+        cache.SetChunkCells(0, new[] { (CellType)1, (CellType)1, (CellType)2, (CellType)2 });
 
         Assert.That(cache.MipBlockSize, Is.EqualTo(1));
         Assert.That(cache.GetLevelWidth(0), Is.EqualTo(2));
@@ -216,5 +216,31 @@ public sealed class WorldMapMipPyramidTests
         Assert.That(cache.GetLevel(0)[0].r, Is.EqualTo(0));
         Assert.That(cache.GetLevel(0)[1].r, Is.EqualTo(255));
         Assert.That(cache.GetLevel(1)[0].r, Is.EqualTo(187).Within(1));
+    }
+
+    [Test]
+    public void UpdatingWholeChunk_RebuildsEachMipLevelFromTheUpdatedBaseRegion()
+    {
+        var colors = new Color32[256];
+        colors[1] = new Color32(0, 0, 0, 255);
+        colors[2] = new Color32(255, 255, 255, 255);
+        var cache = new WorldMapMipPyramid(
+            widthChunks: 2,
+            heightChunks: 2,
+            chunkSize: 2,
+            worldWidth: 4,
+            worldHeight: 4,
+            cellColorTable: colors,
+            unloadedColor: new Color32(0, 0, 0, 255),
+            blockSize: 1);
+
+        for (int chunkIndex = 0; chunkIndex < 4; chunkIndex++)
+        {
+            cache.SetChunkCells(chunkIndex, new[] { (CellType)1, (CellType)1, (CellType)1, (CellType)1 });
+        }
+
+        cache.SetChunkCells(0, new[] { (CellType)2, (CellType)2, (CellType)2, (CellType)2 });
+
+        Assert.That(cache.GetLevel(2)[0].r, Is.EqualTo(137).Within(1));
     }
 }

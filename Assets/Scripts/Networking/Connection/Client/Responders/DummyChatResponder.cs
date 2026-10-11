@@ -10,9 +10,18 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummyClock clock)
+internal sealed class DummyChatResponder
 {
-    private readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages(DummyClockTime.UnixMilliseconds(clock));
+    private readonly Action<ServerPacket> _sendPacket;
+    private readonly IDummyClock _clock;
+    internal DummyChatResponder(Action<ServerPacket> sendPacket, IDummyClock clock)
+    {
+        _sendPacket = sendPacket;
+        _clock = clock;
+        _seedMessages = CreateSeedMessages(DummyClockTime.UnixMilliseconds(_clock));
+    }
+
+    private readonly ChatMessagePacket[] _seedMessages;
     private System.Drawing.Color _chatColor =
         System.Drawing.Color.FromArgb(255, 200, 180, 100);
 
@@ -25,7 +34,7 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummy
         ChatMessagePacket[] filtered = _seedMessages
             .Where(message => startFrom == 0 || message.Timestamp >= startFrom)
             .ToArray();
-        sendPacket(new ServerPacket(new ChatMessageListPacket(packet.Tag, filtered)));
+        _sendPacket(new ServerPacket(new ChatMessageListPacket(packet.Tag, filtered)));
     }
 
     public void SendLocal(
@@ -33,11 +42,11 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummy
         ushort botId,
         ushort x,
         ushort y) =>
-        sendPacket(new ServerPacket(new LocalChatMessagePacket(botId, x, y, packet.Message)));
+        _sendPacket(new ServerPacket(new LocalChatMessagePacket(botId, x, y, packet.Message)));
 
     public void SendGlobal(SendChatMessagePacket packet)
     {
-        long now = DummyClockTime.UnixMilliseconds(clock);
+        long now = DummyClockTime.UnixMilliseconds(_clock);
         var message = new ChatMessagePacket(
             now,
             now,
@@ -50,9 +59,9 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummy
         // Заглушка обязана отвечать тем же тегом, каким сервер помечает
         // глобальный канал: клиент отбрасывает ChatMessageListPacket с
         // незнакомым Tag, и под "global" окно осталось бы пустым.
-        sendPacket(new ServerPacket(new ChatMessageListPacket(
+        _sendPacket(new ServerPacket(new ChatMessageListPacket(
             ProjectRuntimeContracts.Chat.GlobalChannelTag,
-            [message])));
+            new[] { message })));
     }
 
     private static ChatMessagePacket[] CreateSeedMessages(long now)
@@ -67,8 +76,8 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummy
         var yellow = System.Drawing.Color.FromArgb(255, 255, 220, 60);
         var white = System.Drawing.Color.White;
 
-        return
-        [
+        return new ChatMessagePacket[]
+        {
             new ChatMessagePacket(1, now - 300000, 0, 0, gray, "System", gray, "Добро пожаловать на Kern!"),
             new ChatMessagePacket(2, now - 270000, 1, 1, green, "Miner77", white, "привет всем!"),
             new ChatMessagePacket(3, now - 240000, 2, 0, blue, "DeepDrill", white, "кто на сервере?"),
@@ -79,6 +88,6 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket, IDummy
             new ChatMessagePacket(8, now - 90000, 1, 1, green, "Miner77", white, "кто-нибудь на базе?"),
             new ChatMessagePacket(9, now - 60000, 7, 0, yellow, "Newbie42", white, "я только зашел"),
             new ChatMessagePacket(10, now - 30000, 3, 2, red, "CrystalMage", white, "сервер лагает?"),
-        ];
+        };
     }
 }

@@ -12,9 +12,14 @@ namespace Kern.Networking.Processors;
 
 // Owns the editor <-> VM protocol. The UI may be rebuilt with the scene, while
 // this service keeps packet subscriptions scoped to the game lifetime.
-public sealed class ProgrammatorProcessor(INetworkService networkService) : IStartable, IDisposable
+public sealed class ProgrammatorProcessor : IStartable, IDisposable
 {
-    private readonly INetworkService _networkService = networkService;
+    private readonly INetworkService _networkService;
+    public ProgrammatorProcessor(INetworkService networkService)
+    {
+        _networkService = networkService;
+    }
+
     private bool _subscribed;
 
     public event Action<UpdateProgramPacket>? ProgramUpdated;

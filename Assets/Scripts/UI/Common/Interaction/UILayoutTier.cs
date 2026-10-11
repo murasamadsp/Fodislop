@@ -1,75 +1,97 @@
 #nullable enable
 
-using UnityEngine;
+using Kern.Core.Interfaces;
 using UnityEngine.UIElements;
 
 namespace Kern.UI;
+
+// Классы раскладки на корне панели (panel.visualTree), чтобы их видели все
+// деревья документа — и HUD, и инвентарь, и Программатор, и окна сервера.
+// @media в USS нет: токены и правила компонентов переключаются классом.
+//
+//   tier--compact|standard|wide   плотность раскладки (токены ThemeTokens.uss)
+//   form--desktop|micro|phone|tablet   форма экрана (ScreenShapeRules)
+//   form--narrow|short             у Micro: не хватает ширины или высоты
+//   pointer--touch                 ввод пальцем: цели касания не меньше 44 dp
 public static class UILayoutTier
 {
     public const string CompactClass = "tier--compact";
     public const string StandardClass = "tier--standard";
     public const string WideClass = "tier--wide";
 
+    public const string FormDesktopClass = "form--desktop";
+    public const string FormMicroClass = "form--micro";
+    public const string FormPhoneClass = "form--phone";
+    public const string FormTabletClass = "form--tablet";
+    public const string FormNarrowClass = "form--narrow";
+    public const string FormShortClass = "form--short";
+    public const string TouchClass = "pointer--touch";
+
     private const float CompactMaxWidth = 900f;
     private const float WideMinWidth = 1600f;
 
-    private const float HandheldMaxInches = 7f;
-
-    public static void Attach(VisualElement root)
+    // Десктопный тир зависит от ширины окна, поэтому корень слушает свою
+    // геометрию. Форма экрана приходит из UIScreen.
+    public static void Attach(VisualElement visualTree)
     {
-        root.RegisterCallback<GeometryChangedEvent>(_ => Apply(root));
-        Apply(root);
+        visualTree.RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
     }
 
-    public static void Apply(VisualElement root)
+    public static void Detach(VisualElement visualTree) =>
+        visualTree.UnregisterCallback<GeometryChangedEvent>(OnGeometryChanged);
+
+    private static void OnGeometryChanged(GeometryChangedEvent evt)
     {
-        float width = root.resolvedStyle.width;
-
-        // До первой раскладки ширина равна NaN — тогда решать ещё не по чему.
-        if (float.IsNaN(width) || width <= 0f)
+        if (evt.currentTarget is VisualElement visualTree)
         {
-            return;
+            Apply(visualTree, UIScreen.Current);
         }
-
-        string tier = ResolveTier(width);
-
-        // Выходим, если тир не изменился. Смена класса переопределяет токены,
-        // те меняют раскладку, а раскладка снова шлёт GeometryChangedEvent —
-        // без этой проверки на самой границе тира возможна осцилляция.
-        if (root.ClassListContains(tier))
-        {
-            return;
-        }
-
-        root.EnableInClassList(CompactClass, tier == CompactClass);
-        root.EnableInClassList(StandardClass, tier == StandardClass);
-        root.EnableInClassList(WideClass, tier == WideClass);
-
-#if UNITY_EDITOR
-        // Логический размер панели — единственное число, по которому вообще
-        // можно судить о масштабе интерфейса: физическое разрешение экрана
-        // ничего не говорит, пока не известен коэффициент PanelSettings.
-#endif
     }
 
-    private static string ResolveTier(float panelWidth)
+    public static void Apply(VisualElement visualTree, in ScreenShape shape)
     {
-        // Карманное устройство получает компактный тир при любой ширине
-        // вьюпорта: на шести дюймах десктопная раскладка нечитаема и
-        // непопадаема пальцем, сколько бы логических пикселей там ни было.
-        //
-        // Проверка ограничена мобильными платформами намеренно. В редакторе
-        // Screen.width/height — это размер Game View, а Screen.dpi — DPI
-        // настоящего монитора; их частное диагональю не является (на этой
-        // машине выходит 7.9" при 14-дюймовом экране). На десктопе тир
-        // решается шириной, и это правильно: там окно и правда бывает узким.
-        if (Application.isMobilePlatform)
+        string tier = ResolveTier(shape, visualTree.resolvedStyle.width);
+
+        // Смена класса меняет токены, токены — раскладку, раскладка снова шлёт
+        // GeometryChangedEvent: без проверки на границе тира возможна осцилляция.
+        if (!visualTree.ClassListContains(tier))
         {
-            float inches = ScreenDiagonalInches();
-            if (inches > 0f && inches < HandheldMaxInches)
-            {
+            visualTree.EnableInClassList(CompactClass, tier == CompactClass);
+            visualTree.EnableInClassList(StandardClass, tier == StandardClass);
+            visualTree.EnableInClassList(WideClass, tier == WideClass);
+        }
+
+        visualTree.EnableInClassList(FormDesktopClass, shape.Form == ScreenForm.Desktop);
+        visualTree.EnableInClassList(FormMicroClass, shape.Form == ScreenForm.Micro);
+        visualTree.EnableInClassList(FormPhoneClass, shape.Form == ScreenForm.Phone);
+        visualTree.EnableInClassList(FormTabletClass, shape.Form == ScreenForm.Tablet);
+        visualTree.EnableInClassList(FormNarrowClass, ScreenShapeRules.IsNarrow(shape));
+        visualTree.EnableInClassList(FormShortClass, ScreenShapeRules.IsShort(shape));
+        visualTree.EnableInClassList(TouchClass, shape.IsTouch);
+    }
+
+    public static string ResolveTier(in ScreenShape shape, float panelWidth)
+    {
+        // Телефон всегда компактен, планшет — стандартен, сколько бы
+        // логических пикселей ни было: на шести дюймах десктопная плотность
+        // нечитаема, а на iPad компактная выглядит игрушечной.
+        switch (shape.Form)
+        {
+            case ScreenForm.Micro:
+            case ScreenForm.Phone:
                 return CompactClass;
-            }
+            case ScreenForm.Tablet:
+                return StandardClass;
+            case ScreenForm.Desktop:
+                break;
+            default:
+                throw new System.ArgumentOutOfRangeException(nameof(shape), shape.Form, "Unknown screen form.");
+        }
+
+        // До первой раскладки ширина равна NaN — тогда остаётся стандартный.
+        if (float.IsNaN(panelWidth) || panelWidth <= 0f)
+        {
+            return StandardClass;
         }
 
         if (panelWidth < CompactMaxWidth)
@@ -78,16 +100,5 @@ public static class UILayoutTier
         }
 
         return panelWidth >= WideMinWidth ? WideClass : StandardClass;
-    }
-
-    private static float ScreenDiagonalInches()
-    {
-        float dpi = Screen.dpi;
-        if (dpi <= 0f)
-        {
-            return 0f;
-        }
-
-        return Mathf.Sqrt((Screen.width * Screen.width) + (Screen.height * Screen.height)) / dpi;
     }
 }

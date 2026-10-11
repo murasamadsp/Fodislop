@@ -20,20 +20,34 @@ internal sealed class PostProcessWorkload
     }
 }
 
-internal readonly struct PostProcessWorkloadSnapshot(int frameId, int width, int height,
-    int dispatchCount, int drawCount, long logicalPixels, long dispatchedThreads,
-    int textureCount, long texturePayloadBytes, double cpuRecordingMs)
+internal readonly struct PostProcessWorkloadSnapshot
 {
-    public int FrameId { get; } = frameId;
-    public int Width { get; } = width;
-    public int Height { get; } = height;
-    public int DispatchCount { get; } = dispatchCount;
-    public int DrawCount { get; } = drawCount;
-    public long LogicalPixels { get; } = logicalPixels;
-    public long DispatchedThreads { get; } = dispatchedThreads;
-    public int TextureCount { get; } = textureCount;
-    public long TexturePayloadBytes { get; } = texturePayloadBytes;
-    public double CPURecordingMs { get; } = cpuRecordingMs;
+    public PostProcessWorkloadSnapshot(int frameId, int width, int height,
+        int dispatchCount, int drawCount, long logicalPixels, long dispatchedThreads,
+        int textureCount, long texturePayloadBytes, double cpuRecordingMs)
+    {
+        FrameId = frameId;
+        Width = width;
+        Height = height;
+        DispatchCount = dispatchCount;
+        DrawCount = drawCount;
+        LogicalPixels = logicalPixels;
+        DispatchedThreads = dispatchedThreads;
+        TextureCount = textureCount;
+        TexturePayloadBytes = texturePayloadBytes;
+        CPURecordingMs = cpuRecordingMs;
+    }
+
+    public int FrameId { get; }
+    public int Width { get; }
+    public int Height { get; }
+    public int DispatchCount { get; }
+    public int DrawCount { get; }
+    public long LogicalPixels { get; }
+    public long DispatchedThreads { get; }
+    public int TextureCount { get; }
+    public long TexturePayloadBytes { get; }
+    public double CPURecordingMs { get; }
 }
 
 internal struct PostProcessWorkloadAccumulator

@@ -48,7 +48,7 @@ public sealed class LightingAmbientOcclusionUpdatePolicyTests
     [Test]
     public void SingleDig_PreservesFieldOutsideSevenCellSupport()
     {
-        RectInt rect = ResolveSingleRect([new RectInt(10, 20, 1, 1)], new RectInt(0, 0, 192, 128), 32, false);
+        RectInt rect = ResolveSingleRect(new[] { new RectInt(10, 20, 1, 1) }, new RectInt(0, 0, 192, 128), 32, false);
         AssertRect(rect, 224, 544, 224, 224);
         Assert.That((long)rect.width * rect.height, Is.EqualTo(50_176));
     }
@@ -56,28 +56,28 @@ public sealed class LightingAmbientOcclusionUpdatePolicyTests
     [Test]
     public void TopDownRenderTarget_MirrorsOnlyTheRowOfTheSameSupport()
     {
-        RectInt rect = ResolveSingleRect([new RectInt(10, 20, 1, 1)], new RectInt(0, 0, 192, 128), 32, true);
+        RectInt rect = ResolveSingleRect(new[] { new RectInt(10, 20, 1, 1) }, new RectInt(0, 0, 192, 128), 32, true);
         AssertRect(rect, 224, 4096 - 544 - 224, 224, 224);
     }
 
     [Test]
     public void TopDownUpperEdge_MapsWorldTopToRowZero()
     {
-        RectInt rect = ResolveSingleRect([new RectInt(0, 7, 8, 1)], new RectInt(0, 0, 8, 8), 32, true);
+        RectInt rect = ResolveSingleRect(new[] { new RectInt(0, 7, 8, 1) }, new RectInt(0, 0, 8, 8), 32, true);
         AssertRect(rect, 0, 0, 256, 128);
     }
 
     [Test]
     public void NegativeOriginAndLowerEdge_ClipInWorldSpaceBeforePixelMapping()
     {
-        RectInt rect = ResolveSingleRect([new RectInt(-10, -20, 1, 1)], new RectInt(-10, -20, 8, 8), 32, false);
+        RectInt rect = ResolveSingleRect(new[] { new RectInt(-10, -20, 1, 1) }, new RectInt(-10, -20, 8, 8), 32, false);
         AssertRect(rect, 0, 0, 128, 128);
     }
 
     [Test]
     public void UpperEdge_UsesBottomLeftRasterRowsAndHalfOpenBounds()
     {
-        RectInt rect = ResolveSingleRect([new RectInt(7, 7, 1, 1)], new RectInt(0, 0, 8, 8), 32, false);
+        RectInt rect = ResolveSingleRect(new[] { new RectInt(7, 7, 1, 1) }, new RectInt(0, 0, 8, 8), 32, false);
         AssertRect(rect, 128, 128, 128, 128);
     }
 
@@ -85,7 +85,7 @@ public sealed class LightingAmbientOcclusionUpdatePolicyTests
     public void NearbyEdits_MergeWhenTheUnionAddsNoRasterPixels()
     {
         IReadOnlyList<RectInt> rects = LightingAmbientOcclusionUpdatePolicy.ResolveRasterRects(
-            [new RectInt(5, 5, 1, 1), new RectInt(9, 5, 1, 1)], new RectInt(0, 0, 32, 32), 32, false);
+            new[] { new RectInt(5, 5, 1, 1), new RectInt(9, 5, 1, 1) }, new RectInt(0, 0, 32, 32), 32, false);
         Assert.That(rects, Has.Count.EqualTo(1));
         AssertRect(rects[0], 64, 64, 352, 224);
     }
@@ -94,7 +94,7 @@ public sealed class LightingAmbientOcclusionUpdatePolicyTests
     public void DistantEdits_RasterizeSeparateSupports()
     {
         IReadOnlyList<RectInt> rects = LightingAmbientOcclusionUpdatePolicy.ResolveRasterRects(
-            [new RectInt(5, 5, 1, 1), new RectInt(20, 20, 1, 1)], new RectInt(0, 0, 32, 32), 32, false);
+            new[] { new RectInt(5, 5, 1, 1), new RectInt(20, 20, 1, 1) }, new RectInt(0, 0, 32, 32), 32, false);
         Assert.That(rects, Has.Count.EqualTo(2));
         AssertRect(rects[0], 64, 64, 224, 224);
         AssertRect(rects[1], 544, 544, 224, 224);
@@ -118,7 +118,7 @@ public sealed class LightingAmbientOcclusionUpdatePolicyTests
     [Test]
     public void EditJustOutsideField_StillUpdatesItsContactSupport()
     {
-        RectInt rect = ResolveSingleRect([new RectInt(-1, 4, 1, 1)], new RectInt(0, 0, 8, 8), 32, false);
+        RectInt rect = ResolveSingleRect(new[] { new RectInt(-1, 4, 1, 1) }, new RectInt(0, 0, 8, 8), 32, false);
         AssertRect(rect, 0, 32, 96, 224);
     }
 
@@ -126,7 +126,7 @@ public sealed class LightingAmbientOcclusionUpdatePolicyTests
     public void DistantEdit_DoesNotTouchField()
     {
         IReadOnlyList<RectInt> rects = LightingAmbientOcclusionUpdatePolicy.ResolveRasterRects(
-            [new RectInt(-10, -10, 1, 1)], new RectInt(0, 0, 8, 8), 32, false);
+            new[] { new RectInt(-10, -10, 1, 1) }, new RectInt(0, 0, 8, 8), 32, false);
         Assert.That(rects, Is.Empty);
     }
 
@@ -134,7 +134,7 @@ public sealed class LightingAmbientOcclusionUpdatePolicyTests
     public void InvalidEdit_IsRejected()
     {
         Assert.Throws<ArgumentException>(() => LightingAmbientOcclusionUpdatePolicy.ResolveRasterRects(
-            [new RectInt(0, 0, 0, 1)], new RectInt(0, 0, 8, 8), 32, false));
+            new[] { new RectInt(0, 0, 0, 1) }, new RectInt(0, 0, 8, 8), 32, false));
     }
 
     private static RectInt ResolveSingleRect(

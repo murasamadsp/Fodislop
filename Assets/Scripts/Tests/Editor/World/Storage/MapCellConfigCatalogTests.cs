@@ -37,16 +37,16 @@ public class MapCellConfigCatalogTests
     public void LoadConfigurations_ValidConfigurations_PopulatesState()
     {
         var catalog = new MapCellConfigCatalog();
-        var configs = new[]
+        var configs = new CellConfigurationPacket[]
         {
             CreateConfig(),
             CreateConfig(color: unchecked((int)0xFF00FF00)), // Green
         };
         byte[][] tileGroups =
-        [
-            [0],
-            [1],
-        ];
+        {
+            new byte[] { 0 },
+            new byte[] { 1 },
+        };
 
         catalog.LoadConfigurations(configs, tileGroups);
 
@@ -66,7 +66,7 @@ public class MapCellConfigCatalogTests
         var catalog = new MapCellConfigCatalog();
 
         Assert.Throws<InvalidDataException>(() => catalog.LoadConfigurations(null, null));
-        Assert.Throws<InvalidDataException>(() => catalog.LoadConfigurations([], null));
+        Assert.Throws<InvalidDataException>(() => catalog.LoadConfigurations(Array.Empty<CellConfigurationPacket>(), null));
     }
 
     [Test]
@@ -94,7 +94,7 @@ public class MapCellConfigCatalogTests
     public void GetCellConfig_OutOfBounds_ThrowsInvalidOperationException()
     {
         var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations([CreateConfig()], null);
+        catalog.LoadConfigurations(new[] { CreateConfig() }, null);
 
         Assert.Throws<InvalidOperationException>(() => catalog.GetCellConfig((CellType)5));
         Assert.Throws<InvalidOperationException>(() => catalog.GetCellConfig(unchecked((CellType)(-1))));
@@ -143,7 +143,7 @@ public class MapCellConfigCatalogTests
     {
         var catalog = new MapCellConfigCatalog();
         int argb = unchecked((int)0xFF112233);
-        catalog.LoadConfigurations([CreateConfig(color: argb)], null);
+        catalog.LoadConfigurations(new[] { CreateConfig(color: argb) }, null);
 
         Color color = catalog.GetCellMinimapColor((CellType)0);
 
@@ -221,7 +221,7 @@ public class MapCellConfigCatalogTests
     public void GetCellMinimapColor_WithZeroColor_UsesFallback()
     {
         var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations([CreateConfig(color: 0)], null);
+        catalog.LoadConfigurations(new[] { CreateConfig(color: 0) }, null);
 
         Color color = catalog.GetCellMinimapColor((CellType)0);
         Color expectedFallback = MapBlockColors.GetColor((CellType)0);
@@ -251,7 +251,7 @@ public class MapCellConfigCatalogTests
     public void Reset_ClearsAllState()
     {
         var catalog = new MapCellConfigCatalog();
-        catalog.LoadConfigurations([CreateConfig()], [[0]]);
+        catalog.LoadConfigurations(new[] { CreateConfig() }, new[] { new byte[] { 0 } });
         catalog.UpdateMovementSpeeds(new MovementSpeedPacket(
             new Dictionary<CellType, ushort> { { (CellType)0, 100 } }));
 

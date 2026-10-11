@@ -93,8 +93,19 @@ namespace Kern.Core
         public void Load()
         {
             ClientConfigLoader.Result result =
-                new ClientConfigLoader(Repository, _graphicsQualityProfile).LoadOrCreate();
+                new ClientConfigLoader(
+                    Repository,
+                    _graphicsQualityProfile,
+                    Application.platform == RuntimePlatform.Android).LoadOrCreate();
             Config = result.Config;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Config.Connection.UseDummyConnection)
+            {
+                Config.Connection.UseDummyConnection = true;
+                SaveDeferred();
+                Debug.Log("[ClientConfigManager] Android build forces DummyConnection for offline world access.");
+            }
+#endif
             Debug.Log(
                 $"[ClientConfigManager] Config {result.Outcome} (schema {result.SourceSchemaVersion}) " +
                 $"at {Repository.ConfigPath}; GraphicsPreset={Config.GraphicsPreset}");

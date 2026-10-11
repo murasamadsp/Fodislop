@@ -13,13 +13,15 @@ internal static class StableUIFontAssetNormalizer
     private const string MenuPath = "Kern/Assets/Normalize Stable UI Fonts";
 
     private static readonly (string Path, bool IncludeCjk)[] s_fontAssets =
-    [
+    new[] {
+
         ("Assets/Resources/Fonts/Exo2_SDF.asset", false),
         ("Assets/Resources/Fonts/JetBrainsMono_SDF.asset", false),
         ("Assets/Resources/Fonts/Unbounded_SDF.asset", false),
         ("Assets/Resources/Fonts/NotoSansSC_SDF.asset", true),
         ("Assets/Resources/Fonts/NotoSansTC_SDF.asset", true),
-    ];
+
+    };
 
     [MenuItem(MenuPath)]
     private static void Normalize()

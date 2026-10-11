@@ -23,6 +23,25 @@ internal sealed class UnityHDROutputBackend : HDROutputController.IBackend
 
     private static HDROutputController.Snapshot ReadOutput()
     {
+        if (Application.platform is RuntimePlatform.Android or RuntimePlatform.IPhonePlayer)
+        {
+            // Screen.mainWindowDisplayInfo is desktop-only. Mobile display
+            // output is owned by the OS compositor, so this backend cannot
+            // identify or switch its HDR output through the desktop API.
+            // Report that capability explicitly instead of failing every
+            // reconciliation tick while querying an unsupported property.
+            return new HDROutputController.Snapshot(
+                new HDROutputController.OutputIdentity(
+                    Application.platform.ToString(), 0, 0, Screen.width, Screen.height,
+                    (int)Screen.fullScreenMode),
+                Supported: false,
+                PipelineSupported: false,
+                Available: false,
+                Active: false,
+                Pending: false,
+                Switchable: false);
+        }
+
         // Unity throws when HDROutputSettings.main is queried after the
         // display has already switched to SDR. Read the instance availability
         // flag first and avoid touching the other output properties while it

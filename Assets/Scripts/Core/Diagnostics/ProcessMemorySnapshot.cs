@@ -8,11 +8,18 @@ using System.Runtime.InteropServices;
 namespace Kern.Core.Diagnostics;
 
 /// <summary>Physical memory only. Swap is never counted as allocation headroom.</summary>
-public readonly struct ProcessMemorySnapshot(long physicalBytes, long processBytes, int? availablePercent)
+public readonly struct ProcessMemorySnapshot
 {
-    public long PhysicalBytes { get; } = physicalBytes;
-    public long ProcessBytes { get; } = processBytes;
-    public int? AvailablePercent { get; } = availablePercent;
+    public ProcessMemorySnapshot(long physicalBytes, long processBytes, int? availablePercent)
+    {
+        PhysicalBytes = physicalBytes;
+        ProcessBytes = processBytes;
+        AvailablePercent = availablePercent;
+    }
+
+    public long PhysicalBytes { get; }
+    public long ProcessBytes { get; }
+    public int? AvailablePercent { get; }
 
     public static ProcessMemorySnapshot Capture()
     {

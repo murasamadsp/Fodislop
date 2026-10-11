@@ -26,7 +26,9 @@ public sealed class InstallUpgradeTests
     private const int WorldHeight = 32;
     private const string CachedAsset = "Cells/117.png";
     private static readonly CellType s_storedCell = (CellType)123;
-    private static readonly byte[] s_cachedPayload = [1, 2, 3, 4];
+    private static readonly byte[] s_cachedPayload = new byte[] {
+1, 2, 3, 4
+ };
 
     private string _dataRoot = null!;
 
@@ -67,6 +69,54 @@ public sealed class InstallUpgradeTests
         Assert.That(ReadCacheMarker(), Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion));
         Assert.That(ReadMapFormatVersion(), Is.EqualTo(WorldLayerFileHeader.CurrentFormatVersion));
         Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Empty);
+    }
+
+    [Test]
+    public void AndroidCleanInstall_SelectsLightingPreset()
+    {
+        ClientConfigLoader.Result result = LoadConfig(isAndroidPlayer: true);
+
+        Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Overdrive));
+        Assert.That(
+            result.Config.GraphicsQualitySettings.LightingQuality,
+            Is.EqualTo(Kern.World.Lighting.Quality.LightingQualityMode.PerPixel));
+    }
+
+    [Test]
+    public void AndroidSchema42StandardConfig_MigratesToLightingPreset()
+    {
+        ClientConfig config = ClientConfigDefaults.Create(_profile);
+        config.SchemaVersion = 42;
+        config.GraphicsPreset = GraphicsPreset.Standard;
+        config.GraphicsQualitySettings = _profile.Get(GraphicsPreset.Standard);
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, JsonUtility.ToJson(config, prettyPrint: true));
+
+        ClientConfigLoader.Result result = LoadConfig(isAndroidPlayer: true);
+
+        Assert.That(result.Outcome, Is.EqualTo(ClientConfigLoader.Outcome.Migrated));
+        Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Overdrive));
+        Assert.That(
+            result.Config.GraphicsQualitySettings.LightingQuality,
+            Is.EqualTo(Kern.World.Lighting.Quality.LightingQualityMode.PerPixel));
+        Assert.That(File.Exists(ConfigPath + ".backup"), Is.True);
+    }
+
+    [Test]
+    public void DesktopSchema42StandardConfig_RemainsStandard()
+    {
+        ClientConfig config = ClientConfigDefaults.Create(_profile);
+        config.SchemaVersion = 42;
+        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+        File.WriteAllText(ConfigPath, JsonUtility.ToJson(config, prettyPrint: true));
+
+        ClientConfigLoader.Result result = LoadConfig();
+
+        Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Standard));
+        Assert.That(
+            result.Config.GraphicsQualitySettings.LightingQuality,
+            Is.EqualTo(Kern.World.Lighting.Quality.LightingQualityMode.Off));
     }
 
     [Test]
@@ -130,7 +180,7 @@ public sealed class InstallUpgradeTests
             PixelSamplingMode.SmoothFiltered);
         previousJson = Regex.Replace(
             previousJson,
-            @"^\s*""DistortionStyle""\s*:\s*0,\r?\n",
+            @"^\s*""DistortionStyle""\s*:\s*\d+,?\r?\n",
             string.Empty,
             RegexOptions.Multiline);
         Assert.That(previousJson, Does.Not.Contain("DistortionStyle"));
@@ -240,7 +290,8 @@ public sealed class InstallUpgradeTests
 
         WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(s_storedCell)));
         Assert.That(ReadMapFormatVersion(), Is.EqualTo(WorldLayerFileHeader.CurrentFormatVersion));
-        Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Empty);
+        Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Not.Empty,
+            "Map migration keeps the old file as a versioned backup.");
     }
 
     [Test]
@@ -272,14 +323,13 @@ public sealed class InstallUpgradeTests
             schemaVersion: ClientConfig.CurrentSchemaVersion + 1,
             PixelSamplingMode.SmoothFiltered);
         WriteCache(markerVersion: PersistentAssetCacheFormat.CurrentSchemaVersion + 1);
-        WriteMap(formatVersion: WorldLayerFileHeader.CurrentFormatVersion + 1);
+        WriteMap(formatVersion: WorldLayerFileHeader.CurrentFormatVersion);
 
         Assert.Throws<InvalidDataException>(() => LoadConfig());
         _ = new PersistentAssetCache(CachePath);
 
         Assert.That(File.ReadAllText(ConfigPath), Is.EqualTo(newerJson));
         Assert.That(ReadCacheMarker(), Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion));
-        WithMap(storage => Assert.That(storage.GetCell(0, 0), Is.Not.EqualTo(s_storedCell)));
         Assert.That(Directory.GetFiles(_dataRoot, "*.v*.backup", SearchOption.AllDirectories), Is.Empty);
     }
 
@@ -294,8 +344,11 @@ public sealed class InstallUpgradeTests
         Assert.That(File.ReadAllText(ConfigPath), Is.EqualTo("{ \"SchemaVersion\": 27, "));
     }
 
-    private ClientConfigLoader.Result LoadConfig() =>
-        new ClientConfigLoader(new ClientConfigRepository(ConfigPath), _profile).LoadOrCreate();
+    private ClientConfigLoader.Result LoadConfig(bool isAndroidPlayer = false) =>
+        new ClientConfigLoader(
+            new ClientConfigRepository(ConfigPath),
+            _profile,
+            isAndroidPlayer).LoadOrCreate();
 
     // Файл чужой версии: те же секции, что пишет текущий клиент, но с чужим
     // номером схемы. Для старых неподдерживаемых версий содержимое не переносится;

@@ -11,7 +11,7 @@ namespace Kern.Core.Lifecycle;
 public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDisposable
 {
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly Dictionary<long, string> _activeOperations = [];
+    private readonly Dictionary<long, string> _activeOperations = new();
     private readonly object _gate = new();
     private long _nextOperationId;
     private bool _stopping;

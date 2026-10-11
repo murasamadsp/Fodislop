@@ -72,7 +72,7 @@ public sealed class TerrainCellMetadataCacheTests
 
         cache.BeginPass();
         cache.GetMetadata(Unready, mapData, textures, atlases);
-        cache.Invalidate([Unready]);
+        cache.Invalidate(new HashSet<CellType> { Unready });
         cache.GetMetadata(Unready, mapData, textures, atlases);
 
         Assert.AreEqual(2, textures.FrameRectCalls);

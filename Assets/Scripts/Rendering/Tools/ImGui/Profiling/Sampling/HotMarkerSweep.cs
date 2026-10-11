@@ -23,8 +23,8 @@ public sealed class HotMarkerSweep : IDisposable
     public readonly record struct Hit(MarkerInfo Marker, double AverageMilliseconds, double PeakMilliseconds, int Frames);
 
     private readonly MarkerBatch _batch = new(BatchSize, FramesPerBatch);
-    private readonly List<Hit> _hits = [];
-    private readonly List<Hit> _pendingHits = [];
+    private readonly List<Hit> _hits = new();
+    private readonly List<Hit> _pendingHits = new();
 
     public bool Running { get; private set; }
 

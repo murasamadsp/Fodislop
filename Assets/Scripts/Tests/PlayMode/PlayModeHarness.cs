@@ -25,10 +25,19 @@ internal static class PlayModeHarness
 {
     public const float UITimeoutSeconds = 20f;
     public const float WorldTimeoutSeconds = 45f;
+    private const string TestDummyToken = "kern-playmode-harness-dummy";
+    private static string? s_originalClientToken;
+    private static HashSet<string>? s_originalDummyTokens;
 
     public static IEnumerator StartAtGateway()
     {
         yield return Shutdown();
+        var gameTokens = new GameTokenStore();
+        var dummyTokens = new DummyTokenStore();
+        s_originalClientToken = gameTokens.Load();
+        s_originalDummyTokens = dummyTokens.Load();
+        dummyTokens.Save(new HashSet<string>(s_originalDummyTokens) { TestDummyToken });
+        gameTokens.Save(TestDummyToken);
         yield return SceneManager.LoadSceneAsync(ProjectRuntimeContracts.SceneNames.Bootstrap, LoadSceneMode.Single);
         yield return WaitUntil(
             () => FindBootstrap() is { Container: not null },
@@ -84,15 +93,34 @@ internal static class PlayModeHarness
                 yield return SceneManager.UnloadSceneAsync(scene);
             }
         }
+
+        if (s_originalDummyTokens != null)
+        {
+            new DummyTokenStore().Save(s_originalDummyTokens);
+            var gameTokens = new GameTokenStore();
+            if (string.IsNullOrEmpty(s_originalClientToken))
+            {
+                gameTokens.Clear();
+            }
+            else
+            {
+                gameTokens.Save(s_originalClientToken);
+            }
+
+            s_originalDummyTokens = null;
+            s_originalClientToken = null;
+        }
     }
 
     private static readonly HashSet<string> s_projectSceneNames =
-    [
+    new() {
+
         ProjectRuntimeContracts.SceneNames.Bootstrap,
         ProjectRuntimeContracts.SceneNames.Gateway,
         ProjectRuntimeContracts.SceneNames.MainMenu,
         ProjectRuntimeContracts.SceneNames.MainGame,
-    ];
+
+    };
 
     public static IEnumerator DestroyPersistentBootstrapIfPresent()
     {
@@ -271,10 +299,21 @@ internal sealed class DummyAuthenticationScope
 // физической клавиатурой разработчика, а после теста устройство удаляется.
 internal sealed class VirtualKeyboard : IDisposable
 {
-    private readonly HashSet<Key> _held = [];
+    private readonly HashSet<Key> _held = new();
+
+    private readonly InputSettings.EditorInputBehaviorInPlayMode _previousBehavior;
+    private readonly InputSettings.BackgroundBehavior _previousBackground;
 
     public VirtualKeyboard()
     {
+        // В batch-прогоне нет ни фокуса приложения, ни окна Game View: без
+        // этих двух настроек Input System отбрасывает нажатия виртуальной
+        // клавиатуры, и тест проверял бы не игру, а их отсутствие.
+        _previousBehavior = InputSystem.settings.editorInputBehaviorInPlayMode;
+        _previousBackground = InputSystem.settings.backgroundBehavior;
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
         Device = InputSystem.AddDevice<Keyboard>("KernTestKeyboard");
         Device.MakeCurrent();
     }
@@ -305,6 +344,8 @@ internal sealed class VirtualKeyboard : IDisposable
     public void Dispose()
     {
         InputSystem.RemoveDevice(Device);
+        InputSystem.settings.editorInputBehaviorInPlayMode = _previousBehavior;
+        InputSystem.settings.backgroundBehavior = _previousBackground;
     }
 
     private void Push()

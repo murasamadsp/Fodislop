@@ -27,6 +27,10 @@ public static class RuntimeTextureFactory
     }
 
     private static readonly ConditionalWeakTable<Texture2D, TextureOpacity> s_decodedOpacity = new();
+    private static readonly byte[] s_pngSignature =
+    {
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+    };
 
     public static bool SupportsTexture2DGPUCopy =>
         (SystemInfo.copyTextureSupport & CopyTextureSupport.Basic) != 0;
@@ -244,6 +248,24 @@ public static class RuntimeTextureFactory
                 $"the limit is {maximumSide} per side.");
         }
 
+        // Unity already decodes PNG directly into the Texture2D and uploads
+        // it. Copying that image through GetPixels32/SetPixels32 allocated a
+        // managed Color32[] as large as the image, copied every pixel again,
+        // and uploaded a second texture. This path is used for streamed world
+        // cells and menu backgrounds, so large PNGs could allocate many MB in
+        // one frame. PNG decoding produces RGBA32, which is the format this
+        // pipeline exposes to its consumers.
+        if (data.AsSpan().StartsWith(s_pngSignature))
+        {
+            return DecodePngDirect(
+                data,
+                name,
+                colorSpace,
+                filterMode,
+                wrapMode,
+                makeNoLongerReadable);
+        }
+
         Texture2D staging = CreateRGBA32NoMip(
             2,
             2,
@@ -271,6 +293,77 @@ public static class RuntimeTextureFactory
         {
             DestroyRuntimeObject(staging);
         }
+    }
+
+    private static Texture2D DecodePngDirect(
+        byte[] data,
+        string name,
+        RuntimeTextureColorSpace colorSpace,
+        FilterMode filterMode,
+        TextureWrapMode wrapMode,
+        bool makeNoLongerReadable)
+    {
+        Texture2D texture = CreateRGBA32NoMip(
+            2,
+            2,
+            name,
+            colorSpace,
+            filterMode,
+            wrapMode);
+        var canonicalFormat = texture.graphicsFormat;
+        try
+        {
+            if (!texture.LoadImage(data, markNonReadable: false))
+            {
+                throw new InvalidOperationException(
+                    $"Encoded PNG '{name}' could not be decoded by Unity.");
+            }
+
+            // LoadImage can replace the requested graphics format with a
+            // platform-selected PNG format. Keep the no-copy path only when
+            // it preserves the factory's canonical RGBA32 format; atlas
+            // consumers use Graphics.CopyTexture and require an exact match.
+            if (texture.graphicsFormat != canonicalFormat)
+            {
+                Texture2D canonicalTexture = CopyToRGBA32NoMip(
+                    texture,
+                    name,
+                    colorSpace,
+                    filterMode,
+                    wrapMode,
+                    makeNoLongerReadable);
+                DestroyRuntimeObject(texture);
+                return canonicalTexture;
+            }
+
+            ApplySampling(texture, filterMode, wrapMode);
+            s_decodedOpacity.Add(texture, new TextureOpacity(IsTextureFullyOpaque(texture)));
+            if (makeNoLongerReadable)
+            {
+                texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            }
+
+            return texture;
+        }
+        catch
+        {
+            DestroyRuntimeObject(texture);
+            throw;
+        }
+    }
+
+    private static bool IsTextureFullyOpaque(Texture2D texture)
+    {
+        Unity.Collections.NativeArray<Color32> pixels = texture.GetPixelData<Color32>(0);
+        for (int index = 0; index < pixels.Length; index++)
+        {
+            if (pixels[index].a < 250)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public static Texture2D CopyToRGBA32NoMip(
@@ -301,18 +394,36 @@ public static class RuntimeTextureFactory
             wrapMode);
         try
         {
-            Color32[] pixels = source.GetPixels32();
             bool fullyOpaque = true;
-            for (int index = 0; index < pixels.Length; index++)
+            if (source.format == TextureFormat.RGBA32)
             {
-                if (pixels[index].a < 250)
+                Unity.Collections.NativeArray<Color32> pixels = source.GetPixelData<Color32>(0);
+                for (int index = 0; index < pixels.Length; index++)
                 {
-                    fullyOpaque = false;
-                    break;
+                    if (pixels[index].a < 250)
+                    {
+                        fullyOpaque = false;
+                        break;
+                    }
                 }
+
+                result.SetPixelData(pixels, 0);
+            }
+            else
+            {
+                Color32[] pixels = source.GetPixels32();
+                for (int index = 0; index < pixels.Length; index++)
+                {
+                    if (pixels[index].a < 250)
+                    {
+                        fullyOpaque = false;
+                        break;
+                    }
+                }
+
+                result.SetPixels32(pixels);
             }
 
-            result.SetPixels32(pixels);
             result.Apply(
                 updateMipmaps: false,
                 makeNoLongerReadable: makeNoLongerReadable);

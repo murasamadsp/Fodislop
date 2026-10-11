@@ -49,7 +49,9 @@ public sealed class WorldChunkV2CodecTests
     [Test]
     public void VisitChunkRuns_EmitsAdjacentEqualValuesAndValidatesBeforeCallbacks()
     {
-        byte[] expected = [3, 3, 3, 9, 9, 2, 2, 2];
+        byte[] expected = new byte[] {
+3, 3, 3, 9, 9, 2, 2, 2
+ };
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
@@ -134,7 +136,9 @@ public sealed class WorldChunkV2CodecTests
     [Test]
     public void IndexedFrame_RejectsBeingAddressedAsAnotherChunk()
     {
-        byte[] expected = [4, 4, 7, 9];
+        byte[] expected = new byte[] {
+4, 4, 7, 9
+ };
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
@@ -170,7 +174,9 @@ public sealed class WorldChunkV2CodecTests
     [Test]
     public void LegacyV2Frame_IsRejectedByCurrentIndexedReader()
     {
-        byte[] expected = [4, 4, 7, 9];
+        byte[] expected = new byte[] {
+4, 4, 7, 9
+ };
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
@@ -205,7 +211,9 @@ public sealed class WorldChunkV2CodecTests
         const int width = 1;
         const int height = 1;
         const int chunkSize = 2;
-        byte[] expected = [5, 5, 8, 9];
+        byte[] expected = new byte[] {
+5, 5, 8, 9
+ };
         try
         {
             using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
@@ -249,7 +257,9 @@ public sealed class WorldChunkV2CodecTests
         const int width = 1;
         const int height = 1;
         const int chunkSize = 2;
-        byte[] expected = [1, 1, 2, 3];
+        byte[] expected = new byte[] {
+1, 1, 2, 3
+ };
         try
         {
             using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
@@ -298,7 +308,9 @@ public sealed class WorldChunkV2CodecTests
         const int chunkSize = 2;
         const int chunkArea = chunkSize * chunkSize;
         const long sharedChunkOffset = WorldLayerFileHeader.HeaderSize + (width * sizeof(long));
-        byte[] duplicatedCells = [7, 7, 7, 7];
+        byte[] duplicatedCells = new byte[] {
+7, 7, 7, 7
+ };
         try
         {
             using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))

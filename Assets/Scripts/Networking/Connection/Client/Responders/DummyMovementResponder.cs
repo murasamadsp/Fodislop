@@ -15,7 +15,18 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyMovementResponder(
+internal sealed class DummyMovementResponder : IDisposable
+{
+    private readonly IAsyncOperationSupervisor _operations;
+    private readonly IDummyClock _clock;
+    private readonly DummyPlayerSimulationState _playerState;
+    private readonly DummyWorldSimulationState _worldState;
+    private readonly DummyTeleportManager _teleportManager;
+    private readonly DummyPathFinder _pathFinder;
+    private readonly Action<ServerPacket> _sendPacket;
+    private readonly Func<bool> _ignoreCollision;
+    private readonly ushort _playerBotId;
+    internal DummyMovementResponder(
     IAsyncOperationSupervisor operations,
     IDummyClock clock,
     DummyPlayerSimulationState playerState,
@@ -24,8 +35,19 @@ internal sealed class DummyMovementResponder(
     DummyPathFinder pathFinder,
     Action<ServerPacket> sendPacket,
     Func<bool> ignoreCollision,
-    ushort playerBotId) : IDisposable
-{
+    ushort playerBotId)
+    {
+        _operations = operations;
+        _clock = clock;
+        _playerState = playerState;
+        _worldState = worldState;
+        _teleportManager = teleportManager;
+        _pathFinder = pathFinder;
+        _sendPacket = sendPacket;
+        _ignoreCollision = ignoreCollision;
+        _playerBotId = playerBotId;
+    }
+
     private CancellationTokenSource? _pathCancellation;
     private CancellationTokenSource? _pendingMoveLoadCancellation;
     private CancellationTokenSource? _positionSnapshotCancellation;
@@ -35,14 +57,14 @@ internal sealed class DummyMovementResponder(
     {
         CancelPendingMoveLoad();
         CancelPositionSnapshot();
-        if (teleportManager.WindowOpen)
+        if (_teleportManager.WindowOpen)
         {
             return;
         }
 
         long requestVersion = ++_moveRequestVersion;
-        int dx = Math.Abs(packet.X - playerState.X);
-        int dy = Math.Abs(packet.Y - playerState.Y);
+        int dx = Math.Abs(packet.X - _playerState.X);
+        int dy = Math.Abs(packet.Y - _playerState.Y);
         bool isAdjacent = (dx == 1 && dy == 0) || (dx == 0 && dy == 1);
         if (!isAdjacent)
         {
@@ -51,13 +73,13 @@ internal sealed class DummyMovementResponder(
         }
 
         CellType cellType = CellType.Unloaded;
-        if (worldState.HasLayer &&
-            !ignoreCollision() &&
-            !worldState.TryGetCell(packet.X, packet.Y, out cellType))
+        if (_worldState.HasLayer &&
+            !_ignoreCollision() &&
+            !_worldState.TryGetCell(packet.X, packet.Y, out cellType))
         {
             var pendingLoadCancellation = new CancellationTokenSource();
             _pendingMoveLoadCancellation = pendingLoadCancellation;
-            operations.Run(
+            _operations.Run(
                 "dummy_move_wait_for_cell",
                 supervisorToken => WaitForCellAndMoveAsync(
                     packet,
@@ -85,7 +107,7 @@ internal sealed class DummyMovementResponder(
     // актуальное состояние вместе с чанками.
     public void HandleRotate(RotatePacket packet)
     {
-        playerState.SetDirection(packet.Direction);
+        _playerState.SetDirection(packet.Direction);
         SendPositionSnapshot();
     }
 
@@ -95,12 +117,12 @@ internal sealed class DummyMovementResponder(
         CancelPositionSnapshot();
         _moveRequestVersion++;
         CancelPath();
-        List<(ushort X, ushort Y)> path = pathFinder.FindPath(
-            playerState.X,
-            playerState.Y,
+        List<(ushort X, ushort Y)> path = _pathFinder.FindPath(
+            _playerState.X,
+            _playerState.Y,
             packet.X,
             packet.Y,
-            worldState.GetCell);
+            _worldState.GetCell);
         if (path.Count == 0)
         {
             return;
@@ -108,20 +130,21 @@ internal sealed class DummyMovementResponder(
 
         _pathCancellation = new CancellationTokenSource();
         CancellationToken pathToken = _pathCancellation.Token;
-        operations.Run(
+        _operations.Run(
             "dummy_walk_path",
             supervisorToken => WalkPathAsync(path, pathToken, supervisorToken));
     }
 
     public void SendPositionSnapshot()
     {
-        sendPacket(new ServerPacket(new HBPacket([
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
             new RobotPositionPacket(
-                playerBotId,
-                playerState.X,
-                playerState.Y,
-                (byte)playerState.Direction),
-        ])));
+                _playerBotId,
+                _playerState.X,
+                _playerState.Y,
+                (byte)_playerState.Direction),
+        })));
     }
 
     public void CancelPath()
@@ -149,37 +172,37 @@ internal sealed class DummyMovementResponder(
             supervisorToken);
         try
         {
-            if (!await worldState.EnsureCellAvailableAsync(
+            if (!await _worldState.EnsureCellAvailableAsync(
                     packet.X,
                     packet.Y,
                     linkedCancellation.Token) ||
                 requestVersion != _moveRequestVersion ||
-                teleportManager.WindowOpen ||
+                _teleportManager.WindowOpen ||
                 !IsAdjacent(packet.X, packet.Y) ||
-                !worldState.TryGetCell(packet.X, packet.Y, out CellType cellType) ||
+                !_worldState.TryGetCell(packet.X, packet.Y, out CellType cellType) ||
                 !CanEnter(cellType))
             {
                 SendPositionSnapshot();
                 return;
             }
 
-            await worldState.SendChunksAroundAsync(
+            await _worldState.SendChunksAroundAsync(
                 packet.X,
                 packet.Y,
-                sendPacket,
+                _sendPacket,
                 linkedCancellation.Token);
             if (requestVersion != _moveRequestVersion ||
-                teleportManager.WindowOpen ||
+                _teleportManager.WindowOpen ||
                 !IsAdjacent(packet.X, packet.Y))
             {
                 SendPositionSnapshot();
                 return;
             }
 
-            playerState.SetPosition(packet.X, packet.Y);
+            _playerState.SetPosition(packet.X, packet.Y);
             CancelPath();
             SchedulePositionSnapshot();
-            teleportManager.CheckTeleportEntry(playerState.X, playerState.Y);
+            _teleportManager.CheckTeleportEntry(_playerState.X, _playerState.Y);
         }
         catch (OperationCanceledException) when (linkedCancellation.IsCancellationRequested)
         {
@@ -208,7 +231,7 @@ internal sealed class DummyMovementResponder(
     {
         var pendingMoveLoadCancellation = new CancellationTokenSource();
         _pendingMoveLoadCancellation = pendingMoveLoadCancellation;
-        operations.Run(
+        _operations.Run(
             "dummy_move_prefetch",
             supervisorToken => PrefetchAndMoveAsync(
                 targetX,
@@ -230,23 +253,23 @@ internal sealed class DummyMovementResponder(
             supervisorToken);
         try
         {
-            await worldState.SendChunksAroundAsync(
+            await _worldState.SendChunksAroundAsync(
                 targetX,
                 targetY,
-                sendPacket,
+                _sendPacket,
                 linkedCancellation.Token);
             if (requestVersion != _moveRequestVersion ||
-                teleportManager.WindowOpen ||
+                _teleportManager.WindowOpen ||
                 !IsAdjacent(targetX, targetY))
             {
                 SendPositionSnapshot();
                 return;
             }
 
-            playerState.SetPosition(targetX, targetY);
+            _playerState.SetPosition(targetX, targetY);
             CancelPath();
             SchedulePositionSnapshot();
-            teleportManager.CheckTeleportEntry(playerState.X, playerState.Y);
+            _teleportManager.CheckTeleportEntry(_playerState.X, _playerState.Y);
         }
         catch (OperationCanceledException) when (linkedCancellation.IsCancellationRequested)
         {
@@ -270,14 +293,14 @@ internal sealed class DummyMovementResponder(
 
     private bool IsAdjacent(ushort x, ushort y)
     {
-        int dx = Math.Abs(x - playerState.X);
-        int dy = Math.Abs(y - playerState.Y);
+        int dx = Math.Abs(x - _playerState.X);
+        int dy = Math.Abs(y - _playerState.Y);
         return (dx == 1 && dy == 0) || (dx == 0 && dy == 1);
     }
 
     private bool CanEnter(CellType cellType)
     {
-        CellConfigurationPacket? cellConfig = worldState.GetCellConfig(cellType);
+        CellConfigurationPacket? cellConfig = _worldState.GetCellConfig(cellType);
         if (!cellConfig.HasValue)
         {
             return true;
@@ -286,7 +309,7 @@ internal sealed class DummyMovementResponder(
         bool isPassable = cellType == CellType.Empty ||
             ((CellConfigProperties)cellConfig.Value.Properties)
                 .HasFlag(CellConfigProperties.Passable);
-        return isPassable || ignoreCollision();
+        return isPassable || _ignoreCollision();
     }
 
     private void SchedulePositionSnapshot()
@@ -294,7 +317,7 @@ internal sealed class DummyMovementResponder(
         CancelPositionSnapshot();
         var positionCancellation = new CancellationTokenSource();
         _positionSnapshotCancellation = positionCancellation;
-        operations.Run(
+        _operations.Run(
             "dummy_position_snapshot",
             supervisorToken => UpdatePositionAsync(positionCancellation, supervisorToken));
     }
@@ -308,13 +331,13 @@ internal sealed class DummyMovementResponder(
             supervisorToken);
         try
         {
-            await clock.Delay(
-                GetMoveDelay(playerState.X, playerState.Y),
+            await _clock.Delay(
+                GetMoveDelay(_playerState.X, _playerState.Y),
                 linkedCancellation.Token);
-            await worldState.SendChunksAroundAsync(
-                playerState.X,
-                playerState.Y,
-                sendPacket,
+            await _worldState.SendChunksAroundAsync(
+                _playerState.X,
+                _playerState.Y,
+                _sendPacket,
                 linkedCancellation.Token);
             SendPositionSnapshot();
         }
@@ -339,15 +362,15 @@ internal sealed class DummyMovementResponder(
 
     private int GetMoveDelay(ushort x, ushort y)
     {
-        if (ignoreCollision())
+        if (_ignoreCollision())
         {
             return 20;
         }
 
-        if (worldState.HasLayer &&
-            worldState.TryGetCell(x, y, out CellType cellType))
+        if (_worldState.HasLayer &&
+            _worldState.TryGetCell(x, y, out CellType cellType))
         {
-            CellConfigurationPacket? config = worldState.GetCellConfig(cellType);
+            CellConfigurationPacket? config = _worldState.GetCellConfig(cellType);
             if (config.HasValue &&
                 !((CellConfigProperties)config.Value.Properties).HasFlag(CellConfigProperties.Passable) &&
                 cellType != CellType.Empty)
@@ -370,8 +393,8 @@ internal sealed class DummyMovementResponder(
         CancellationToken cancellationToken = linkedCancellation.Token;
         try
         {
-            ushort previousX = playerState.X;
-            ushort previousY = playerState.Y;
+            ushort previousX = _playerState.X;
+            ushort previousY = _playerState.Y;
             for (int index = 0; index < path.Count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -381,22 +404,23 @@ internal sealed class DummyMovementResponder(
                     : nextX < previousX ? Direction.Left
                     : Direction.Right;
 
-                await worldState.SendChunksAroundAsync(
+                await _worldState.SendChunksAroundAsync(
                     nextX,
                     nextY,
-                    sendPacket,
+                    _sendPacket,
                     cancellationToken);
-                playerState.SetPosition(nextX, nextY);
+                _playerState.SetPosition(nextX, nextY);
                 previousX = nextX;
                 previousY = nextY;
-                sendPacket(new ServerPacket(new HBPacket([
+                _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+                {
                     new RobotPositionPacket(
-                        playerBotId,
-                        playerState.X,
-                        playerState.Y,
+                        _playerBotId,
+                        _playerState.X,
+                        _playerState.Y,
                         (byte)direction),
-                ])));
-                await clock.Delay(GetMoveDelay(nextX, nextY), cancellationToken);
+                })));
+                await _clock.Delay(GetMoveDelay(nextX, nextY), cancellationToken);
             }
         }
         catch (OperationCanceledException)

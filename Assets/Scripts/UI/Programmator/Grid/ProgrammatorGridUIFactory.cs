@@ -27,6 +27,7 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     private VisualElement? _popup;
     private VisualElement? _gridContainer;
     private VisualElement?[,]? _cells;
+    private bool _touchMultiSelect;
     private Label?[,]? _cellLabels;
     private Tooltip? _tooltip;
     private Label? _pageLabel;
@@ -364,6 +365,108 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
     public void Dispose()
     {
         _loc.UnregisterLocalizable(this);
+    }
+
+    // Сенсорная правка: панель инструментов (отмена, повтор, буфер, удаление,
+    // мульти-выбор) и жесты сетки. Видимость панели — Touch.uss; обработчики
+    // висят всегда, скрытый элемент нажатий не получает.
+    public void BindTouchEditing(
+        ProgrammatorEditCommands commands,
+        ProgrammatorSelectionModel selection,
+        ProgrammatorRadialController radial)
+    {
+        VisualElement popup = _popup ??
+            throw new InvalidOperationException("[Programmator] Build must run before BindTouchEditing.");
+
+        Bind(popup, "ProgUndoButton", commands.Undo);
+        Bind(popup, "ProgRedoButton", commands.Redo);
+        Bind(popup, "ProgCopyButton", commands.Copy);
+        Bind(popup, "ProgCutButton", commands.Cut);
+        Bind(popup, "ProgPasteButton", commands.Paste);
+        Bind(popup, "ProgDeleteButton", commands.DeleteSelection);
+
+        Button multi = popup.Q<Button>("ProgMultiSelectButton") ??
+            throw new InvalidOperationException("[Programmator] ProgMultiSelectButton is missing from Programmator.uxml.");
+        multi.clicked += () =>
+        {
+            _touchMultiSelect = !_touchMultiSelect;
+            multi.EnableInClassList("prog-touch-tool--active", _touchMultiSelect);
+        };
+
+        VisualElement viewport = popup.Q<VisualElement>("GridScroll") ??
+            throw new InvalidOperationException("[Programmator] GridScroll is missing from Programmator.uxml.");
+        // Жесты держатся на обработчиках окна сетки — отдельная ссылка не нужна.
+        _ = new ProgrammatorTouchGrid(
+            viewport,
+            _gridContainer!,
+            FindCell,
+            (row, col) => OnTouchTap(row, col, selection, radial),
+            (row, col) => OnTouchLongPress(row, col, selection, radial));
+    }
+
+    private static void Bind(VisualElement root, string name, Action action)
+    {
+        Button button = root.Q<Button>(name) ??
+            throw new InvalidOperationException($"[Programmator] {name} is missing from Programmator.uxml.");
+        button.clicked += action;
+    }
+
+    private Vector2Int? FindCell(VisualElement target)
+    {
+        for (VisualElement? current = target; current != null; current = current.parent)
+        {
+            if (!current.ClassListContains("prog-cell"))
+            {
+                continue;
+            }
+
+            for (int row = 0; row < ProgrammatorData.ROWS; row++)
+            {
+                for (int col = 0; col < ProgrammatorData.COLS; col++)
+                {
+                    if (_cells![row, col] == current)
+                    {
+                        return new Vector2Int(row, col);
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // Тап: в режиме мульти-выбора — добавить/убрать клетку (Ctrl+клик мыши);
+    // по уже выбранной — радиальное меню (ПКМ мыши); иначе — выбрать.
+    private void OnTouchTap(int row, int col, ProgrammatorSelectionModel selection, ProgrammatorRadialController radial)
+    {
+        if (radial.IsShown)
+        {
+            radial.HideAll();
+            return;
+        }
+
+        if (_touchMultiSelect)
+        {
+            selection.ToggleCellSelection(row, col);
+        }
+        else if (selection.IsSelected(row, col))
+        {
+            radial.HandleCellRightClick(row, col, _cells![row, col]!);
+        }
+        else
+        {
+            selection.SelectCell(row, col);
+        }
+    }
+
+    private void OnTouchLongPress(int row, int col, ProgrammatorSelectionModel selection, ProgrammatorRadialController radial)
+    {
+        if (!selection.IsSelected(row, col))
+        {
+            selection.SelectCell(row, col);
+        }
+
+        radial.HandleCellRightClick(row, col, _cells![row, col]!);
     }
 
     public void UpdateCell(int row, int col)

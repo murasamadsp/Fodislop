@@ -28,7 +28,7 @@ public sealed class DummyGameplayActionResponderTests
         var player = new DummyPlayerSimulationState();
         player.SetHealth(400);
         using var world = new DummyWorldSimulationState(operations, new Kern.Tests.Networking.UnavailableDummyWorldMapSource());
-        var teleports = new DummyTeleportManager(sent.Add, [], operations);
+        var teleports = new DummyTeleportManager(sent.Add, new List<(ushort X, ushort Y)>(), operations);
         var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
         var clock = new VirtualDummyClock(seed: 1);
         using var movement = new DummyMovementResponder(
@@ -44,7 +44,7 @@ public sealed class DummyGameplayActionResponderTests
         var inventory = new DummyInventoryResponder(
             sent.Add,
             (_, _, _, _) => { },
-            [],
+            new List<(ushort X, ushort Y)>(),
             player.SetHealth,
             world.GetCell,
             world.SetCell);
@@ -99,7 +99,7 @@ public sealed class DummyGameplayActionResponderTests
             world.SetCell(10, 10, CellType.Empty);
 
             var clock = new VirtualDummyClock(seed: 1);
-            var teleports = new DummyTeleportManager(sent.Add, [], operations);
+            var teleports = new DummyTeleportManager(sent.Add, new List<(ushort X, ushort Y)>(), operations);
             var pathFinder = new DummyPathFinder(sent.Add, world.GetCellConfig);
             using var movement = new DummyMovementResponder(
                 operations,
@@ -114,7 +114,7 @@ public sealed class DummyGameplayActionResponderTests
             var inventory = new DummyInventoryResponder(
                 sent.Add,
                 (_, _, _, _) => { },
-                [],
+                new List<(ushort X, ushort Y)>(),
                 player.SetHealth,
                 world.GetCell,
                 world.SetCell);
@@ -147,10 +147,14 @@ public sealed class DummyGameplayActionResponderTests
         }
     }
 
-    private sealed class FileMapSource(string mapPath) : IDummyWorldMapSource
+    private sealed class FileMapSource : IDummyWorldMapSource
     {
+        private readonly string _mapPath;
+
+        public FileMapSource(string mapPath) => _mapPath = mapPath;
+
         public UniTask<string> GetMapFileAsync(string worldCodeName, CancellationToken cancellationToken) =>
-            UniTask.FromResult(mapPath);
+            UniTask.FromResult(_mapPath);
     }
 
     private sealed class RecordingSupervisor : IAsyncOperationSupervisor

@@ -81,7 +81,7 @@ public sealed class ClientConfigRepositoryTests
         config.Connection.ServerPort = 4242;
         repository.Save(config);
         string historicalJson = File.ReadAllText(_configPath)
-            .Replace("\"HdrSwitchPending\"", "\"HDRSwitchPending\"");
+            .Replace("\"HDRSwitchPending\"", "\"HdrSwitchPending\"");
         File.WriteAllText(_configPath, historicalJson);
 
         ClientConfig loaded = repository.Load().Config;
@@ -90,7 +90,7 @@ public sealed class ClientConfigRepositoryTests
         Assert.That(loaded.Connection.ServerPort, Is.EqualTo(4242));
         Assert.That(File.ReadAllText(_configPath), Is.EqualTo(historicalJson));
         repository.Save(loaded);
-        Assert.That(File.ReadAllText(_configPath), Does.Contain("\"HdrSwitchPending\""));
+        Assert.That(File.ReadAllText(_configPath), Does.Contain("\"HDRSwitchPending\""));
         Assert.That(repository.Load().Config.Display.HDRSwitchPending, Is.EqualTo(pending));
     }
 
@@ -102,8 +102,8 @@ public sealed class ClientConfigRepositoryTests
         repository.Save(config);
         string json = File.ReadAllText(_configPath);
         json = System.Text.RegularExpressions.Regex.Replace(
-            json, "\"HdrSwitchPending\"\\s*:\\s*(true|false)\\s*,", "");
-        Assert.That(json, Does.Not.Contain("\"HdrSwitchPending\""));
+            json, "\"HDRSwitchPending\"\\s*:\\s*(true|false)\\s*,", "");
+        Assert.That(json, Does.Not.Contain("\"HDRSwitchPending\""));
         File.WriteAllText(_configPath, json);
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(

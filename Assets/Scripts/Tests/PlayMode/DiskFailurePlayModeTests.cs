@@ -230,41 +230,50 @@ public sealed class DiskFailurePlayModeTests
 
         public Stream Wrap(Stream inner) => new FaultyStream(inner, this);
 
-        private sealed class FaultyStream(Stream inner, FaultyDisk disk) : Stream
+        private sealed class FaultyStream : Stream
         {
-            public override bool CanRead => inner.CanRead;
+            private readonly Stream _inner;
+            private readonly FaultyDisk _disk;
 
-            public override bool CanSeek => inner.CanSeek;
+            public FaultyStream(Stream inner, FaultyDisk disk)
+            {
+                _inner = inner;
+                _disk = disk;
+            }
 
-            public override bool CanWrite => inner.CanWrite;
+            public override bool CanRead => _inner.CanRead;
 
-            public override long Length => inner.Length;
+            public override bool CanSeek => _inner.CanSeek;
+
+            public override bool CanWrite => _inner.CanWrite;
+
+            public override long Length => _inner.Length;
 
             public override long Position
             {
-                get => inner.Position;
-                set => inner.Position = value;
+                get => _inner.Position;
+                set => _inner.Position = value;
             }
 
             public override void Flush()
             {
-                if (disk.WriteDelayMilliseconds > 0)
+                if (_disk.WriteDelayMilliseconds > 0)
                 {
-                    System.Threading.Thread.Sleep(disk.WriteDelayMilliseconds);
+                    System.Threading.Thread.Sleep(_disk.WriteDelayMilliseconds);
                 }
 
                 ThrowIfFailing();
-                inner.Flush();
+                _inner.Flush();
             }
 
-            public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
 
-            public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+            public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
 
             public override void SetLength(long value)
             {
                 ThrowIfFailing();
-                inner.SetLength(value);
+                _inner.SetLength(value);
             }
 
             public override void Write(byte[] buffer, int offset, int count) =>
@@ -272,11 +281,11 @@ public sealed class DiskFailurePlayModeTests
 
             public override void Write(ReadOnlySpan<byte> buffer)
             {
-                if (disk.FailAfterBytes is int budget)
+                if (_disk.FailAfterBytes is int budget)
                 {
                     int written = Math.Min(budget, buffer.Length);
-                    inner.Write(buffer[..written]);
-                    disk.FailAfterBytes = budget - written;
+                    _inner.Write(buffer[..written]);
+                    _disk.FailAfterBytes = budget - written;
                     if (written < buffer.Length)
                     {
                         throw new IOException("Injected disk failure: no space left on device.");
@@ -286,7 +295,7 @@ public sealed class DiskFailurePlayModeTests
                 }
 
                 ThrowIfFailing();
-                inner.Write(buffer);
+                _inner.Write(buffer);
             }
 
             public override void WriteByte(byte value) => Write(new[] { value }, 0, 1);
@@ -295,7 +304,7 @@ public sealed class DiskFailurePlayModeTests
             {
                 if (disposing)
                 {
-                    inner.Dispose();
+                    _inner.Dispose();
                 }
 
                 base.Dispose(disposing);
@@ -303,7 +312,7 @@ public sealed class DiskFailurePlayModeTests
 
             private void ThrowIfFailing()
             {
-                if (disk.FailWrites)
+                if (_disk.FailWrites)
                 {
                     throw new IOException("Injected disk failure.");
                 }

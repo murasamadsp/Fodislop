@@ -42,6 +42,8 @@ namespace Kern.UI.Inventory
         private readonly Dictionary<ItemType, List<VisualElement>> _cellElements = new();
         private TemplateContainer? _inventoryRoot;
         private Button? _inventoryButton;
+        private VisualElement? _hotbarContainer;
+        private VisualElement? _fullScroll;
         private VisualElement? _hotbarSlots;
         private VisualElement? _fullSlots;
         private Label? _toggleGlyph;
@@ -244,6 +246,7 @@ namespace Kern.UI.Inventory
             {
                 TemplateContainer tree = uxml.Instantiate();
                 _inventoryRoot = tree;
+                tree.Q<VisualElement>("InventoryRoot")?.RegisterCallback<PointerDownEvent>(OnBackdropPointerDown);
                 tree.AddToClassList("ui-fullscreen");
                 tree.pickingMode = PickingMode.Ignore;
                 root.Add(tree);
@@ -273,6 +276,8 @@ namespace Kern.UI.Inventory
                 }
 
                 _fullSlots = tree.Q<VisualElement>("InventoryGrid");
+                _hotbarContainer = tree.Q<VisualElement>("HotbarContainer");
+                _fullScroll = tree.Q<ScrollView>("InventoryScroll");
                 RebuildSlots();
 
             }
@@ -311,15 +316,34 @@ namespace Kern.UI.Inventory
             qtyLabel.pickingMode = PickingMode.Ignore;
             cell.Add(qtyLabel);
 
-            cell.RegisterCallback<MouseEnterEvent>(_ => cell.AddToClassList("inv-cell--highlight"));
-            cell.RegisterCallback<MouseLeaveEvent>(_ => cell.RemoveFromClassList("inv-cell--highlight"));
-
-            // ЛКМ выбирает предмет (контекстное меню из новой модели убрано).
-            cell.RegisterCallback<MouseDownEvent>(evt =>
+            // Подсветка наведения — только мышью: у пальца наведения нет, и
+            // подсветка залипала бы на последней тронутой ячейке.
+            cell.RegisterCallback<PointerEnterEvent>(evt =>
             {
-                if (evt.button == 0)
+                if (evt.pointerType == UnityEngine.UIElements.PointerType.mouse)
                 {
-                    _model!.Select(type);
+                    cell.AddToClassList("inv-cell--highlight");
+                }
+            });
+            cell.RegisterCallback<PointerLeaveEvent>(_ => cell.RemoveFromClassList("inv-cell--highlight"));
+
+            // Нажатие выбирает предмет. Повторное касание пальцем уже
+            // выбранного — применяет его: на сенсорном экране это единственная
+            // замена Enter. Мышь, как и раньше, только выбирает.
+            cell.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                {
+                    return;
+                }
+
+                if (_model!.SelectedItem == type && evt.pointerType != UnityEngine.UIElements.PointerType.mouse)
+                {
+                    _model.UseSelectedItem();
+                }
+                else
+                {
+                    _model.Select(type);
                 }
             });
 
@@ -465,6 +489,16 @@ namespace Kern.UI.Inventory
             }
         }
 
+        // Касание затемнения вокруг раскрытого списка закрывает его.
+        private void OnBackdropPointerDown(PointerDownEvent evt)
+        {
+            if (_isInventoryOpen && evt.target is VisualElement { name: "InventoryRoot" })
+            {
+                ToggleFullInventory();
+                evt.StopPropagation();
+            }
+        }
+
         private void ToggleFullInventory()
         {
             _isInventoryOpen = !_isInventoryOpen;
@@ -479,6 +513,12 @@ namespace Kern.UI.Inventory
                     _isInventoryOpen ? DisplayStyle.None : DisplayStyle.Flex;
             }
 
+            if (_fullScroll != null)
+            {
+                _fullScroll.style.display =
+                    _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
             if (_fullSlots != null)
             {
                 _fullSlots.style.display =
@@ -488,6 +528,29 @@ namespace Kern.UI.Inventory
             if (_toggleGlyph != null)
             {
                 _toggleGlyph.text = _isInventoryOpen ? "\u25B6" : "\u25C0";
+            }
+
+            // Раскрытый список на сенсорном экране — окно по центру (Touch.uss):
+            // полосой вдоль края полсотни предметов закрыли бы весь HUD.
+            _hotbarContainer?.EnableInClassList("inv-hotbar--popup", _isInventoryOpen);
+
+            // На сенсорном экране раскрытый список модален: корень инвентаря
+            // ловит касания мимо окна (затемнение в Touch.uss) и закрывает его,
+            // а HUD под ним не нажимается сквозь окно. Мышью — как раньше.
+            bool modal = _isInventoryOpen && UIScreen.Current.IsTouch;
+            if (_inventoryRoot != null)
+            {
+                VisualElement? inventoryRoot = _inventoryRoot.Q<VisualElement>("InventoryRoot");
+                if (inventoryRoot != null)
+                {
+                    inventoryRoot.pickingMode = modal ? PickingMode.Position : PickingMode.Ignore;
+                    inventoryRoot.EnableInClassList("inv-root--modal", modal);
+                }
+
+                if (_isInventoryOpen)
+                {
+                    _inventoryRoot.BringToFront();
+                }
             }
         }
 

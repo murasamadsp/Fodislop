@@ -6,6 +6,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kern.Core;
 using UnityEngine;
 using VContainer;
 
@@ -28,20 +29,31 @@ public interface IPersistentAssetCache
 
 public sealed class PersistentAssetCache : IPersistentAssetCache
 {
+    private const string ManifestSuffix = ".entry";
+    private const long DiskMaintenanceIntervalTicks = TimeSpan.TicksPerSecond * 30;
     private readonly string _cachePath;
+    private readonly IAsyncOperationSupervisor? _operations;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _entryGates =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _diskMaintenanceGate = new(1, 1);
+    private long _nextDiskMaintenanceUtcTicks;
 
     [Inject]
-    public PersistentAssetCache()
-        : this(GetDefaultCachePath())
+    public PersistentAssetCache(IAsyncOperationSupervisor operations)
+        : this(GetDefaultCachePath(), operations)
     {
     }
 
-    internal PersistentAssetCache(string cachePath)
+    internal PersistentAssetCache(string cachePath, IAsyncOperationSupervisor? operations = null)
     {
         _cachePath = Path.GetFullPath(cachePath);
+        _operations = operations;
         PersistentAssetCacheFormat.EnsureCurrent(_cachePath);
+#if UNITY_IOS && !UNITY_EDITOR
+        // Кэш скачивается заново с CDN: в резервную копию iCloud ему нельзя,
+        // иначе он съедает квоту игрока и нарушает правила App Store.
+        UnityEngine.iOS.Device.SetNoBackupFlag(_cachePath);
+#endif
     }
 
     private static string GetDefaultCachePath()
@@ -74,7 +86,13 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         gate.Wait();
         try
         {
-            return ReadVerifiedAsset(assetPath, out _);
+            byte[]? payload = ReadVerifiedAsset(assetPath, out _);
+            if (payload != null)
+            {
+                Touch(assetPath);
+            }
+
+            return payload;
         }
         finally
         {
@@ -86,16 +104,23 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
     {
         string assetPath = GetAssetPath(filename);
         SemaphoreSlim gate = GetEntryGate(assetPath);
+        byte[]? payload;
         await gate.WaitAsync();
         try
         {
-            (byte[]? payload, _) = await ReadVerifiedAssetAsync(assetPath);
-            return payload;
+            (payload, _) = await ReadVerifiedAssetAsync(assetPath);
+            if (payload != null)
+            {
+                Touch(assetPath);
+            }
         }
         finally
         {
             gate.Release();
         }
+
+        await TrimDiskCacheAsync();
+        return payload;
     }
     private static void SaveAssetCore(string assetPath, byte[] data, string etag)
     {
@@ -136,6 +161,8 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         {
             gate.Release();
         }
+
+        ScheduleDiskTrim();
     }
 
     public async UniTask SaveAssetAsync(string filename, byte[] data, string etag)
@@ -161,6 +188,8 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         {
             gate.Release();
         }
+
+        await TrimDiskCacheAsync();
     }
 
     private static async UniTask SaveAssetCoreAsync(string assetPath, byte[] data, string etag)
@@ -194,6 +223,7 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
                 return null;
             }
 
+            Touch(assetPath);
             return manifest.ETag;
         }
         finally
@@ -215,6 +245,7 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
                 return null;
             }
 
+            Touch(assetPath);
             return manifest.ETag;
         }
         finally
@@ -271,7 +302,134 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
     private SemaphoreSlim GetEntryGate(string assetPath) =>
         _entryGates.GetOrAdd(assetPath, _ => new SemaphoreSlim(1, 1));
 
-    private static string GetManifestPath(string assetPath) => assetPath + ".entry";
+    private static string GetManifestPath(string assetPath) => assetPath + ManifestSuffix;
+
+    private async UniTask TrimDiskCacheAsync()
+    {
+        long nowUtcTicks = DateTime.UtcNow.Ticks;
+        if (nowUtcTicks < Interlocked.Read(ref _nextDiskMaintenanceUtcTicks))
+        {
+            return;
+        }
+
+        await UniTask.RunOnThreadPool(TryTrimDiskCache);
+    }
+
+    private void ScheduleDiskTrim()
+    {
+        if (_operations == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _operations.Run(
+                "persistent_asset_cache_trim",
+                _ => UniTask.RunOnThreadPool(TryTrimDiskCache));
+        }
+        catch (ObjectDisposedException)
+        {
+            // Disk trimming is maintenance; a cache save remains valid during teardown.
+        }
+    }
+
+    private void TryTrimDiskCache()
+    {
+        long nowUtcTicks = DateTime.UtcNow.Ticks;
+        if (nowUtcTicks < Interlocked.Read(ref _nextDiskMaintenanceUtcTicks) ||
+            !_diskMaintenanceGate.Wait(0))
+        {
+            return;
+        }
+
+        try
+        {
+            nowUtcTicks = DateTime.UtcNow.Ticks;
+            if (nowUtcTicks < Interlocked.Read(ref _nextDiskMaintenanceUtcTicks))
+            {
+                return;
+            }
+
+            Interlocked.Exchange(
+                ref _nextDiskMaintenanceUtcTicks,
+                nowUtcTicks + DiskMaintenanceIntervalTicks);
+            var entries = new System.Collections.Generic.List<(string AssetPath, string ManifestPath, long Size, DateTime AccessUtc)>();
+            long totalBytes = 0;
+            foreach (string manifestPath in Directory.EnumerateFiles(
+                         _cachePath,
+                         "*" + ManifestSuffix,
+                         SearchOption.AllDirectories))
+            {
+                string assetPath = manifestPath[..^ManifestSuffix.Length];
+                if (!File.Exists(assetPath))
+                {
+                    File.Delete(manifestPath);
+                    continue;
+                }
+
+                long size = new FileInfo(assetPath).Length + new FileInfo(manifestPath).Length;
+                totalBytes += size;
+                entries.Add((assetPath, manifestPath, size, File.GetLastAccessTimeUtc(assetPath)));
+            }
+
+            if (totalBytes <= ProjectRuntimeContracts.AssetStreaming.PersistentAssetCacheCapacityBytes)
+            {
+                return;
+            }
+
+            entries.Sort(static (left, right) => left.AccessUtc.CompareTo(right.AccessUtc));
+            foreach ((string assetPath, string manifestPath, long size, _) in entries)
+            {
+                if (totalBytes <= ProjectRuntimeContracts.AssetStreaming.PersistentAssetCacheCapacityBytes)
+                {
+                    break;
+                }
+
+                SemaphoreSlim entryGate = GetEntryGate(assetPath);
+                if (!entryGate.Wait(0))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (!File.Exists(assetPath) || !File.Exists(manifestPath))
+                    {
+                        continue;
+                    }
+
+                    File.Delete(assetPath);
+                    File.Delete(manifestPath);
+                    totalBytes -= size;
+                }
+                finally
+                {
+                    entryGate.Release();
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Debug.LogWarning($"[PersistentAssetCache] Disk-cache trim failed: {exception.Message}");
+        }
+        finally
+        {
+            _diskMaintenanceGate.Release();
+        }
+    }
+
+    private static void Touch(string assetPath)
+    {
+        try
+        {
+            File.SetLastAccessTimeUtc(assetPath, DateTime.UtcNow);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Access timestamps are only an eviction hint.
+        }
+    }
 
     private static byte[]? ReadVerifiedAsset(
         string assetPath,

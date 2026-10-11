@@ -40,7 +40,7 @@ internal static class DummyCellConfigurationUtilities
         }
 
         pack.Sort();
-        return [pack.ToArray()];
+        return new[] { pack.ToArray() };
     }
 
     public static CellConfigurationPacket[] CreateCellConfigurations()

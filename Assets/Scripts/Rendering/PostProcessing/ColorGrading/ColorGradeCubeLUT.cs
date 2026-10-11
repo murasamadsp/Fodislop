@@ -67,7 +67,7 @@ public sealed class ColorGradeCubeLUT : IDisposable
                 }
 
                 string[] tokens = line.Split(
-                    [' ', '\t'],
+                    new[] { ' ', '\t' },
                     StringSplitOptions.RemoveEmptyEntries);
                 switch (tokens[0].ToUpperInvariant())
                 {

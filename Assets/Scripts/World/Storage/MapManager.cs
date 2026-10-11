@@ -142,7 +142,21 @@ namespace Kern.World
             }
         }
 
-        protected void OnLowMemory()
+        // Unity не шлёт компонентам сообщение OnLowMemory: предупреждение ОС
+        // приходит только событием Application.lowMemory. Без подписки метод
+        // ниже не вызывался ни разу, и грязные чанки оставались в памяти до
+        // убийства процесса — вместе с несохранённым миром.
+        protected void OnEnable()
+        {
+            Application.lowMemory += OnLowMemory;
+        }
+
+        protected void OnDisable()
+        {
+            Application.lowMemory -= OnLowMemory;
+        }
+
+        private void OnLowMemory()
         {
             if (_hasWorldStorage && _worldStorage != null)
             {

@@ -9,7 +9,7 @@ namespace Kern.UI;
 // Чистый сервис контейнера: ни рендера, ни transform (docs/architecture/SCENE_STANDARD.md §1).
 public sealed class UIInputManager
 {
-    private readonly List<VisualElement> _modalStack = [];
+    private readonly List<VisualElement> _modalStack = new();
     private int _escapeConsumedFrame = -1;
 
     public bool IsChatFocused { get; set; }

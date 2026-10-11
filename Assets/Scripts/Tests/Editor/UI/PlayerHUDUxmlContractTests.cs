@@ -10,8 +10,10 @@ namespace Kern.Tests.UI;
 public sealed class PlayerHUDUxmlContractTests
 {
     private static readonly string[] s_requiredHudElements =
-    [
+    new[] {
+
         "TopStatusPill",
+        "FPSCounterLabel",
         "PlayerStatusPanel",
         "NicknameLabel",
         "LevelLabel",
@@ -27,6 +29,16 @@ public sealed class PlayerHUDUxmlContractTests
         "BonusPanel",
         "AggressionButton",
         "AutoDigButton",
+        "MobileControls",
+        "MobileMovePad",
+        "MobileMoveKnob",
+        "MobileDigButton",
+        "MobileGeoButton",
+        "MobileHealButton",
+        "MobileBuildCyanButton",
+        "MobileBuildGrayButton",
+        "MobileBuildGreenButton",
+        "MobileBuildWhiteButton",
         "ProgrammatorButton",
         "ProgramRunButton",
         "RespawnButton",
@@ -34,10 +46,12 @@ public sealed class PlayerHUDUxmlContractTests
         "FaqButton",
         "SkillContainer",
         "MissionPanel",
-    ];
+
+    };
 
     private static readonly string[] s_requiredOverlayElements =
-    [
+    new[] {
+
         "WorldMapOverlay",
         "WorldMapWindow",
         "WorldMapImage",
@@ -47,7 +61,8 @@ public sealed class PlayerHUDUxmlContractTests
         "RespawnPopup",
         "BuildingsPopup",
         "FaqPopup",
-    ];
+
+    };
 
     [Test]
     public void PlayerHudResourceLoadsAndContainsHudRoot()

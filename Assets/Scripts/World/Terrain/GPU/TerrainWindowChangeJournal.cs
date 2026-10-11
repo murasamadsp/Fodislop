@@ -22,10 +22,10 @@ internal sealed class TerrainWindowChangeJournal
 {
     private readonly TerrainDirtyTracker _dirty = new();
     private readonly DirtyRectSet _publishedChangedRegions = new();
-    private HashSet<CellType> _pendingTextureCellTypes = [];
-    private HashSet<CellType> _buildTextureCellTypes = [];
-    private List<RectInt> _changedRegions = [];
-    private List<RectInt> _buildChangedRegions = [];
+    private HashSet<CellType> _pendingTextureCellTypes = new();
+    private HashSet<CellType> _buildTextureCellTypes = new();
+    private List<RectInt> _changedRegions = new();
+    private List<RectInt> _buildChangedRegions = new();
     private long _oldestChangeTimestamp;
     private bool? _requestedDistortion;
     private TerrainDistortionStyle? _requestedDistortionStyle;

@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Kern.UI.Controls;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Shared.Packets;
@@ -132,12 +133,12 @@ public static class ClickContextResolver
     {
         if (root == null)
         {
-            return [];
+            return Array.Empty<StringPairPacket>();
         }
 
-        List<StringPairPacket> result = [];
+        List<StringPairPacket> result = new();
         CollectRecursive(root, result);
-        return [.. result];
+        return result.ToArray();
     }
 
     private static void CollectRecursive(VisualElement element, List<StringPairPacket> result)

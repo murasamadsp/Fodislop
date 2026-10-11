@@ -1,0 +1,1963 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Color pipeline verification</title><style>body{font:15px system-ui;margin:32px;background:#15171a;color:#e5e8ed}table{border-collapse:collapse;width:100%}td{border:1px solid #555;padding:8px;vertical-align:top}pre{white-space:pre-wrap;overflow-wrap:anywhere}td:first-child{width:35%;overflow-wrap:anywhere}</style><h1>Проверка цветового пайплайна — 09.10.2026</h1>
+<p>Обнаружен переход настройки проекта из Linear в Gamma. Через PlayerSettings API восстановлены Linear и allowHDRDisplaySupport. useHDRDisplay остаётся выключенным; переключением вывода управляет runtime preference. GUID и прочие пользовательские настройки сохранены.</p>
+<p>Unity 6000.7.0b4, Metal. Оригинальный GUI Editor не управлялся. Headless-прогоны выполнены последовательно в изолированной копии текущего проекта. Полные XML: Logs/Diagnostics/Tests/20261009-color-pipeline.</p>
+<h2>Повторные производственные GPU-проверки</h2><p>Анимация атласа, лава и кайма: 3 Passed. Исправлены адресные вершины тестового меша и захват через настоящую URP-камеру. Поверхность: Passed, реальные SurfaceSceneRenderer meshes, Renderer2D, native world grid, volume Neutral, scene HDR peak 2.60351563. Средняя яркость статической сцены Neutral=0.02227784, None=0.02134341; солнечный максимум не используется как единственное доказательство кривой.</p>
+<p>MainGame_WorldBloomImage: Passed. Реальный World Surface REDROCK, материалы и транспорт, scene/bloom/output readbacks. Вход радианса до bloom peak=1372; bloom сохраняет alpha. Независимая численная Neutral-кривая проверяет однократную экспозицию +1 stop: scene=0.143188477 / 0.286376953, output=0.2722168 / 0.4555664, погрешность не более 0.005. Яркие образцы для проверки кривой заменены на образцы ниже SDR clipping; прежние оба попадали в белый и не различали кривую.</p>
+<p>Сжатие яркости не исчезло: проверка численной кривой прошла. Потеря компрессии текстур также не обнаружена: импорт pixel art и runtime RGBA32 намеренно несжатые. Нативный Bloom в DefaultVolumeProfile имеет intensity=0, но нарушает строгий структурный тест профиля; причина пересвета этим не доказана.</p>
+<p>Общий прогон не зелёный. Полные результаты ниже относятся к прогону до последующих исправлений GPU-фикстур; повторные успешные проверки перечислены отдельно. 11 skipped — Explicit benchmark tests, один из них запущен отдельно и прошёл. Остальные явные performance benchmarks не запускались.</p><h2>EditMode</h2><p>{&#x27;total&#x27;: &#x27;2056&#x27;, &#x27;passed&#x27;: &#x27;2007&#x27;, &#x27;failed&#x27;: &#x27;49&#x27;, &#x27;skipped&#x27;: &#x27;0&#x27;}</p><table><tr><td>Kern.Tests.Core.ArchitectureHygieneTests.LightingEngine_MustRemainAFacade</td><td><pre>  LightingEngine is a facade; frame scheduling belongs in LightingUpdateCoordinator.
+  Expected: less than or equal to 600
+  But was:  616
+</pre></td></tr><tr><td>Kern.Tests.Core.ClientConfigDecompositionContractTests.RuntimeManager_DoesNotOwnPersistenceMigrationOrValidationImplementation</td><td><pre>  Expected: String containing &quot;_Repository.Save(Config&quot;
+  But was:  &quot;#nullable enable
+
+using System;
+using System.IO;
+using Kern.Core.Interfaces;
+using Kern.Rendering;
+using UnityEngine;
+using VContainer;
+
+namespace Kern.Core
+{
+    [DefaultExecutionOrder(-9000)]
+    public class ClientConfigManager : MonoBehaviour, IClientConfigManager
+    {
+        private const string ConfigFileName = &quot;client_config.json&quot;;
+        private const string ConfigDirectory = &quot;Config&quot;;
+
+        public ClientConfig Config { get; private set; } = null!;
+        public string ConfigFilePath =&gt; Repository.ConfigPath;
+        public GraphicsPreset SelectedGraphicsPreset =&gt; Config.GraphicsPreset;
+
+        private bool _initialized;
+        private ConfigSaveScheduler? _saveScheduler;
+        private ClientConfigRepository? _repository;
+        private ClientConfigValidator? _validator;
+
+        [Inject]
+        private GraphicsQualityProfile _graphicsQualityProfile = null!;
+
+        private string GetConfigPath()
+        {
+            return Path.Combine(Application.persistentDataPath, ConfigDirectory, ConfigFileName);
+        }
+
+        private ClientConfigRepository Repository =&gt;
+            _repository ??= new ClientConfigRepository(GetConfigPath());
+
+        private ClientConfigValidator Validator =&gt;
+            _validator ??= new ClientConfigValidator(_graphicsQualityProfile);
+
+        private ConfigSaveScheduler SaveScheduler =&gt;
+            _saveScheduler ??= new ConfigSaveScheduler(this);
+
+        public void EnsureInitialized()
+        {
+            if (_initialized)
+            {
+                return;
+            }
+
+            if (_graphicsQualityProfile == null)
+            {
+                throw new InvalidOperationException(
+                    &quot;[ClientConfigManager] GraphicsQualityProfile must be injected before loading client config.&quot;);
+            }
+
+            Load();
+            _initialized = true;
+        }
+
+        private void Start()
+        {
+            EnsureInitialized();
+        }
+
+        private void Update()
+        {
+            SaveScheduler.TryFlush(Time.unscaledTime);
+        }
+
+        private void OnApplicationQuit()
+        {
+            SaveScheduler.Flush();
+        }
+
+        // Свёрнутое приложение система вправе завершить без OnApplicationQuit.
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused)
+            {
+                SaveScheduler.Flush();
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Выход из Play Mode в редакторе OnApplicationQuit не вызывает.
+            // Без этого правка, сделанная в последнюю четверть секунды, не
+            // доехала бы до диска.
+            SaveScheduler.Flush();
+        }
+
+        public void Load()
+        {
+            ClientConfigLoader.Result result =
+                new ClientConfigLoader(Repository, _graphicsQualityProfile).LoadOrCreate();
+            Config = result.Config;
+            Debug.Log(
+                $&quot;[ClientConfigManager] Config {result.Outcome} (schema {result.SourceSchemaVersion}) &quot; +
+                $&quot;at {Repository.ConfigPath}; GraphicsPreset={Config.GraphicsPreset}&quot;);
+        }
+
+        public void SelectGraphicsPreset(GraphicsPreset preset)
+        {
+            // Неизвестное значение отвергает сам профиль: ступеней две, и
+            // «промежуточной» ступени, куда можно было бы перевести конфиг,
+            // больше нет.
+            Config.GraphicsPreset = preset;
+            Config.GraphicsQualitySettings = _graphicsQualityProfile.Get(preset);
+            Debug.Log($&quot;[ClientConfigManager] Selected graphics preset: {preset}&quot;);
+        }
+
+        public void UpdateSection&lt;TSection&gt;(
+            Func&lt;ClientConfig, TSection&gt; select,
+            Action&lt;TSection&gt; update)
+            where TSection : class, new()
+        {
+            if (select == null)
+            {
+                throw new ArgumentNullException(nameof(select));
+            }
+
+            if (update == null)
+            {
+                throw new ArgumentNullException(nameof(update));
+            }
+
+            update(select(Config));
+            Debug.Log($&quot;[ClientConfigManager] Updated section {typeof(TSection).Name}&quot;);
+            SaveDeferred();
+        }
+
+        public void UpdateAndSave(Action&lt;ClientConfig&gt; update)
+        {
+            if (update == null)
+            {
+                throw new ArgumentNullException(nameof(update));
+            }
+
+            update(Config);
+            Debug.Log(&quot;[ClientConfigManager] Updated config&quot;);
+            SaveDeferred();
+        }
+
+        public void UpdatePostProcessAndSave(Action&lt;ClientConfig&gt; update)
+        {
+            if (update == null)
+            {
+                throw new ArgumentNullException(nameof(update));
+            }
+
+            update(Config);
+            Debug.Log(&quot;[ClientConfigManager] Updated post-process settings&quot;);
+            SaveDeferred();
+        }
+
+        public void Save()
+        {
+            Validator.Validate(Config);
+            Repository.Save(Config, Repository.BackupPath);
+            Debug.Log($&quot;[ClientConfigManager] Saved config directly to {Repository.ConfigPath}&quot;);
+        }
+
+        public void SaveDeferred()
+        {
+            // Проверка немедленная, откладывается только диск. Иначе неверное
+            // значение всплывало бы исключением на выходе из игры — позже
+            // правки, которая его внесла, и без всякой связи с ней.
+            Validator.Validate(Config);
+            SaveScheduler.Queue();
+            Debug.Log(&quot;[ClientConfigManager] Queued deferred config save&quot;);
+        }
+    }
+}
+&quot;
+</pre></td></tr><tr><td>Kern.Tests.Core.ClientConfigRepositoryTests.Load_MissingHDRSwitchFlag_StillRejectsIncompleteCurrentSchema</td><td><pre>  Expected: &lt;System.IO.InvalidDataException&gt;
+  But was:  null
+</pre></td></tr><tr><td>Kern.Tests.Core.ClientConfigRepositoryTests.Load_RenamedHDRSwitchFlag_PreservesSavedValue(False)</td><td><pre>  Expected: String containing &quot;&quot;HdrSwitchPending&quot;&quot;
+  But was:  &quot;{
+    &quot;SchemaVersion&quot;: 40,
+    &quot;Audio&quot;: {
+        &quot;MasterVolume&quot;: 1.0,
+        &quot;SfxVolume&quot;: 1.0,
+        &quot;MusicVolume&quot;: 0.5,
+        &quot;AmbienceVolume&quot;: 0.699999988079071,
+        &quot;VoiceVolume&quot;: 1.0,
+        &quot;UIVolume&quot;: 1.0,
+        &quot;MuteInBackground&quot;: true
+    },
+    &quot;Display&quot;: {
+        &quot;ResolutionWidth&quot;: 0,
+        &quot;ResolutionHeight&quot;: 0,
+        &quot;RefreshRate&quot;: 0,
+        &quot;FullScreenMode&quot;: 1,
+        &quot;VSync&quot;: true,
+        &quot;HDREnabled&quot;: true,
+        &quot;HDRSwitchPending&quot;: false,
+        &quot;TargetFrameRate&quot;: -1,
+        &quot;PixelSampling&quot;: 0,
+        &quot;PaperWhiteNits&quot;: 350.0,
+        &quot;PeakBrightnessNits&quot;: 1300.0,
+        &quot;PeakBrightnessFromDisplay&quot;: true
+    },
+    &quot;Interface&quot;: {
+        &quot;UIScale&quot;: 1.0,
+        &quot;Language&quot;: &quot;ru&quot;,
+        &quot;ControlScheme&quot;: 0,
+        &quot;AutoLogin&quot;: false,
+        &quot;OnboardingDone&quot;: false,
+        &quot;KeyDig&quot;: &quot;Space&quot;,
+        &quot;KeyAutoDig&quot;: &quot;E&quot;,
+        &quot;KeyAggression&quot;: &quot;L&quot;,
+        &quot;KeyGeo&quot;: &quot;G&quot;,
+        &quot;KeyHeal&quot;: &quot;V&quot;,
+        &quot;KeyBuildCyan&quot;: &quot;Y&quot;,
+        &quot;KeyBuildGray&quot;: &quot;H&quot;,
+        &quot;KeyBuildGreen&quot;: &quot;F&quot;,
+        &quot;KeyBuildWhite&quot;: &quot;J&quot;,
+        &quot;HasHudPanelPosition&quot;: false,
+        &quot;HudPanelX&quot;: 0.0,
+        &quot;HudPanelY&quot;: 0.0
+    },
+    &quot;Connection&quot;: {
+        &quot;UseDummyConnection&quot;: false,
+        &quot;ServerHost&quot;: &quot;127.0.0.1&quot;,
+        &quot;ServerPort&quot;: 4242
+    },
+    &quot;Terrain&quot;: {
+        &quot;FlowScale&quot;: {
+            &quot;x&quot;: 12.0,
+            &quot;y&quot;: 10.0
+        },
+        &quot;ShimmerSpeedScale&quot;: 0.05000000074505806,
+        &quot;BlinkingSpeedScale&quot;: 0.5,
+        &quot;ShimmerColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;EnableDistortion&quot;: true,
+        &quot;DistortionStyle&quot;: 1,
+        &quot;EnableRim&quot;: true,
+        &quot;TransitGlowColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;TransitGlowStrength&quot;: 0.3499999940395355,
+        &quot;PerspectiveGlowColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;PerspectiveGlowStrength&quot;: 0.11999999731779099,
+        &quot;SurfaceOccupancy&quot;: 1.0
+    },
+    &quot;Effects&quot;: {
+        &quot;BloomEnabled&quot;: false,
+        &quot;VignetteEnabled&quot;: false,
+        &quot;EigengrauEnabled&quot;: false
+    },
+    &quot;GraphicsPreset&quot;: 0,
+    &quot;GraphicsQualitySettings&quot;: {
+        &quot;LightingMinimumPixelsPerCell&quot;: 0,
+        &quot;LightingMaximumTextureDimension&quot;: 0,
+        &quot;LightingMaximumLightCount&quot;: 0,
+        &quot;LightingCascadeAtlasLimit&quot;: 0,
+        &quot;RenderScale&quot;: 0.0,
+        &quot;AntiAliasing&quot;: 0,
+        &quot;LightingQuality&quot;: 0
+    }
+}&quot;
+</pre></td></tr><tr><td>Kern.Tests.Core.ClientConfigRepositoryTests.Load_RenamedHDRSwitchFlag_PreservesSavedValue(True)</td><td><pre>  Expected: String containing &quot;&quot;HdrSwitchPending&quot;&quot;
+  But was:  &quot;{
+    &quot;SchemaVersion&quot;: 40,
+    &quot;Audio&quot;: {
+        &quot;MasterVolume&quot;: 1.0,
+        &quot;SfxVolume&quot;: 1.0,
+        &quot;MusicVolume&quot;: 0.5,
+        &quot;AmbienceVolume&quot;: 0.699999988079071,
+        &quot;VoiceVolume&quot;: 1.0,
+        &quot;UIVolume&quot;: 1.0,
+        &quot;MuteInBackground&quot;: true
+    },
+    &quot;Display&quot;: {
+        &quot;ResolutionWidth&quot;: 0,
+        &quot;ResolutionHeight&quot;: 0,
+        &quot;RefreshRate&quot;: 0,
+        &quot;FullScreenMode&quot;: 1,
+        &quot;VSync&quot;: true,
+        &quot;HDREnabled&quot;: true,
+        &quot;HDRSwitchPending&quot;: true,
+        &quot;TargetFrameRate&quot;: -1,
+        &quot;PixelSampling&quot;: 0,
+        &quot;PaperWhiteNits&quot;: 350.0,
+        &quot;PeakBrightnessNits&quot;: 1300.0,
+        &quot;PeakBrightnessFromDisplay&quot;: true
+    },
+    &quot;Interface&quot;: {
+        &quot;UIScale&quot;: 1.0,
+        &quot;Language&quot;: &quot;ru&quot;,
+        &quot;ControlScheme&quot;: 0,
+        &quot;AutoLogin&quot;: false,
+        &quot;OnboardingDone&quot;: false,
+        &quot;KeyDig&quot;: &quot;Space&quot;,
+        &quot;KeyAutoDig&quot;: &quot;E&quot;,
+        &quot;KeyAggression&quot;: &quot;L&quot;,
+        &quot;KeyGeo&quot;: &quot;G&quot;,
+        &quot;KeyHeal&quot;: &quot;V&quot;,
+        &quot;KeyBuildCyan&quot;: &quot;Y&quot;,
+        &quot;KeyBuildGray&quot;: &quot;H&quot;,
+        &quot;KeyBuildGreen&quot;: &quot;F&quot;,
+        &quot;KeyBuildWhite&quot;: &quot;J&quot;,
+        &quot;HasHudPanelPosition&quot;: false,
+        &quot;HudPanelX&quot;: 0.0,
+        &quot;HudPanelY&quot;: 0.0
+    },
+    &quot;Connection&quot;: {
+        &quot;UseDummyConnection&quot;: false,
+        &quot;ServerHost&quot;: &quot;127.0.0.1&quot;,
+        &quot;ServerPort&quot;: 4242
+    },
+    &quot;Terrain&quot;: {
+        &quot;FlowScale&quot;: {
+            &quot;x&quot;: 12.0,
+            &quot;y&quot;: 10.0
+        },
+        &quot;ShimmerSpeedScale&quot;: 0.05000000074505806,
+        &quot;BlinkingSpeedScale&quot;: 0.5,
+        &quot;ShimmerColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;EnableDistortion&quot;: true,
+        &quot;DistortionStyle&quot;: 1,
+        &quot;EnableRim&quot;: true,
+        &quot;TransitGlowColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;TransitGlowStrength&quot;: 0.3499999940395355,
+        &quot;PerspectiveGlowColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;PerspectiveGlowStrength&quot;: 0.11999999731779099,
+        &quot;SurfaceOccupancy&quot;: 1.0
+    },
+    &quot;Effects&quot;: {
+        &quot;BloomEnabled&quot;: false,
+        &quot;VignetteEnabled&quot;: false,
+        &quot;EigengrauEnabled&quot;: false
+    },
+    &quot;GraphicsPreset&quot;: 0,
+    &quot;GraphicsQualitySettings&quot;: {
+        &quot;LightingMinimumPixelsPerCell&quot;: 0,
+        &quot;LightingMaximumTextureDimension&quot;: 0,
+        &quot;LightingMaximumLightCount&quot;: 0,
+        &quot;LightingCascadeAtlasLimit&quot;: 0,
+        &quot;RenderScale&quot;: 0.0,
+        &quot;AntiAliasing&quot;: 0,
+        &quot;LightingQuality&quot;: 0
+    }
+}&quot;
+</pre></td></tr><tr><td>Kern.Tests.Core.DisplayOutputProfileTests.AuthoredProfilesDoNotIntroduceASecondNativePostProcess(&quot;Assets/Settings/DefaultVolumeProfile.asset&quot;)</td><td><pre>  Assets/Settings/DefaultVolumeProfile.asset: Bloom; artistic effects belong to Kern, output tonemapping to Bootstrap.
+  Expected: False
+  But was:  True
+</pre></td></tr><tr><td>Kern.Tests.Core.InstallUpgradeTests.NewerConfigVersion_IsRejectedAndLeftUntouched</td><td><pre>System.IO.IOException : Map file &#x27;/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern_install_c960332709ce47fa917d16131fd5f5ab/install_test.map&#x27; uses unsupported format version 4; this client supports versions 0, 1, 2, and 3.</pre></td></tr><tr><td>Kern.Tests.Core.InstallUpgradeTests.OldConfigVersion_MigratesSettingsAndKeepsBackup</td><td><pre>System.ArgumentOutOfRangeException : Unknown graphics preset.
+Parameter name: preset
+Actual value was 5.</pre></td></tr><tr><td>Kern.Tests.Core.InstallUpgradeTests.OldMapVersion_DropsAndRegenerates</td><td><pre>  Expected: &lt;empty&gt;
+  But was:  &lt; &quot;/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern_install_dfd9c3301ee24151bbdbdbbff2048cb5/install_test.map.v0.backup&quot;, &quot;/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern_install_dfd9c3301ee24151bbdbdbbff2048cb5/install_test.map.v1.backup&quot; &gt;
+</pre></td></tr><tr><td>Kern.Tests.Core.InstallUpgradeTests.PreviousConfigVersion_MigratesDistortionStyleAndKeepsBackup</td><td><pre>  Expected: not String containing &quot;DistortionStyle&quot;
+  But was:  &quot;{
+    &quot;SchemaVersion&quot;: 39,
+    &quot;Audio&quot;: {
+        &quot;MasterVolume&quot;: 1.0,
+        &quot;SfxVolume&quot;: 1.0,
+        &quot;MusicVolume&quot;: 0.5,
+        &quot;AmbienceVolume&quot;: 0.699999988079071,
+        &quot;VoiceVolume&quot;: 1.0,
+        &quot;UIVolume&quot;: 1.0,
+        &quot;MuteInBackground&quot;: true
+    },
+    &quot;Display&quot;: {
+        &quot;ResolutionWidth&quot;: 0,
+        &quot;ResolutionHeight&quot;: 0,
+        &quot;RefreshRate&quot;: 0,
+        &quot;FullScreenMode&quot;: 1,
+        &quot;VSync&quot;: true,
+        &quot;HDREnabled&quot;: true,
+        &quot;HDRSwitchPending&quot;: false,
+        &quot;TargetFrameRate&quot;: -1,
+        &quot;PixelSampling&quot;: 0,
+        &quot;PaperWhiteNits&quot;: 350.0,
+        &quot;PeakBrightnessNits&quot;: 1300.0,
+        &quot;PeakBrightnessFromDisplay&quot;: true
+    },
+    &quot;Interface&quot;: {
+        &quot;UIScale&quot;: 1.350000023841858,
+        &quot;Language&quot;: &quot;ru&quot;,
+        &quot;ControlScheme&quot;: 0,
+        &quot;AutoLogin&quot;: false,
+        &quot;OnboardingDone&quot;: false,
+        &quot;KeyDig&quot;: &quot;Space&quot;,
+        &quot;KeyAutoDig&quot;: &quot;E&quot;,
+        &quot;KeyAggression&quot;: &quot;L&quot;,
+        &quot;KeyGeo&quot;: &quot;G&quot;,
+        &quot;KeyHeal&quot;: &quot;V&quot;,
+        &quot;KeyBuildCyan&quot;: &quot;Y&quot;,
+        &quot;KeyBuildGray&quot;: &quot;H&quot;,
+        &quot;KeyBuildGreen&quot;: &quot;F&quot;,
+        &quot;KeyBuildWhite&quot;: &quot;J&quot;,
+        &quot;HasHudPanelPosition&quot;: false,
+        &quot;HudPanelX&quot;: 0.0,
+        &quot;HudPanelY&quot;: 0.0
+    },
+    &quot;Connection&quot;: {
+        &quot;UseDummyConnection&quot;: false,
+        &quot;ServerHost&quot;: &quot;127.0.0.1&quot;,
+        &quot;ServerPort&quot;: 8090
+    },
+    &quot;Terrain&quot;: {
+        &quot;FlowScale&quot;: {
+            &quot;x&quot;: 12.0,
+            &quot;y&quot;: 10.0
+        },
+        &quot;ShimmerSpeedScale&quot;: 0.05000000074505806,
+        &quot;BlinkingSpeedScale&quot;: 0.5,
+        &quot;ShimmerColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;EnableDistortion&quot;: true,
+        &quot;DistortionStyle&quot;: 1,
+        &quot;EnableRim&quot;: true,
+        &quot;TransitGlowColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;TransitGlowStrength&quot;: 0.3499999940395355,
+        &quot;PerspectiveGlowColor&quot;: {
+            &quot;r&quot;: 1.0,
+            &quot;g&quot;: 1.0,
+            &quot;b&quot;: 1.0,
+            &quot;a&quot;: 1.0
+        },
+        &quot;PerspectiveGlowStrength&quot;: 0.11999999731779099,
+        &quot;SurfaceOccupancy&quot;: 1.0
+    },
+    &quot;Effects&quot;: {
+        &quot;BloomEnabled&quot;: false,
+        &quot;VignetteEnabled&quot;: false,
+        &quot;EigengrauEnabled&quot;: false
+    },
+    &quot;GraphicsPreset&quot;: 5,
+    &quot;GraphicsQualitySettings&quot;: {
+        &quot;LightingMinimumPixelsPerCell&quot;: 2,
+        &quot;LightingMaximumTextureDimension&quot;: 8192,
+        &quot;LightingMaximumLightCount&quot;: 512,
+        &quot;LightingCascadeAtlasLimit&quot;: 1280,
+        &quot;RenderScale&quot;: 1.0,
+        &quot;AntiAliasing&quot;: 0,
+        &quot;LightingQuality&quot;: 0
+    }
+}&quot;
+</pre></td></tr><tr><td>Kern.Tests.Game.WorldEntityGPUDrivenRenderingTests.GPUDrivenRendererInitializesAndDisposesCleanly</td><td><pre>Unhandled log message: &#x27;[Error] WorldEntityQuadInstanceMesh: Destroy may not be called from edit mode! Use DestroyImmediate instead.
+Destroying an object in edit mode destroys it permanently&#x27;. Use UnityEngine.TestTools.LogAssert.Expect</pre></td></tr><tr><td>Kern.Tests.Networking.DummyMovementResponderTests.AdjacentMove_UpdatesStateAndSchedulesSnapshot</td><td><pre>  Expected is &lt;System.String[1]&gt;, actual is &lt;System.Collections.Generic.List`1[System.String]&gt; with 1 elements
+  Values differ at index [0]
+  Expected string length 24 but was 19. Strings differ at index 11.
+  Expected: &quot;dummy_move_wait_for_cell&quot;
+  But was:  &quot;dummy_move_prefetch&quot;
+  ----------------------^
+</pre></td></tr><tr><td>Kern.Tests.Networking.DummyWorldSimulationStateTests.FailedInitialization_CanBeRetried</td><td><pre>Expected log did not appear: [Exception] Regex: injected failure</pre></td></tr><tr><td>Kern.Tests.Networking.InventoryProcessorTests.BeginBatch_EndBatch_CoalescesMultipleInventoryChangesIntoSingleOnItemsChanged</td><td><pre>Unhandled log message: &#x27;[Exception] InvalidOperationException: injected failure&#x27;. Use UnityEngine.TestTools.LogAssert.Expect</pre></td></tr><tr><td>Kern.Tests.UI.PlayerHUDBonusControllerTests.ClaimButton_SendsDailyBonusClickPacket</td><td><pre>  Expected: 1
+  But was:  0
+</pre></td></tr><tr><td>Kern.Tests.UI.PlayerStatsModelTests.InformativeEvents_FireWithAccurateParameters</td><td><pre>  Expected: (5000, 42)
+  But was:  (5000, 42)
+</pre></td></tr><tr><td>Kern.Tests.UI.WorldLabelChatStyleTests.WorldLabels_PositionsChatBubbleByBottomCenterAndNicknameByTopLeft</td><td><pre>  Expected: String containing &quot;Vector3 offset = kind == WorldLabelKind.ChatBubble&quot;
+  But was:  &quot;#nullable enable
+
+using System;
+using System.Collections.Generic;
+using Kern.Core;
+using Kern.Core.Interfaces;
+using Unity.Profiling;
+using UnityEngine;
+using UnityEngine.UIElements;
+using VContainer.Unity;
+
+namespace Kern.UI;
+
+public sealed class WorldLabels : IWorldLabels, IPostLateTickable, IDisposable
+{
+    private const string TAG = &quot;[WorldLabels]&quot;;
+
+    private static readonly ProfilerMarker s_postLateTickMarker =
+        new(&quot;Kern.WorldLabels.PostLateTick&quot;);
+
+    private readonly List&lt;Entry&gt; _entries = new();
+    private readonly UIDocument _document;
+    private readonly IGameplayCamera _camera;
+    private VisualElement? _root;
+    private VisualElement? _container;
+    private bool _zoomErrorLogged;
+
+    public WorldLabels(UIDocument document, IGameplayCamera camera)
+    {
+        _document = document;
+        _camera = camera;
+    }
+
+    public IWorldLabel Create(WorldLabelKind kind)
+    {
+        if (_root == null)
+        {
+            VisualTreeAsset template = Resources.Load&lt;VisualTreeAsset&gt;(&quot;UI/Gameplay/WorldLabels&quot;)
+                ?? throw new InvalidOperationException(&quot;Missing UI/Gameplay/WorldLabels.&quot;);
+            _root = template.CloneTree();
+            _root.AddToClassList(&quot;world-labels&quot;);
+            _root.pickingMode = PickingMode.Ignore;
+            _document.rootVisualElement.Insert(0, _root);
+            _container = _root.Q(&quot;WorldLabels&quot;);
+        }
+
+        // Labels are a dynamic collection, not static screen structure.
+        var label = new Label { pickingMode = PickingMode.Ignore, enableRichText = false };
+        label.AddToClassList(kind == WorldLabelKind.ChatBubble
+            ? &quot;world-label-chat&quot;
+            : &quot;world-label-name&quot;);
+        _container!.Add(label);
+        var entry = new Entry(this, label, kind);
+        _entries.Add(entry);
+        return entry;
+    }
+
+    // После всех LateUpdate, а не в LateTick: VContainer ставит LateTick перед
+    // ScriptRunBehaviourLateUpdate, а камера (CameraFollow) двигается и меняет
+    // зум именно там. Метка, посчитанная раньше камеры, бралась по кадру
+    // прошлого кадра: при движении отставала от робота, при зуме кегль
+    // запаздывал на кадр — ники «плавали» и меняли размер.
+    public void PostLateTick()
+    {
+        using var marker = s_postLateTickMarker.Auto();
+        if (!_document.enabled || _root?.panel == null)
+        {
+            return;
+        }
+
+        // Камера принадлежит Bootstrap и может быть уничтожена раньше этой сцены:
+        // порядок разрушения сцен при выходе и в тестах не гарантирован.
+        Camera? view = _camera.Camera;
+        if (view == null)
+        {
+            return;
+        }
+
+        // Кегль и бокс метки пересчитываются по зуму камеры: USS задаёт базу в
+        // пикселях панели, а панель от зума не зависит, и без пересчёта текст
+        // над роботом оставался бы прежних 12 px при любом отдалении.
+        if (!WorldLabelScale.TryFor(view.orthographicSize, out float scale))
+        {
+            // Камера без пригодного размера кадра — дефект, а не повод оставить
+            // метки прежнего кегля: молчаливая подмена размера скрыла бы его
+            // ровно тем же способом, каким он появился.
+            if (!_zoomErrorLogged)
+            {
+                _zoomErrorLogged = true;
+                Debug.LogError(
+                    $&quot;{TAG} Camera reports orthographicSize={view.orthographicSize}; &quot; +
+                    &quot;world label font size cannot be matched to the zoom.&quot;);
+            }
+
+            return;
+        }
+
+        foreach (Entry entry in _entries)
+        {
+            // Куллер робота скрывает никнейм, пока робот далеко от камеры.
+            // Такая метка не может стать видимой от перемещения самой камеры:
+            // робот должен сначала попасть в область камеры и включить её
+            // обратно. Не проецируем её мировую точку каждый кадр.
+            if (!entry.Visible)
+            {
+                entry.ApplyHidden();
+                continue;
+            }
+
+            entry.ApplyScale(scale);
+
+            Vector3 viewport = view.WorldToViewportPoint(entry.Position);
+            bool visible = viewport.z &gt; 0f &amp;&amp;
+                viewport.x &gt;= -0.15f &amp;&amp; viewport.x &lt;= 1.15f &amp;&amp;
+                viewport.y &gt;= -0.15f &amp;&amp; viewport.y &lt;= 1.15f;
+            if (!visible)
+            {
+                entry.ApplyHidden();
+                continue;
+            }
+
+            Vector2 panelPosition = RuntimePanelUtils.CameraTransformWorldToPanel(
+                _root.panel, entry.Position, view);
+            Vector2 local = _container!.WorldToLocal(panelPosition);
+            entry.ApplyVisible(new Vector3(local.x, local.y, 0f));
+        }
+    }
+
+    public void Dispose()
+    {
+        _entries.Clear();
+        _root?.RemoveFromHierarchy();
+        _root = null;
+        _container = null;
+    }
+
+    private sealed class Entry : IWorldLabel
+    {
+        private readonly WorldLabels _owner;
+        private readonly WorldLabelKind _kind;
+        private const float PositionApplyEpsilonPx = 0.5f;
+
+        // Зум квантуется пиксельной сеткой (PixelGrid.QuantizeOrthographicSize),
+        // поэтому у камеры лишь несколько дискретных значений и запись кегля
+        // случается на соседних шагах зума, а не каждый кадр. Порог оставлен
+        // тем же приёмом, что и у позиции: дробная подстройка кегля ни на что
+        // не влияет, а стиль без нужды помечается грязным.
+        private const float ScaleApplyEpsilon = 0.002f;
+        private const string OffscreenClass = &quot;world-label-offscreen&quot;;
+
+        public Label Label { get; }
+        public Vector3 Position { get; private set; }
+        public bool Visible { get; private set; } = true;
+
+        private Vector3 _lastAppliedPosition;
+        private bool _lastAppliedVisible;
+        private bool _hasApplied;
+
+        // База берётся из USS один раз, до первой записи: пока кегль не
+        // переопределён, resolvedStyle отдаёт ровно то, что задано стилями,
+        // и число 12 не дублируется в коде. Ноль означает «база ещё не
+        // разложена» — тогда запись откладывается до следующего кадра.
+        private float _baseFontSize;
+        private TextShadow _baseShadow;
+        private float _baseMaxWidth;
+        private float _basePaddingTop;
+        private float _basePaddingRight;
+        private float _basePaddingBottom;
+        private float _basePaddingLeft;
+        private float _baseBorderWidth;
+        private float _baseBorderRadius;
+        private float _lastScale = -1f;
+        private bool _sizeDirty;
+
+        public Entry(WorldLabels owner, Label label, WorldLabelKind kind)
+        {
+            _owner = owner;
+            Label = label;
+            _kind = kind;
+        }
+
+        public void SetText(string text) =&gt; Label.text = text;
+        public void SetPosition(Vector3 position) =&gt; Position = position;
+        public void SetVisible(bool visible) =&gt; Visible = visible;
+        public void SetOpacity(float opacity) =&gt; Label.style.opacity = Mathf.Clamp01(opacity);
+
+        // Перевод метки в постоянный мировой размер: кегль, а с ним поля,
+        // рамка, скругление и предел ширины облака, умножаются на масштаб зума.
+        // Один размер на все стороны снимается с первой грани: USS задаёт
+        // border-* и border-radius одним значением, иначе рамка разъехалась бы.
+        //
+        // Облаку нужны и поля: без их пересчёта на сильном приближении текст
+        // вылезал бы на рамку, а на отдалении облако состояло бы в основном из
+        // полей. Нику, у которого рамки нет, достаточно кегля и тени.
+        public void ApplyScale(float scale)
+        {
+            if (_baseFontSize &lt;= 0f &amp;&amp; !TryCaptureBase())
+            {
+                return;
+            }
+
+            if (_lastScale &gt; 0f &amp;&amp; Mathf.Abs(scale - _lastScale) &lt;= ScaleApplyEpsilon)
+            {
+                return;
+            }
+
+            Label.style.fontSize = _baseFontSize * scale;
+            if (_kind == WorldLabelKind.ChatBubble)
+            {
+                Label.style.maxWidth = _baseMaxWidth * scale;
+                Label.style.paddingTop = _basePaddingTop * scale;
+                Label.style.paddingRight = _basePaddingRight * scale;
+                Label.style.paddingBottom = _basePaddingBottom * scale;
+                Label.style.paddingLeft = _basePaddingLeft * scale;
+                Label.style.borderTopWidth = _baseBorderWidth * scale;
+                Label.style.borderRightWidth = _baseBorderWidth * scale;
+                Label.style.borderBottomWidth = _baseBorderWidth * scale;
+                Label.style.borderLeftWidth = _baseBorderWidth * scale;
+                Label.style.borderTopLeftRadius = _baseBorderRadius * scale;
+                Label.style.borderTopRightRadius = _baseBorderRadius * scale;
+                Label.style.borderBottomRightRadius = _baseBorderRadius * scale;
+                Label.style.borderBottomLeftRadius = _baseBorderRadius * scale;
+            }
+            else
+            {
+                TextShadow shadow = _baseShadow;
+                shadow.offset *= scale;
+                Label.style.textShadow = shadow;
+            }
+
+            _lastScale = scale;
+
+            // Смена кегля меняет бокс, а якорь облака задан его размером:
+            // пересчёт смещения обязан повториться на кадре, где раскладка уже
+            // отдаёт новые width/height. Пока этого не случилось, смещение
+            // записано по старому размеру, и ApplyVisible его не запоминает.
+            _sizeDirty = true;
+        }
+
+        private bool TryCaptureBase()
+        {
+            IResolvedStyle style = Label.resolvedStyle;
+            if (!IsResolved(style.fontSize) || style.fontSize &lt;= 0f)
+            {
+                return false;
+            }
+
+            // maxWidth — единственное разрешённое значение метки, приходящее не
+            // как float, поэтому снимается через .value.
+            float maxWidth = style.maxWidth.value;
+            if (_kind == WorldLabelKind.ChatBubble &amp;&amp;
+                (!IsResolved(maxWidth) || maxWidth &lt;= 0f ||
+                 !IsResolved(style.paddingTop) || !IsResolved(style.paddingRight) ||
+                 !IsResolved(style.paddingBottom) || !IsResolved(style.paddingLeft) ||
+                 !IsResolved(style.borderLeftWidth) || !IsResolved(style.borderTopLeftRadius)))
+            {
+                return false;
+            }
+
+            // База записывается целиком или никак: частичная запись обнулила бы
+            // поля облака, и рамка схлопнулась бы в линию на первый же кадр.
+            _baseFontSize = style.fontSize;
+            _baseShadow = style.textShadow;
+            if (_kind == WorldLabelKind.ChatBubble)
+            {
+                _baseMaxWidth = maxWidth;
+                _basePaddingTop = style.paddingTop;
+                _basePaddingRight = style.paddingRight;
+                _basePaddingBottom = style.paddingBottom;
+                _basePaddingLeft = style.paddingLeft;
+                _baseBorderWidth = style.borderLeftWidth;
+                _baseBorderRadius = style.borderTopLeftRadius;
+            }
+
+            return true;
+        }
+
+        private static bool IsResolved(float value) =&gt;
+            !float.IsNaN(value) &amp;&amp; !float.IsInfinity(value);
+
+        // Запись в style.translate помечает стили элемента грязными без
+        // сравнения значений, поэтому безусловная запись каждый кадр держала
+        // всю панель в состоянии style-dirty: дерево пересчитывало стили,
+        // раскладку и перекраску, даже когда метки стояли на месте. Пишем
+        // только при смене видимости или сдвиге сверх половины пикселя —
+        // тем же приёмом, что MissionArrowUI.
+        public void ApplyVisible(Vector3 position)
+        {
+            bool visibilityChanged = !_hasApplied || !_lastAppliedVisible;
+            bool positionChanged = !_hasApplied ||
+                (position - _lastAppliedPosition).sqrMagnitude &gt;
+                    PositionApplyEpsilonPx * PositionApplyEpsilonPx;
+            if (!visibilityChanged &amp;&amp; !positionChanged)
+            {
+                return;
+            }
+
+            // Показываем независимо от того, посчитан ли размер. Раньше здесь
+            // стоял выход по TryResolveSize, и это был дедлок: скрытие идёт
+            // через visibility, размер доступен всегда, но на первом кадре он
+            // ещё NaN, ранний выход оставлял метку скрытой, и снять скрытие
+            // мог только ApplyVisible — то есть уже никогда. С переиспользованным
+            // пузырём из пула сообщение переставало показываться навсегда.
+            SetOffscreen(false);
+            _lastAppliedVisible = true;
+            _hasApplied = true;
+
+            if (!TryResolveSize(out Vector2 size))
+            {
+                // Смещение не пишем, но и позицию не запоминаем: флаг
+                // positionChanged останется поднятым, и следующий кадр повторит
+                // попытку, как только раскладка посчитает размер.
+                return;
+            }
+
+            // translate двигает бокс целиком, поэтому угол привязки вычитается
+            // из его размера: облако висит нижним центром над роботом,
+            // никнейм — левым верхним углом от точки как есть.
+            Vector3 offset = _kind == WorldLabelKind.ChatBubble
+                ? new Vector3(position.x - (size.x * 0.5f), position.y - size.y)
+                : position;
+            Label.style.translate = new Translate(offset.x, offset.y);
+            if (_sizeDirty)
+            {
+                // Смещение только что посчитано по боксу прежнего кегля.
+                // Запоминать позицию нельзя: сдвига больше не будет, флаг
+                // positionChanged не поднимется, и якорь облака навсегда
+                // останется на старом размере. Следующий кадр повторяет
+                // пересчёт по уже разложенному боксу.
+                _sizeDirty = false;
+                return;
+            }
+
+            _lastAppliedPosition = position;
+        }
+
+        public void ApplyHidden()
+        {
+            if (_hasApplied &amp;&amp; !_lastAppliedVisible)
+            {
+                return;
+            }
+
+            SetOffscreen(true);
+            _lastAppliedVisible = false;
+            _hasApplied = true;
+        }
+
+        public void Dispose()
+        {
+            _owner._entries.Remove(this);
+            Label.RemoveFromHierarchy();
+        }
+
+        // Скрытие через visibility, а не через UIState.SetHidden с display:none.
+        // display:none выводит элемент из раскладки, ширина и высота становятся
+        // NaN, и посчитать нижний центр больше нечем. visibility:hidden элемент
+        // раскладывается, поэтому повторный показ всегда знает свой размер.
+        private void SetOffscreen(bool offscreen) =&gt;
+            Label.EnableInClassList(OffscreenClass, offscreen);
+
+        private bool TryResolveSize(out Vector2 size)
+        {
+            if (_kind != WorldLabelKind.ChatBubble)
+            {
+                size = Vector2.zero;
+                return true;
+            }
+
+            IResolvedStyle style = Label.resolvedStyle;
+            if (float.IsNaN(style.width) || float.IsNaN(style.height) ||
+                style.width &lt;= 0f || style.height &lt;= 0f)
+            {
+                size = Vector2.zero;
+                return false;
+            }
+
+            size = new Vector2(style.width, style.height);
+            return true;
+        }
+    }
+}
+&quot;
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileLayoutsMatchTheReferenceWithoutThrowing(1)</td><td><pre>  seed 1, iteration 41, cascade 1
+  Expected: 68
+  But was:  64
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileLayoutsMatchTheReferenceWithoutThrowing(7)</td><td><pre>  seed 7, iteration 81, cascade 0
+  Expected: 272
+  But was:  256
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileLayoutsMatchTheReferenceWithoutThrowing(42)</td><td><pre>  seed 42, iteration 62, cascade 1
+  Expected: 68
+  But was:  64
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileLayoutsMatchTheReferenceWithoutThrowing(1337)</td><td><pre>  seed 1337, iteration 64, cascade 3
+  Expected: 68
+  But was:  64
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileLayoutsMatchTheReferenceWithoutThrowing(90210)</td><td><pre>  seed 90210, iteration 46, cascade 0
+  Expected: 272
+  But was:  256
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileLayoutsMatchTheReferenceWithoutThrowing(2147483)</td><td><pre>  seed 2147483, iteration 1, cascade 1
+  Expected: 272
+  But was:  256
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileLayoutsMatchTheReferenceWithoutThrowing(8675309)</td><td><pre>  seed 8675309, iteration 16, cascade 5
+  Expected: 68
+  But was:  64
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileStepBudgetsNeverThrowAndStillMatchTheReference(7)</td><td><pre>  seed 7, iteration 996, cascade 3
+  Expected: 3622
+  But was:  3621
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.HostileStepBudgetsNeverThrowAndStillMatchTheReference(90210)</td><td><pre>  seed 90210, iteration 8, cascade 3
+  Expected: 6279
+  But was:  6278
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.SamplesMatchTheReferenceForEveryRandomWorld(7)</td><td><pre>  seed 7, iteration 996, cascade 3
+  Expected: 3622
+  But was:  3621
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.CascadeCostCalculatorFuzzTests.SamplesMatchTheReferenceForEveryRandomWorld(90210)</td><td><pre>  seed 90210, iteration 8, cascade 3
+  Expected: 6279
+  But was:  6278
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.TerrainLightingExchangeTests.FramePublicationRequiresContiguousSequenceAndActiveGeneration</td><td><pre>  Expected: &lt;System.InvalidOperationException&gt;
+  But was:  &lt;System.ArgumentException: Terrain frame has invalid generation, contributor, camera, or viewport.
+Parameter name: frame
+  at Kern.Core.Bootstrap.WorldLighting.TerrainLightingExchange.ValidateFrame (Kern.Core.Interfaces.WorldLighting.TerrainLightingFrameSnapshot frame) [0x00075] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/Core/Bootstrap/WorldLighting/TerrainLightingExchange.cs:244
+  at Kern.Core.Bootstrap.WorldLighting.TerrainLightingExchange.PublishTerrainFrame (Kern.Core.Interfaces.WorldLighting.TerrainLightingFrameSnapshot&amp; frame) [0x00000] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/Core/Bootstrap/WorldLighting/TerrainLightingExchange.cs:62
+  at Kern.Tests.World.Lighting.TerrainLightingExchangeTests+&lt;&gt;c__DisplayClass8_0.&lt;FramePublicationRequiresContiguousSequenceAndActiveGeneration&gt;b__0 () [0x00000] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/Tests/Editor/World/Lighting/TerrainLightingExchangeTests.cs:259
+  at NUnit.Framework.Assert.Throws (NUnit.Framework.Constraints.IResolveConstraint expression, NUnit.Framework.TestDelegate code, System.String message, System.Object[] args) [0x00043] in &lt;9a0a9db6872b48fda8359c19b63c1dbe&gt;:0 &gt;
+</pre></td></tr><tr><td>Kern.Tests.World.Lighting.TerrainLightingExchangeTests.FramePumpDoesNotAcknowledgeWhenLightingTickFails</td><td><pre>System.ArgumentException : Terrain frame has invalid generation, contributor, camera, or viewport.
+Parameter name: frame</pre></td></tr><tr><td>Kern.Tests.World.Lighting.TerrainLightingExchangeTests.FramePumpInvokesTickForEachReadyFrameAndPreservesHeldViewSnapshot</td><td><pre>System.ArgumentException : Terrain frame has invalid generation, contributor, camera, or viewport.
+Parameter name: frame</pre></td></tr><tr><td>Kern.Tests.World.Lighting.TerrainLightingExchangeTests.FramePumpLeavesDemandPendingWhenLightingIsDisabledOrBypassed</td><td><pre>System.ArgumentException : Terrain frame has invalid generation, contributor, camera, or viewport.
+Parameter name: frame</pre></td></tr><tr><td>Kern.Tests.World.Lighting.TerrainLightingExchangeTests.FramePumpSkipsAbsentAndAlreadyAcknowledgedSnapshots</td><td><pre>System.ArgumentException : Terrain frame has invalid generation, contributor, camera, or viewport.
+Parameter name: frame</pre></td></tr><tr><td>Kern.Tests.World.Lighting.TerrainLightingExchangeTests.FramePumpUsesExchangeWatermarkAfterWorldGenerationResetsSequence</td><td><pre>System.ArgumentException : Terrain frame has invalid generation, contributor, camera, or viewport.
+Parameter name: frame</pre></td></tr><tr><td>Kern.Tests.World.Lighting.TerrainLightingExchangeTests.FrameSequenceRestartsPerGenerationWithoutReplayingOldAcknowledgement</td><td><pre>System.ArgumentException : Terrain frame has invalid generation, contributor, camera, or viewport.
+Parameter name: frame</pre></td></tr><tr><td>Kern.Tests.World.Streaming.TerrainFramePlanSelectionTests.CameraViewportOutsideCommittedWindowIsNotClampedIntoLightingDemand</td><td><pre>  Expected: (x:90, y:-10, width:40, height:30)
+  But was:  (x:60, y:0, width:40, height:30)
+</pre></td></tr><tr><td>Kern.Tests.World.TerrainBuildPipelineWorkerTests.WorkerStep_ThrowsWhenBackgroundTypeWasNotResolvedOnMainThread</td><td><pre>  Expected: &lt;System.InvalidOperationException&gt;
+  But was:  &lt;System.AggregateException: One or more errors occurred. (Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;RedRock&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;RedRock&#x27; was not resolved before the cache was read.) (Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.) ---&gt; System.InvalidOperationException: Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+   --- End of inner exception stack trace ---
+  at System.Threading.Tasks.TaskReplicator.Run[TState] (System.Threading.Tasks.TaskReplicator+ReplicatableUserAction`1[TState] action, System.Threading.Tasks.ParallelOptions options, System.Boolean stopOnFirstFailure) [0x0005b] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.Parallel.ForWorker[TLocal] (System.Int32 fromInclusive, System.Int32 toExclusive, System.Threading.Tasks.ParallelOptions parallelOptions, System.Action`1[T] body, System.Action`2[T1,T2] bodyWithState, System.Func`4[T1,T2,T3,TResult] bodyWithLocal, System.Func`1[TResult] localInit, System.Action`1[T] localFinally) [0x00139] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel.ThrowSingleCancellationExceptionOrOtherException (System.Collections.ICollection exceptions, System.Threading.CancellationToken cancelToken, System.Exception otherException) [0x0000b] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.Parallel.ForWorker[TLocal] (System.Int32 fromInclusive, System.Int32 toExclusive, System.Threading.Tasks.ParallelOptions parallelOptions, System.Action`1[T] body, System.Action`2[T1,T2] bodyWithState, System.Func`4[T1,T2,T3,TResult] bodyWithLocal, System.Func`1[TResult] localInit, System.Action`1[T] localFinally) [0x00199] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.Parallel.For[TLocal] (System.Int32 fromInclusive, System.Int32 toExclusive, System.Func`1[TResult] localInit, System.Func`4[T1,T2,T3,TResult] body, System.Action`1[T] localFinally) [0x0002b] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillFull (Kern.World.Terrain.TerrainCellSources sources, System.Int32 minX, System.Int32 minY, System.Threading.CancellationToken cancellationToken) [0x0004c] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:76
+  at Kern.World.Terrain.TerrainCellBuilder.BuildFull (Kern.World.Terrain.TerrainCellSources sources, System.Int32 minX, System.Int32 minY, System.Threading.CancellationToken cancellationToken) [0x0002d] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellBuilder.cs:100
+  at Kern.World.Terrain.TerrainBuildPipeline.RunWindowStages (Kern.World.Terrain.TerrainCPUBuildRequest request, Kern.World.Terrain.TerrainCellSources&amp; sources, Kern.World.Terrain.TerrainCPUBuildResultBuilder result, System.Threading.CancellationToken cancellationToken) [0x00015] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainBuildPipeline.cs:293
+  at Kern.World.Terrain.TerrainBuildPipeline.Execute (Kern.World.Terrain.TerrainCPUBuildRequest request, System.Threading.CancellationToken cancellationToken) [0x0008d] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainBuildPipeline.cs:234
+  at Kern.Tests.World.TerrainBuildPipelineWorkerTests+&lt;&gt;c__DisplayClass6_0.&lt;WorkerStep_ThrowsWhenBackgroundTypeWasNotResolvedOnMainThread&gt;b__0 () [0x00000] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/Tests/Editor/World/Terrain/Geometry/TerrainBuildPipelineWorkerTests.cs:120
+  at NUnit.Framework.Assert.Throws (NUnit.Framework.Constraints.IResolveConstraint expression, NUnit.Framework.TestDelegate code, System.String message, System.Object[] args) [0x00043] in &lt;9a0a9db6872b48fda8359c19b63c1dbe&gt;:0
+---&gt; (Inner Exception #0) System.InvalidOperationException: Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #1) System.InvalidOperationException: Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #2) System.InvalidOperationException: Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #3) System.InvalidOperationException: Terrain metadata for cell type &#x27;RedRock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #4) System.InvalidOperationException: Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #5) System.InvalidOperationException: Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #6) System.InvalidOperationException: Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #7) System.InvalidOperationException: Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #8) System.InvalidOperationException: Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #9) System.InvalidOperationException: Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #10) System.InvalidOperationException: Terrain metadata for cell type &#x27;Empty&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #11) System.InvalidOperationException: Terrain metadata for cell type &#x27;RedRock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+
+---&gt; (Inner Exception #12) System.InvalidOperationException: Terrain metadata for cell type &#x27;Rock&#x27; was not resolved before the cache was read.
+  at Kern.World.Terrain.TerrainCellCache.RequireMetadata (MinesServer.Data.CellType type) [0x00026] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:378
+  at Kern.World.Terrain.TerrainCellCache.GetCellData (System.Int32 x, System.Int32 y) [0x00009] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/Cache/TerrainCellCache.cs:87
+  at Kern.World.Terrain.TerrainCellFillExecutor.FillCell (System.Int32 x, System.Int32 y, System.Int32 minX, System.Int32 minY, Kern.World.Terrain.TerrainCellSources sources, System.Int64&amp; quadTicks, System.Int64&amp; packTicks, System.Boolean countAnchoredForeground) [0x00045] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:227
+  at Kern.World.Terrain.TerrainCellFillExecutor+&lt;&gt;c__DisplayClass30_0.&lt;FillFull&gt;b__1 (System.Int32 x, System.Threading.Tasks.ParallelLoopState _, Kern.World.Terrain.TerrainCellFillExecutor+FillState state) [0x0000f] in /private/var/folders/76/x4md2qxs6gj_1k6h2wt0yz800000gp/T/kern-startup-check-n13_142m/Assets/Scripts/World/Terrain/GPU/TerrainCellFillExecutor.cs:85
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x00165] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+--- End of stack trace from previous location where exception was thrown ---
+
+  at System.Threading.Tasks.Parallel+&lt;&gt;c__DisplayClass19_0`1[TLocal].&lt;ForWorker&gt;b__1 (System.Threading.Tasks.RangeWorker&amp; currentWorker, System.Int32 timeout, System.Boolean&amp; replicationDelegateYieldedBeforeCompletion) [0x001e5] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica`1[TState].ExecuteAction (System.Boolean&amp; yieldedBeforeCompletion) [0x00000] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0
+  at System.Threading.Tasks.TaskReplicator+Replica.Execute () [0x00023] in &lt;7ce9c2ad64304b17b5997561e26f926e&gt;:0 &lt;---
+&gt;
+</pre></td></tr><tr><td>Kern.Tests.World.TerrainCellBuilderDeterminismTests.RoadSurfaceDoesNotInheritNeighborDistortion(Classic)</td><td><pre>  Road (6,0) corner 0 follows the neighboring rock distortion.
+  Expected: (6.00, 0.00, 0.00)
+  But was:  (0.00, 0.00, 0.00)
+</pre></td></tr><tr><td>Kern.Tests.World.TerrainCellBuilderDeterminismTests.RoadSurfaceDoesNotInheritNeighborDistortion(Organic)</td><td><pre>  Road (6,0) corner 0 follows the neighboring rock distortion.
+  Expected: (6.00, 0.00, 0.00)
+  But was:  (0.00, 0.00, 0.00)
+</pre></td></tr><tr><td>Kern.Tests.World.TerrainDebugViewContractTests.BackgroundTileIdentityViewIsolatedAndUsesResolvedAtlasTile</td><td><pre>  Проходы поля освещения не должны менять occupancy из-за отладки фона.
+  Expected: String containing &quot;occludedBackground = occludedBackground &amp;&amp; _TerrainDebugBackgroundTileIdentity == 0&quot;
+  But was:  &quot;#ifndef KERN_TERRAIN_CELL_DATA_INCLUDED
+#define KERN_TERRAIN_CELL_DATA_INCLUDED
+
+#include &quot;TerrainGeometryContract.hlsl&quot;
+#include &quot;TerrainCellFormat.hlsl&quot;
+#include &quot;TerrainAtlasSampling.hlsl&quot;
+#include &quot;TerrainMaterialCBuffer.hlsl&quot;
+
+// Квад террейна из данных клетки — только функции. Данные (раскладка,
+// буферы, глобалы) — в TerrainCellFormat.hlsl.
+//
+// Меш идентификаторов (TerrainCellIdMesh) несёт в POSITION адрес квада
+// (x, y, слой: 0 фон, 1 передний план, 2 накладка дверей) и угол. Из
+// клетки, её восьми соседей и строк их типов восстанавливаются ровно те
+// атрибуты, что TerrainQuadBuilder пишет в вершину.
+
+int TerrainRing(int value, int size)
+{
+    int quotient = value / size;
+    int remainder = value - quotient * size;
+    return remainder &lt; 0 ? remainder + size : remainder;
+}
+
+uint TerrainLoadCell(int gridX, int unityY)
+{
+    int width = (int)round(_TerrainCellGridSize.x);
+    int height = (int)round(_TerrainCellGridSize.y);
+    uint index = (uint)(TerrainRing(unityY, height) * width + TerrainRing(gridX, width));
+    return (_TerrainCells[index / KERN_TERRAIN_CELLS_PER_WORD] &gt;&gt;
+        ((index % KERN_TERRAIN_CELLS_PER_WORD) * KERN_TERRAIN_CELL_BITS)) &amp; KERN_TERRAIN_CELL_TYPE_MASK;
+}
+
+// ═══ ФОРМАТ: доступ к полям ═════════════════════════════════════════════
+// Только здесь поле клетки или строки типа достаётся по битам; остальной
+// код зовёт эти функции. Имя функции — TerrainType + имя поля строки.
+
+// Клетка: её тип.
+uint TerrainCellType(uint cell) { return cell &amp; KERN_TERRAIN_CELL_TYPE_MASK; }
+
+// Строка типа читается целиком — и своя, и соседей.
+TerrainTypeRow TerrainTypeRowOf(uint type) { return _TerrainTypes[type]; }
+
+uint TerrainField(uint word, uint shift, uint mask) { return (word &gt;&gt; shift) &amp; mask; }
+
+// atlasXY, atlasWH
+float4 TerrainTypeAtlasPixels(TerrainTypeRow row)
+{
+    return float4(
+        row.atlasXY &amp; KERN_TERRAIN_TYPE_PIXEL_MASK,
+        (row.atlasXY &gt;&gt; KERN_TERRAIN_TYPE_PIXEL_HIGH_SHIFT) &amp; KERN_TERRAIN_TYPE_PIXEL_MASK,
+        row.atlasWH &amp; KERN_TERRAIN_TYPE_PIXEL_MASK,
+        (row.atlasWH &gt;&gt; KERN_TERRAIN_TYPE_PIXEL_HIGH_SHIFT) &amp; KERN_TERRAIN_TYPE_PIXEL_MASK);
+}
+float TerrainTypeFrameCount(TerrainTypeRow row) { return (float)(row.atlasXY &gt;&gt; KERN_TERRAIN_TYPE_BYTE_SHIFT); }
+uint TerrainTypeRimMass(TerrainTypeRow row) { return row.atlasWH &gt;&gt; KERN_TERRAIN_TYPE_BYTE_SHIFT; }
+
+// speedGlowTile
+uint TerrainTypeTileGroupCode(TerrainTypeRow row) { return row.speedGlowTile &gt;&gt; KERN_TERRAIN_TYPE_BYTE_SHIFT; }
+bool TerrainTypeHasTileGroup(TerrainTypeRow row) { return TerrainTypeTileGroupCode(row) != 0u; }
+uint TerrainTypeTileGroup(TerrainTypeRow row) { return TerrainTypeTileGroupCode(row) - 1u; }
+
+// look
+uint TerrainTypeSlot(TerrainTypeRow row) { return row.look &amp; KERN_TERRAIN_TYPE_SLOT_MASK; }
+bool TerrainTypeOpaqueOwn(TerrainTypeRow row) { return (row.look &amp; KERN_TERRAIN_TYPE_OPAQUE_OWN) != 0u; }
+bool TerrainTypeOpaqueAny(TerrainTypeRow row) { return (row.look &amp; KERN_TERRAIN_TYPE_OPAQUE_ANY) != 0u; }
+uint TerrainTypeTextureAnchor(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_TEXTURE_ANCHOR_SHIFT, KERN_TERRAIN_TYPE_TEXTURE_ANCHOR_MASK); }
+uint TerrainTypeOutline(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_OUTLINE_SHIFT, KERN_TERRAIN_TYPE_OUTLINE_MASK); }
+uint TerrainTypeAnimationType(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_ANIMATION_TYPE_SHIFT, KERN_TERRAIN_TYPE_ANIMATION_TYPE_MASK); }
+uint TerrainTypeSurfaceEffect(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_SURFACE_EFFECT_SHIFT, KERN_TERRAIN_TYPE_SURFACE_EFFECT_MASK); }
+uint TerrainTypeSurfaceEffectPalette(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_SURFACE_EFFECT_PALETTE_SHIFT, KERN_TERRAIN_TYPE_SURFACE_EFFECT_PALETTE_MASK); }
+uint TerrainTypeDecalAtlas(TerrainTypeRow row) { return TerrainField(row.look, KERN_TERRAIN_TYPE_DECAL_ATLAS_SHIFT, KERN_TERRAIN_TYPE_DECAL_ATLAS_MASK); }
+
+float TerrainTypeAnimationSpeed(TerrainTypeRow row) { return f16tof32(row.speedGlowTile &amp; KERN_TERRAIN_TYPE_ANIMATION_SPEED_MASK); }
+uint TerrainTypeGlowByte(TerrainTypeRow row) { return TerrainField(row.speedGlowTile, KERN_TERRAIN_TYPE_GLOW_SHIFT, KERN_TERRAIN_TYPE_GLOW_MASK); }
+float TerrainTypeGlow(TerrainTypeRow row) { return (float)TerrainTypeGlowByte(row) * (1.0 / 255.0); }
+
+// Сравнение одного поля со значением.
+// Фон (drawLayer Background или Underlay) лежит сам на себе; под передним
+// планом — подложка.
+bool TerrainTypeIsBackground(TerrainTypeRow row) { return (row.look &amp; KERN_TERRAIN_TYPE_BACKGROUND) != 0u; }
+uint TerrainTypeUnder(uint type, TerrainTypeRow row) { return TerrainTypeIsBackground(row) ? type : (uint)_TerrainUnderlayType; }
+bool TerrainTypeGlows(TerrainTypeRow row) { return TerrainTypeGlowByte(row) != 0u; }
+bool TerrainTypeWavy(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_WAVY; }
+bool TerrainTypeHolds(TerrainTypeRow row)
+{
+    uint outline = TerrainTypeOutline(row);
+    return outline != KERN_TERRAIN_OUTLINE_PLIANT &amp;&amp; outline != KERN_TERRAIN_OUTLINE_WAVY;
+}
+bool TerrainTypeRound(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_ROUND; }
+bool TerrainTypeWall(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_WALL; }
+bool TerrainTypeCorner(TerrainTypeRow row) { return TerrainTypeOutline(row) == KERN_TERRAIN_OUTLINE_CORNER; }
+
+// Факты текстуры: прямоугольник, размер тайла, высота кадра.
+float4 TerrainTypeAtlasRect(TerrainTypeRow row)
+{
+    float4 texel = TerrainMaterialAtlasTexelSize((int)TerrainTypeSlot(row));
+    return TerrainTypeAtlasPixels(row) * texel.xyxy;
+}
+bool TerrainTypeHasAtlasRect(TerrainTypeRow row) { return (row.atlasWH &amp; KERN_TERRAIN_TYPE_PIXEL_MASK) != 0u; }
+float TerrainTypeTileSize(TerrainTypeRow row)
+{
+    return KERN_TERRAIN_CELL_TEXELS * TerrainMaterialAtlasTexelSize((int)TerrainTypeSlot(row)).x;
+}
+float TerrainTypeFrameHeight(TerrainTypeRow row)
+{
+    float height = TerrainTypeAtlasRect(row).w;
+    return height &gt; 0.0 ? height / TerrainTypeTileSize(row) : 1.0;
+}
+
+uint TerrainTileDescriptor(uint mask)
+{
+    return (_TerrainTileDescriptors[mask &gt;&gt; 2] &gt;&gt; ((mask &amp; 3u) * 8u)) &amp; 0xFFu;
+}
+
+// Как TerrainCellMaskCalculator.CalculateTilingDescriptor и
+// TerrainBackgroundTileResolver: соседи той же тайлгруппы → дескриптор.
+// neighbours — признаки соседей того же слоя.
+uint TerrainTilingDescriptor(TerrainTypeRow own, TerrainTypeRow neighbours[8])
+{
+    if (!TerrainTypeHasTileGroup(own))
+    {
+        return 0u;
+    }
+
+    uint group = TerrainTypeTileGroup(own);
+    uint mask = 0u;
+    [unroll]
+    for (int i = 0; i &lt; 8; i++)
+    {
+        TerrainTypeRow other = neighbours[i];
+        if (TerrainTypeHasTileGroup(other) &amp;&amp; TerrainTypeTileGroup(other) == group)
+        {
+            mask |= 1u &lt;&lt; i;
+        }
+    }
+
+    return TerrainTileDescriptor(mask);
+}
+
+// Как TerrainQuadBuilder.ResolveBuildingWallVariant: колонка по числу
+// примыкающих углов пака, отражения — из собственного дескриптора.
+uint TerrainBuildingWallVariant(uint descriptor, uint cornerSideMask)
+{
+    bool hasLeft = (cornerSideMask &amp; 1u) != 0u;
+    bool hasRight = (cornerSideMask &amp; 2u) != 0u;
+    bool hasTop = (cornerSideMask &amp; 4u) != 0u;
+    bool hasBottom = (cornerSideMask &amp; 8u) != 0u;
+    uint cornerCount = (hasLeft ? 1u : 0u) + (hasRight ? 1u : 0u) + (hasTop ? 1u : 0u) + (hasBottom ? 1u : 0u);
+    uint column = KERN_TERRAIN_WALL_BASE_COLUMN + (cornerCount &lt; 2u ? cornerCount : 2u);
+    uint transforms = descriptor &amp; KERN_TERRAIN_TILE_TRANSFORM_MASK;
+    if (cornerCount == 1u &amp;&amp; (hasRight || hasBottom))
+    {
+        transforms ^= 1u &lt;&lt; KERN_TERRAIN_TILE_FLIP_U_SHIFT;
+    }
+
+    if (cornerCount &gt;= 2u &amp;&amp; !hasLeft &amp;&amp; !hasRight)
+    {
+        transforms ^= 1u &lt;&lt; KERN_TERRAIN_TILE_TURN_SHIFT;
+    }
+
+    return transforms | (column &amp; KERN_TERRAIN_TILE_COLUMN_MASK);
+}
+
+// Как TerrainCellMaskCalculator.SameRimSurface: соседи одной ненулевой
+// массы — одно тело без каймы; масса 0 каймы не имеет.
+bool TerrainSameRim(TerrainTypeRow own, TerrainTypeRow other)
+{
+    uint otherMass = TerrainTypeRimMass(other);
+    return otherMass != 0u &amp;&amp; TerrainTypeRimMass(own) == otherMass;
+}
+
+// Как TerrainForegroundOcclusion.IsOpaqueMassCell (до переноса в шейдер):
+// загруженная волнистая клетка, непрозрачная в атласе.
+bool TerrainOpaqueMassCell(TerrainTypeRow row)
+{
+    return TerrainTypeWavy(row) &amp;&amp; TerrainTypeOpaqueAny(row);
+}
+
+// Углы UV квада после отражений и поворота автотайла — как
+// TerrainQuadUvs.Transform: отражения по осям, затем поворот на четверть.
+// Биты угла i: (2i) — u, (2i+1) — v.
+uint TerrainCornerUvBits(uint descriptor, bool tiling)
+{
+    uint transforms = tiling ? descriptor : 0u;
+    uint flipU = (transforms &gt;&gt; KERN_TERRAIN_TILE_FLIP_U_SHIFT) &amp; 1u;
+    uint flipV = (transforms &gt;&gt; KERN_TERRAIN_TILE_FLIP_V_SHIFT) &amp; 1u;
+    uint turn = (transforms &gt;&gt; KERN_TERRAIN_TILE_TURN_SHIFT) &amp; 1u;
+    uint bits = 0u;
+    [unroll]
+    for (uint corner = 0u; corner &lt; 4u; corner++)
+    {
+        uint source = (corner + turn) &amp; 3u;
+        uint u = ((source == 1u || source == 2u) ? 1u : 0u) ^ flipU;
+        uint v = (source &gt;= 2u ? 1u : 0u) ^ flipV;
+        bits |= (u | (v &lt;&lt; 1)) &lt;&lt; (corner * KERN_TERRAIN_UV_BITS_PER_CORNER);
+    }
+
+    return bits;
+}
+
+// Декаль — тем же хэшем, что TerrainDecalCatalog.Place.
+float TerrainDecalPlacement(uint rule, int worldX, int serverY)
+{
+    uint percent = rule &amp; KERN_TERRAIN_DECAL_RULE_PERCENT_MASK;
+    if (percent == 0u)
+    {
+        return 0.0;
+    }
+
+    uint hash = asuint(worldX) * 374761393u;
+    hash += asuint(serverY) * 668265263u;
+    hash ^= ((rule &gt;&gt; KERN_TERRAIN_DECAL_RULE_SEED_SHIFT) &amp; KERN_TERRAIN_DECAL_RULE_SEED_MASK) * 2246822519u;
+    hash = (hash ^ (hash &gt;&gt; 13)) * 1274126177u;
+    hash ^= hash &gt;&gt; 16;
+    if (hash % 100u &gt;= percent)
+    {
+        return 0.0;
+    }
+
+    uint packed = 1u + hash % KERN_TERRAIN_DECAL_VARIANTS +
+        (((hash &gt;&gt; 8) &amp; 3u) &lt;&lt; KERN_TERRAIN_DECAL_ROTATION_SHIFT) +
+        (((hash &gt;&gt; 10) &amp; 1u) &lt;&lt; KERN_TERRAIN_DECAL_MIRROR_SHIFT) +
+        (((hash &gt;&gt; 12) &amp; 3u) &lt;&lt; KERN_TERRAIN_DECAL_OFFSET_X_SHIFT) +
+        (((hash &gt;&gt; 14) &amp; 3u) &lt;&lt; KERN_TERRAIN_DECAL_OFFSET_Y_SHIFT);
+    return (float)((rule &amp; KERN_TERRAIN_DECAL_RULE_ROCK) != 0u ? packed | KERN_TERRAIN_DECAL_ROCK_ATLAS : packed);
+}
+
+// Значение после записи в half вершины (TerrainVertex.H): мантисса
+// обрезается до 10 бит, слишком малое становится нулём.
+float TerrainTruncateToHalf(float value)
+{
+    uint bits = asuint(value);
+    int exponent = (int)((bits &gt;&gt; 23) &amp; 0xFFu) - 127 + 15;
+    if (exponent &lt;= 0)
+    {
+        return asfloat(bits &amp; 0x80000000u);
+    }
+
+    return asfloat(bits &amp; 0xFFFFE000u);
+}
+
+// H(k / 1000f) без деления float: деление на GPU округляется не так, как на
+// CPU, а целое — одинаково везде. s — наименьший сдвиг, при котором
+// k·2^s ≥ 1024·1000; мантисса m = ⌊k·2^s / 1000⌋ ∈ [1024, 2047]; значение
+// m·2^-s. Округление float до 24 бит перед обрезкой не переходит границу
+// 10-битной мантиссы (остаток кратен 1/1000 её шага), поэтому равенство
+// с H(k / 1000f) точное.
+float TerrainThousandthsAsHalf(uint k)
+{
+    if (k == 0u)
+    {
+        return 0.0;
+    }
+
+    uint shift = 8u;
+    [loop]
+    while (shift &lt; 20u &amp;&amp; (k &lt;&lt; shift) &lt; 1024000u)
+    {
+        shift++;
+    }
+
+    uint mantissa = (k &lt;&lt; shift) / 1000u;
+    return (float)mantissa * asfloat((127u - shift) &lt;&lt; 23);
+}
+
+// Как TerrainQuadBuilder.HashCell.
+uint TerrainCellHash(int gridX, int serverY)
+{
+    uint seed = asuint(gridX) * 374761397u + asuint(serverY) * 668265263u;
+    seed = (seed ^ (seed &gt;&gt; 13)) * 1274126177u;
+    return seed ^ (seed &gt;&gt; 16);
+}
+
+// Фаза анимации — как TerrainQuadBuilder.ResolveAnimationOffset.
+float TerrainAnimationPhase(TerrainTypeRow row, bool hasAtlasRect, int gridX, int serverY)
+{
+    float palette = (float)TerrainTypeSurfaceEffectPalette(row);
+    if (!hasAtlasRect)
+    {
+        return palette;
+    }
+
+    if (TerrainTypeAnimationType(row) == KERN_TERRAIN_ANIMATION_TYPE_BLINKING)
+    {
+        return TerrainThousandthsAsHalf(TerrainCellHash(gridX, serverY) % 6283u);
+    }
+
+    if (TerrainTypeSurfaceEffect(row) == KERN_TERRAIN_SURFACE_EFFECT_FACETED)
+    {
+        return TerrainTruncateToHalf(
+            (float)(TerrainCellHash(gridX, serverY) &amp; 0xFFFFu) * (1.0 / 65536.0));
+    }
+
+    return palette;
+}
+
+// 24-битный хэш решётки — как TerrainVertexDistortionCalculator.Hash.
+uint TerrainHash24(int x, int y, uint seed)
+{
+    uint hash = (asuint(x) * 0x9E3779B9u) ^ (asuint(y) * 0x85EBCA6Bu) ^ seed;
+    hash ^= hash &gt;&gt; 16;
+    hash *= 0x7FEB352Du;
+    hash ^= hash &gt;&gt; 15;
+    hash *= 0x846CA68Bu;
+    hash ^= hash &gt;&gt; 16;
+    return hash &amp; 0x00FFFFFFu;
+}
+
+// Как TerrainVertexDistortionCalculator.ComputeOrganicEdgeBend: −2..2.
+int TerrainOrganicEdgeBend(int edgeX, int edgeY, bool vertical)
+{
+    uint seed = asuint(vertical ? _TerrainOrganicVerticalSeed : _TerrainOrganicHorizontalSeed);
+    return (int)min((TerrainHash24(edgeX, edgeY, seed) * 5u) &gt;&gt; 24, 4u) - 2;
+}
+
+// Классический джиттер — как RandXd (row 1) и RandYd (row 2). Произведение
+// переполняется так же, как int в C#: умножение в uint.
+int TerrainClassicJitter(int x, int y, int row)
+{
+    float4 k = _TerrainDistortion[row];
+    int a = (int)k.x * x + (int)k.y * y;
+    int b = (int)k.z * x + (int)k.w * y;
+    int product = asint(asuint(a) * asuint(b));
+    int number = product % (int)_TerrainDistortion[3][row - 1];
+    return (number * number) % (int)_TerrainDistortion[0].y;
+}
+
+// Билинейный шум периода p со сглаживанием t²(3 − 2t) в целых — как
+// TerrainVertexDistortionCalculator.ValueNoise. Переполнение uint в
+// промежуточных разностях взаимно гасится: итог укладывается в 32 бита.
+uint TerrainValueNoise(int worldX, int worldY, uint period, uint seed, uint shift)
+{
+    int x0 = worldX / (int)period;
+    int y0 = worldY / (int)period;
+    uint rx = (uint)(worldX % (int)period);
+    uint ry = (uint)(worldY % (int)period);
+    uint d = period * period * period;
+    uint sx = rx * rx * (3u * period - 2u * rx);
+    uint sy = ry * ry * (3u * period - 2u * ry);
+    uint h00 = TerrainHash24(x0, y0, seed) &gt;&gt; shift;
+    uint h10 = TerrainHash24(x0 + 1, y0, seed) &gt;&gt; shift;
+    uint h01 = TerrainHash24(x0, y0 + 1, seed) &gt;&gt; shift;
+    uint h11 = TerrainHash24(x0 + 1, y0 + 1, seed) &gt;&gt; shift;
+    uint bottom = h00 * d + (h10 - h00) * sx;
+    uint top = h01 * d + (h11 - h01) * sx;
+    uint value = bottom * d + (top - bottom) * sy;
+    return ((value &lt;&lt; 1) + (d * d) / 2u) / (d * d);
+}
+
+// Смещение органики в единицах узла — как OrganicOffsetUnits.
+int TerrainOrganicUnits(int worldX, int worldY, float4 seeds)
+{
+    float4 periods = _TerrainDistortion[4];
+    float4 weights = _TerrainDistortion[5];
+    uint hashBits = (uint)_TerrainDistortion[6].w;
+    uint shift = 24u - hashBits;
+    int scale = (int)(((1u &lt;&lt; hashBits) - 1u) &lt;&lt; 1);
+    int noise =
+        (int)weights.x * (int)TerrainValueNoise(worldX, worldY, (uint)periods.x, (uint)seeds.x, shift) +
+        (int)weights.y * (int)TerrainValueNoise(worldX, worldY, (uint)periods.y, (uint)seeds.y, shift) +
+        (int)weights.z * (int)TerrainValueNoise(worldX, worldY, (uint)periods.z, (uint)seeds.z, shift);
+    int full = 100 * scale;
+    int contrasted = (int)periods.w * noise - (int)weights.w * scale;
+    int clamped = clamp(contrasted, 0, full);
+    int maximum = (int)_TerrainDistortion[3].z;
+    return (clamped * maximum + full / 2) / full;
+}
+
+// Узел в долях клетки.
+float2 TerrainNodeCells(int2 units)
+{
+    return float2(units.x, units.y) * (1.0 / 256.0);
+}
+
+// Узел сетки — левый нижний угол клетки (nodeX, nodeY) — в единицах 1/256
+// клетки по флагам передних типов клеток вокруг узла: как
+// TerrainVertexDistortionCalculator.ComputeNode.
+int2 TerrainNode(int nodeX, int nodeY, TerrainTypeRow ftl, TerrainTypeRow ftr, TerrainTypeRow fbl, TerrainTypeRow fbr)
+{
+    int worldX = nodeX - 1;
+    int worldY = nodeY - 1;
+    int worldWidth = (int)round(_TerrainCellOrigin.w);
+    int worldHeight = (int)round(_TerrainCellOrigin.z);
+    if (_TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_OFF ||
+        worldX &lt;= 0 || worldX &gt;= worldWidth || worldY &lt;= 0 || worldY &gt;= worldHeight)
+    {
+        return int2(0, 0);
+    }
+
+    bool ctl = TerrainTypeWavy(ftl);
+    bool ctr = TerrainTypeWavy(ftr);
+    bool cbl = TerrainTypeWavy(fbl);
+    bool cbr = TerrainTypeWavy(fbr);
+    bool allCause = ctl &amp;&amp; ctr &amp;&amp; cbl &amp;&amp; cbr;
+    int rx;
+    int ry;
+    int center;
+    if (_TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_ORGANIC)
+    {
+        if (!allCause)
+        {
+            return int2(0, 0);
+        }
+
+        rx = TerrainOrganicUnits(worldX, worldY, _TerrainDistortion[6]);
+        ry = TerrainOrganicUnits(worldX, worldY, _TerrainDistortion[7]);
+        center = (int)_TerrainDistortion[3].w;
+    }
+    else
+    {
+        int step = (int)_TerrainDistortion[0].x;
+        rx = TerrainClassicJitter(worldX, worldY, 1) * step;
+        ry = TerrainClassicJitter(worldX, worldY, 2) * step;
+        center = (int)_TerrainDistortion[0].z;
+    }
+
+    // Как ComputeOffsetFromJitter.
+    if (allCause)
+    {
+        return int2(rx - center, -(ry - center));
+    }
+
+    if (TerrainTypeHolds(ftl) || TerrainTypeHolds(ftr) || TerrainTypeHolds(fbl) || TerrainTypeHolds(fbr) ||
+        (ctl &amp;&amp; cbr) || (ctr &amp;&amp; cbl))
+    {
+        return int2(0, 0);
+    }
+
+    if (ctl &amp;&amp; ctr) return int2(0, -ry);
+    if (ctl &amp;&amp; cbl) return int2(-rx, 0);
+    if (ctr &amp;&amp; cbr) return int2(rx, 0);
+    if (cbl &amp;&amp; cbr) return int2(0, ry);
+    if (ctl) return int2(-rx, -ry);
+    if (ctr) return int2(rx, -ry);
+    if (cbl) return int2(-rx, ry);
+    if (cbr) return int2(rx, ry);
+    return int2(0, 0);
+}
+
+// Как TerrainQuadBuilder.OrganicEdgeBend: сосед по ребру — по флагам его
+// типа (у незагруженного они нулевые, и ребро не гнётся).
+int TerrainOrganicNeighbourBend(TerrainTypeRow row, int edgeX, int edgeY, bool vertical, int inwardSign)
+{
+    bool cause = TerrainTypeWavy(row);
+    bool block = TerrainTypeHolds(row);
+    bool backgroundEdge = TerrainTypeIsBackground(row) &amp;&amp; !block &amp;&amp; !cause;
+    if (block || (!cause &amp;&amp; !backgroundEdge))
+    {
+        return 0;
+    }
+
+    int bend = TerrainOrganicEdgeBend(edgeX, edgeY, vertical);
+    return cause ? bend : min(abs(bend), 1) * inwardSign;
+}
+
+// Номер угла квада из меша идентификаторов (0..3, против часовой стрелки
+// от левого нижнего) — в угол клетки.
+float2 TerrainCornerBase(float corner)
+{
+    int index = (int)round(corner);
+    return float2(index == 1 || index == 2 ? 1.0 : 0.0, index &gt;= 2 ? 1.0 : 0.0);
+}
+
+TerrainCellVertex LoadTerrainCellVertex(
+    float3 address,
+    float2 cornerBase)
+{
+    TerrainCellVertex v = (TerrainCellVertex)0;
+    // Слой 2 — накладка дверей: передний план, адрес уже в сетке, смещение
+    // видимого окна к нему не прибавляется (меш накладки собран по сетке).
+    int layer = (int)round(address.z);
+    bool overlay = layer == 2;
+    int x = (int)round(address.x) + (overlay ? 0 : (int)round(_TerrainCellViewOffset.x));
+    int y = (int)round(address.y) + (overlay ? 0 : (int)round(_TerrainCellViewOffset.y));
+    layer = overlay ? 1 : layer;
+    int2 cornerStep = (int2)round(cornerBase);
+    int corner = cornerStep.y == 0
+        ? (cornerStep.x == 0 ? 0 : 1)
+        : (cornerStep.x == 1 ? 2 : 3);
+    int2 origin = (int2)round(_TerrainCellOrigin.xy);
+    int gridX = origin.x + x;
+    int unityY = origin.y + y;
+    bool foreground = layer &gt; 0;
+    v.layer = layer;
+    v.atlasIndex = -1.0;
+
+    // Незагруженная клетка не рисует ни одного слоя.
+    uint cell = TerrainLoadCell(gridX, unityY);
+    uint foregroundType = TerrainCellType(cell);
+    if (foregroundType == 0u)
+    {
+        return v;
+    }
+
+    // Соседи и признаки их передних типов читаются ровно по разу: всё
+    // ниже — узлы, маски, кайма, перекрытие, изгибы — берёт их отсюда.
+    uint neighbours[8];
+    TerrainTypeRow neighbourRows[8];
+    [unroll]
+    for (int n = 0; n &lt; 8; n++)
+    {
+        neighbours[n] = TerrainLoadCell(gridX + KERN_TERRAIN_NEIGHBOUR_X[n], unityY + KERN_TERRAIN_NEIGHBOUR_Y[n]);
+        neighbourRows[n] = TerrainTypeRowOf(TerrainCellType(neighbours[n]));
+    }
+
+    TerrainTypeRow foregroundRow = TerrainTypeRowOf(foregroundType);
+    bool foregroundIsBackground = TerrainTypeIsBackground(foregroundRow);
+    bool foregroundCause = TerrainTypeWavy(foregroundRow);
+    // Органика — у искажающей клетки при стиле Organic
+    // (TerrainQuadBuilder.organicTerrain).
+    bool organicTerrain = _TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_ORGANIC &amp;&amp; foregroundCause;
+
+    // Какой тип рисует слой — как TerrainQuadBuilder. Фон лежит сам на себе
+    // и рисуется только фоном; под передним планом фоном рисуется подложка.
+    uint layerType = foreground
+        ? (foregroundIsBackground ? 0u : foregroundType)
+        : TerrainTypeUnder(foregroundType, foregroundRow);
+
+    if (layerType == 0u)
+    {
+        return v;
+    }
+
+    TerrainTypeRow row = TerrainTypeRowOf(layerType);
+
+    // Геометрия — только у искажающего (Cause) переднего плана. Углы — узлы
+    // клетки и её соседей справа, сверху и справа-сверху; органические рёбра
+    // — от типов четырёх соседей и хэша ребра.
+    float4 geometryX = float4(0.0, 1.0, 1.0, 0.0);
+    float4 geometryY = float4(0.0, 0.0, 1.0, 1.0);
+    if (foregroundCause)
+    {
+        // Узел — левый нижний угол клетки; клетки вокруг него: tl, tr, bl, br.
+        TerrainTypeRow left = neighbourRows[KERN_TERRAIN_LEFT];
+        TerrainTypeRow right = neighbourRows[KERN_TERRAIN_RIGHT];
+        TerrainTypeRow top = neighbourRows[KERN_TERRAIN_TOP];
+        TerrainTypeRow bottom = neighbourRows[KERN_TERRAIN_BOTTOM];
+        float2 node00 = TerrainNodeCells(TerrainNode(gridX, unityY,
+            left, foregroundRow, neighbourRows[KERN_TERRAIN_BOTTOM_LEFT], bottom));
+        float2 node10 = TerrainNodeCells(TerrainNode(gridX + 1, unityY,
+            foregroundRow, right, bottom, neighbourRows[KERN_TERRAIN_BOTTOM_RIGHT]));
+        float2 node11 = TerrainNodeCells(TerrainNode(gridX + 1, unityY + 1,
+            top, neighbourRows[KERN_TERRAIN_TOP_RIGHT], foregroundRow, right));
+        float2 node01 = TerrainNodeCells(TerrainNode(gridX, unityY + 1,
+            neighbourRows[KERN_TERRAIN_TOP_LEFT], top, left, foregroundRow));
+        geometryX += float4(node00.x, node10.x, node11.x, node01.x);
+        geometryY += float4(node00.y, node10.y, node11.y, node01.y);
+    }
+
+    bool foregroundAnchored = organicTerrain ||
+        any(geometryX != float4(0.0, 1.0, 1.0, 0.0)) ||
+        any(geometryY != float4(0.0, 0.0, 1.0, 1.0));
+
+    // Фон под передним планом, закрывающим каждый пиксель клетки,
+    // отбрасывается так же, как незаполненный квад (как
+    // TerrainForegroundOcclusion.CoversCell до переноса в шейдер): у
+    // переднего плана есть текстура, она непрозрачна в своём атласе, контур
+    // не скруглён, а смещённая клетка лежит внутри массы — её
+    // общие узлы закрывают прямоугольник встык с соседями.
+    if (!foreground)
+    {
+        bool occluded = !foregroundIsBackground &amp;&amp;
+            TerrainTypeHasAtlasRect(foregroundRow) &amp;&amp;
+            !TerrainTypeRound(foregroundRow) &amp;&amp;
+            TerrainTypeOpaqueOwn(foregroundRow);
+        if (occluded &amp;&amp; foregroundAnchored)
+        {
+            [unroll]
+            for (int m = 0; m &lt; 8; m++)
+            {
+                occluded = occluded &amp;&amp; TerrainOpaqueMassCell(neighbourRows[m]);
+            }
+        }
+
+#if defined(KERN_TERRAIN_DEBUG_BACKGROUND_TILE_VIEW)
+        occluded = occluded &amp;&amp; _TerrainDebugBackgroundTileIdentity == 0;
+#endif
+        if (occluded)
+        {
+            return v;
+        }
+    }
+
+    // Дескриптор автотайла: передний план — по типам соседей и стене пака,
+    // фон — по фоновым типам соседей (в кайме фона нет, как и в
+    // TerrainBackgroundTileResolver за окном).
+    TerrainTypeRow layerRows[8];
+    [unroll]
+    for (int t = 0; t &lt; 8; t++)
+    {
+        if (foreground)
+        {
+            layerRows[t] = neighbourRows[t];
+        }
+        else
+        {
+            layerRows[t] = TerrainTypeRowOf(TerrainTypeUnder(TerrainCellType(neighbours[t]), neighbourRows[t]));
+        }
+    }
+
+    uint descriptor = TerrainTilingDescriptor(row, layerRows);
+    bool tiling = TerrainTypeHasTileGroup(row);
+    if (foreground &amp;&amp; TerrainTypeWall(row))
+    {
+        uint cornerSideMask =
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_LEFT]) ? 1u : 0u) |
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_RIGHT]) ? 2u : 0u) |
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_TOP]) ? 4u : 0u) |
+            (TerrainTypeCorner(neighbourRows[KERN_TERRAIN_BOTTOM]) ? 8u : 0u);
+        if (cornerSideMask != 0u)
+        {
+            descriptor = TerrainBuildingWallVariant(descriptor, cornerSideMask);
+            tiling = true;
+        }
+    }
+
+    uint uvBits = TerrainCornerUvBits(descriptor, tiling);
+    v.uvBits = uvBits;
+    v.uv = float2(
+        (uvBits &gt;&gt; (corner * KERN_TERRAIN_UV_BITS_PER_CORNER)) &amp; 1u,
+        (uvBits &gt;&gt; (corner * KERN_TERRAIN_UV_BITS_PER_CORNER + 1)) &amp; 1u);
+    v.atlasIndex = (float)TerrainTypeSlot(row);
+
+    // Мировая клетка — от адреса: высота мира переводит строку Unity в
+    // серверную, как CoordinateUtils.UnityToServerY.
+    int serverY = (int)round(_TerrainCellOrigin.z) - 1 - unityY;
+    float tileSize = TerrainTypeTileSize(row);
+    v.subAtlasRect = TerrainTypeAtlasRect(row);
+    v.tileSizeUV = float4(tileSize, tileSize, TerrainTypeFrameCount(row), TerrainTypeFrameHeight(row));
+    v.worldPos = float4(
+        gridX,
+        serverY,
+        (float)((descriptor &amp; KERN_TERRAIN_COLUMN_MASK) | (TerrainTypeTextureAnchor(row) == KERN_TERRAIN_TEXTURE_ANCHOR_WORLD ? KERN_TERRAIN_COLUMN_WORLD_TEXTURE_ANCHOR : 0u)),
+        tiling ? 1.0 : 0.0);
+    v.animData = float4(
+        (float)TerrainTypeAnimationType(row),
+        TerrainTypeAnimationSpeed(row),
+        TerrainAnimationPhase(row, TerrainTypeHasAtlasRect(row), gridX, serverY),
+        (float)TerrainTypeSurfaceEffect(row));
+
+    // Соседи-блоки — общие для слоёв (TerrainCellMaskRules): сверху,
+    // слева, снизу, справа.
+    uint foregroundSides =
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_TOP]) ? 0u : 1u) |
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_LEFT]) ? 0u : 2u) |
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_BOTTOM]) ? 0u : 4u) |
+        (TerrainTypeIsBackground(neighbourRows[KERN_TERRAIN_RIGHT]) ? 0u : 8u);
+
+    // Кайма — только у переднего плана с ненулевой группой каймы
+    // (TerrainCellMaskCalculator.CalculateRimMasks): стороны, где сосед —
+    // та же поверхность, и вогнутые углы.
+    uint contour = 0u;
+    if (foreground)
+    {
+        contour = TerrainTypeRound(row) ? KERN_TERRAIN_ROUNDABLE_CONTOUR_FLAG : 0u;
+        if (TerrainTypeRimMass(row) != 0u)
+        {
+            bool top = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_TOP]);
+            bool left = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_LEFT]);
+            bool bottom = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_BOTTOM]);
+            bool right = TerrainSameRim(row, neighbourRows[KERN_TERRAIN_RIGHT]);
+            uint rimMask = (top ? 1u : 0u) | (left ? 2u : 0u) | (bottom ? 4u : 0u) | (right ? 8u : 0u);
+            uint rimCorners =
+                (bottom &amp;&amp; left &amp;&amp; !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_BOTTOM_LEFT]) ? 1u : 0u) |
+                (bottom &amp;&amp; right &amp;&amp; !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_BOTTOM_RIGHT]) ? 2u : 0u) |
+                (top &amp;&amp; right &amp;&amp; !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_TOP_RIGHT]) ? 4u : 0u) |
+                (top &amp;&amp; left &amp;&amp; !TerrainSameRim(row, neighbourRows[KERN_TERRAIN_TOP_LEFT]) ? 8u : 0u);
+            contour += ((rimMask + 1u) &lt;&lt; KERN_TERRAIN_RIM_SHIFT) +
+                (rimCorners &lt;&lt; KERN_TERRAIN_RIM_CORNERS_SHIFT);
+        }
+    }
+
+    // Флаги света — раскладка TerrainLightingData; масса — блок
+    // передний план.
+    uint lightingFlags = foregroundSides |
+        (TerrainTypeGlows(row) ? KERN_TERRAIN_GLOW_FLAG : 0u) |
+        (foreground &amp;&amp; !TerrainTypeIsBackground(row) ? KERN_TERRAIN_PHYSICAL_MASS_FLAG : 0u);
+    uint decalAtlas = TerrainTypeDecalAtlas(row);
+    uint decalRule = decalAtlas == KERN_TERRAIN_DECAL_ATLAS_GROUND ? (uint)_TerrainGroundDecalRule
+        : decalAtlas == KERN_TERRAIN_DECAL_ATLAS_ROCK ? (uint)_TerrainRockDecalRule
+        : 0u;
+    v.lightContourDecal = float4(
+        0.0,
+        (float)lightingFlags + TerrainTypeGlow(row) * KERN_TERRAIN_GLOW_FRACTION_SCALE,
+        (float)contour,
+        TerrainDecalPlacement(decalRule, gridX, serverY));
+
+    uint organicCode = 0u;
+    if (foreground &amp;&amp; organicTerrain)
+    {
+        int bottomBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_BOTTOM], gridX, unityY, false, 1);
+        int rightBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_RIGHT], gridX + 1, unityY, true, -1);
+        int topBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_TOP], gridX, unityY + 1, false, -1);
+        int leftBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_LEFT], gridX, unityY, true, 1);
+        organicCode = (uint)(1 + (bottomBend + 2) + (rightBend + 2) * 5 +
+            (topBend + 2) * 25 + (leftBend + 2) * 125);
+    }
+
+    if (!foreground)
+    {
+        geometryX = float4(0.0, 1.0, 1.0, 0.0);
+        geometryY = float4(0.0, 0.0, 1.0, 1.0);
+    }
+
+    bool anchored = foreground &amp;&amp; foregroundAnchored;
+    float organicEdges = (float)organicCode;
+    bool organic = organicCode != 0u;
+    // Rasterize a carrier enclosing the ENTIRE pixel silhouette. Rasterizing
+    // the displaced polygon first loses fragments on the outward half of every
+    // staircase; fragment clipping cannot bring those fragments back.
+    // Corners are cell-local, so the interpolant and POSITION use one scale.
+    float2 carrierMin = float2(0.0, 0.0);
+    float2 carrierMax = float2(1.0, 1.0);
+    if (anchored)
+    {
+        float2 firstCorner = TerrainGeometryCorner(geometryX, geometryY, 0);
+        float2 boundsMin = firstCorner;
+        float2 boundsMax = firstCorner;
+        [unroll]
+        for (int corner = 1; corner &lt; KERN_TERRAIN_ORGANIC_EDGE_COUNT; corner++)
+        {
+            float2 finalCorner = TerrainGeometryCorner(geometryX, geometryY, corner);
+            boundsMin = min(boundsMin, finalCorner);
+            boundsMax = max(boundsMax, finalCorner);
+        }
+
+        // The carrier bounds use the exact same corner and bend points as the
+        // fragment geometry predicate. It encloses the silhouette without a
+        // second bend/pivot/rounding implementation.
+        if (organic)
+        {
+            float4 bends = TerrainOrganicGeometryBends(organicEdges);
+            [unroll]
+            for (int side = 0; side &lt; 4; side++)
+            {
+                float2 bend = TerrainOrganicGeometryPoint(
+                    geometryX,
+                    geometryY,
+                    bends,
+                    side * 2 + 1);
+                boundsMin = min(boundsMin, bend);
+                boundsMax = max(boundsMax, bend);
+            }
+        }
+        carrierMin = boundsMin;
+        carrierMax = boundsMax;
+    }
+    // Only the AO field extends its raster carrier for signed-distance filter
+    // support. Screen and material passes cannot inherit this global state.
+    float2 carrierPadding = float2(0.0, 0.0);
+#if defined(KERN_TERRAIN_AO_FIELD)
+    carrierPadding = max(_TerrainGeometryCarrierPaddingWorld, float2(0.0, 0.0)) /
+        max(_TerrainCellGridSize.z, 0.0001);
+#endif
+    carrierMin -= carrierPadding;
+    carrierMax += carrierPadding;
+    float2 carrierCorner = lerp(carrierMin, carrierMax, cornerBase);
+    v.packedData = float4(anchored ? 1.0 : 0.0, carrierCorner, organicEdges);
+    v.geometryCornersX = anchored
+        ? geometryX
+        : float4(0.0, 1.0, 1.0, 0.0);
+    v.geometryCornersY = anchored
+        ? geometryY
+        : float4(0.0, 0.0, 1.0, 1.0);
+    float cellSize = _TerrainCellGridSize.z;
+    v.positionOS = float3(
+        (x + carrierCorner.x) * cellSize,
+        (y + carrierCorner.y) * cellSize,
+        layer == 0 ? 0.1 : 0.0);
+    return v;
+}
+
+// Клип-позиция, которую растеризатор отбрасывает целиком.
+float4 TerrainCulledPosition()
+{
+    return float4(2.0, 2.0, 2.0, 1.0);
+}
+
+#endif
+&quot;
+</pre></td></tr><tr><td>Kern.Tests.World.TerrainDebugViewContractTests.EveryViewHasAShaderConstantWithTheSameNumber</td><td><pre>  Вид WorldTextureAnchor есть в C#, но не объявлен в шейдере как KERN_TERRAIN_DEBUG_WORLD_TEXTURE_ANCHOR.
+  Expected: True
+  But was:  False
+</pre></td></tr><tr><td>Kern.Tests.World.TerrainDebugViewContractTests.ShaderDeclaresNoViewThatCSharpDoesNotKnow</td><td><pre>  Шейдер объявляет KERN_TERRAIN_DEBUG_CONTINUOUS_SHEET, которого нет в TerrainDebugView.
+  Expected: True
+  But was:  False
+</pre></td></tr><tr><td>Kern.Tests.World.TileBitmaskConverterFuzzTests.GetDescriptor_LUTBoundaryMasks(8,65)</td><td><pre>  mask=0x08
+  Expected: 65
+  But was:  0
+</pre></td></tr><tr><td>Kern.Tests.World.TileBitmaskConverterFuzzTests.GetDescriptor_LUTBoundaryMasks(16,129)</td><td><pre>  mask=0x10
+  Expected: 129
+  But was:  65
+</pre></td></tr><tr><td>Kern.Tests.World.TileBitmaskConverterFuzzTests.GetDescriptor_LUTBoundaryMasks(32,65)</td><td><pre>  mask=0x20
+  Expected: 65
+  But was:  0
+</pre></td></tr><tr><td>Kern.Tests.World.TileBitmaskConverterFuzzTests.GetDescriptor_LUTBoundaryMasks(64,65)</td><td><pre>  mask=0x40
+  Expected: 65
+  But was:  129
+</pre></td></tr><tr><td>Kern.Tests.World.TileBitmaskConverterFuzzTests.GetDescriptor_RotationSymmetry_LeftRightEdgesAgree</td><td><pre>  mask=0x00
+  Expected: 3
+  But was:  0
+</pre></td></tr><tr><td>Kern.Tests.World.TileBitmaskConverterFuzzTests.GetDescriptor_RotationSymmetry_TopBottomEdgesAgree</td><td><pre>  mask=0x00
+  Expected: 131
+  But was:  0
+</pre></td></tr><tr><td>Kern.Tests.World.WorldLayerRLETests.ReadChunk_CorruptOffset_TransitionsFromLoadingToFailed</td><td><pre>Timeout value of 180000 ms was exceeded. If this is intended, increase the timeout value using a TimeoutAttribute.</pre></td></tr></table><h2>PlayMode</h2><p>{&#x27;total&#x27;: &#x27;82&#x27;, &#x27;passed&#x27;: &#x27;49&#x27;, &#x27;failed&#x27;: &#x27;22&#x27;, &#x27;skipped&#x27;: &#x27;11&#x27;}</p><table><tr><td>Kern.Tests.PlayMode.DiskFailurePlayModeTests.DiskFailingUntilShutdown_ReportsLossButKeepsFileReadable</td><td><pre>  The failing shutdown corrupted already saved data.
+  Expected: DeepObsidianRock
+  But was:  Unloaded
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.LightingGPULifecyclePlayModeTests.CyclingPresets_RecreatesTargetsWithoutLeakingThem</td><td><pre>  _LightingMaterialField
+  Expected: 4096
+  But was:  256
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.LightingGPULifecyclePlayModeTests.FieldRaster_KeepsAsymmetricSolidAtItsWorldTexelsAcrossRegionShifts</td><td><pre>System.IndexOutOfRangeException : Index was outside the bounds of the array.</pre></td></tr><tr><td>Kern.Tests.PlayMode.LightingGPULifecyclePlayModeTests.PolarDepth_EqualExtinctionPreservesColoredHDRRadiance</td><td><pre>Unhandled log message: &#x27;[Error] AsyncGPUReadback - Out of bounds arguments - src offset:(4294967187,4294967227,0) dst dim:(448,448,1) src dim:(256,256,1)&#x27;. Use UnityEngine.TestTools.LogAssert.Expect</pre></td></tr><tr><td>Kern.Tests.PlayMode.LightingGPULifecyclePlayModeTests.SubcellSource_IntegratesContinuousEmitterBounds</td><td><pre>  The source fixture unexpectedly moved the transport region.
+  Expected: (-32.00, 39872.00, 128.00, 128.00)
+  But was:  (-32.00, 39936.00, 128.00, 128.00)
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.LightingGPULifecyclePlayModeTests.VisualTuning_RebuildsFieldsAndRetainsStationarySources</td><td><pre>Unhandled log message: &#x27;[Exception] InvalidOperationException: Статическое освещение требует 1,118,306,304 единиц работы на полный пересчёт; предел 200,000,000. Уменьши плотность поля, проб каскадов или предел направлений и примени настройки явно.&#x27;. Use UnityEngine.TestTools.LogAssert.Expect</pre></td></tr><tr><td>Kern.Tests.PlayMode.LocalChatInputPlayModeTests.T_FocusesTheLocalChatInput</td><td><pre>T did not focus the local chat input.</pre></td></tr><tr><td>Kern.Tests.PlayMode.LocalChatSpamDoesNotStickInputPlayModeTests.FastLocalMessages_LeaveInputUnblocked</td><td><pre>  T stopped opening the chat after 30 messages. blocked=False chatFocused=False modalStack=False pause=False programmator=False map=False serverWindows=False topTag=- serverModal=False modal=&lt;none&gt;
+  Expected: True
+  But was:  False
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.SoakPlayModeTests.ReconnectStorms_EndInOneHealthySession</td><td><pre>Session did not recover after reconnect storm 0.</pre></td></tr><tr><td>Kern.Tests.PlayMode.SoakPlayModeTests.StreamingAcrossTheMap_StaysWithinCacheAndMemory</td><td><pre>Unhandled log message: &#x27;[Error] [AssetDiag] TEXFAIL Cells/PassiveAcid — using map colour fallback&#x27;. Use UnityEngine.TestTools.LogAssert.Expect</pre></td></tr><tr><td>Kern.Tests.PlayMode.SurfaceScenePlayModeTests.Surface_ProductionCompositionCaptures_AndStableLightingRevision</td><td><pre>  Existing horizon depth must not hide the production entity plane.
+  Expected: greater than 0.980000019f
+  But was:  0.0f
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.SurfaceSceneRenderPathPlayModeTests.Surface_RealMeshPass_PreservesHdrAndProducesDepthLayers</td><td><pre>  Expected: greater than or equal to 474657
+  But was:  474636
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.TeardownPlayModeTests.DestroyingBootstrapInWorld_ReleasesEverythingTheGameOwned</td><td><pre>  Game teardown leaked:
+- Time.timeScale left at 0
+  Expected: &lt;empty&gt;
+  But was:  &lt; &quot;Time.timeScale left at 0&quot; &gt;
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.TerrainTextureAnimationPlayModeTests.ProductionTerrainPass_AdvancesTextureAtlasFrames</td><td><pre>  The production terrain pass never advanced to atlas frame 1 (blue). Check animation frame count/speed propagation and the _Time-based UV offset.
+  Expected: True
+  But was:  False
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.TerrainTextureAnimationPlayModeTests.ProductionTerrainPass_AnimatesMoltenLavaSurface</td><td><pre>  Lava&#x27;s production terrain pass stayed static. Check the molten profile in mesh animation data and its time-based shader branch.
+  Expected: True
+  But was:  False
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.UIInputPlayModeTests.Escape_OpensAndClosesPauseMenu</td><td><pre>  Escape did not open the pause menu.
+  Expected: True
+  But was:  False
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.UIInputPlayModeTests.FocusedChat_SwallowsGameplayHotkeys</td><td><pre>T did not focus the chat input.</pre></td></tr><tr><td>Kern.Tests.PlayMode.UIInputPlayModeTests.OpenPauseMenu_BlocksMovementUntilClosed</td><td><pre>  Expected: True
+  But was:  False
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.WorldLabelReusePlayModeTests.ReusedLabel_ComesBackAfterHiding</td><td><pre>  Expected: Visible
+  But was:  Hidden
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.WorldLabelReusePlayModeTests.ReusedLabel_HeightFollowsTextLengthInBothDirections</td><td><pre>  The long message must render taller than the short one.
+  Expected: greater than 14.5f
+  But was:  13.5f
+</pre></td></tr><tr><td>Kern.Tests.PlayMode.WorldLabelZoomScalePlayModeTests.ChatBubble_ScalesItsBoxAndKeepsTheCellTopAnchor</td><td><pre>SetUp : The probe robot never settled in cell 1316:15.</pre></td></tr><tr><td>Kern.Tests.PlayMode.WorldLabelZoomScalePlayModeTests.Nickname_KeepsWorldSizeThroughZoomOutAndBackIn</td><td><pre>SetUp : The probe robot never settled in cell 1316:15.</pre></td></tr></table></html>

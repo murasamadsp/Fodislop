@@ -109,8 +109,7 @@ namespace Kern.UI
             // по событию смены языка — иначе ворота показали бы сырые ключи.
             UILocalizer.Apply(tree, _loc);
 
-            // Тир раскладки вместо @media — как и в остальных экранах.
-            UILayoutTier.Attach(tree);
+            // Тир и форма экрана — классами на корне панели (UIScreen.Bind ниже).
             _root = tree;
 
             // Состояние ставится на тот же элемент, на котором оно задано в
@@ -166,6 +165,11 @@ namespace Kern.UI
 
         private void OnDestroy()
         {
+            if (_document != null)
+            {
+                UIScreen.Unbind(_document);
+            }
+
             if (_authGate != null)
             {
                 _authGate.Passed -= OnAuthPassed;
@@ -233,7 +237,7 @@ namespace Kern.UI
             }
 
             // Диапазон тот же, что проверяет ClientConfigManager.
-            panel.scale = UIScaleUtility.Clamp(scale);
+            UIScreen.Bind(_document, UIScaleUtility.Clamp(scale));
         }
 
         // ─────────────────────────────────────────────────────────────

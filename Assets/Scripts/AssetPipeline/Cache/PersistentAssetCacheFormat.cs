@@ -29,10 +29,18 @@ internal static class PersistentAssetCacheFormat
         string markerPath = Path.Combine(normalizedPath, MarkerFileName);
         if (File.Exists(markerPath))
         {
-            int version = ReadVersionMarker(markerPath);
-            if (version == CurrentSchemaVersion)
+            try
             {
-                return;
+                int version = ReadVersionMarker(markerPath);
+                if (version == CurrentSchemaVersion)
+                {
+                    return;
+                }
+            }
+            catch (InvalidDataException)
+            {
+                // Cache entries carry their own format and content hashes, so
+                // a torn container marker does not make their data unsafe.
             }
         }
 

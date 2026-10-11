@@ -99,10 +99,10 @@ public struct GenerateCellIdMeshJob : IJobParallelFor
 // (слой 2, TerrainDoorOverlayRenderer).
 public sealed class TerrainCellIdMesh : IDisposable
 {
-    internal static readonly VertexAttributeDescriptor[] VertexLayout =
-    [
+    internal static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
+    {
         new(VertexAttribute.Position, VertexAttributeFormat.Float16, 4),
-    ];
+    };
 
     private Mesh? _mesh;
     private int _width;

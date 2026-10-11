@@ -10,6 +10,7 @@ using Kern.Networking;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace Kern.UI
 {
@@ -43,6 +44,8 @@ namespace Kern.UI
         private ILocalizationService _loc = null!;
         [Inject]
         private ISceneNavigator _sceneNavigator = null!;
+        [Inject]
+        private IConnectionService _connection = null!;
         [Inject]
         private IWorldEntryPreparation _worldEntryPreparation = null!;
         [Inject]
@@ -157,11 +160,8 @@ namespace Kern.UI
             _root.Add(tree);
 
             _doc.panelSettings = panelSettings;
-            panelSettings.scale = UIScaleUtility.ResolveEffectiveScale(
-                _clientConfig?.Config.Interface.UIScale ?? 0f);
+            UIScreen.Bind(_doc, _clientConfig?.Config.Interface.UIScale ?? 0f);
             _tree = tree;
-
-            UILayoutTier.Attach(tree);
 
             BindUIElements(tree);
             _modalManager.Bind(tree);
@@ -319,6 +319,11 @@ namespace Kern.UI
         protected void OnDestroy()
         {
             _teardownStarted = true;
+            if (_doc != null)
+            {
+                UIScreen.Unbind(_doc);
+            }
+
             if (_windowVisibilitySubscribed && _windowCommands != null)
             {
                 _windowCommands.OpenWindowVisibilityChanged -= OnServerWindowVisibilityChanged;
@@ -336,11 +341,6 @@ namespace Kern.UI
 
             _tree?.RemoveFromHierarchy();
             _tree = null;
-        }
-
-        private void HideLoader()
-        {
-            _loaderPanel.Hide();
         }
 
         private void HideMenu()
@@ -408,6 +408,7 @@ namespace Kern.UI
                 destroyCancellationToken);
 
             _loaderPanel.Show();
+            _loaderPanel.Reset();
 
             if (_windowCommands != null && _windowCommands.HasOpenWindows)
             {
@@ -431,11 +432,39 @@ namespace Kern.UI
             try
             {
                 // Подготовка мира не входит в таймаут перехода: он меряет только сцену.
+                var preparationTimer = Stopwatch.StartNew();
                 await _worldEntryPreparation.EnsureReadyAsync(transitionToken);
+                Debug.Log(
+                    $"[MainMenu] World-entry preparation completed in {preparationTimer.Elapsed.TotalSeconds:F2} s; " +
+                    "starting MainGame scene transition.");
+                transitionToken.ThrowIfCancellationRequested();
                 await _sceneNavigator.TransitionAsync(GameSceneName, transitionToken);
             }
             catch (OperationCanceledException) when (transitionToken.IsCancellationRequested)
             {
+            }
+            catch (ConnectionStartupInterruptedException exception)
+            {
+                if (!_teardownStarted)
+                {
+                    // Не warning: вход в мир оборвался, а по консоли это было
+                    // неотличимо от штатного спуска. Причина обязана быть
+                    // слышна — иначе отказ ищут по одному экрану.
+                    Debug.LogError(
+                        $"[MainMenu] MainGame startup was interrupted by a disconnected transport; " +
+                        $"descent remains active. {exception}");
+                    _loaderPanel.ShowFailure(exception, _loc);
+                }
+            }
+            catch (TimeoutException exception) when (IsWaitingForWorldStartup())
+            {
+                if (!_teardownStarted)
+                {
+                    Debug.LogError(
+                        $"[MainMenu] MainGame startup timed out; keeping the descent screen while " +
+                        $"waiting for the server. {exception}");
+                    _loaderPanel.ShowFailure(exception, _loc);
+                }
             }
             catch (Exception exception)
             {
@@ -444,24 +473,29 @@ namespace Kern.UI
                     return;
                 }
 
-                _loadingActive = false;
-                UIState.Show(_tree);
-                if (_root != null)
-                {
-                    _root.pickingMode = PickingMode.Ignore;
-                }
-
-                _sceneryPresenter.ResumeRenderers();
-                HideLoader();
-                UIState.Show(_mainMenuContainer);
-
-                Debug.LogError($"[MainMenu] MainGame transition failed: {exception.Message}");
+                _loaderPanel.ShowFailure(exception, _loc);
             }
         }
 
+        private bool IsWaitingForWorldStartup() =>
+            _connection.IsAutoReconnecting || _connection.IsWorldStartupPending;
+
         private void CancelDescent()
         {
-            Debug.Log("[MainMenu] Descent is already in progress; waiting for MainGame.");
+            if (!_loaderPanel.HasFailure)
+            {
+                Debug.Log("[MainMenu] Descent is already in progress; waiting for MainGame.");
+                return;
+            }
+
+            _connection.Disconnect();
+            _descentCancellation?.Cancel();
+            _loadingActive = false;
+            _loaderPanel.Reset();
+            _loaderPanel.Hide();
+            _navigationPresenter.SetOrbitRouteActive();
+            _sceneryPresenter.DescentTarget = 0f;
+            UIState.Show(_mainMenuContainer);
         }
     }
 }

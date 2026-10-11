@@ -20,8 +20,8 @@ public sealed class MarkerSearch : IDisposable
     // настройки проекта живут в файлах (KERN-FORBIDDEN-API).
     private const string PinsFileName = "tool_marker_pins.txt";
 
-    private readonly List<FrameProbe> _results = [];
-    private readonly List<FrameProbe> _pins = [];
+    private readonly List<FrameProbe> _results = new();
+    private readonly List<FrameProbe> _pins = new();
     private readonly Queue<string> _pendingToggles = new();
 
     private string _appliedQuery = string.Empty;

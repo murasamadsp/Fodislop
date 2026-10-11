@@ -14,7 +14,7 @@ public sealed class GradingWorkbench : IDisposable
 {
     private readonly GradingLUTWindow _lutWindow = new();
     private readonly GradingScopesWindow _scopesWindow = new();
-    private readonly List<ToolWindow> _hiddenForWorkspace = [];
+    private readonly List<ToolWindow> _hiddenForWorkspace = new();
 
     private bool _registered;
     private bool _disposed;

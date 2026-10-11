@@ -43,8 +43,8 @@ namespace Kern.Game
 
         private static bool s_tuningGlobalsApplied;
 
-        private readonly List<Tentacle> _tentacles = [];
-        private readonly List<SpriteHandle> _sprites = [];
+        private readonly List<Tentacle> _tentacles = new();
+        private readonly List<SpriteHandle> _sprites = new();
         private readonly Dictionary<string, Sprite> _ownedSpritesByKey = new(StringComparer.Ordinal);
         private readonly SpatialShardGrid<SpriteHandle> _spatialGrid = new();
         private readonly WorldEntityVisibility _visibility;

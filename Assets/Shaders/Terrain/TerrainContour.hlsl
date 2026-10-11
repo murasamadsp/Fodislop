@@ -132,9 +132,8 @@ struct TerrainSurfaceInputs
     // несущего прямоугольника. Мировая ориентация, вариантом тайла не тронута.
     float2 cellSample;
 
-    // Координата для контура. У смещённой клетки это та же клеточная, у
-    // ровной — UV тайла: скругление блока живёт в тайле и обязано ехать
-    // вместе с его отражениями.
+    // The contour and neighbor masks share world-oriented cell coordinates.
+    // Texture variants may rotate or reflect independently of the geometry.
     float2 contourUV;
 
     float4 cornersX;
@@ -156,7 +155,7 @@ TerrainSurfaceInputs BuildTerrainSurfaceInputs(
 {
     TerrainSurfaceInputs surface;
     surface.cellSample = packedData.yz;
-    surface.contourUV = packedData.x > 0.5 ? packedData.yz : tileUV;
+    surface.contourUV = packedData.yz;
     surface.cornersX = cornersX;
     surface.cornersY = cornersY;
     surface.anchored = packedData.x;
@@ -194,7 +193,7 @@ float TerrainRimSideBevel(TerrainSurfaceInputs surface, int foreignSides)
             side);
         float influence = saturate(1.0 - distanceToSide * _RimDistanceScale);
         float sideShade = 1.0 - _RimFalloff * influence * influence;
-        bevel *= sideShade * sideShade * sideShade;
+        bevel = min(bevel, sideShade);
     }
 
     return bevel;
@@ -245,7 +244,7 @@ float TerrainRimBevel(TerrainSurfaceInputs surface)
         if ((sameSides & 8) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.75, 0.0), float2(0.75, 0.5)));
         float influence = saturate(1.0 + edge * _RimDistanceScale);
         float shade = 1.0 - _RimFalloff * influence * influence;
-        bevel = shade * shade * shade;
+        bevel = shade;
     }
     else
     {
@@ -268,7 +267,7 @@ float TerrainRimBevel(TerrainSurfaceInputs surface)
                 TerrainGeometryCorner(surface.cornersX, surface.cornersY, corner));
             float influence = saturate(1.0 - distanceToCorner * _RimDistanceScale);
             float cornerShade = 1.0 - _RimFalloff * influence * influence;
-            bevel *= cornerShade * cornerShade * cornerShade;
+            bevel = min(bevel, cornerShade);
         }
     }
 

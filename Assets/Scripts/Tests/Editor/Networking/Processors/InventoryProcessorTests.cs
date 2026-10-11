@@ -16,11 +16,13 @@ namespace Kern.Tests.Networking;
 public class InventoryProcessorTests
 {
     private static readonly ItemType[] s_knownTypes =
-    [
+    new[] {
+
         ItemType.Rem,
         ItemType.Battery,
         ItemType.Nano,
-    ];
+
+    };
 
     private InventoryModel _model = null!;
     private InventoryProcessor _processor = null!;
@@ -206,9 +208,13 @@ public class InventoryProcessorTests
         Assert.AreEqual("Custom Rem", _model.GetItem(ItemType.Rem)?.Name);
     }
 
-    private sealed class StubItemCatalog(IEnumerable<ItemType> knownTypes) : IItemCatalog
+    private sealed class StubItemCatalog : IItemCatalog
     {
-        public IEnumerable<ItemType> AllTypes => knownTypes;
+        private readonly IEnumerable<ItemType> _knownTypes;
+
+        public StubItemCatalog(IEnumerable<ItemType> knownTypes) => _knownTypes = knownTypes;
+
+        public IEnumerable<ItemType> AllTypes => _knownTypes;
 
         public string GetName(ItemType type) => type.ToString();
 

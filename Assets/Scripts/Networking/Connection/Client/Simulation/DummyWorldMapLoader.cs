@@ -10,6 +10,7 @@ using Kern.Persistence;
 using Kern.World;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace MinesServer.Networking.Connection.Client;
 
@@ -21,7 +22,10 @@ internal static class DummyWorldMapLoader
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var stageTimer = Stopwatch.StartNew();
         (int worldWidth, int worldHeight) = await DummyWorldMapArchive.ReadDimensionsWithRetryAsync(mapPath);
+        UnityEngine.Debug.Log(
+            $"[DummyWorldMapPrepare] Header and offset table validated in {stageTimer.Elapsed.TotalSeconds:F2} s.");
         if (worldWidth <= 0 || worldHeight <= 0)
         {
             throw new InvalidDataException(
@@ -32,17 +36,23 @@ internal static class DummyWorldMapLoader
             ProjectRuntimeContracts.World.ChunkSize;
         int heightChunks = (worldHeight + ProjectRuntimeContracts.World.ChunkSize - 1) /
             ProjectRuntimeContracts.World.ChunkSize;
+        stageTimer.Restart();
         await WorldLayer<CellType>.MigrateLegacyFileAsync(
             mapPath,
             widthChunks,
             heightChunks,
             ProjectRuntimeContracts.World.ChunkSize,
             cancellationToken);
+        UnityEngine.Debug.Log(
+            $"[DummyWorldMapPrepare] Format migration stage finished in {stageTimer.Elapsed.TotalSeconds:F2} s.");
+        stageTimer.Restart();
         await MapStorage.PrepareWorldCacheAsync(
             worldCodeName,
             widthChunks,
             heightChunks,
             cancellationToken);
+        UnityEngine.Debug.Log(
+            $"[DummyWorldMapPrepare] Persistent cache preflight finished in {stageTimer.Elapsed.TotalSeconds:F2} s.");
         cancellationToken.ThrowIfCancellationRequested();
     }
 

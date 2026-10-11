@@ -4,12 +4,14 @@ using System;
 using Kern.Core;
 using Kern.Rendering.PostProcessing.Scopes;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 
 namespace Kern.Rendering.PostProcessing
 {
     [DisallowMultipleRendererFeature]
-    public class PostProcessRendererFeature : ScriptableRendererFeature, IRenderer2DWorldGridProvider
+    public class PostProcessRendererFeature : ScriptableRendererFeature
     {
         public const string WorldUILayerName = ProjectRuntimeContracts.RequiredLayers.WorldUI;
 
@@ -30,40 +32,36 @@ namespace Kern.Rendering.PostProcessing
         private PostProcessRenderPass? _displayPass;
         private ScopesRenderPass? _scopesPass;
         private Camera? _mainCamera;
+        private readonly WorldRasterTargetObservation _rasterObservation = new();
+
+        private sealed class WorldRasterTargetObservation : ScriptableRenderPass2D
+        {
+            public WorldRasterTargetObservation()
+            {
+                renderPassEvent2D = RenderPassEvent2D.BeforeRendering;
+            }
+
+            public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+            {
+                UniversalCameraData camera = frameData.Get<UniversalCameraData>();
+                TextureHandle color = frameData.Get<UniversalResourceData>().activeColorTexture;
+                TextureDesc descriptor = color.GetDescriptor(renderGraph);
+                TextureHandle depth = frameData.Get<UniversalResourceData>().activeDepthTexture;
+                TextureDesc depthDescriptor = depth.GetDescriptor(renderGraph);
+                if (descriptor.width != depthDescriptor.width || descriptor.height != depthDescriptor.height ||
+                    descriptor.slices != depthDescriptor.slices || descriptor.msaaSamples != depthDescriptor.msaaSamples)
+                {
+                    throw new InvalidOperationException("World raster color and depth attachments differ before Renderer2D.");
+                }
+                PostProcessRuntimeState.DiagnosticWorldRasterTarget?.Invoke(camera.camera,
+                    new Vector2Int(descriptor.width, descriptor.height));
+            }
+        }
 
         internal bool RendersCamera(Camera camera) => _mainCamera == camera ||
             (_mainCamera == GameplayCamera.Resolve() && camera == PostProcessRuntimeState.DiagnosticOffscreenCamera);
         internal PostProcessWorkloadSnapshot? SceneWorkload => _worldBloomPass?.LatestWorkload;
         internal PostProcessWorkloadSnapshot? DisplayWorkload => _displayPass?.LatestWorkload;
-
-        public bool TryGetWorldGrid(Camera camera, out Renderer2DWorldGridLayout layout)
-        {
-            layout = default;
-            if (camera == PostProcessRuntimeState.DiagnosticOffscreenCamera &&
-                PostProcessRuntimeState.DiagnosticFullResolutionWorld)
-            {
-                return false;
-            }
-            if (camera.cameraType != CameraType.Game ||
-                (camera != GameplayCamera.Resolve() && camera != PostProcessRuntimeState.DiagnosticOffscreenCamera))
-            {
-                return false;
-            }
-
-            var binding = WorldRenderGridCamera.Capture(camera);
-            var grid = binding.Grid;
-            layout = new Renderer2DWorldGridLayout
-            {
-                Width = grid.Width,
-                Height = grid.Height,
-                View = binding.ViewMatrix,
-                Projection = binding.ProjectionMatrix,
-                ViewportToWorldUv = binding.ViewportToWorldUv,
-                WorldRect = new Vector4((float)grid.WorldMinX, (float)grid.WorldMinY,
-                    (float)grid.WorldWidth, (float)grid.WorldHeight),
-            };
-            return true;
-        }
 
         public override void Create()
         {
@@ -169,6 +167,10 @@ namespace Kern.Rendering.PostProcessing
             }
 
             EnsurePassCreated(targetCamera ?? cameraData.camera);
+            if (PostProcessRuntimeState.DiagnosticWorldRasterTarget != null)
+            {
+                renderer.EnqueuePass(_rasterObservation);
+            }
             if (_displayPass == null || _worldBloomPass == null)
             {
                 return;

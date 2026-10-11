@@ -118,6 +118,23 @@ public sealed class AssetCache
             RequestUnusedAssetsCollection(force: true);
         }
     }
+    // Предупреждение ОС о нехватке памяти: декодированные копии отпускаются
+    // целиком — их восстанавливают из байтов при следующем обращении, а
+    // байты и сами ассеты на экране остаются.
+    public void ReleaseDecodedForLowMemory()
+    {
+        long previous = _maxDecodedBytes;
+        _maxDecodedBytes = 0;
+        try
+        {
+            TrimDecodedIfNeeded();
+        }
+        finally
+        {
+            _maxDecodedBytes = previous;
+        }
+    }
+
     internal void TrackAccess(string filename, long byteSize)
     {
         if (_entrySizes.TryAdd(filename, byteSize))

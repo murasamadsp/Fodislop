@@ -30,16 +30,25 @@ internal sealed class ClientConfigLoader
     private const int HdrSwitchPendingSchemaVersion = 38;
     private const int PeakBrightnessFromDisplaySchemaVersion = 39;
     private const int TerrainNamesSchemaVersion = 40;
+    private const int HandheldUIScaleSchemaVersion = 41;
+    private const int HandheldUIScaleCorrectionSchemaVersion = 42;
+    private const int AndroidLightingPresetSchemaVersion = 43;
+    private const int PhysicalUIScaleSchemaVersion = 44;
 
     private readonly ClientConfigRepository _repository;
     private readonly ClientConfigValidator _validator;
     private readonly GraphicsQualityProfile _graphicsQualityProfile;
+    private readonly bool _isAndroidPlayer;
 
-    public ClientConfigLoader(ClientConfigRepository repository, GraphicsQualityProfile graphicsQualityProfile)
+    public ClientConfigLoader(
+        ClientConfigRepository repository,
+        GraphicsQualityProfile graphicsQualityProfile,
+        bool isAndroidPlayer = false)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _graphicsQualityProfile = graphicsQualityProfile ??
             throw new ArgumentNullException(nameof(graphicsQualityProfile));
+        _isAndroidPlayer = isAndroidPlayer;
         _validator = new ClientConfigValidator(graphicsQualityProfile);
     }
 
@@ -59,7 +68,9 @@ internal sealed class ClientConfigLoader
     {
         if (!_repository.Exists)
         {
-            ClientConfig defaults = ClientConfigDefaults.Create(_graphicsQualityProfile);
+            ClientConfig defaults = ClientConfigDefaults.Create(
+                _graphicsQualityProfile,
+                _isAndroidPlayer ? GraphicsPreset.Overdrive : GraphicsPreset.Standard);
             _validator.Validate(defaults);
             _repository.Save(defaults, _repository.BackupPath);
             return new Result(defaults, Outcome.CreatedDefaults, ClientConfig.CurrentSchemaVersion);
@@ -82,9 +93,18 @@ internal sealed class ClientConfigLoader
 
         if (sourceSchemaVersion != ClientConfig.CurrentSchemaVersion)
         {
-            ClientConfig migrated = ClientConfigDefaults.Create(_graphicsQualityProfile);
+            ClientConfig migrated = ClientConfigDefaults.Create(
+                _graphicsQualityProfile,
+                _isAndroidPlayer ? GraphicsPreset.Overdrive : GraphicsPreset.Standard);
             JsonUtility.FromJsonOverwrite(loaded.Json, migrated);
-            ApplyMigrations(migrated, loaded.Json, sourceSchemaVersion);
+            ApplyMigrations(migrated, loaded.Json, sourceSchemaVersion, _isAndroidPlayer);
+            if (!Enum.IsDefined(typeof(GraphicsPreset), migrated.GraphicsPreset))
+            {
+                // Older releases persisted the retired multi-step preset enum.
+                // Normalize values that no longer exist before rebuilding the profile.
+                migrated.GraphicsPreset = GraphicsPreset.Overdrive;
+            }
+
             ReconcileStandardPreset(migrated);
             _validator.Validate(migrated);
             _repository.Save(migrated, _repository.BackupPath);
@@ -142,7 +162,11 @@ internal sealed class ClientConfigLoader
         config.SchemaVersion = BloomStyleSchemaVersion;
     }
 
-    private static void ApplyMigrations(ClientConfig config, string sourceJson, int sourceSchemaVersion)
+    private static void ApplyMigrations(
+        ClientConfig config,
+        string sourceJson,
+        int sourceSchemaVersion,
+        bool isAndroidPlayer)
     {
         int schema = sourceSchemaVersion;
 
@@ -264,6 +288,64 @@ internal sealed class ClientConfigLoader
             }
 
             schema = TerrainNamesSchemaVersion;
+        }
+
+        if (schema == TerrainNamesSchemaVersion)
+        {
+            // Схема заведена под плотностный масштаб интерфейса на телефоне;
+            // от него отказались (см. UIScaleUtility), поэтому здесь остаётся
+            // прежнее правило: дефолт 1.0 поднимается до рекомендованного для
+            // этого экрана. Масштаб, выставленный игроком, не трогаем.
+            if (UIScaleUtility.IsHandheld &&
+                (Mathf.Approximately(config.Interface.UIScale, UIScaleUtility.StandardDefaultScale) ||
+                 Mathf.Approximately(config.Interface.UIScale, UIScaleUtility.RetinaDefaultScale)))
+            {
+                config.Interface.UIScale = UIScaleUtility.RecommendedDefaultScale;
+            }
+
+            schema = HandheldUIScaleSchemaVersion;
+        }
+
+        if (schema == HandheldUIScaleSchemaVersion)
+        {
+            // Схема 41 поднимала масштаб на карманном устройстве до плотности
+            // экрана (2.5) и уводила логический холст до 960×432 — макет на нём
+            // рассыпался. Возвращаем рекомендованное значение; точное совпадение
+            // с верхом диапазона и есть то самое число.
+            if (UIScaleUtility.IsHandheld &&
+                Mathf.Approximately(config.Interface.UIScale, UIScaleUtility.UIScaleMax))
+            {
+                config.Interface.UIScale = UIScaleUtility.RecommendedDefaultScale;
+            }
+
+            schema = HandheldUIScaleCorrectionSchemaVersion;
+        }
+
+        if (schema == HandheldUIScaleCorrectionSchemaVersion)
+        {
+            // Android's shipped default used Standard, whose contract disables
+            // radiance transport entirely. Upgrade only the untouched Standard
+            // selection; explicit Overdrive selections remain unchanged.
+            if (isAndroidPlayer && config.GraphicsPreset == GraphicsPreset.Standard)
+            {
+                config.GraphicsPreset = GraphicsPreset.Overdrive;
+            }
+
+            schema = AndroidLightingPresetSchemaVersion;
+        }
+
+        if (schema == AndroidLightingPresetSchemaVersion)
+        {
+            // На мобильной платформе панель теперь меряется в dp, и UIScale —
+            // множитель поверх физического размера, а не поверх опорных
+            // 1920×1080. Старые 1.0/1.35/2.5 значили совсем другой размер,
+            // поэтому сохранённое число сбрасывается к единице.
+            if (UIScaleUtility.UsesPhysicalScale)
+            {
+                config.Interface.UIScale = UIScaleUtility.RecommendedDefaultScale;
+            }
+
+            schema = PhysicalUIScaleSchemaVersion;
         }
 
         config.SchemaVersion = schema;

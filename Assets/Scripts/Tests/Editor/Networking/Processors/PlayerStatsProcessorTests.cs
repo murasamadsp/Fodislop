@@ -55,7 +55,9 @@ public class PlayerStatsProcessorTests
     [Test]
     public void Process_BasketPacket_UpdatesBasketCapacityAndContents()
     {
-        long[] contents = [10, 20, 30];
+        long[] contents = new long[] {
+10, 20, 30
+ };
         var packet = new BasketPacket(100, contents);
         _processor.Process(packet);
 

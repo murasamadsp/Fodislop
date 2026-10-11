@@ -10,14 +10,16 @@ namespace Kern.Tests.UI;
 public class InventoryModelFuzzTests
 {
     private static readonly ItemType[] s_types =
-    [
+    new[] {
+
         ItemType.Rem,
         ItemType.Battery,
         ItemType.Nano,
         ItemType.Poly,
         ItemType.UpgradeBooster,
         ItemType.GeoCyan,
-    ];
+
+    };
 
     [Test]
     public void RandomSnapshots_KeepOrderConsistentWithSelection()

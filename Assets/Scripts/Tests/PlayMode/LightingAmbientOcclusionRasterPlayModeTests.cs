@@ -67,7 +67,8 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
 
             SetCells(mesh, includeUpper: false);
             RectInt retainedPatch = new(240, 240, 32, 32);
-            solver.RecordAmbientOcclusionField(commands, contributor, registry, worldRect, [patch, retainedPatch]);
+        solver.RecordAmbientOcclusionField(commands, contributor, registry, worldRect,
+            new[] { patch, retainedPatch });
             Graphics.ExecuteCommandBuffer(commands);
             commands.Clear();
             byte[]? partial = null;
@@ -131,19 +132,33 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
     private static void SetCells(Mesh mesh, bool includeUpper)
     {
         mesh.Clear();
-        mesh.vertices =
-        [
+        mesh.vertices = new Vector3[]
+        {
+
             new(3f, -6f), new(4f, -6f), new(4f, -5f), new(3f, -5f),
             new(-6f, 3f), new(-5f, 3f), new(-5f, 4f), new(-6f, 4f),
-        ];
-        mesh.uv = [Vector2.zero, Vector2.right, Vector2.one, Vector2.up,
-            Vector2.zero, Vector2.right, Vector2.one, Vector2.up];
+
+        };
+        mesh.uv = new[] {
+Vector2.zero, Vector2.right, Vector2.one, Vector2.up,
+            Vector2.zero, Vector2.right, Vector2.one, Vector2.up
+ };
         mesh.uv2 = new Vector2[8];
-        mesh.triangles = includeUpper ? [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7] : [0, 1, 2, 0, 2, 3];
+        mesh.triangles = includeUpper
+            ? new[] { 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7 }
+            : new[] { 0, 1, 2, 0, 2, 3 };
     }
 
-    private sealed class SurfaceCells(Mesh mesh, Material material) : ILightingGeometryContributor
+    private sealed class SurfaceCells : ILightingGeometryContributor
     {
+        private readonly Mesh _mesh;
+        private readonly Material _material;
+
+        public SurfaceCells(Mesh mesh, Material material)
+        {
+            _mesh = mesh;
+            _material = material;
+        }
         public ulong LightingGeometryRevision => 1;
 
         public void RenderMaterialGlowFields(CommandBuffer commands, in LightingMaterialGlowContext context)
@@ -153,9 +168,9 @@ public sealed class LightingAmbientOcclusionRasterPlayModeTests
         public void RenderAmbientOcclusionField(CommandBuffer commands, in LightingAmbientOcclusionContext context)
         {
             LightingFieldOrientation.BindRaster(commands, context.WorldRect, Matrix4x4.identity);
-            int pass = material.FindPass("LightingAmbientOcclusionField");
+            int pass = _material.FindPass("LightingAmbientOcclusionField");
             Assert.That(pass, Is.GreaterThanOrEqualTo(0));
-            commands.DrawMesh(mesh, Matrix4x4.identity, material, 0, pass);
+            commands.DrawMesh(_mesh, Matrix4x4.identity, _material, 0, pass);
         }
     }
 }

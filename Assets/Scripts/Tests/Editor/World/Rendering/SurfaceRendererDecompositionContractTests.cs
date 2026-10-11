@@ -65,6 +65,31 @@ public sealed class SurfaceRendererDecompositionContractTests
         }
     }
 
+    [Test]
+    public void ExistingSurface_AllMaterialAltitudesFollowWorldReload()
+    {
+        var manager = new SurfaceMaterialManager();
+        var materials = new Material[4];
+        try
+        {
+            for (int index = 0; index < materials.Length; index++)
+            {
+                materials[index] = manager.CreateSurfaceMaterial(Texture2D.whiteTexture, Color.clear,
+                    0f, 0f, Vector2.one, new Vector2(512f, 256f),
+                    (SurfaceMaterialManager.SurfaceKind)index, "World size contract");
+            }
+            manager.SetMaterialWorldSize(materials[1], materials[2], materials[0], materials[3], 640, 128);
+            foreach (Material material in materials)
+            {
+                Assert.That(material.GetVector("_WorldSize"), Is.EqualTo(new Vector4(640f, 128f, 0f, 0f)));
+            }
+        }
+        finally
+        {
+            foreach (Material material in materials) { Object.DestroyImmediate(material); }
+        }
+    }
+
     private static string ReadRenderingSource(string fileName)
     {
         return File.ReadAllText(RenderingSourcePath(fileName));

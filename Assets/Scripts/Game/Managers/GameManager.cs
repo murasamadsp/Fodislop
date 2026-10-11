@@ -120,7 +120,7 @@ namespace Kern.Game.Managers
 
             CurrentState = newState;
             Debug.Log($"[GameManager] Game state changed to: {newState}");
-            OnGameStateChanged?.Invoke(newState);
+            InvokeSubscribersSafely(OnGameStateChanged, newState, nameof(OnGameStateChanged));
         }
 
         private const float ReadinessDiagInterval = 2.5f;
@@ -212,21 +212,65 @@ namespace Kern.Game.Managers
             }
 
             _loadProgress.Report(WorldLoadPhase.Done);
+            player.SetGameplayVisible();
+            AuthorizeUI();
 
             _worldLoadPending = false;
             _worldLoadPublished = true;
             IsWorldLoaded = true;
             Debug.Log($"[Probe] WorldLoaded {UnityEngine.Time.realtimeSinceStartup:F3}");
             SetState(GameState.InGame);
-            player.SetGameplayVisible();
-            AuthorizeUI();
             int robotCount = _robotService?.RobotCount ?? -1;
             Debug.Log(
                 $"[GameManager] World load completed: server position, terrain, shaders and textures are ready. " +
                 $"robots={robotCount}, pendingAssets={_assetLoader.PendingAssetCount}, " +
                 $"queuedAssets={_assetLoader.QueuedAssetCount}, " +
                 $"pendingCellTextures={_textureService.PendingCellTextureRequests}");
-            OnWorldLoaded?.Invoke();
+            InvokeSubscribersSafely(OnWorldLoaded, nameof(OnWorldLoaded));
+        }
+
+        private static void InvokeSubscribersSafely<T>(Action<T>? subscribers, T value, string eventName)
+        {
+            if (subscribers == null)
+            {
+                return;
+            }
+
+            foreach (Delegate subscriber in subscribers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<T>)subscriber)(value);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(new InvalidOperationException(
+                        $"[GameManager] {eventName} subscriber failed.",
+                        exception));
+                }
+            }
+        }
+
+        private static void InvokeSubscribersSafely(Action? subscribers, string eventName)
+        {
+            if (subscribers == null)
+            {
+                return;
+            }
+
+            foreach (Delegate subscriber in subscribers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action)subscriber)();
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(new InvalidOperationException(
+                        $"[GameManager] {eventName} subscriber failed.",
+                        exception));
+                }
+            }
         }
 
         public void AuthorizeUI()

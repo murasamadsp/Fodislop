@@ -36,11 +36,11 @@ internal sealed class RobotAura
     private const int AuraSortingOrder = 50;
 
     private static readonly Color[] s_wispTints =
-    [
+    {
         new(0.55f, 0.80f, 1.00f, 1f),
         new(0.76f, 0.62f, 1.00f, 1f),
         new(0.90f, 0.95f, 1.00f, 1f),
-    ];
+    };
 
     private static Sprite? s_sharedSegmentSprite;
 

@@ -14,7 +14,6 @@ internal sealed class WorldMapLayerBinding : IDisposable
     private readonly MapCellSampler _cellSampler;
     private readonly WorldMapMipSource _mipSource;
     private readonly Action _requestRender;
-    private readonly Action _requestFullRender;
     private IWorldDataStorage? _storage;
     private IWorldLayer<CellType>? _subscribedCellLayer;
     private int _chunkSize;
@@ -22,13 +21,11 @@ internal sealed class WorldMapLayerBinding : IDisposable
     public WorldMapLayerBinding(
         MapCellSampler cellSampler,
         WorldMapMipSource mipSource,
-        Action requestRender,
-        Action requestFullRender)
+        Action requestRender)
     {
         _cellSampler = cellSampler ?? throw new ArgumentNullException(nameof(cellSampler));
         _mipSource = mipSource ?? throw new ArgumentNullException(nameof(mipSource));
         _requestRender = requestRender ?? throw new ArgumentNullException(nameof(requestRender));
-        _requestFullRender = requestFullRender ?? throw new ArgumentNullException(nameof(requestFullRender));
     }
 
     public IWorldLayer<CellType>? CellLayer => _subscribedCellLayer;
@@ -115,14 +112,14 @@ internal sealed class WorldMapLayerBinding : IDisposable
         int chunkY = serverY / _chunkSize;
         _cellSampler.InvalidateChunk(chunkX * _chunkSize, chunkY * _chunkSize);
         _mipSource.QueueChunk(chunkX, chunkY);
-        _requestFullRender();
+        _requestRender();
     }
 
     private void OnChunkLoaded(int serverX, int serverY, int width, int height)
     {
         _cellSampler.InvalidateChunk(serverX, serverY);
         _mipSource.QueueChunk(serverX / Mathf.Max(1, _chunkSize), serverY / Mathf.Max(1, _chunkSize));
-        _requestFullRender();
+        _requestRender();
     }
 
     private void OnRegionChanged(int startX, int startY, int width, int height)
@@ -143,6 +140,6 @@ internal sealed class WorldMapLayerBinding : IDisposable
             }
         }
 
-        _requestFullRender();
+        _requestRender();
     }
 }

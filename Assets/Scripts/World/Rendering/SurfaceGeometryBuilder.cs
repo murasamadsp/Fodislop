@@ -8,6 +8,8 @@ namespace Kern.World;
 public sealed class SurfaceGeometryBuilder
 {
     public const float TransitHeight = 2f;
+    public const float PerspectiveHeight = 2f;
+    public const float PresentationHeight = TransitHeight + PerspectiveHeight;
     public const float TransitTileWidth = 30f;
     public const float HorizonWidth = 200f;
     public const float HorizonHeight = 100f;
@@ -15,10 +17,10 @@ public sealed class SurfaceGeometryBuilder
     public const float GeometryCacheQuantum = 32f;
     public const float GeometryCachePadding = 16f;
 
-    private static readonly int[] s_quadTriangles =
-    [
+    private static readonly int[] s_quadTriangles = new int[]
+    {
         0, 1, 2, 3, 2, 1,
-    ];
+    };
 
     private readonly Vector3[] _boundaryVertices = new Vector3[12];
     private readonly Vector2[] _boundaryUv = new Vector2[12];
@@ -31,13 +33,13 @@ public sealed class SurfaceGeometryBuilder
     private readonly Vector2[] _uvTransit = new Vector2[4];
     private readonly Vector3[] _verticesPers = new Vector3[4];
     private readonly Vector2[] _uvPers = new Vector2[4];
-    private readonly Vector2[] _uvPers2 =
-    [
+    private readonly Vector2[] _uvPers2 = new Vector2[]
+    {
         new(0f, 0f),
         new(0f, 1f),
         new(1f, 0f),
         new(1f, 1f),
-    ];
+    };
 
     public static Rect GetVisibleRect(Camera camera)
     {
@@ -190,9 +192,9 @@ public sealed class SurfaceGeometryBuilder
         _uvTransit[3] = new Vector2(num4, 1f);
 
         _verticesTransit[0] = new Vector3(num, surfaceY + 0f, z);
-        _verticesTransit[1] = new Vector3(num, surfaceY + 2f, z);
+        _verticesTransit[1] = new Vector3(num, surfaceY + TransitHeight, z);
         _verticesTransit[2] = new Vector3(num2, surfaceY + 0f, z);
-        _verticesTransit[3] = new Vector3(num2, surfaceY + 2f, z);
+        _verticesTransit[3] = new Vector3(num2, surfaceY + TransitHeight, z);
 
         float num5 = 15f + (0.5f * (num3 + num4));
         float num6 = num4 - num3;
@@ -202,10 +204,10 @@ public sealed class SurfaceGeometryBuilder
         _uvPers[2] = new Vector2(num5 + (0.5f * num6), 0f);
         _uvPers[3] = new Vector2(num5 + (0.5f * num6), 1f);
 
-        _verticesPers[0] = new Vector3(num, surfaceY + 2f, z);
-        _verticesPers[1] = new Vector3(num, surfaceY + 4f, z);
-        _verticesPers[2] = new Vector3(num2, surfaceY + 2f, z);
-        _verticesPers[3] = new Vector3(num2, surfaceY + 4f, z);
+        _verticesPers[0] = new Vector3(num, surfaceY + TransitHeight, z);
+        _verticesPers[1] = new Vector3(num, surfaceY + PresentationHeight, z);
+        _verticesPers[2] = new Vector3(num2, surfaceY + TransitHeight, z);
+        _verticesPers[3] = new Vector3(num2, surfaceY + PresentationHeight, z);
 
         float meshBoundsWidth = Mathf.Max((span * 2f) + 32f, 200f);
         transitMesh.bounds = new Bounds(new Vector3(cx, surfaceY + 1f, 0f), new Vector3(meshBoundsWidth, 100f, 10f));

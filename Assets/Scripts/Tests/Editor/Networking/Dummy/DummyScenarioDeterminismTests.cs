@@ -310,7 +310,7 @@ public sealed class DummyScenarioDeterminismTests
 
     private sealed class NoItems : IItemCatalog
     {
-        public IEnumerable<ItemType> AllTypes => [];
+        public IEnumerable<ItemType> AllTypes => Array.Empty<ItemType>();
 
         public string GetName(ItemType type) => type.ToString();
 

@@ -6,11 +6,18 @@ using MinesServer.Data;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class LayerLease(WorldLayer<CellType> layer)
+internal sealed class LayerLease
 {
+    private readonly WorldLayer<CellType> _layer;
+
+    internal LayerLease(WorldLayer<CellType> layer)
+    {
+        _layer = layer;
+    }
+
     private int _refCount = 1;
 
-    public WorldLayer<CellType> Layer => layer;
+    public WorldLayer<CellType> Layer => _layer;
 
     public bool TryAddRef()
     {
@@ -33,7 +40,7 @@ internal sealed class LayerLease(WorldLayer<CellType> layer)
     {
         if (Interlocked.Decrement(ref _refCount) == 0)
         {
-            layer.Dispose();
+            _layer.Dispose();
         }
     }
 }

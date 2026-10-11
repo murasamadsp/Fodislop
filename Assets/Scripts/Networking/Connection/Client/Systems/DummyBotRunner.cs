@@ -101,7 +101,7 @@ internal static class DummyBotRunner
 
             if (positions.Count > 0)
             {
-                sendPacket(new ServerPacket(new HBPacket([.. positions])));
+                sendPacket(new ServerPacket(new HBPacket(positions)));
             }
 
             await clock.Delay(100, cancellationToken);

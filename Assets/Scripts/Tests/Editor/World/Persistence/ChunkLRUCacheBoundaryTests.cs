@@ -59,8 +59,12 @@ public class ChunkLRUCacheBoundaryTests
             onEvictDirty: (_, _) => evictCalls++,
             allowDirtyEviction: false);
 
-        int[] first = [10];
-        int[] second = [20];
+        int[] first = new[] {
+10
+ };
+        int[] second = new[] {
+20
+ };
         cache.AddOrUpdate(1, first);
         cache.MarkDirty(1);
         cache.AddOrUpdate(2, second);
@@ -75,7 +79,9 @@ public class ChunkLRUCacheBoundaryTests
     public void DetachedDirtySnapshot_UsesCopyOnWriteForConcurrentMutation()
     {
         var cache = new ChunkLRUCache<int>(4);
-        int[] original = [10, 20];
+        int[] original = new[] {
+10, 20
+ };
         cache.AddOrUpdate(7, original);
         cache.MarkDirty(7);
 

@@ -42,8 +42,19 @@ namespace Kern.Rendering.PostProcessing
         private static readonly ProfilerMarker s_downsample = new(ProfilerCategory.Render, "Kern.PostProcess.Bloom.Downsample", MarkerFlags.SampleGPU);
         private static readonly ProfilerMarker s_upsample = new(ProfilerCategory.Render, "Kern.PostProcess.Bloom.Upsample", MarkerFlags.SampleGPU);
         private static readonly ProfilerMarker s_add = new(ProfilerCategory.Render, "Kern.PostProcess.Bloom.Add", MarkerFlags.SampleGPU);
-        private static readonly string[] s_downNames = ["_WorldBloom0", "_WorldBloom1", "_WorldBloom2", "_WorldBloom3"];
-        private static readonly string[] s_upNames = ["_WorldBloomUp0", "_WorldBloomUp1", "_WorldBloomUp2"];
+        private static readonly string[] s_downNames =
+        {
+            "_WorldBloom0",
+            "_WorldBloom1",
+            "_WorldBloom2",
+            "_WorldBloom3",
+        };
+        private static readonly string[] s_upNames =
+        {
+            "_WorldBloomUp0",
+            "_WorldBloomUp1",
+            "_WorldBloomUp2",
+        };
         private readonly WorldBloomLevel[] _levels = new WorldBloomLevel[4];
         private readonly TextureHandle[] _down = new TextureHandle[4];
         private readonly TextureHandle[] _up = new TextureHandle[3];
@@ -120,9 +131,7 @@ namespace Kern.Rendering.PostProcessing
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer context)
         {
             UniversalCameraData camera = context.Get<UniversalCameraData>();
-            Renderer2DWorldGridData grid = context.Get<Renderer2DWorldGridData>();
-            if (!grid.Active ||
-                (camera.camera != PostProcessRuntimeState.MainCamera &&
+            if ((camera.camera != PostProcessRuntimeState.MainCamera &&
                  camera.camera != PostProcessRuntimeState.DiagnosticOffscreenCamera) ||
                 PostProcessRuntimeState.BypassPostProcessEffects || PostProcessRuntimeState.TemporaryBypass)
             {
@@ -144,15 +153,17 @@ namespace Kern.Rendering.PostProcessing
                 throw new InvalidOperationException("World bloom requires the world HDR color target.");
             }
 
-            var layout = grid.Layout;
-            int minX = Mathf.RoundToInt(layout.WorldRect.x * WorldRenderGrid.PixelsPerCell);
-            int minY = Mathf.RoundToInt(layout.WorldRect.y * WorldRenderGrid.PixelsPerCell);
-            var scene = new WorldBloomLevel(minX, minY, layout.Width, layout.Height, 1);
+            var binding = WorldRenderGridCamera.Capture(camera.camera);
+            WorldRenderGrid worldGrid = binding.Grid;
+            TextureDesc descriptor = sceneColor.GetDescriptor(graph);
+            int minX = Mathf.FloorToInt((float)(worldGrid.ViewportMinX * WorldRenderGrid.PixelsPerCell));
+            int minY = Mathf.FloorToInt((float)(worldGrid.ViewportMinY * WorldRenderGrid.PixelsPerCell));
+            var scene = new WorldBloomLevel(minX, minY, descriptor.width, descriptor.height, 1);
             int count = 1;
-            _levels[0] = WorldBloomLevel.Cover(minX, minY, layout.Width, layout.Height, 4);
+            _levels[0] = WorldBloomLevel.Cover(minX, minY, descriptor.width, descriptor.height, 4);
             for (int i = 1; i < _levels.Length; i++)
             {
-                WorldBloomLevel next = WorldBloomLevel.Cover(minX, minY, layout.Width, layout.Height, 4 << i);
+                WorldBloomLevel next = WorldBloomLevel.Cover(minX, minY, descriptor.width, descriptor.height, 4 << i);
                 if (Math.Min(next.Width, next.Height) < 8)
                 {
                     break;
@@ -163,7 +174,6 @@ namespace Kern.Rendering.PostProcessing
 
             long bytes = 0;
             int textureCount = 0;
-            TextureDesc descriptor = sceneColor.GetDescriptor(graph);
             descriptor.sizeMode = TextureSizeMode.Explicit;
             descriptor.colorFormat = GraphicsFormat.R16G16B16A16_SFloat;
             descriptor.depthBufferBits = DepthBits.None;
@@ -197,8 +207,10 @@ namespace Kern.Rendering.PostProcessing
             {
                 throw new InvalidOperationException("World bloom requires a coherent glow world rectangle.");
             }
-            Vector4 glowUv = new(layout.WorldRect.z / lightRect.z, layout.WorldRect.w / lightRect.w,
-                (layout.WorldRect.x - lightRect.x) / lightRect.z, (layout.WorldRect.y - lightRect.y) / lightRect.w);
+            Vector4 glowUv = new((float)(worldGrid.ViewportWidth / lightRect.z),
+                (float)(worldGrid.ViewportHeight / lightRect.w),
+                (float)((worldGrid.ViewportMinX - lightRect.x) / lightRect.z),
+                (float)((worldGrid.ViewportMinY - lightRect.y) / lightRect.w));
             if (LightingFieldOrientation.RowsTopDown)
             {
                 glowUv.y = -glowUv.y;

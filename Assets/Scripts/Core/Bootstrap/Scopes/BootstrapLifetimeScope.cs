@@ -135,6 +135,7 @@ namespace Kern.Core
             gateEntered = true;
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 await TransitionExclusiveAsync(sceneName, cancellationToken);
             }
             finally
@@ -150,6 +151,15 @@ namespace Kern.Core
             string sceneName,
             CancellationToken cancellationToken)
         {
+            Scene alreadyCurrent = SceneTransitionSceneLookup.FindFirstLoaded(sceneName);
+            if (string.Equals(_currentSceneName, sceneName, StringComparison.Ordinal) &&
+                alreadyCurrent.IsValid() && alreadyCurrent.isLoaded)
+            {
+                SceneManager.SetActiveScene(alreadyCurrent);
+                Debug.Log($"[Bootstrap] Scene '{sceneName}' is already current; transition skipped.");
+                return;
+            }
+
             Scene? previousScene = null;
             string? currentSceneName = _currentSceneName;
             if (!string.IsNullOrEmpty(currentSceneName))
@@ -195,8 +205,12 @@ namespace Kern.Core
                 using (LifetimeScope.EnqueueParent(this))
                 using (LifetimeScope.Enqueue(builder => builder.RegisterInstance(ticket)))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    AsyncOperation loadOperation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive)
+                        ?? throw new SceneContractException(
+                            $"Unity refused to start loading scene '{sceneName}' (isPlaying={Application.isPlaying}).");
                     candidateLoadStarted = true;
-                    await SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive).ToUniTask();
+                    await loadOperation.ToUniTask();
                     // Yield one frame so Unity finishes Awake/OnEnable on the new
                     // scene's root objects before we touch them. Without this the
                     // very first lookup against candidateScene can race the
@@ -205,6 +219,7 @@ namespace Kern.Core
                 }
 
                 candidateScene = SceneTransitionSceneLookup.FindUniqueLoaded(sceneName);
+                ThrowIfSceneScopeAwakeFailed(candidateScene);
 
                 await ticket.WaitUntilAttachedAsync().AttachExternalCancellation(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
@@ -242,7 +257,23 @@ namespace Kern.Core
             {
                 ticket.Fail(ex);
                 _currentSceneName = previousScene?.name;
-                if (string.Equals(sceneName, ProjectRuntimeContracts.SceneNames.MainGame, StringComparison.Ordinal))
+                if (previousScene.HasValue && previousScene.Value.IsValid() && previousScene.Value.isLoaded)
+                {
+                    SceneManager.SetActiveScene(previousScene.Value);
+                }
+
+                bool worldStartupTimedOut =
+                    string.Equals(sceneName, ProjectRuntimeContracts.SceneNames.MainGame, StringComparison.Ordinal) &&
+                    ex is TimeoutException &&
+                    _connectionManager.IsWorldStartupPending &&
+                    !_connectionManager.IsOffline &&
+                    _connectionManager.IsConnected;
+                if (worldStartupTimedOut)
+                {
+                    _connectionManager.HandleServerReconnect();
+                }
+                else if (string.Equals(sceneName, ProjectRuntimeContracts.SceneNames.MainGame, StringComparison.Ordinal) &&
+                         !_connectionManager.IsAutoReconnecting)
                 {
                     // The connection and DummyConnection outlive the candidate
                     // scene. If world initialization times out, keeping that
@@ -296,6 +327,36 @@ namespace Kern.Core
         private void PublishTransitionStatus(SceneTransitionStatus status)
         {
             SceneTransitionRuntime.PublishSafely(TransitionChanged, status);
+        }
+
+        private static void ThrowIfSceneScopeAwakeFailed(Scene scene)
+        {
+            bool foundScope = false;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                foreach (TransitionSceneLifetimeScope scope in
+                         root.GetComponentsInChildren<TransitionSceneLifetimeScope>(true))
+                {
+                    if (scope.gameObject.scene != scene)
+                    {
+                        continue;
+                    }
+
+                    foundScope = true;
+                    if (scope.AwakeFailure != null)
+                    {
+                        throw new SceneContractException(
+                            $"Scene '{scene.name}' composition root failed during Awake/Configure.",
+                            scope.AwakeFailure);
+                    }
+                }
+            }
+
+            if (!foundScope)
+            {
+                throw new SceneContractException(
+                    $"Scene '{scene.name}' loaded without a TransitionSceneLifetimeScope composition root.");
+            }
         }
 
         private static GameLifetimeScope? FindGameScope(Scene scene)

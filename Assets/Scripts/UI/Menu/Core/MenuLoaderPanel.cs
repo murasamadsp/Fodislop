@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using Kern.Core.Interfaces;
 using Kern.Core.Localization;
 using UnityEngine.UIElements;
@@ -17,6 +18,8 @@ namespace Kern.UI
         private MenuLoaderProgress? _progress;
         private bool _hiddenAtDone;
 
+        public bool HasFailure { get; private set; }
+
         public void Bind(VisualElement tree, VisualElement searchRoot, ILocalizationService loc)
         {
             _container = tree.Q<VisualElement>("LoaderContainer") ?? searchRoot.Q<VisualElement>("LoaderContainer");
@@ -31,16 +34,14 @@ namespace Kern.UI
             // «меню построено», после чего кадр умирал тремя секундами позже
             // на таймауте готовности, и в логе не было ни одного имени, за
             // которое можно зацепиться. Отказ называет всё недостающее сразу.
-            string[] missing =
-            [
-                .. _container == null ? new[] { "LoaderContainer" } : [],
-                .. _content == null ? new[] { "LoaderContent" } : [],
-                .. progressFill == null ? new[] { "LoaderProgressFill" } : [],
-                .. phaseLabel == null ? new[] { "LoaderPhaseLabel" } : [],
-                .. phaseCount == null ? new[] { "LoaderPhaseCount" } : [],
-                .. phaseList == null ? new[] { "LoaderPhaseList" } : [],
-            ];
-            if (missing.Length > 0)
+            var missing = new List<string>();
+            if (_container == null) { missing.Add("LoaderContainer"); }
+            if (_content == null) { missing.Add("LoaderContent"); }
+            if (progressFill == null) { missing.Add("LoaderProgressFill"); }
+            if (phaseLabel == null) { missing.Add("LoaderPhaseLabel"); }
+            if (phaseCount == null) { missing.Add("LoaderPhaseCount"); }
+            if (phaseList == null) { missing.Add("LoaderPhaseList"); }
+            if (missing.Count > 0)
             {
                 throw new InvalidOperationException(
                     "[MainMenu] В Resources/UI/Menus/MainMenu.uxml нет элементов, которых ждёт загрузчик: " +
@@ -78,6 +79,15 @@ namespace Kern.UI
         public void Reset()
         {
             _hiddenAtDone = false;
+            HasFailure = false;
+            _progress?.ResetFailure();
+        }
+
+        public void ShowFailure(Exception exception, ILocalizationService loc)
+        {
+            HasFailure = true;
+            UnityEngine.Debug.LogException(exception);
+            _progress?.ShowFailure(loc.Get("menu.loading.failed", exception.Message));
         }
 
         public void UpdateProgress(WorldLoadPhase phase, Action onDone)

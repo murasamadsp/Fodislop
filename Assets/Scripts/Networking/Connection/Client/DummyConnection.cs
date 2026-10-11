@@ -493,6 +493,20 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            // Disconnect/reset cancels the active map open without stopping the
+            // application supervisor. That is a normal end to this request.
+        }
+        catch (Exception exception)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            Debug.LogException(new InvalidOperationException(
+                "[DummyConnection] Offline world initialization failed before the world became ready.",
+                exception));
+            TriggerDisconnect($"Offline world initialization failed: {exception.Message}");
         }
     }
 

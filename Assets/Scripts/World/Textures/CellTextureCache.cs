@@ -41,7 +41,7 @@ public class CellTextureCache
 
     public void Clear()
     {
-        HashSet<Texture2D> ownedTextures = [];
+        HashSet<Texture2D> ownedTextures = new();
         foreach (CellTextureInfo textureInfo in _textureCache.Values)
         {
             if (textureInfo.OwnsBaseTexture && textureInfo.BaseTexture != null)

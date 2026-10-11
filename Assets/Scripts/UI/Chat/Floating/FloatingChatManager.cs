@@ -47,6 +47,8 @@ namespace Kern.UI
         private UIInputManager _uiInput = null!;
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
+        [Inject]
+        private TouchCommands _touchCommands = null!;
 
         private LocalChatInput? _localInput;
         private float _lastBubbleActivityTime;
@@ -66,6 +68,7 @@ namespace Kern.UI
                 _inputBlocker,
                 _uiInput,
                 _operations,
+                _touchCommands,
                 destroyCancellationToken);
         }
 

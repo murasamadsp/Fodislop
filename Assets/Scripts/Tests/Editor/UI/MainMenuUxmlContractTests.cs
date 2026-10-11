@@ -10,7 +10,8 @@ namespace Kern.Tests.UI;
 public sealed class MainMenuUxmlContractTests
 {
     private static readonly string[] s_requiredLoaderElements =
-    [
+    new[] {
+
         "LoaderContainer",
         "LoaderContent",
         "LoaderProgressFill",
@@ -18,7 +19,8 @@ public sealed class MainMenuUxmlContractTests
         "LoaderPhaseCount",
         "LoaderPhaseList",
         "CancelDescentButton",
-    ];
+
+    };
 
     [Test]
     public void MainMenuResourceContainsCompleteLoadingUI()

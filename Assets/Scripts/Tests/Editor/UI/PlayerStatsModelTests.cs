@@ -145,7 +145,7 @@ public class PlayerStatsModelTests
     [Test]
     public void InformativeEvents_FireWithAccurateParameters()
     {
-        (int current, int max) healthResult = default;
+        (long current, long max) healthResult = default;
         (long money, long credits) currencyResult = default;
 
         _statsModel.OnHealthUpdated += (c, m) => healthResult = (c, m);
@@ -154,7 +154,7 @@ public class PlayerStatsModelTests
         _statsModel.SetHealth(80, 120);
         _statsModel.SetCurrency(5000, 42);
 
-        Assert.AreEqual((80, 120), healthResult);
-        Assert.AreEqual((5000, 42), currencyResult);
+        Assert.AreEqual((80L, 120L), healthResult);
+        Assert.AreEqual((5000L, 42L), currencyResult);
     }
 }

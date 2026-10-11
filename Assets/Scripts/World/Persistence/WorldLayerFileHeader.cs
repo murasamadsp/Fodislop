@@ -153,6 +153,22 @@ public static class WorldLayerFileHeader
         writer.Write(offset);
     }
 
+    public static void WriteChunkOffsets(Stream stream, long[] chunkOffsets)
+    {
+        if (stream == null)
+        {
+            throw new ArgumentNullException(nameof(stream));
+        }
+
+        if (chunkOffsets == null)
+        {
+            throw new ArgumentNullException(nameof(chunkOffsets));
+        }
+
+        stream.Seek(HeaderSize, SeekOrigin.Begin);
+        stream.Write(MemoryMarshal.AsBytes(chunkOffsets.AsSpan()));
+    }
+
     public static int? TryReadFormatVersion(Stream stream)
     {
         try

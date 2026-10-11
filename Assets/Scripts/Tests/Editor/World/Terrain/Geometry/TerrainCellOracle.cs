@@ -18,23 +18,56 @@ namespace Kern.Tests.World;
 // узел в единицах 1/256 знака нуля не знает; для шейдера это одно число.
 // Узлы оракул берёт из nodeAt (правило TerrainVertexDistortionCalculator):
 // его HLSL-копию сверяет растровый шим на тех же мирах.
-internal sealed class TerrainCellOracle(
-    Func<int, int, TerrainCell> cellAt,
-    Func<int, int, TerrainVertexOffset> nodeAt,
-    Func<uint, TerrainTypeRow> typeOf,
-    Func<int, int> atlasSize,
-    uint[] tileDescriptors,
-    uint groundType,
-    uint groundDecalRule,
-    uint rockDecalRule,
-    int worldHeight,
-    bool organicEdges,
-    uint horizontalSeed,
-    uint verticalSeed)
+internal sealed class TerrainCellOracle
 {
+    private readonly Func<int, int, TerrainCell> _cellAt;
+    private readonly Func<int, int, TerrainVertexOffset> _nodeAt;
+    private readonly Func<uint, TerrainTypeRow> _typeOf;
+    private readonly Func<int, int> _atlasSize;
+    private readonly uint[] _tileDescriptors;
+    private readonly uint _groundType;
+    private readonly uint _groundDecalRule;
+    private readonly uint _rockDecalRule;
+    private readonly int _worldHeight;
+    private readonly bool _organicEdges;
+    private readonly uint _horizontalSeed;
+    private readonly uint _verticalSeed;
+
+    public TerrainCellOracle(
+        Func<int, int, TerrainCell> cellAt,
+        Func<int, int, TerrainVertexOffset> nodeAt,
+        Func<uint, TerrainTypeRow> typeOf,
+        Func<int, int> atlasSize,
+        uint[] tileDescriptors,
+        uint groundType,
+        uint groundDecalRule,
+        uint rockDecalRule,
+        int worldHeight,
+        bool organicEdges,
+        uint horizontalSeed,
+        uint verticalSeed)
+    {
+        _cellAt = cellAt;
+        _nodeAt = nodeAt;
+        _typeOf = typeOf;
+        _atlasSize = atlasSize;
+        _tileDescriptors = tileDescriptors;
+        _groundType = groundType;
+        _groundDecalRule = groundDecalRule;
+        _rockDecalRule = rockDecalRule;
+        _worldHeight = worldHeight;
+        _organicEdges = organicEdges;
+        _horizontalSeed = horizontalSeed;
+        _verticalSeed = verticalSeed;
+    }
+
     // L, BL, B, BR, R, TR, T, TL — порядок битов маски автотайла.
-    private static readonly int[] s_dx = [-1, -1, 0, 1, 1, 1, 0, -1];
-    private static readonly int[] s_dy = [0, -1, -1, -1, 0, 1, 1, 1];
+    private static readonly int[] s_dx = new[] {
+-1, -1, 0, 1, 1, 1, 0, -1
+ };
+    private static readonly int[] s_dy = new[] {
+0, -1, -1, -1, 0, 1, 1, 1
+ };
     private const int Left = 0, BottomLeft = 1, Bottom = 2, BottomRight = 3, Right = 4, TopRight = 5, Top = 6, TopLeft = 7;
 
     public void AssertMatchesQuad(
@@ -46,20 +79,20 @@ internal sealed class TerrainCellOracle(
         string where)
     {
         bool foreground = layer == 1;
-        uint cell = cellAt(gridX, unityY).Bits;
+        uint cell = _cellAt(gridX, unityY).Bits;
         uint fgType = cell & 0xFFu;
         var nb = new uint[8];
         var nbType = new uint[8];
         for (int i = 0; i < 8; i++)
         {
-            nb[i] = cellAt(gridX + s_dx[i], unityY + s_dy[i]).Bits;
+            nb[i] = _cellAt(gridX + s_dx[i], unityY + s_dy[i]).Bits;
             nbType[i] = nb[i] & 0xFFu;
         }
 
-        uint fgLook = typeOf(fgType).Look;
+        uint fgLook = _typeOf(fgType).Look;
         bool fgEmpty = Bit(fgLook, 3);
         bool fgCause = Outline(fgLook) == 1;
-        bool organicTerrain = organicEdges && fgCause;
+        bool organicTerrain = _organicEdges && fgCause;
 
         uint typeIndex = 0;
         if (fgType != 0)
@@ -74,14 +107,20 @@ internal sealed class TerrainCellOracle(
             }
         }
 
-        float[] cornersX = [0f, 1f, 1f, 0f];
-        float[] cornersY = [0f, 0f, 1f, 1f];
+        float[] cornersX = new[] {
+0f, 1f, 1f, 0f
+ };
+        float[] cornersY = new[] {
+0f, 0f, 1f, 1f
+ };
         if (fgCause && fgType != 0)
         {
-            (int Dx, int Dy)[] owners = [(0, 0), (1, 0), (1, 1), (0, 1)];
+            (int Dx, int Dy)[] owners = new[] {
+(0, 0), (1, 0), (1, 1), (0, 1)
+ };
             for (int corner = 0; corner < 4; corner++)
             {
-                TerrainVertexOffset node = nodeAt(gridX + owners[corner].Dx, unityY + owners[corner].Dy);
+                TerrainVertexOffset node = _nodeAt(gridX + owners[corner].Dx, unityY + owners[corner].Dy);
                 cornersX[corner] += node.XSteps / TerrainVertexOffset.GridSize;
                 cornersY[corner] += node.YSteps / TerrainVertexOffset.GridSize;
             }
@@ -94,7 +133,7 @@ internal sealed class TerrainCellOracle(
         if (typeIndex != 0 && !foreground)
         {
             bool occluded = !fgEmpty &&
-                HasRect(typeOf(fgType)) && Outline(fgLook) != 3 &&
+                HasRect(_typeOf(fgType)) && Outline(fgLook) != 3 &&
                 Bit(fgLook, 4);
             if (occluded && fgAnchored)
             {
@@ -107,9 +146,9 @@ internal sealed class TerrainCellOracle(
             typeIndex = occluded ? 0u : typeIndex;
         }
 
-        TerrainTypeRow type = typeOf(typeIndex);
+        TerrainTypeRow type = _typeOf(typeIndex);
         int atlasIndex = typeIndex != 0 ? (int)(type.Look & 7u) : -1;
-        float size = typeIndex != 0 ? atlasSize(atlasIndex) : 1f;
+        float size = typeIndex != 0 ? _atlasSize(atlasIndex) : 1f;
         Assert.That(atlasIndex, Is.EqualTo(result.AtlasIndex), $"{where}: слот атласа");
         if (typeIndex == 0)
         {
@@ -118,7 +157,7 @@ internal sealed class TerrainCellOracle(
 
         uint look = type.Look;
 
-        int serverY = worldHeight - 1 - unityY;
+        int serverY = _worldHeight - 1 - unityY;
 
         var layerTypes = new uint[8];
         for (int i = 0; i < 8; i++)
@@ -133,14 +172,14 @@ internal sealed class TerrainCellOracle(
             uint mask = 0;
             for (int i = 0; i < 8; i++)
             {
-                TerrainTypeRow other = typeOf(layerTypes[i]);
+                TerrainTypeRow other = _typeOf(layerTypes[i]);
                 if (TileCode(other) != 0 && TileCode(other) == TileCode(type))
                 {
                     mask |= 1u << i;
                 }
             }
 
-            descriptor = (tileDescriptors[mask >> 2] >> (int)((mask & 3u) * 8u)) & 0xFFu;
+            descriptor = (_tileDescriptors[mask >> 2] >> (int)((mask & 3u) * 8u)) & 0xFFu;
         }
 
         if (foreground && Outline(look) == 4)
@@ -181,15 +220,15 @@ internal sealed class TerrainCellOracle(
         float packedFlags = lightingFlags + glow * (1f / 255f) * 0.25f;
         // Размер тайла и высота кадра не хранятся: 32 текселя на размер атласа
         // слота и высота прямоугольника на размер тайла.
-        float tile = 32f / atlasSize(atlasIndex);
+        float tile = 32f / _atlasSize(atlasIndex);
         // Прямоугольник — пиксели по 12 бит, в UV делятся на размер атласа.
         var rect = new Vector4(
             (type.AtlasXY & 0xFFFu) / size, ((type.AtlasXY >> 12) & 0xFFFu) / size,
             (type.AtlasWH & 0xFFFu) / size, ((type.AtlasWH >> 12) & 0xFFFu) / size);
         float frameHeight = rect.w > 0f ? rect.w / tile : 1f;
         uint decal = (look >> 17) & 3u;
-        uint decalRule = decal == 1 ? groundDecalRule
-            : decal == 2 ? rockDecalRule
+        uint decalRule = decal == 1 ? _groundDecalRule
+            : decal == 2 ? _rockDecalRule
             : 0u;
 
         uint organic = 0;
@@ -205,8 +244,8 @@ internal sealed class TerrainCellOracle(
         bool anchored = foreground && fgAnchored;
         if (!foreground)
         {
-            cornersX = [0f, 1f, 1f, 0f];
-            cornersY = [0f, 0f, 1f, 1f];
+            cornersX = new[] { 0f, 1f, 1f, 0f };
+            cornersY = new[] { 0f, 0f, 1f, 1f };
         }
 
         uint uvBits = CornerUvBits(descriptor, tiling);
@@ -263,7 +302,7 @@ internal sealed class TerrainCellOracle(
     private static bool Bit(uint word, int bit) => ((word >> bit) & 1u) != 0;
 
     // Фон (бит 3) лежит сам на себе, передний план — на подложке.
-    private uint Under(uint type) => Bit(typeOf(type).Look, 3) ? type : groundType;
+    private uint Under(uint type) => Bit(_typeOf(type).Look, 3) ? type : _groundType;
 
     // Контур: 0 гибкий, 1 волнистый, 2 жёсткий, 3 капля, 4 стена, 5 угол, 6 дверь.
     private static uint Outline(uint look) => (look >> 7) & 7u;
@@ -276,16 +315,16 @@ internal sealed class TerrainCellOracle(
 
     private bool OpaqueMass(uint type) =>
         type != 0 &&
-        Outline(typeOf(type).Look) == 1 &&
-        Bit(typeOf(type).Look, 5);
+        Outline(_typeOf(type).Look) == 1 &&
+        Bit(_typeOf(type).Look, 5);
 
-    private bool Corner(uint type) => Outline(typeOf(type).Look) == 5;
+    private bool Corner(uint type) => Outline(_typeOf(type).Look) == 5;
 
-    private bool IsForeground(uint type) => !Bit(typeOf(type).Look, 3);
+    private bool IsForeground(uint type) => !Bit(_typeOf(type).Look, 3);
 
     private bool Same(uint ownRim, uint otherType)
     {
-        uint otherGroup = Rim(typeOf(otherType));
+        uint otherGroup = Rim(_typeOf(otherType));
         if (otherGroup == 0)
         {
             return false;
@@ -320,7 +359,7 @@ internal sealed class TerrainCellOracle(
             return 0;
         }
 
-        uint look = typeOf(type).Look;
+        uint look = _typeOf(type).Look;
         bool cause = Outline(look) == 1;
         bool block = Outline(look) >= 2;
         bool emptyEdge = Bit(look, 3) && !block && !cause;
@@ -329,7 +368,7 @@ internal sealed class TerrainCellOracle(
             return 0;
         }
 
-        uint hash = unchecked(((uint)edgeX * 0x9E3779B9u) ^ ((uint)edgeY * 0x85EBCA6Bu) ^ (vertical ? verticalSeed : horizontalSeed));
+        uint hash = unchecked(((uint)edgeX * 0x9E3779B9u) ^ ((uint)edgeY * 0x85EBCA6Bu) ^ (vertical ? _verticalSeed : _horizontalSeed));
         hash ^= hash >> 16;
         hash = unchecked(hash * 0x7FEB352Du);
         hash ^= hash >> 15;

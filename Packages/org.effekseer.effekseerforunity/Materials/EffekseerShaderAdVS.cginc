@@ -1,4 +1,4 @@
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/WorldRenderGrid.hlsl"
+#include "Assets/Shaders/World/WorldRenderGrid.hlsl"
 #include <UnityInstancing.cginc>
 
 #if defined(UNITY_INSTANCING_ENABLED) || defined(UNITY_PROCEDURAL_INSTANCING_ENABLED) || defined(UNITY_STEREO_INSTANCING_ENABLED)

@@ -211,6 +211,13 @@ internal sealed class PauseMenuDisplayTabBuilder
             value => _displayManager.SetVSync(value),
             _refreshers);
         displaySection.Add(vSyncToggle);
+
+        // На телефоне и планшете окно, разрешение и синхронизацию задаёт
+        // система: переключатели были бы кнопками без действия.
+        bool systemOwnsWindow = Application.isMobilePlatform;
+        UIState.SetHidden(_fullscreenButton, systemOwnsWindow);
+        UIState.SetHidden(resolutionRow, systemOwnsWindow);
+        UIState.SetHidden(vSyncToggle, systemOwnsWindow);
         Label syncContext = displaySection.Q<Label>("DisplaySyncContext") ??
             throw new InvalidOperationException("[PauseMenu] DisplaySyncContext is missing from PauseMenu.uxml.");
         syncContext.text = _loc.Get("settings.display.sync_editor");

@@ -17,7 +17,7 @@ static const int KERN_TERRAIN_DEBUG_LAYER = 4;
 static const int KERN_TERRAIN_DEBUG_ANCHORED = 5;
 static const int KERN_TERRAIN_DEBUG_CELL_LOCAL = 6;
 static const int KERN_TERRAIN_DEBUG_RIM_MASS = 7;
-static const int KERN_TERRAIN_DEBUG_CONTINUOUS_SHEET = 8;
+static const int KERN_TERRAIN_DEBUG_WORLD_TEXTURE_ANCHOR = 8;
 static const int KERN_TERRAIN_DEBUG_AMBIENT_OCCLUSION = 9;
 static const int KERN_TERRAIN_DEBUG_BACKGROUND_TILE_IDENTITY = 10;
 static const int KERN_TERRAIN_DEBUG_FACETED_GLINT = 11;
@@ -262,7 +262,7 @@ float3 KernTerrainDebugColor(
         return float3(shade, shade * 0.5, 1.0 - shade);
     }
 
-    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_CONTINUOUS_SHEET)
+    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_WORLD_TEXTURE_ANCHOR)
     {
         bool sheet = (((int)(packedColumn + 0.5)) & 32) != 0;
         return sheet

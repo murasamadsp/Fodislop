@@ -28,7 +28,7 @@ public static class FrameEventLog
 
     private static readonly int[] s_frames = new int[Capacity];
     private static readonly string?[] s_texts = new string?[Capacity];
-    private static readonly List<IFrameEventSource> s_sources = [];
+    private static readonly List<IFrameEventSource> s_sources = new();
     private static readonly object s_gate = new();
     private static int s_next;
 

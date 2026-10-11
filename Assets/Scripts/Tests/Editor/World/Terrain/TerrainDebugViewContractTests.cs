@@ -136,7 +136,7 @@ public sealed class TerrainDebugViewContractTests
             "Только экранный проход может показывать подложку под полностью закрытыми клетками.");
         Assert.That(
             cellDataShader,
-            Does.Contain("occludedBackground = occludedBackground && _TerrainDebugBackgroundTileIdentity == 0"),
+            Does.Contain("occluded = occluded && _TerrainDebugBackgroundTileIdentity == 0"),
             "Проходы поля освещения не должны менять occupancy из-за отладки фона.");
         Assert.That(
             samplingShader,

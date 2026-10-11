@@ -73,7 +73,7 @@ public class ChatEventGatewayTests
             "tester",
             System.Drawing.Color.White,
             "hello");
-        var packet = new ChatListPacket([("global", "Global", message)]);
+        var packet = new ChatListPacket(new[] { ("global", "Global", message) });
 
         gateway.Publish(packet);
 

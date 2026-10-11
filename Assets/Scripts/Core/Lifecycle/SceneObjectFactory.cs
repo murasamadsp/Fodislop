@@ -7,23 +7,42 @@ using VContainer;
 namespace Kern.Core.Lifecycle
 {
 
-public sealed class SceneObjectFactory(
-    Transform runtimeRoot,
-    Transform robotsRoot,
-    Transform buildingsRoot,
-    Transform vfxRoot,
-    Transform floatingUIRoot,
-    Transform audioEventsRoot,
-    IObjectResolver resolver) : ISceneObjectFactory
+public sealed class SceneObjectFactory : ISceneObjectFactory
 {
+    private readonly Transform _runtimeRoot;
+    private readonly Transform _robotsRoot;
+    private readonly Transform _buildingsRoot;
+    private readonly Transform _vfxRoot;
+    private readonly Transform _floatingUIRoot;
+    private readonly Transform _audioEventsRoot;
+    private readonly IObjectResolver _resolver;
+
+    public SceneObjectFactory(
+        Transform runtimeRoot,
+        Transform robotsRoot,
+        Transform buildingsRoot,
+        Transform vfxRoot,
+        Transform floatingUIRoot,
+        Transform audioEventsRoot,
+        IObjectResolver resolver)
+    {
+        _runtimeRoot = runtimeRoot;
+        _robotsRoot = robotsRoot;
+        _buildingsRoot = buildingsRoot;
+        _vfxRoot = vfxRoot;
+        _floatingUIRoot = floatingUIRoot;
+        _audioEventsRoot = audioEventsRoot;
+        _resolver = resolver;
+    }
+
     public Transform GetOwner(RuntimeOwner owner = RuntimeOwner.General) => owner switch
     {
-        RuntimeOwner.Robots => robotsRoot,
-        RuntimeOwner.Buildings => buildingsRoot,
-        RuntimeOwner.VFX => vfxRoot,
-        RuntimeOwner.FloatingUI => floatingUIRoot,
-        RuntimeOwner.AudioEvents => audioEventsRoot,
-        _ => runtimeRoot,
+        RuntimeOwner.Robots => _robotsRoot,
+        RuntimeOwner.Buildings => _buildingsRoot,
+        RuntimeOwner.VFX => _vfxRoot,
+        RuntimeOwner.FloatingUI => _floatingUIRoot,
+        RuntimeOwner.AudioEvents => _audioEventsRoot,
+        _ => _runtimeRoot,
     };
 
     public GameObject Create(string name, RuntimeOwner owner = RuntimeOwner.General)
@@ -44,7 +63,7 @@ public sealed class SceneObjectFactory(
         GameObject gameObject = Create(name, owner);
         gameObject.SetActive(false);
         T component = gameObject.AddComponent<T>();
-        resolver.Inject(component);
+        _resolver.Inject(component);
         gameObject.SetActive(true);
         return component;
     }

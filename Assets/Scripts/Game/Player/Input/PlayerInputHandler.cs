@@ -14,6 +14,22 @@ namespace Kern.Player.Input
         private InputActionReference? _moveActionReference = null;
 
         private Vector2 _moveInput;
+        // Отклонение стика, ниже которого дрон только поворачивается, не
+        // сходя с клетки, — тач-аналог Shift. Порог — доля радиуса стика.
+        public const float TouchTurnOnlyDeflection = 0.35f;
+
+        private Vector2 _touchMoveInput;
+        private bool _touchDigHeld;
+        private bool _touchHealHeld;
+        private bool _touchFastMove;
+        private bool _touchAutoDig;
+        private bool _touchAggression;
+        private bool _touchGeo;
+        private bool _touchHeal;
+        private bool _touchBuildCyan;
+        private bool _touchBuildGray;
+        private bool _touchBuildGreen;
+        private bool _touchBuildWhite;
         private bool _isGamepadActive;
 
         public Vector2 MoveInput => _moveInput;
@@ -21,7 +37,7 @@ namespace Kern.Player.Input
 
         public bool WantsToToggleAutoDig =>
             !InputIntercepted &&
-            (WasPressedThisFrame(ConfiguredKey(
+            (ConsumeTouchAction(ref _touchAutoDig) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyAutoDig, Key.E)) ||
              (Gamepad.current != null && Gamepad.current.buttonNorth.wasPressedThisFrame));
 
@@ -29,48 +45,49 @@ namespace Kern.Player.Input
         // раскладке на ней "Д"): "Врубите агрессию [L]".
         public bool WantsToToggleAggression =>
             !InputIntercepted &&
-            WasPressedThisFrame(ConfiguredKey(
-                _clientConfig?.Config.Interface.KeyAggression, Key.L));
+            (ConsumeTouchAction(ref _touchAggression) || WasPressedThisFrame(ConfiguredKey(
+                _clientConfig?.Config.Interface.KeyAggression, Key.L)));
 
         public bool WantsToGeo =>
             !InputIntercepted &&
-            (WasPressedThisFrame(ConfiguredKey(
+            (ConsumeTouchAction(ref _touchGeo) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyGeo, Key.G)) ||
              (Gamepad.current != null && Gamepad.current.dpad.left.wasPressedThisFrame));
 
         public bool WantsToHeal =>
             !InputIntercepted &&
-            (WasPressedThisFrame(ConfiguredKey(
+            (ConsumeTouchAction(ref _touchHeal) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyHeal, Key.V)) ||
              (Gamepad.current != null && Gamepad.current.dpad.right.wasPressedThisFrame));
 
         public bool IsHealHeld =>
             !InputIntercepted &&
-            (IsHeld(ConfiguredKey(
+            (_touchHealHeld ||
+             IsHeld(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyHeal, Key.V)) ||
              (Gamepad.current != null && Gamepad.current.dpad.right.isPressed));
 
         public bool WantsToBuildCyan =>
             !InputIntercepted &&
-            (WasPressedThisFrame(ConfiguredKey(
+            (ConsumeTouchAction(ref _touchBuildCyan) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyBuildCyan, Key.Y)) ||
              (Gamepad.current != null && Gamepad.current.dpad.up.wasPressedThisFrame));
 
         public bool WantsToBuildGray =>
             !InputIntercepted &&
-            (WasPressedThisFrame(ConfiguredKey(
+            (ConsumeTouchAction(ref _touchBuildGray) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyBuildGray, Key.H)) ||
              (Gamepad.current != null && Gamepad.current.dpad.down.wasPressedThisFrame));
 
         public bool WantsToBuildGreen =>
             !InputIntercepted &&
-            (WasPressedThisFrame(ConfiguredKey(
+            (ConsumeTouchAction(ref _touchBuildGreen) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyBuildGreen, Key.F)) ||
              (Gamepad.current != null && Gamepad.current.buttonEast.wasPressedThisFrame));
 
         public bool WantsToBuildWhite =>
             !InputIntercepted &&
-            (WasPressedThisFrame(ConfiguredKey(
+            (ConsumeTouchAction(ref _touchBuildWhite) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyBuildWhite, Key.J)) ||
              (Gamepad.current != null && Gamepad.current.buttonWest.wasPressedThisFrame));
 
@@ -78,13 +95,16 @@ namespace Kern.Player.Input
             !InputIntercepted &&
             (IsHeld(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyDig, Key.Space)) ||
+             _touchDigHeld ||
              (Gamepad.current != null && (Gamepad.current.rightTrigger.isPressed || Gamepad.current.buttonSouth.isPressed)));
 
         public bool IsShiftPressed =>
+            IsTouchTurnOnly ||
             (Keyboard.current != null && Keyboard.current.shiftKey.isPressed) ||
             (Gamepad.current != null && (Gamepad.current.rightShoulder.isPressed || Gamepad.current.leftStickButton.isPressed));
 
         public bool IsCtrlPressed =>
+            _touchFastMove ||
             (Keyboard.current != null && Keyboard.current.ctrlKey.isPressed) ||
             (Gamepad.current != null && Gamepad.current.leftTrigger.isPressed);
 
@@ -154,6 +174,60 @@ namespace Kern.Player.Input
             _moveInput = input;
         }
 
+        public void SetTouchMovementInput(Vector2 input) => _touchMoveInput = Vector2.ClampMagnitude(input, 1f);
+
+        public void SetTouchDigHeld(bool held) => _touchDigHeld = held;
+
+        public void SetTouchHealHeld(bool held) => _touchHealHeld = held;
+
+        public bool IsTouchFastMove => _touchFastMove;
+
+        public void SetTouchFastMove(bool enabled) => _touchFastMove = enabled;
+
+        private bool IsTouchTurnOnly
+        {
+            get
+            {
+                float deflection = _touchMoveInput.sqrMagnitude;
+                return deflection > 0f &&
+                    deflection < TouchTurnOnlyDeflection * TouchTurnOnlyDeflection;
+            }
+        }
+
+        public void QueueTouchAction(TouchPlayerAction action)
+        {
+            switch (action)
+            {
+                case TouchPlayerAction.ToggleAutoDig: _touchAutoDig = true; break;
+                case TouchPlayerAction.ToggleAggression: _touchAggression = true; break;
+                case TouchPlayerAction.Geo: _touchGeo = true; break;
+                case TouchPlayerAction.Heal: _touchHeal = true; break;
+                case TouchPlayerAction.BuildCyan: _touchBuildCyan = true; break;
+                case TouchPlayerAction.BuildGray: _touchBuildGray = true; break;
+                case TouchPlayerAction.BuildGreen: _touchBuildGreen = true; break;
+                case TouchPlayerAction.BuildWhite: _touchBuildWhite = true; break;
+            }
+        }
+
+        public void ClearQueuedTouchActions()
+        {
+            _touchAutoDig = false;
+            _touchAggression = false;
+            _touchGeo = false;
+            _touchHeal = false;
+            _touchBuildCyan = false;
+            _touchBuildGray = false;
+            _touchBuildGreen = false;
+            _touchBuildWhite = false;
+        }
+
+        private static bool ConsumeTouchAction(ref bool action)
+        {
+            bool pressed = action;
+            action = false;
+            return pressed;
+        }
+
         private void ReadInput()
         {
             // Карта мира — оверлей, а не модальное окно: смотреть в неё можно
@@ -163,6 +237,10 @@ namespace Kern.Player.Input
             if (_inputBlocker != null && _inputBlocker.IsInputBlockedExcludingMapMode)
             {
                 _moveInput = Vector2.zero;
+                _touchMoveInput = Vector2.zero;
+                _touchDigHeld = false;
+                _touchHealHeld = false;
+                ClearQueuedTouchActions();
                 return;
             }
 
@@ -226,6 +304,14 @@ namespace Kern.Player.Input
             if (_moveInput.sqrMagnitude > 1f)
             {
                 _moveInput.Normalize();
+            }
+
+            if (_touchMoveInput.sqrMagnitude > 0f)
+            {
+                // Направление — по стику, а сила роли не играет: дрон ходит
+                // по клеткам, малое отклонение означает поворот (IsShiftPressed).
+                _moveInput = _touchMoveInput.normalized;
+                _isGamepadActive = true;
             }
         }
 

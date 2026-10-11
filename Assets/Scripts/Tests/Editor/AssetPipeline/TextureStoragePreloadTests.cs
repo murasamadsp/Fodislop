@@ -66,7 +66,7 @@ public class TextureStoragePreloadTests
         string pngPath = Path.Combine(cellDir, "1.png");
 
         var testTex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-        testTex.SetPixels([Color.red, Color.green, Color.blue, Color.white]);
+        testTex.SetPixels(new[] { Color.red, Color.green, Color.blue, Color.white });
         testTex.Apply();
         byte[] expectedBytes = testTex.EncodeToPNG();
         UnityEngine.Object.DestroyImmediate(testTex);
@@ -74,7 +74,7 @@ public class TextureStoragePreloadTests
         await File.WriteAllBytesAsync(pngPath, expectedBytes);
 
         // Preload via relative path
-        await _storageManager.PreloadTexturesAsync(["Cells/1.png"], CancellationToken.None);
+        await _storageManager.PreloadTexturesAsync(new[] { "Cells/1.png" }, CancellationToken.None);
 
         // Verify HasTexture is true for both with-extension and extensionless
         Assert.That(_storageManager.HasTexture("Cells/1.png"), Is.True);
@@ -111,7 +111,7 @@ public class TextureStoragePreloadTests
         UnityEngine.Object.DestroyImmediate(testTex);
         await File.WriteAllBytesAsync(pngPath, bytes);
 
-        await _storageManager.PreloadTexturesAsync(["Cells/2.png"]);
+        await _storageManager.PreloadTexturesAsync(new[] { "Cells/2.png" });
         Assert.That(_storageManager.HasTexture("Cells/2.png"), Is.True);
 
         _storageManager.ClearCache();
@@ -120,10 +120,14 @@ public class TextureStoragePreloadTests
         Assert.That(_storageManager.HasTexture("Cells/2.png"), Is.False);
     }
 
-    private sealed class StubRuntimeAssetPaths(string rootDir) : IRuntimeAssetPaths
+    private sealed class StubRuntimeAssetPaths : IRuntimeAssetPaths
     {
-        public string BundledTexturesRoot => rootDir;
-        public string PersistentTexturesRoot => rootDir;
+        private readonly string _rootDir;
+
+        public StubRuntimeAssetPaths(string rootDir) => _rootDir = rootDir;
+
+        public string BundledTexturesRoot => _rootDir;
+        public string PersistentTexturesRoot => _rootDir;
 
         public UniTask EnsureReadyAsync() => UniTask.CompletedTask;
 
@@ -131,7 +135,7 @@ public class TextureStoragePreloadTests
 
         public string? FindTextureFile(string relativePath)
         {
-            string candidate = Path.Combine(rootDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            string candidate = Path.Combine(_rootDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
             if (File.Exists(candidate))
             {
                 return candidate;

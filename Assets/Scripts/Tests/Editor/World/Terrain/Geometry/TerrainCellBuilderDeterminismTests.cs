@@ -47,9 +47,11 @@ public sealed class TerrainCellBuilderDeterminismTests
                 adjacentRoads++;
                 TerrainQuadBuilder.FillQuad(sources,
                     new TerrainQuadSite(x, y, OriginX + x, OriginY + y, 1f),
-                    TerrainQuadLayer.Foreground, quad);
-                Vector3[] expected = [new(x, y, 0), new(x + 1, y, 0),
-                    new(x + 1, y + 1, 0), new(x, y + 1, 0)];
+                    TerrainQuadLayer.Background, quad);
+                Vector3[] expected = new Vector3[] {
+new(x, y, 0.1f), new(x + 1, y, 0.1f),
+                    new(x + 1, y + 1, 0.1f), new(x, y + 1, 0.1f)
+ };
                 for (int corner = 0; corner < 4; corner++)
                 {
                     Assert.That(quad[corner].Position, Is.EqualTo(expected[corner]),
@@ -96,7 +98,9 @@ public sealed class TerrainCellBuilderDeterminismTests
         Assert.That(builder.HasDoors, Is.True);
 
         world.RoadTextureReady = true;
-        HashSet<CellType> changedTypes = [CellType.Road];
+        HashSet<CellType> changedTypes = new() {
+CellType.Road
+ };
         cache.RefreshTextureMetadata(changedTypes, world.MapData, world.Textures, world.Atlases);
         builder.BuildTextureCells(
             TerrainCellTypeSet.Capture(changedTypes), sources, OriginX, OriginY);
@@ -122,7 +126,9 @@ public sealed class TerrainCellBuilderDeterminismTests
         Assert.That(builder.Buffers.GetTypeRow(CellType.BuildingDoor).AtlasWH & 0xFFFFu, Is.Zero);
 
         world.DoorTextureReady = true;
-        HashSet<CellType> changedTypes = [CellType.BuildingDoor];
+        HashSet<CellType> changedTypes = new() {
+CellType.BuildingDoor
+ };
         cache.RefreshTextureMetadata(changedTypes, world.MapData, world.Textures, world.Atlases);
         builder.BuildTextureCells(
             TerrainCellTypeSet.Capture(changedTypes), sources, OriginX, OriginY);

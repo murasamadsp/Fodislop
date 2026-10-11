@@ -8,10 +8,15 @@ using UnityEngine;
 
 namespace Kern.Core;
 
-internal sealed class ClientConfigValidator(GraphicsQualityProfile graphicsQualityProfile)
+internal sealed class ClientConfigValidator
 {
-    private readonly GraphicsQualityProfile _graphicsQualityProfile = graphicsQualityProfile ??
-        throw new ArgumentNullException(nameof(graphicsQualityProfile));
+    private readonly GraphicsQualityProfile _graphicsQualityProfile;
+
+    public ClientConfigValidator(GraphicsQualityProfile graphicsQualityProfile)
+    {
+        _graphicsQualityProfile = graphicsQualityProfile ??
+            throw new ArgumentNullException(nameof(graphicsQualityProfile));
+    }
 
     public void Validate(ClientConfig config)
     {

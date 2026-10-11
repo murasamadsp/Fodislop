@@ -10,11 +10,17 @@ using UnityEngine;
 
 namespace Kern.Game.Managers;
 
-public sealed class ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths) : IItemCatalog
+public sealed class ItemRegistry : IItemCatalog
 {
     private const string TAG = "[ItemRegistry]";
+    private readonly IRuntimeAssetPaths _runtimeAssetPaths;
     private readonly Dictionary<ItemType, Texture2D?> _iconCache = new();
     private readonly HashSet<ItemType> _missingIconWarned = new();
+
+    public ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths)
+    {
+        _runtimeAssetPaths = runtimeAssetPaths;
+    }
 
     // Локальный справочник: русское название и описание предмета. Серверные
     // метаданные (SelectItemPacket) имеют приоритет — этот текст используется,
@@ -38,8 +44,8 @@ public sealed class ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths) : IItemCa
             state.AsSpan().CopyTo(span);
             span[0] = char.ToLowerInvariant(span[0]);
         });
-        string? path = runtimeAssetPaths.FindBundledTextureFile($"Items/{camelName}.png") ??
-            runtimeAssetPaths.FindBundledTextureFile($"Items/{typeName.ToLowerInvariant()}.png");
+        string? path = _runtimeAssetPaths.FindBundledTextureFile($"Items/{camelName}.png") ??
+            _runtimeAssetPaths.FindBundledTextureFile($"Items/{typeName.ToLowerInvariant()}.png");
 
         if (path == null)
         {

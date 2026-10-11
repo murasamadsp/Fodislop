@@ -906,6 +906,117 @@
     font-size: 16px;
 }
 
+/* Native touch targets: keep the movement surface separate from the world
+   and leave room for the minimap / existing mode controls on the left. */
+.hud-mobile-controls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    flex-direction: row;
+    display: flex;
+}
+
+.hud-mobile-move-pad {
+    position: relative;
+    width: 148px;
+    height: 148px;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background-color: rgba(8, 17, 24, 0.48);
+    border-color: var(--border-subtle);
+    border-width: 1px;
+    display: none;
+}
+
+.hud-mobile-move-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 72px;
+    height: 72px;
+    translate: -50% -50%;
+    border-radius: var(--radius-pill);
+    border-color: rgba(255, 255, 255, 0.28);
+    border-width: 1px;
+}
+
+.hud-mobile-move-knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 54px;
+    height: 54px;
+    translate: -50% -50%;
+    border-radius: var(--radius-pill);
+    background-color: rgba(31, 163, 170, 0.78);
+    border-color: var(--accent-cyan-hover);
+    border-width: 2px;
+}
+
+.hud-mobile-actions {
+    flex-direction: row;
+    align-items: flex-end;
+    display: none;
+}
+
+.hud-mobile-build-actions {
+    width: 168px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    display: none;
+}
+
+.hud-mobile-right-dock {
+    position: absolute;
+    right: var(--space-5);
+    bottom: var(--space-5);
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.hud-mobile-action {
+    min-width: 62px;
+    height: 42px;
+    margin-top: var(--space-1);
+    margin-left: var(--space-1);
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+    background-color: rgba(8, 17, 24, 0.82);
+    border-color: var(--border-subtle);
+    border-width: 1px;
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: var(--size-sm);
+    -unity-font-style: bold;
+    white-space: normal;
+}
+
+.hud-mobile-action--primary {
+    min-width: 74px;
+    height: 48px;
+    background-color: rgba(21, 105, 111, 0.9);
+    border-color: var(--accent-cyan-hover);
+}
+
+.hud-mobile-build-action {
+    min-width: 78px;
+    height: 34px;
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+    font-size: var(--size-xs);
+}
+
+.hud-mobile-build-action--cyan { border-color: rgb(75, 196, 224); }
+.hud-mobile-build-action--gray { border-color: rgb(174, 184, 192); }
+.hud-mobile-build-action--green { border-color: rgb(91, 204, 122); }
+.hud-mobile-build-action--white { border-color: rgb(235, 239, 242); }
+
+/* Видимость и раскладка сенсорного управления — Touch.uss
+   (класс pointer--touch на корне панели). */
+
 /* ═══════════════════════════════════════════════════════════
    Sci-Fi Player HUD Styles
    ═══════════════════════════════════════════════════════════ */

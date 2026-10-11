@@ -100,7 +100,7 @@ public class StatusProcessorTests
             0,
             System.Drawing.Color.Green,
             "buff_speed",
-            ["Speed +20%", "60s"]);
+            new[] { "Speed +20%", "60s" });
 
         _processor.Process(packet);
 
@@ -112,7 +112,7 @@ public class StatusProcessorTests
     [Test]
     public void Process_ClearStatusLinePacket_RemovesStatusLine()
     {
-        _stats.AddStatusLine("buff_speed", ["Speed +20%"], Color.green, 0, 0);
+        _stats.AddStatusLine("buff_speed", new[] { "Speed +20%" }, Color.green, 0, 0);
         Assert.AreEqual(1, _stats.StatusLines.Count);
 
         var packet = new ClearStatusLinePacket("buff_speed");
@@ -124,8 +124,8 @@ public class StatusProcessorTests
     [Test]
     public void Process_ClearStatusPacket_ClearsAllStatusLines()
     {
-        _stats.AddStatusLine("buff1", ["Buff 1"], Color.green, 0, 0);
-        _stats.AddStatusLine("buff2", ["Buff 2"], Color.blue, 0, 0);
+        _stats.AddStatusLine("buff1", new[] { "Buff 1" }, Color.green, 0, 0);
+        _stats.AddStatusLine("buff2", new[] { "Buff 2" }, Color.blue, 0, 0);
         Assert.AreEqual(2, _stats.StatusLines.Count);
 
         var packet = default(ClearStatusPacket);

@@ -11,7 +11,7 @@ internal sealed class WorldEntityTextureAtlas : IDisposable
 {
     private const int AtlasSize = 2048;
     private const int Padding = 1;
-    private readonly Dictionary<Texture2D, Rect> _rects = [];
+    private readonly Dictionary<Texture2D, Rect> _rects = new();
     private int _cursorX;
     private int _cursorY;
     private int _rowHeight;

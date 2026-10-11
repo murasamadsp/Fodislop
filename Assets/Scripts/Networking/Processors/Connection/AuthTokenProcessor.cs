@@ -7,8 +7,16 @@ using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Kern.Networking.Processors;
 
-public sealed class AuthTokenProcessor(ILocalPlayerState localPlayer, IGameTokenStore tokens)
+public sealed class AuthTokenProcessor
 {
+    private readonly ILocalPlayerState _localPlayer;
+    private readonly IGameTokenStore _tokens;
+    public AuthTokenProcessor(ILocalPlayerState localPlayer, IGameTokenStore tokens)
+    {
+        _localPlayer = localPlayer;
+        _tokens = tokens;
+    }
+
     private bool _emptyAuthTokenWarningLogged;
 
     public void Process(AuthTokenPacket packet)
@@ -26,7 +34,7 @@ public sealed class AuthTokenProcessor(ILocalPlayerState localPlayer, IGameToken
         }
 
         _emptyAuthTokenWarningLogged = false;
-        tokens.Save(newToken);
-        localPlayer.SetAuthenticated(true);
+        _tokens.Save(newToken);
+        _localPlayer.SetAuthenticated(true);
     }
 }

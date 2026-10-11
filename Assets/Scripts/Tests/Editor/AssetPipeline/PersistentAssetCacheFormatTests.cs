@@ -38,7 +38,7 @@ public sealed class PersistentAssetCacheFormatTests
         string relativeAsset = Path.Combine("Cells", "117.png");
         string assetPath = Path.Combine(_cachePath, relativeAsset);
         Directory.CreateDirectory(Path.GetDirectoryName(assetPath)!);
-        File.WriteAllBytes(assetPath, [1, 2, 3, 4]);
+        File.WriteAllBytes(assetPath, new byte[] { 1, 2, 3, 4 });
 
         PersistentAssetCacheFormat.EnsureCurrent(_cachePath);
 
@@ -81,15 +81,20 @@ public sealed class PersistentAssetCacheFormatTests
     }
 
     [Test]
-    public void EnsureCurrent_RejectsCorruptMarker()
+    public void EnsureCurrent_RepairsCorruptMarker()
     {
         Directory.CreateDirectory(_cachePath);
         File.WriteAllText(
             Path.Combine(_cachePath, PersistentAssetCacheFormat.MarkerFileName),
             "not-a-version");
 
-        Assert.Throws<InvalidDataException>(
-            () => PersistentAssetCacheFormat.EnsureCurrent(_cachePath));
+        PersistentAssetCacheFormat.EnsureCurrent(_cachePath);
+
+        Assert.That(
+            File.ReadAllText(Path.Combine(
+                _cachePath,
+                PersistentAssetCacheFormat.MarkerFileName)).Trim(),
+            Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion.ToString()));
     }
 
     [Test]
@@ -100,7 +105,7 @@ public sealed class PersistentAssetCacheFormatTests
             Path.Combine(_cachePath, PersistentAssetCacheFormat.MarkerFileName),
             "1");
         string payloadPath = Path.Combine(_cachePath, "old.bin");
-        File.WriteAllBytes(payloadPath, [1, 2, 3]);
+        File.WriteAllBytes(payloadPath, new byte[] { 1, 2, 3 });
         var cache = new PersistentAssetCache(_cachePath);
 
         byte[]? payload = cache.GetAsset("old.bin");
@@ -118,9 +123,9 @@ public sealed class PersistentAssetCacheFormatTests
     public void Entry_RejectsTamperedPayload()
     {
         var cache = new PersistentAssetCache(_cachePath);
-        cache.SaveAsset("Cells/117.png", [1, 2, 3, 4], "etag-1");
+        cache.SaveAsset("Cells/117.png", new byte[] { 1, 2, 3, 4 }, "etag-1");
         string payloadPath = cache.GetAssetPath("Cells/117.png");
-        File.WriteAllBytes(payloadPath, [4, 3, 2, 1]);
+        File.WriteAllBytes(payloadPath, new byte[] { 4, 3, 2, 1 });
 
         byte[]? payload = cache.GetAsset("Cells/117.png");
 
@@ -135,7 +140,7 @@ public sealed class PersistentAssetCacheFormatTests
     {
         var cache = new PersistentAssetCache(_cachePath);
 
-        cache.SaveAsset("Cells/117.png", [1, 2, 3, 4], "etag-1");
+        cache.SaveAsset("Cells/117.png", new byte[] { 1, 2, 3, 4 }, "etag-1");
 
         Assert.That(cache.GetAsset("Cells/117.png"), Is.EqualTo(new byte[] { 1, 2, 3, 4 }));
         Assert.That(cache.GetETag("Cells/117.png"), Is.EqualTo("etag-1"));
@@ -146,7 +151,7 @@ public sealed class PersistentAssetCacheFormatTests
     {
         var cache = new PersistentAssetCache(_cachePath);
 
-        cache.SaveAsset("local.bin", [5, 6, 7], string.Empty);
+        cache.SaveAsset("local.bin", new byte[] { 5, 6, 7 }, string.Empty);
 
         Assert.That(cache.GetAsset("local.bin"), Is.EqualTo(new byte[] { 5, 6, 7 }));
         Assert.That(cache.GetETag("local.bin"), Is.Empty);
@@ -156,7 +161,7 @@ public sealed class PersistentAssetCacheFormatTests
     public void Entry_MissingManifestInvalidatesOrphanPayload()
     {
         var cache = new PersistentAssetCache(_cachePath);
-        cache.SaveAsset("orphan.bin", [1, 2, 3], "etag");
+        cache.SaveAsset("orphan.bin", new byte[] { 1, 2, 3 }, "etag");
         string payloadPath = cache.GetAssetPath("orphan.bin");
         File.Delete(payloadPath + ".entry");
 
@@ -177,8 +182,12 @@ public sealed class PersistentAssetCacheFormatTests
     public async Task ConcurrentReadsAndWritesNeverExposeMixedEntryPairs()
     {
         var cache = new PersistentAssetCache(_cachePath);
-        byte[] first = [1, 1, 1, 1];
-        byte[] second = [2, 2, 2, 2];
+        byte[] first = new byte[] {
+1, 1, 1, 1
+ };
+        byte[] second = new byte[] {
+2, 2, 2, 2
+ };
         cache.SaveAsset("shared.bin", first, "first");
 
         async Task WriteMany()
@@ -212,7 +221,7 @@ public sealed class PersistentAssetCacheFormatTests
     public async Task AsyncReadAndETagRoundTripVerifiedPair()
     {
         var cache = new PersistentAssetCache(_cachePath);
-        cache.SaveAsset("async.bin", [8, 13, 21], "async-etag");
+        cache.SaveAsset("async.bin", new byte[] { 8, 13, 21 }, "async-etag");
 
         Assert.That(await cache.GetAssetAsync("async.bin"), Is.EqualTo(new byte[] { 8, 13, 21 }));
         Assert.That(await cache.GetETagAsync("async.bin"), Is.EqualTo("async-etag"));

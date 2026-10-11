@@ -10,6 +10,7 @@ internal sealed class MapCellSampler
     private const int MaxChunkCacheEntries = 4096;
 
     private readonly Dictionary<int, CellType[]?> _chunks = new();
+    private readonly HashSet<int> _dirtyChunks = new();
     private readonly LinkedList<int> _chunkOrder = new();
     private readonly Dictionary<int, LinkedListNode<int>> _chunkOrderNodes = new();
     private readonly Stack<LinkedListNode<int>> _freeChunkOrderNodes = new();
@@ -25,7 +26,9 @@ internal sealed class MapCellSampler
 
     public int HeightChunks => _heightChunks;
 
-    public int Revision { get; private set; }
+    public bool RequiresFullRefresh { get; private set; } = true;
+
+    public IReadOnlyCollection<int> DirtyChunks => _dirtyChunks;
 
     // Границы мира в клетках кешируются: попиксельный опрос карты обращается к
     // слою миллионы раз за кадр, и чтение свойств через IWorldLayer на каждом
@@ -45,6 +48,7 @@ internal sealed class MapCellSampler
 
         _layer = layer;
         _chunks.Clear();
+        _dirtyChunks.Clear();
         _chunkOrder.Clear();
         _chunkOrderNodes.Clear();
         _freeChunkOrderNodes.Clear();
@@ -52,7 +56,7 @@ internal sealed class MapCellSampler
         _lastChunk = null;
         _chunkSize = layer?.ChunkSize ?? 0;
         _heightChunks = layer?.HeightChunks ?? 0;
-        Revision++;
+        RequiresFullRefresh = true;
         _worldWidth = _chunkSize * (layer?.WidthChunks ?? 0);
         _worldHeight = _chunkSize * _heightChunks;
     }
@@ -60,12 +64,13 @@ internal sealed class MapCellSampler
     public void Invalidate()
     {
         _chunks.Clear();
+        _dirtyChunks.Clear();
         _chunkOrder.Clear();
         _chunkOrderNodes.Clear();
         _freeChunkOrderNodes.Clear();
         _lastChunkIndex = -1;
         _lastChunk = null;
-        Revision++;
+        RequiresFullRefresh = true;
     }
 
     public void InvalidateChunk(int serverX, int serverY)
@@ -78,6 +83,7 @@ internal sealed class MapCellSampler
         int chunkX = serverX / _chunkSize;
         int chunkY = serverY / _chunkSize;
         int chunkIndex = chunkY + (chunkX * _heightChunks);
+        _dirtyChunks.Add(chunkIndex);
         _chunks.Remove(chunkIndex);
         if (_chunkOrderNodes.TryGetValue(chunkIndex, out LinkedListNode<int>? node))
         {
@@ -92,7 +98,12 @@ internal sealed class MapCellSampler
             _lastChunk = null;
         }
 
-        Revision++;
+    }
+
+    public void CompleteRefresh()
+    {
+        RequiresFullRefresh = false;
+        _dirtyChunks.Clear();
     }
 
     public bool TryGetChunk(int chunkX, int chunkY, out CellType[]? chunk)

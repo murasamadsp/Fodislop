@@ -31,6 +31,24 @@ public sealed class FmodAudioBackend
 
     public async UniTask WaitUntilReadyAsync(AudioSystem system, CancellationToken cancellationToken)
     {
+        try
+        {
+            await WaitUntilReadyCoreAsync(system, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _degraded = true;
+            Debug.LogWarning(
+                $"[FmodAudioBackend] Audio initialization failed; continuing without complete audio. {exception}");
+        }
+    }
+
+    private async UniTask WaitUntilReadyCoreAsync(AudioSystem system, CancellationToken cancellationToken)
+    {
         // Unity's test runner is batch-mode and does not advance FMOD's sample
         // loading lifecycle. Waiting on the native loading flag there can
         // block the scene transition forever, even though audio is explicitly

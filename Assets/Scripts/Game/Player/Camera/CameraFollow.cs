@@ -79,6 +79,7 @@ namespace Kern.Player
         [Inject] private IClientConfigManager? _clientConfig = null;
         [Inject] private WorldViewTransition? _viewTransition = null;
         [Inject] private IMapDataProvider? _mapDataProvider = null;
+        [Inject] private Kern.Player.Input.TouchGestureTracker? _touchGestures = null;
 
         private CameraPixelGridAligner? _aligner;
 
@@ -351,6 +352,18 @@ namespace Kern.Player
                     : StepSmoothZoom(_targetZoom, scrollInput);
             }
 
+            // Пинч двумя пальцами: пальцы разошлись — приближение. Отношение
+            // расстояний переводится в щелчки колёсика, и дальше зум идёт тем
+            // же путём — с теми же границами, упором и квантованием.
+            float pinch = _touchGestures?.ConsumePinchScale() ?? 1f;
+            if (acceptsInput && Mathf.Abs(pinch - 1f) > 0.0001f)
+            {
+                float notches = Mathf.Log(pinch) / Mathf.Log(1f + _zoomStepPerNotch);
+                _targetZoom = Aligner.QuantizesZoom
+                    ? StepPixelPerfectZoom(_targetZoom, notches)
+                    : StepSmoothZoom(_targetZoom, notches);
+            }
+
             // Режим выборки могли переключить в настройках на ходу: цель
             // PixelPerfect обязана стоять на целом уровне, иначе зум никогда не
             // сядет на пиксельную сетку.
@@ -533,8 +546,18 @@ namespace Kern.Player
         // Размер применяется как есть. Квантование PixelPerfect делает цель
         // (QuantizeIfPixelPerfect), а не каждый кадр: иначе переход между
         // уровнями превращался в скачок, и сглаживание зума было не видно.
-        private void ApplyZoom(float size)
+        // Зум — половина короткой стороны кадра; камере нужна половина
+        // высоты. На экране шире 2:1 высота уменьшается, чтобы ширина не
+        // выходила за потолок (CameraViewRules). В PixelPerfect уменьшенный
+        // кадр снова садится на целое число пикселей на тексель.
+        private void ApplyZoom(float zoom)
         {
+            float size = CameraViewRules.OrthographicSize(zoom, _camera.aspect);
+            if (size < zoom && Aligner.QuantizesZoom)
+            {
+                size = Aligner.ResolveOrthographicSize(size, Mathf.Min(size, MinimumZoom), MaximumZoom);
+            }
+
             if (!Mathf.Approximately(_camera.orthographicSize, size))
             {
                 _camera.orthographicSize = size;

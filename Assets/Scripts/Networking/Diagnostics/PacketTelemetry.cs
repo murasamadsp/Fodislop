@@ -11,8 +11,8 @@ public static class PacketTelemetry
 {
     public const int HistoryCapacity = 200;
 
-    private static readonly Dictionary<string, PacketStat> s_incoming = [];
-    private static readonly Dictionary<string, PacketStat> s_outgoing = [];
+    private static readonly Dictionary<string, PacketStat> s_incoming = new();
+    private static readonly Dictionary<string, PacketStat> s_outgoing = new();
     private static readonly PacketEvent[] s_history = new PacketEvent[HistoryCapacity];
     private static int s_historyCursor;
     private static int s_historyCount;

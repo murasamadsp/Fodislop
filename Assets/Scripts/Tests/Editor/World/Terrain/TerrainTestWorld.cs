@@ -251,8 +251,12 @@ public sealed class TerrainTestWorld
         }
     }
 
-    private sealed class FakeStorage(FakeLayer layer) : IWorldDataStorage
+    private sealed class FakeStorage : IWorldDataStorage
     {
+        private readonly FakeLayer _layer;
+
+        public FakeStorage(FakeLayer layer) => _layer = layer;
+
         public event Action<int, int>? CellChanged
         {
             add { }
@@ -269,7 +273,7 @@ public sealed class TerrainTestWorld
 
         public long Revision => 1;
 
-        public IWorldLayer<CellType>? CellLayer => layer;
+        public IWorldLayer<CellType>? CellLayer => _layer;
 
         public CellType GetCell(int x, int y) => CellAt(x, y);
 
@@ -325,7 +329,7 @@ public sealed class TerrainTestWorld
 
     private sealed class FakeLayer : IWorldLayer<CellType>
     {
-        private readonly Dictionary<int, CellType[]> _chunks = [];
+        private readonly Dictionary<int, CellType[]> _chunks = new();
 
         public event Action<int, int, int, int>? ChunkLoaded
         {

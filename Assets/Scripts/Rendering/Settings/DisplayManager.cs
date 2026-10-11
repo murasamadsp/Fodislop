@@ -81,7 +81,9 @@ namespace Kern.Rendering
 
             ApplyFrameTiming(display);
 
-            if (display.ResolutionWidth > 0 && display.ResolutionHeight > 0)
+            // На телефоне разрешение и режим окна задаёт система; сохранённое
+            // с десктопа разрешение растянуло бы картинку на чужой экран.
+            if (!Application.isMobilePlatform && display.ResolutionWidth > 0 && display.ResolutionHeight > 0)
             {
                 var mode = NormalizeFullScreenMode((FullScreenMode)display.FullScreenMode);
                 int refresh = display.RefreshRate > 0 ? display.RefreshRate : (int)Screen.currentResolution.refreshRateRatio.value;
@@ -99,8 +101,31 @@ namespace Kern.Rendering
             }
 
             QualitySettings.vSyncCount = display.VSync ? 1 : 0;
-            Application.targetFrameRate = display.TargetFrameRate;
+            Application.targetFrameRate = ResolveTargetFrameRate(display.TargetFrameRate);
             Time.maximumDeltaTime = 0.1f;
+
+            // Игрок часто не касается экрана: робот идёт по программе, копает
+            // автокопка, игрок читает чат. Системный таймаут гасил бы экран
+            // посреди игры.
+            if (Application.isMobilePlatform)
+            {
+                Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            }
+        }
+
+        // −1 на десктопе — «без ограничения», на телефоне Unity понимает его
+        // как 30 кадров: vSyncCount там игнорируется, и экран 60/90/120 Гц
+        // работал бы на половине частоты. Поэтому «без ограничения» на
+        // мобильной платформе — частота самого экрана.
+        public static int ResolveTargetFrameRate(int configured)
+        {
+            if (configured != -1 || !Application.isMobilePlatform)
+            {
+                return configured;
+            }
+
+            double refresh = Screen.currentResolution.refreshRateRatio.value;
+            return refresh >= 1.0 ? (int)System.Math.Round(refresh) : configured;
         }
 
         public void ApplyDisplaySettings()
@@ -180,7 +205,7 @@ namespace Kern.Rendering
             _clientConfig.UpdateSection(config => config.Display, display => display.VSync = enabled);
 
             QualitySettings.vSyncCount = enabled ? 1 : 0;
-            Application.targetFrameRate = _clientConfig.Config.Display.TargetFrameRate;
+            Application.targetFrameRate = ResolveTargetFrameRate(_clientConfig.Config.Display.TargetFrameRate);
             Debug.Log($"[DisplayManager] SetVSync: {enabled} (TargetFPS={_clientConfig.Config.Display.TargetFrameRate})");
         }
 

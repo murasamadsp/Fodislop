@@ -166,7 +166,8 @@ internal static class PostProcessPassExecutor
             FilterMode.Bilinear,
             TextureWrapMode.Clamp);
         s_identityLUT3D.SetPixels(
-        [
+        new[]
+        {
             Color.black,
             new Color(1f, 0f, 0f, 1f),
             new Color(0f, 1f, 0f, 1f),
@@ -175,7 +176,7 @@ internal static class PostProcessPassExecutor
             new Color(1f, 0f, 1f, 1f),
             new Color(0f, 1f, 1f, 1f),
             Color.white,
-        ]);
+        });
         s_identityLUT3D.Apply(false, true);
         return s_identityLUT3D;
     }

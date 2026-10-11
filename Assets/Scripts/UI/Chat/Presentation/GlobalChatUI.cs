@@ -30,7 +30,9 @@ namespace Kern.UI
         private ChatColorController? _colorController;
         private ChatBlinkController? _blink;
         private bool _isOpen;
+        private const string ChatOpenClass = "ui--chat-open";
         private bool _initialized;
+        private TouchCommands? _touchCommands;
         private readonly GlobalChatMessagePresenter _messages = new();
         private readonly ChatMuteTracker _muteTracker = new();
         private bool _lastMutedState;
@@ -49,8 +51,11 @@ namespace Kern.UI
         }
 
         [Inject]
-        private void Construct(ChatEventGateway chatEvents)
+        private void Construct(ChatEventGateway chatEvents, TouchCommands touchCommands)
         {
+            // Кнопка «Чат» HUD — тач-аналог TAB.
+            _touchCommands = touchCommands;
+            _touchCommands.GlobalChatRequested += OnTouchChatRequested;
             _chatEvents = chatEvents;
             _chatEvents.MessageReceived += AddMessage;
             _chatEvents.HistoryReceived += AddHistory;
@@ -59,6 +64,21 @@ namespace Kern.UI
             if (_chatEvents.LastChatList is ChatListPacket lastChatList)
             {
                 ApplyChatList(lastChatList);
+            }
+        }
+
+        // Кнопка «Чат» HUD — тач-аналог TAB, с теми же правилами.
+        private void OnTouchChatRequested()
+        {
+            if (!_initialized)
+            {
+                return;
+            }
+
+            bool inputBlocked = _inputBlocker != null && _inputBlocker.IsInputBlocked;
+            if (!_isOpen || !inputBlocked || _uiInput.IsChatFocused)
+            {
+                Toggle();
             }
         }
 
@@ -132,6 +152,11 @@ namespace Kern.UI
                 _uiInput.IsChatFocused = false;
             }
 
+            if (_touchCommands != null)
+            {
+                _touchCommands.GlobalChatRequested -= OnTouchChatRequested;
+            }
+
             if (_loc != null)
             {
                 _loc.UnregisterLocalizable(this);
@@ -169,12 +194,14 @@ namespace Kern.UI
                 return;
             }
 
+            RefreshMuteState();
+
+            // Без клавиатуры (телефон) остальное — клавиши; открытие и
+            // отправка приходят кнопками «Чат» и «>».
             if (Keyboard.current == null)
             {
                 return;
             }
-
-            RefreshMuteState();
 
             bool inputBlocked = _inputBlocker != null && _inputBlocker.IsInputBlocked;
 
@@ -320,12 +347,25 @@ namespace Kern.UI
                 _view.Panel.style.display = DisplayStyle.Flex;
             }
 
+            // Открытый чат — поверх панелей HUD: задание и программатор иначе
+            // перекрывали бы поле ввода.
+            _view?.Tree.BringToFront();
+            MarkChatOpen(true);
+
             _view?.InputField?.Focus();
+        }
+
+        // На низком экране (сплит) открытое окно чата накрыло бы кнопки
+        // действий; класс на корне панели убирает их, пока чат открыт.
+        private void MarkChatOpen(bool open)
+        {
+            _doc?.rootVisualElement?.panel?.visualTree.EnableInClassList(ChatOpenClass, open);
         }
 
         public void Hide()
         {
             _isOpen = false;
+            MarkChatOpen(false);
             if (_view?.Panel != null)
             {
                 _view.Panel.style.display = DisplayStyle.None;

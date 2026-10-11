@@ -19,9 +19,13 @@ public static class ConnectionTransportConfig
 
     public static ConnectionTransportKind SelectTransport(bool useDummyConnection)
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        return ConnectionTransportKind.Dummy;
+#else
         return useDummyConnection
             ? ConnectionTransportKind.Dummy
             : ConnectionTransportKind.Tcp;
+#endif
     }
 
     public static bool TryResolveEndpoint(

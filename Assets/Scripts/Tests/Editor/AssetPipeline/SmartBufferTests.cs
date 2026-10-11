@@ -39,7 +39,9 @@ public sealed class SmartBufferTests
     public void CopyFromArray_PopulatesBufferAndSetsLength()
     {
         using var buffer = new SmartBuffer(16, usePool: true);
-        byte[] source = [1, 2, 3, 4, 5];
+        byte[] source = new byte[] {
+1, 2, 3, 4, 5
+ };
 
         int copied = buffer.CopyFromArray(source);
 

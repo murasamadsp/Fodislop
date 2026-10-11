@@ -3,6 +3,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
 using Kern.Core;
 
 namespace Kern.Rendering.PostProcessing;
@@ -14,6 +15,10 @@ public static class PostProcessRuntimeState
     // the real pass before its input is discarded. All arguments are borrowed
     // for this call; the fixture must clear the callback during teardown.
     internal static Action<CommandBuffer, RenderTexture, Vector4>? DiagnosticWorldImage { get; set; }
+
+    // The actual geometry attachment, observed before Renderer2D draws sprites.
+    internal static Action<Camera, Vector2Int>? DiagnosticWorldRasterTarget { get; set; }
+    internal static Action<RenderGraph, ContextContainer>? DiagnosticWorldRasterDepthSetup { get; set; }
 
     // Observation only: production scene/prefilter/additive targets. The
     // callback records readbacks into this frame's command buffer and cannot
@@ -195,6 +200,8 @@ public static class PostProcessRuntimeState
         DiagnosticOffscreenCamera = null;
         DiagnosticWorldImage = null;
         DiagnosticBloomImage = null;
+        DiagnosticWorldRasterTarget = null;
+        DiagnosticWorldRasterDepthSetup = null;
         DiagnosticFullResolutionWorld = false;
         DiagnosticBloomDispatches = 0;
         DiagnosticBloomFrame = -1;

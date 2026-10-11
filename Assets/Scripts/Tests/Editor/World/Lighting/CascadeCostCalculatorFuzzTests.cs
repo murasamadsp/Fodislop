@@ -10,12 +10,43 @@ namespace Kern.Tests.World.Lighting;
 [TestFixture]
 public class CascadeCostCalculatorFuzzTests
 {
-    private static readonly int[] s_seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
+    [Test]
+    public void DiagonalVisitEstimateRoundsUpAtFloatBoundary()
+    {
+        var cascade = new CascadeLayout(
+            Offset: 0,
+            EntryCount: 1,
+            ProbeWidth: 1,
+            ProbeHeight: 1,
+            ProbeSpacing: 1,
+            DirectionCount: 1,
+            IntervalStart: 0f,
+            IntervalEnd: 1.4142136573791504f);
+        var samples = new List<CascadeCostSample>();
 
-    private static readonly int[] s_hostileEntryCounts = [0, -1, 1, 7, 1000];
-    private static readonly int[] s_hostileDirectionCounts = [0, 1, 4, 16, 64, 256, 512];
-    private static readonly float[] s_hostileIntervalStarts = [0f, -1f, 1f, 4f, 100f];
-    private static readonly float[] s_hostileIntervalEnds = [0f, -1f, 1f, 4f, 16f, 1000f];
+        CascadeCostCalculator.CollectCascadeCosts(new[] { cascade }, int.MaxValue, samples);
+
+        // sqrt(2) * IntervalEnd is just above 2 in exact arithmetic. The
+        // conservative DDA bound must account for the third crossed texel.
+        Assert.That(samples[0].StepCount, Is.EqualTo(5));
+    }
+
+    private static readonly int[] s_seeds = new[] {
+1, 7, 42, 1337, 90210, 2147483, 8675309
+ };
+
+    private static readonly int[] s_hostileEntryCounts = new[] {
+0, -1, 1, 7, 1000
+ };
+    private static readonly int[] s_hostileDirectionCounts = new[] {
+0, 1, 4, 16, 64, 256, 512
+ };
+    private static readonly float[] s_hostileIntervalStarts = new[] {
+0f, -1f, 1f, 4f, 100f
+ };
+    private static readonly float[] s_hostileIntervalEnds = new[] {
+0f, -1f, 1f, 4f, 16f, 1000f
+ };
 
     [Test]
     public void SamplesMatchTheReferenceForEveryRandomWorld([ValueSource(nameof(s_seeds))] int seed)
@@ -48,7 +79,9 @@ public class CascadeCostCalculatorFuzzTests
     public void HostileStepBudgetsNeverThrowAndStillMatchTheReference([ValueSource(nameof(s_seeds))] int seed)
     {
         var random = new System.Random(seed);
-        int[] budgets = [0, -1, int.MinValue, 1, 63, 64, 256, int.MaxValue];
+        int[] budgets = new[] {
+0, -1, int.MinValue, 1, 63, 64, 256, int.MaxValue
+ };
 
         for (int iteration = 0; iteration < 1000; iteration++)
         {
@@ -161,7 +194,7 @@ public class CascadeCostCalculatorFuzzTests
         CascadeLayout cascade = cascades[index];
         string context = $"seed {seed}, iteration {iteration}, cascade {index}";
 
-        float traceLength = Math.Max(cascade.IntervalEnd - cascade.IntervalStart, 0f);
+        double traceLength = Math.Max((double)cascade.IntervalEnd - cascade.IntervalStart, 0d);
         int traceCount = 1;
         long mergeTaps = 0;
         if (index + 1 < cascades.Count)
@@ -169,11 +202,12 @@ public class CascadeCostCalculatorFuzzTests
             CascadeLayout far = cascades[index + 1];
             traceCount = Clamp(far.DirectionCount / Math.Max(1, cascade.DirectionCount), 1, 4) * 4;
             mergeTaps = (long)cascade.EntryCount * traceCount;
-            traceLength = Math.Abs(cascade.IntervalStart) + Math.Abs(far.IntervalStart) +
-                (float)Math.Sqrt(2f) * far.ProbeSpacing;
+            traceLength = Math.Abs((double)cascade.IntervalStart) + Math.Abs((double)far.IntervalStart) +
+                Math.Sqrt(2d) * far.ProbeSpacing;
         }
 
-        int stepCount = ((int)Math.Ceiling((float)Math.Sqrt(2f) * traceLength) + 2) * traceCount;
+        int stepsPerTrace = (int)Math.Min(Math.Ceiling(Math.Sqrt(2d) * traceLength) + 2d, int.MaxValue);
+        int stepCount = (int)Math.Min((long)stepsPerTrace * traceCount, int.MaxValue);
 
         Assert.That(sample.Index, Is.EqualTo(index), context);
         Assert.That(sample.ProbeWidth, Is.EqualTo(cascade.ProbeWidth), context);

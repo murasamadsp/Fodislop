@@ -46,9 +46,15 @@ namespace Kern.UI
         private Kern.World.Terrain.TerrainRenderer _terrainRenderer = null!;
 
         private readonly WorldGizmoOptions _gizmos = new();
-        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[9];
+        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[10];
         private RenderBypassWindow? _bypassWindow;
         private bool _registered;
+
+        // Вход без клавиатуры: долгое нажатие на строку статуса (FPS/пинг)
+        // делает то же, что F1. Статусная строка есть в каждой сборке.
+        private const long StatusLongPressMilliseconds = 800;
+        private VisualElement? _statusPill;
+        private IVisualElementScheduledItem? _statusPressTimer;
 
         public bool IsEnabled
         {
@@ -153,6 +159,7 @@ namespace Kern.UI
             var packets = new PacketTrafficWindow();
             var color = new ColorOutputWindow(_clientConfig, _displayManager, _lighting);
             var terrainDebug = new TerrainDebugWindow(_terrainRenderer);
+            var logs = new LogWindow();
             _bypassWindow = bypass;
             _ownedWindows[0] = toolbar;
             _ownedWindows[1] = stats;
@@ -163,6 +170,7 @@ namespace Kern.UI
             _ownedWindows[6] = packets;
             _ownedWindows[7] = color;
             _ownedWindows[8] = terrainDebug;
+            _ownedWindows[9] = logs;
 
             foreach (ToolWindow? window in _ownedWindows)
             {
@@ -178,6 +186,7 @@ namespace Kern.UI
         private void Update()
         {
             EnsureWindows();
+            EnsureStatusPillGesture();
             Keyboard? keyboard = Keyboard.current;
             if (keyboard != null &&
                 !ToolWindows.HasKeyboardCapture &&
@@ -199,6 +208,41 @@ namespace Kern.UI
             UpdateTelemetryState();
             _telemetry.BeginFrame();
             ToolWindows.Tick();
+        }
+
+        private void EnsureStatusPillGesture()
+        {
+            if (_statusPill != null && _statusPill.panel != null)
+            {
+                return;
+            }
+
+            _statusPill = _gameUIDocument != null && _gameUIDocument.isActiveAndEnabled
+                ? _gameUIDocument.rootVisualElement.Q<VisualElement>("TopStatusPill")
+                : null;
+            if (_statusPill == null)
+            {
+                return;
+            }
+
+            _statusPill.RegisterCallback<PointerDownEvent>(OnStatusPointerDown);
+            _statusPill.RegisterCallback<PointerUpEvent>(_ => _statusPressTimer?.Pause());
+            _statusPill.RegisterCallback<PointerLeaveEvent>(_ => _statusPressTimer?.Pause());
+        }
+
+        private void OnStatusPointerDown(PointerDownEvent evt)
+        {
+            if (evt.pointerType == UnityEngine.UIElements.PointerType.mouse || _statusPill == null)
+            {
+                return;
+            }
+
+            _statusPressTimer?.Pause();
+            _statusPressTimer = _statusPill.schedule.Execute(() =>
+            {
+                SetToolsEnabled(!ToolWindows.Enabled);
+                UpdateTelemetryState();
+            }).StartingIn(StatusLongPressMilliseconds);
         }
 
         private static void ReleaseCaptureOnEscape(Keyboard? keyboard)

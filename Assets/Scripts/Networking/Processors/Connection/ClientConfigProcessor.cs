@@ -10,12 +10,24 @@ using MinesServer.Networking.Server.Packets.Information;
 
 namespace Kern.Networking.Processors;
 
-public sealed class ClientConfigProcessor(
+public sealed class ClientConfigProcessor : IPacketProcessor<ClientConfigPacket>
+{
+    private readonly ITextureStorageService _textureStorage;
+    private readonly IAsyncOperationSupervisor _operations;
+    private readonly IAudioSystem? _audio;
+    private readonly IClientConfigManager? _clientConfig;
+    public ClientConfigProcessor(
     ITextureStorageService textureStorage,
     IAsyncOperationSupervisor operations,
     IAudioSystem? audio = null,
-    IClientConfigManager? clientConfig = null) : IPacketProcessor<ClientConfigPacket>
-{
+    IClientConfigManager? clientConfig = null)
+    {
+        _textureStorage = textureStorage;
+        _operations = operations;
+        _audio = audio;
+        _clientConfig = clientConfig;
+    }
+
     private static readonly Dictionary<string, AudioBusType> s_soundKeyToBus = new(StringComparer.OrdinalIgnoreCase)
     {
         ["master"] = AudioBusType.Master,
@@ -32,25 +44,25 @@ public sealed class ClientConfigProcessor(
 
         if (packet.UnrenderedTextures != null && packet.UnrenderedTextures.Count > 0)
         {
-            operations.Run(
+            _operations.Run(
                 "preload_textures",
-                cancellationToken => textureStorage.PreloadTexturesAsync(packet.UnrenderedTextures, cancellationToken));
+                cancellationToken => _textureStorage.PreloadTexturesAsync(packet.UnrenderedTextures, cancellationToken));
         }
     }
 
     private void ApplySoundConfig(SoundConfigPacket soundConfig)
     {
-        if (audio == null)
+        if (_audio == null)
         {
             return;
         }
 
         float masterVol = soundConfig.Master / 255f;
-        audio.SetBusVolume(AudioBusType.Master, masterVol);
+        _audio.SetBusVolume(AudioBusType.Master, masterVol);
 
-        if (clientConfig != null)
+        if (_clientConfig != null)
         {
-            clientConfig.UpdateSection(
+            _clientConfig.UpdateSection(
                 config => config.Audio,
                 settings =>
                 {
@@ -76,7 +88,7 @@ public sealed class ClientConfigProcessor(
                 if (s_soundKeyToBus.TryGetValue(kv.Key, out AudioBusType bus))
                 {
                     float vol = kv.Value / 255f;
-                    audio.SetBusVolume(bus, vol);
+                    _audio.SetBusVolume(bus, vol);
                 }
             }
         }

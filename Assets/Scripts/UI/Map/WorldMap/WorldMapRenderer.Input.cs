@@ -5,13 +5,29 @@ using UnityEngine.UIElements;
 
 namespace Kern.UI
 {
-    internal sealed class WorldMapInputDispatcher(
-        MapInteractionController interaction,
-        WorldMapPanel panel,
-        MapTextureController textureController,
-        Action clampViewCenter,
-        Action requestRender)
+    internal sealed class WorldMapInputDispatcher
     {
+        private readonly MapInteractionController _interaction;
+        private readonly WorldMapPanel _panel;
+        private readonly MapTextureController _textureController;
+        private readonly Action _clampViewCenter;
+        private readonly Action _requestRender;
+        private readonly MapPinchGesture _pinch = new();
+
+        public WorldMapInputDispatcher(
+            MapInteractionController interaction,
+            WorldMapPanel panel,
+            MapTextureController textureController,
+            Action clampViewCenter,
+            Action requestRender)
+        {
+            _interaction = interaction;
+            _panel = panel;
+            _textureController = textureController;
+            _clampViewCenter = clampViewCenter;
+            _requestRender = requestRender;
+        }
+
         public void HandleWheel(
             WheelEvent evt,
             float maxCellsPerPixel,
@@ -20,58 +36,96 @@ namespace Kern.UI
             ref float viewCenterY)
         {
             bool renderRequested = false;
-            interaction.HandleMouseScroll(
-                panel.Overlay,
-                panel.Image,
+            _interaction.HandleMouseScroll(
+                _panel.Overlay,
+                _panel.Image,
                 evt.delta.y,
                 evt.mousePosition,
-                textureController.TexWidth,
-                textureController.TexHeight,
+                _textureController.TexWidth,
+                _textureController.TexHeight,
                 maxCellsPerPixel,
                 ref cellsPerPixel,
                 ref viewCenterX,
                 ref viewCenterY,
                 ref renderRequested,
-                clampViewCenter);
+                _clampViewCenter);
 
             if (renderRequested)
             {
-                requestRender();
+                _requestRender();
             }
         }
 
-        public void HandlePointerDown(PointerDownEvent evt) =>
-            interaction.HandlePointerDown(evt, panel.Image);
+        public void HandlePointerDown(PointerDownEvent evt)
+        {
+            if (_panel.Image != null && _pinch.Down(evt, _panel.Image))
+            {
+                _interaction.CancelDragForPinch();
+                evt.StopPropagation();
+                return;
+            }
+
+            _interaction.HandlePointerDown(evt, _panel.Image);
+        }
 
         public void HandlePointerMove(
             PointerMoveEvent evt,
-            float cellsPerPixel,
+            float maxCellsPerPixel,
+            ref float cellsPerPixel,
             float dragSpeed,
             ref float viewCenterX,
             ref float viewCenterY,
             ref bool followPlayer)
         {
             bool renderRequested = false;
-            interaction.HandlePointerMove(
+            if (_pinch.Move(evt, out float wheelDelta, out UnityEngine.Vector2 center) && _pinch.IsPinching)
+            {
+                _interaction.HandleMouseScroll(
+                    _panel.Overlay,
+                    _panel.Image,
+                    wheelDelta,
+                    center,
+                    _textureController.TexWidth,
+                    _textureController.TexHeight,
+                    maxCellsPerPixel,
+                    ref cellsPerPixel,
+                    ref viewCenterX,
+                    ref viewCenterY,
+                    ref renderRequested,
+                    _clampViewCenter);
+                followPlayer = false;
+                if (renderRequested)
+                {
+                    _requestRender();
+                }
+
+                evt.StopPropagation();
+                return;
+            }
+
+            _interaction.HandlePointerMove(
                 evt,
-                panel.Image,
-                textureController.TexWidth,
-                textureController.TexHeight,
+                _panel.Image,
+                _textureController.TexWidth,
+                _textureController.TexHeight,
                 cellsPerPixel,
                 dragSpeed,
                 ref viewCenterX,
                 ref viewCenterY,
                 ref followPlayer,
                 ref renderRequested,
-                clampViewCenter);
+                _clampViewCenter);
 
             if (renderRequested)
             {
-                requestRender();
+                _requestRender();
             }
         }
 
-        public void HandlePointerUp(PointerUpEvent evt) =>
-            interaction.HandlePointerUp(evt, panel.Image);
+        public void HandlePointerUp(PointerUpEvent evt)
+        {
+            _pinch.Up(evt, _panel.Image);
+            _interaction.HandlePointerUp(evt, _panel.Image);
+        }
     }
 }

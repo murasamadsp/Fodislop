@@ -9,17 +9,27 @@ using Kern.Audio.Core;
 namespace Kern.Core;
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
-public sealed class AudioBusPathAttribute(string path) : Attribute
+public sealed class AudioBusPathAttribute : Attribute
 {
-    public string Path { get; } = string.IsNullOrWhiteSpace(path)
-        ? throw new ArgumentException("Bus path must not be empty.", nameof(path))
-        : path;
+    public AudioBusPathAttribute(string path)
+    {
+        Path = string.IsNullOrWhiteSpace(path)
+            ? throw new ArgumentException("Bus path must not be empty.", nameof(path))
+            : path;
+    }
+
+    public string Path { get; }
 }
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
-public sealed class AudioBusAttribute(AudioBusType bus) : Attribute
+public sealed class AudioBusAttribute : Attribute
 {
-    public AudioBusType Bus { get; } = bus;
+    public AudioBusAttribute(AudioBusType bus)
+    {
+        Bus = bus;
+    }
+
+    public AudioBusType Bus { get; }
 }
 
 public static class AudioBusRegistry

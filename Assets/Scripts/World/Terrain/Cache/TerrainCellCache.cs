@@ -34,9 +34,9 @@ public class TerrainCellCache : ITerrainCellDataSource
     // метаданные немногих встретившихся типов. Раскладка в кольцо — рабочий
     // поток. Прежде всё это шло на главном: сдвиг на квант по двум осям
     // стоил ~7 мс кадра.
-    private readonly List<RectInt> _pendingRects = [];
+    private readonly List<RectInt> _pendingRects = new();
     private readonly bool[] _seenTypes = new bool[256];
-    private CellType[] _pendingTypes = [];
+    private CellType[] _pendingTypes = Array.Empty<CellType>();
     private int _pendingTypeCount;
     private bool _hasPending;
     private bool _pendingFull;

@@ -6,9 +6,15 @@ using UnityEngine;
 
 namespace Kern.UI;
 
-internal sealed class MinimapCellInvalidation(MapCellSampler sampler)
+internal sealed class MinimapCellInvalidation
 {
+    private readonly MapCellSampler _sampler;
     private bool _pending;
+
+    public MinimapCellInvalidation(MapCellSampler sampler)
+    {
+        _sampler = sampler;
+    }
 
     public bool IsPending => _pending;
 
@@ -16,13 +22,13 @@ internal sealed class MinimapCellInvalidation(MapCellSampler sampler)
 
     public void OnChunkLoaded(int serverX, int serverY)
     {
-        sampler.InvalidateChunk(serverX, serverY);
+        _sampler.InvalidateChunk(serverX, serverY);
         _pending = true;
     }
 
     public void OnCellChanged(int serverX, int serverY)
     {
-        sampler.InvalidateChunk(serverX, serverY);
+        _sampler.InvalidateChunk(serverX, serverY);
         _pending = true;
     }
 
@@ -45,7 +51,7 @@ internal sealed class MinimapCellInvalidation(MapCellSampler sampler)
         {
             for (int chunkY = Mathf.Max(0, startY / chunkSize); chunkY <= endY / chunkSize; chunkY++)
             {
-                sampler.InvalidateChunk(chunkX * chunkSize, chunkY * chunkSize);
+                _sampler.InvalidateChunk(chunkX * chunkSize, chunkY * chunkSize);
             }
         }
 

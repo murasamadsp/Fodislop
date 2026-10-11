@@ -8,7 +8,9 @@ namespace Kern.Core;
 
 internal static class ClientConfigDefaults
 {
-    public static ClientConfig Create(GraphicsQualityProfile graphicsQualityProfile)
+    public static ClientConfig Create(
+        GraphicsQualityProfile graphicsQualityProfile,
+        GraphicsPreset initialGraphicsPreset = GraphicsPreset.Standard)
     {
         if (graphicsQualityProfile == null)
         {
@@ -18,6 +20,7 @@ internal static class ClientConfigDefaults
         var config = new ClientConfig
         {
             SchemaVersion = ClientConfig.CurrentSchemaVersion,
+            GraphicsPreset = initialGraphicsPreset,
         };
         config.GraphicsQualitySettings = graphicsQualityProfile.Get(config.GraphicsPreset);
         config.Interface.UIScale = UIScaleUtility.RecommendedDefaultScale;

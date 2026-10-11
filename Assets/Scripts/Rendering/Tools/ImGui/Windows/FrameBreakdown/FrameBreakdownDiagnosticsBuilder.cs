@@ -12,8 +12,8 @@ internal static class FrameBreakdownDiagnosticsBuilder
 {
     private const double BudgetMilliseconds = FrameBudget.TargetFrameMilliseconds;
 
-    private static readonly List<KeyValuePair<string, int>> s_subtreeSorted = [];
-    private static readonly List<KeyValuePair<Texture, int>> s_textureSorted = [];
+    private static readonly List<KeyValuePair<string, int>> s_subtreeSorted = new();
+    private static readonly List<KeyValuePair<Texture, int>> s_textureSorted = new();
 
     public static void BuildLayoutRows(
         List<FrameBreakdownRow> rows,

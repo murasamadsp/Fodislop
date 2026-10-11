@@ -12,12 +12,12 @@ public sealed class PacketTrafficWindow : ToolWindow
 
     private const double SilenceThresholdSeconds = 5d;
 
-    private readonly List<PacketStat> _incoming = [];
-    private readonly List<PacketStat> _outgoing = [];
-    private readonly List<PacketEvent> _history = [];
-    private readonly List<string> _incomingRows = [];
-    private readonly List<string> _outgoingRows = [];
-    private readonly List<string> _historyRows = [];
+    private readonly List<PacketStat> _incoming = new();
+    private readonly List<PacketStat> _outgoing = new();
+    private readonly List<PacketEvent> _history = new();
+    private readonly List<string> _incomingRows = new();
+    private readonly List<string> _outgoingRows = new();
+    private readonly List<string> _historyRows = new();
 
     private string _summary = "учёт не ведётся";
     private string _rateSummary = string.Empty;

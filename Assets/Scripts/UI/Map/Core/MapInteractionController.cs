@@ -80,9 +80,17 @@ public sealed class MapInteractionController
         evt.StopPropagation();
     }
 
+    // Второй палец превратил перетаскивание в пинч: сдвиг прекращается,
+    // но захват первого пальца остаётся — его движения нужны пинчу.
+    public void CancelDragForPinch()
+    {
+        _isDragging = false;
+        WasDragging = true;
+    }
+
     public void HandlePointerUp(PointerUpEvent evt, Image? mapImage)
     {
-        if (!_isDragging || evt.pointerId != _dragPointerId)
+        if (evt.pointerId != _dragPointerId)
         {
             return;
         }

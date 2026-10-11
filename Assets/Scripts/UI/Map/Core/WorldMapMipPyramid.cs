@@ -379,6 +379,10 @@ internal sealed class WorldMapMipPyramid
         int blockX0 = chunkX * _blocksPerChunkAxis;
         int blockY0 = chunkY * _blocksPerChunkAxis;
         int totalCells = 0;
+        int minBlockX = _blocksPerChunkAxis;
+        int minBlockY = _blocksPerChunkAxis;
+        int maxBlockX = -1;
+        int maxBlockY = -1;
         for (int blockXi = 0; blockXi < _blocksPerChunkAxis; blockXi++)
         {
             for (int blockYi = 0; blockYi < _blocksPerChunkAxis; blockYi++)
@@ -391,16 +395,20 @@ internal sealed class WorldMapMipPyramid
                 }
 
                 totalCells += count;
-                SetBlockAverage(
-                    blockX0 + blockXi,
-                    blockY0 + blockYi,
-                    CreateAverage(
-                        _blockRed[blockIndex],
-                        _blockGreen[blockIndex],
-                        _blockBlue[blockIndex],
-                        _blockAlpha[blockIndex],
-                        count),
+                int blockX = blockX0 + blockXi;
+                int blockY = blockY0 + blockYi;
+                int levelZeroIndex = blockY * _levelWidths[0] + blockX;
+                _levels[0][levelZeroIndex] = CreateAverage(
+                    _blockRed[blockIndex],
+                    _blockGreen[blockIndex],
+                    _blockBlue[blockIndex],
+                    _blockAlpha[blockIndex],
                     count);
+                _levelWeights[0][levelZeroIndex] = count;
+                minBlockX = Math.Min(minBlockX, blockXi);
+                minBlockY = Math.Min(minBlockY, blockYi);
+                maxBlockX = Math.Max(maxBlockX, blockXi);
+                maxBlockY = Math.Max(maxBlockY, blockYi);
             }
         }
 
@@ -410,28 +418,16 @@ internal sealed class WorldMapMipPyramid
                 $"Chunk {chunkX},{chunkY} contributed no in-world cells to the mip pyramid.");
         }
 
+        RebuildParentRegion(
+            blockX0 + minBlockX,
+            blockY0 + minBlockY,
+            blockX0 + maxBlockX,
+            blockY0 + maxBlockY);
         ResetBlockAccumulators();
     }
 
-    private void ResetBlockAccumulators()
+    private void RebuildParentRegion(int minChildX, int minChildY, int maxChildX, int maxChildY)
     {
-        Array.Clear(_blockRed, 0, _blockRed.Length);
-        Array.Clear(_blockGreen, 0, _blockGreen.Length);
-        Array.Clear(_blockBlue, 0, _blockBlue.Length);
-        Array.Clear(_blockAlpha, 0, _blockAlpha.Length);
-        Array.Clear(_blockCount, 0, _blockCount.Length);
-    }
-
-    private void SetBlockAverage(int blockX, int blockY, Color32 average, int validCellCount)
-    {
-        ValidateBlockIndex(blockX, blockY);
-
-        _levels[0][blockY * _levelWidths[0] + blockX] = average;
-        _levelWeights[0][blockY * _levelWidths[0] + blockX] = validCellCount;
-        int minChildX = blockX;
-        int maxChildX = blockX;
-        int minChildY = blockY;
-        int maxChildY = blockY;
         for (int level = 1; level < _levels.Length; level++)
         {
             int childWidth = _levelWidths[level - 1];
@@ -447,9 +443,9 @@ internal sealed class WorldMapMipPyramid
             {
                 for (int parentX = minParentX; parentX <= maxParentX; parentX++)
                 {
-                    Color32 parentAverage = AverageChildren(level - 1, parentX, parentY, out double parentWeight);
-                    _levels[level][parentY * parentWidth + parentX] = parentAverage;
-                    _levelWeights[level][parentY * parentWidth + parentX] = (float)parentWeight;
+                    int parentIndex = parentY * parentWidth + parentX;
+                    _levels[level][parentIndex] = AverageChildren(level - 1, parentX, parentY, out double weight);
+                    _levelWeights[level][parentIndex] = (float)weight;
                 }
             }
 
@@ -458,6 +454,15 @@ internal sealed class WorldMapMipPyramid
             minChildY = minParentY;
             maxChildY = maxParentY;
         }
+    }
+
+    private void ResetBlockAccumulators()
+    {
+        Array.Clear(_blockRed, 0, _blockRed.Length);
+        Array.Clear(_blockGreen, 0, _blockGreen.Length);
+        Array.Clear(_blockBlue, 0, _blockBlue.Length);
+        Array.Clear(_blockAlpha, 0, _blockAlpha.Length);
+        Array.Clear(_blockCount, 0, _blockCount.Length);
     }
 
     private Color32 GetColor(CellType cellType) =>
@@ -577,11 +582,4 @@ internal sealed class WorldMapMipPyramid
         }
     }
 
-    private void ValidateBlockIndex(int blockX, int blockY)
-    {
-        if ((uint)blockX >= (uint)_levelWidths[0] || (uint)blockY >= (uint)_levelHeights[0])
-        {
-            throw new ArgumentOutOfRangeException(nameof(blockX));
-        }
-    }
 }

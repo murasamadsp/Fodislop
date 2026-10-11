@@ -18,7 +18,7 @@ public static class ToolLayout
     // Динамические ширины (окно тянут мышью) дали бы бесконечный рост кеша.
     private const int MaximumCachedWidths = 256;
 
-    private static readonly Dictionary<float, GUILayoutOption> s_widths = [];
+    private static readonly Dictionary<float, GUILayoutOption> s_widths = new();
     private static readonly GUILayoutOption s_expandWidthTrue = GUILayout.ExpandWidth(true);
     private static readonly GUILayoutOption s_expandWidthFalse = GUILayout.ExpandWidth(false);
 

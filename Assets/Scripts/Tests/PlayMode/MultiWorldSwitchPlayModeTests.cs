@@ -77,7 +77,7 @@ public sealed class MultiWorldSwitchPlayModeTests
             64,
             64,
             MinesServer.Networking.Connection.Client.DummyCellConfigurationUtilities.CreateCellConfigurations(),
-            [[37, 38, 106]]);
+            new[] { new byte[] { 37, 38, 106 } });
 
         // 3. Process WorldInit mid-session
         worldInitProcessor.Process(newWorldPacket);

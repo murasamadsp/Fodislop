@@ -58,7 +58,9 @@ public class PlayerMovementBoundaryFuzzTests
         var random = new System.Random(42);
         for (int i = 0; i < 100; i++)
         {
-            Vector2Int[] dirs = [new(0, 0), new(1, 0), new(-1, 0), new(0, 1), new(0, -1)];
+            Vector2Int[] dirs = new Vector2Int[] {
+new(0, 0), new(1, 0), new(-1, 0), new(0, 1), new(0, -1)
+ };
             Vector2Int d = dirs[random.Next(dirs.Length)];
             Vector2Int delta = PlayerMovementMath.MovementToDeltaServer(d);
             Assert.That(delta.x, Is.EqualTo(d.x));
@@ -82,7 +84,9 @@ public class PlayerMovementBoundaryFuzzTests
     public void IsPassable_NonEmptyWithPassableFlag_True()
     {
         var random = new System.Random(42);
-        CellType[] types = [CellType.Road, CellType.Gate, CellType.BuildingDoor];
+        CellType[] types = new[] {
+CellType.Road, CellType.Gate, CellType.BuildingDoor
+ };
         for (int i = 0; i < 50; i++)
         {
             bool p = PlayerMovementValidator.IsPassable(
@@ -96,7 +100,9 @@ public class PlayerMovementBoundaryFuzzTests
     public void IsPassable_Solid_False()
     {
         var random = new System.Random(42);
-        CellType[] types = [CellType.Rock, CellType.BuildingWall, CellType.Lava, CellType.Box];
+        CellType[] types = new[] {
+CellType.Rock, CellType.BuildingWall, CellType.Lava, CellType.Box
+ };
         for (int i = 0; i < 50; i++)
         {
             bool p = PlayerMovementValidator.IsPassable(

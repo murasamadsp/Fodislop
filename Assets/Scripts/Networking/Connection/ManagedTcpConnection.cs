@@ -107,6 +107,23 @@ namespace Kern.Networking.Connection
             {
                 // Явное закрытие: событие уже отправил Disconnect().
             }
+            catch (SocketException exception) when (
+                exception.SocketErrorCode == SocketError.ConnectionRefused)
+            {
+                // Сервер может быть выключен при запуске клиента. Это
+                // обычный отказ подключения; состояние и OnDisconnected
+                // выставятся в finally.
+                Debug.Log(
+                    $"[ManagedTcpConnection] Connection refused by {_address}:{_port}; connection remains disconnected.");
+            }
+            catch (AggregateException exception) when (IsConnectionRefused(exception))
+            {
+                // Task.Wait оборачивает отказ ConnectAsync в AggregateException.
+                // Оставляем сообщение о недоступном сервере без исключения и
+                // stack trace.
+                Debug.Log(
+                    $"[ManagedTcpConnection] Connection refused by {_address}:{_port}; connection remains disconnected.");
+            }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[ManagedTcpConnection] Connection lost:\n{ex}");
@@ -117,6 +134,26 @@ namespace Kern.Networking.Connection
                 SetStatus(ConnectionStatus.Disconnected);
                 PostToMain(() => OnDisconnected?.Invoke());
             }
+        }
+
+        private static bool IsConnectionRefused(AggregateException exception)
+        {
+            AggregateException flattened = exception.Flatten();
+            if (flattened.InnerExceptions.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (Exception innerException in flattened.InnerExceptions)
+            {
+                if (innerException is not SocketException socketException ||
+                    socketException.SocketErrorCode != SocketError.ConnectionRefused)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void RunReadLoop(TcpClient client, NetworkStream stream)

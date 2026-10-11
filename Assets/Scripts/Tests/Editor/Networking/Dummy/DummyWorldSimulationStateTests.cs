@@ -54,7 +54,6 @@ public sealed class DummyWorldSimulationStateTests
             }
         }
 
-        LogAssert.Expect(LogType.Exception, new System.Text.RegularExpressions.Regex("injected failure"));
         bool failedAsExpected = await FailsAsExpected();
         Assert.That(failedAsExpected, Is.True);
 
@@ -190,7 +189,7 @@ public sealed class DummyWorldSimulationStateTests
 
     private sealed class StubItemCatalog : IItemCatalog
     {
-        public IEnumerable<ItemType> AllTypes => [ItemType.Rem, ItemType.Battery];
+        public IEnumerable<ItemType> AllTypes => new[] { ItemType.Rem, ItemType.Battery };
 
         public string GetName(ItemType type) => type.ToString();
 

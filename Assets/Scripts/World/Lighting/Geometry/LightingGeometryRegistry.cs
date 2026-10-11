@@ -10,7 +10,7 @@ namespace Kern.World.Lighting;
 
 public sealed class LightingGeometryRegistry
 {
-    private readonly List<Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor> _contributors = [];
+    private readonly List<Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor> _contributors = new();
     private readonly RenderTargetIdentifier[] _fieldTargets = new RenderTargetIdentifier[2];
     private readonly RenderTargetIdentifier[] _ambientOcclusionTarget = new RenderTargetIdentifier[1];
     private ulong _registryRevision = 1;

@@ -29,11 +29,21 @@ internal readonly record struct LightingDiagnosticsContext(
 /// не участвует в решении света и не может на него повлиять. Держать их рядом
 /// с кадром значило каждый раз перечитывать сто строк отчётности, чтобы найти
 /// двадцать строк работы.
-internal sealed class LightingDiagnosticsReporter(
-    LightingResourceManager resources,
-    LightingRuntimeState runtimeState,
-    IFrameTelemetry telemetry)
+internal sealed class LightingDiagnosticsReporter
 {
+    private readonly LightingResourceManager _resources;
+    private readonly LightingRuntimeState _runtimeState;
+    private readonly IFrameTelemetry _telemetry;
+
+    public LightingDiagnosticsReporter(
+        LightingResourceManager resources,
+        LightingRuntimeState runtimeState,
+        IFrameTelemetry telemetry)
+    {
+        _resources = resources;
+        _runtimeState = runtimeState;
+        _telemetry = telemetry;
+    }
     // Снимок делается один раз за сессию: нарушение бюджета повторяется каждый
     // кадр, и второй дамп уже ничего не добавит, зато добавит стоимости.
     private bool _budgetViolationCaptured;
@@ -43,49 +53,49 @@ internal sealed class LightingDiagnosticsReporter(
         in LightingDiagnosticsContext context)
     {
         CascadeCostCalculator.CollectCascadeCosts(
-            resources.Cascades, context.MaximumIntervalSteps, destination);
+            _resources.Cascades, context.MaximumIntervalSteps, destination);
     }
 
     public string? DumpCurrentFrame(
         in LightingDiagnosticsContext context,
         string? targetDirectory)
     {
-        if (!context.Initialized || resources.Registry.Compute == null)
+        if (!context.Initialized || _resources.Registry.Compute == null)
         {
             return null;
         }
 
         return LightingFrameDumper.DumpCurrentFrame(
-            resources.Registry,
+            _resources.Registry,
             context.WorldRect,
             context.CellSize,
             context.Quality,
-            telemetry,
-            resources.LightingCounters,
+            _telemetry,
+            _resources.LightingCounters,
             targetDirectory);
     }
 
     public void CaptureBudgetViolationIfNeeded(in LightingDiagnosticsContext context)
     {
-        long estimatedRayWork = CascadeCostCalculator.EstimateRayWorkUnits(resources.Cascades);
+        long estimatedRayWork = CascadeCostCalculator.EstimateRayWorkUnits(_resources.Cascades);
         bool staticRayBudgetViolation =
             estimatedRayWork > LightingPerformanceBudget.MaximumStaticCascadeRayWorkUnits;
         bool measuredBudgetViolation =
-            !LightingPerformanceBudget.CheckBudget(telemetry, out _) ||
-            !LightingPerformanceBudget.CheckFrameBudget(telemetry, out _);
+            !LightingPerformanceBudget.CheckBudget(_telemetry, out _) ||
+            !LightingPerformanceBudget.CheckFrameBudget(_telemetry, out _);
         bool repeatedStaticSolve =
-            runtimeState.SolveCount > 1 &&
-            telemetry.LightingStaticSolveCount > 0 &&
-            (telemetry.LightingRegionChangeCount > 0 ||
-                telemetry.LightingFieldRebuildCount > 0);
+            _runtimeState.SolveCount > 1 &&
+            _telemetry.LightingStaticSolveCount > 0 &&
+            (_telemetry.LightingRegionChangeCount > 0 ||
+                _telemetry.LightingFieldRebuildCount > 0);
         bool repeatedTerrainFullRebuild =
-            runtimeState.SolveCount > 1 &&
-            telemetry.TerrainFullPopulateCount > 1 &&
-            (telemetry.StreamingPlanKind == (int)StreamingPlanKind.FullRebuild ||
-                telemetry.StreamingPlanKind == (int)StreamingPlanKind.Resize);
+            _runtimeState.SolveCount > 1 &&
+            _telemetry.TerrainFullPopulateCount > 1 &&
+            (_telemetry.StreamingPlanKind == (int)StreamingPlanKind.FullRebuild ||
+                _telemetry.StreamingPlanKind == (int)StreamingPlanKind.Resize);
         if (_budgetViolationCaptured ||
             !context.Initialized ||
-            resources.Registry.Compute == null ||
+            _resources.Registry.Compute == null ||
             !measuredBudgetViolation &&
             !staticRayBudgetViolation &&
             !repeatedStaticSolve &&
@@ -103,19 +113,19 @@ internal sealed class LightingDiagnosticsReporter(
             $"measuredBudgetViolation={measuredBudgetViolation}, " +
             $"repeatedStaticSolve={repeatedStaticSolve}, " +
             $"repeatedTerrainFullRebuild={repeatedTerrainFullRebuild}, " +
-            $"staticSolves={telemetry.LightingStaticSolveCount}, " +
-            $"terrainFullPopulates={telemetry.TerrainFullPopulateCount}.");
+            $"staticSolves={_telemetry.LightingStaticSolveCount}, " +
+            $"terrainFullPopulates={_telemetry.TerrainFullPopulateCount}.");
         try
         {
             // A violation is already the expensive frame. Full ReadPixels
             // plus PNG encoding here would add seven synchronous GPU/CPU
             // readbacks and turn one bad frame into a visible freeze.
             LightingFrameDumper.DumpCurrentFrame(
-                resources.Registry,
+                _resources.Registry,
                 context.WorldRect,
                 context.CellSize,
                 context.Quality,
-                telemetry,
+                _telemetry,
                 lightingCounters: null,
                 targetDirectory: null,
                 includeTextures: false);

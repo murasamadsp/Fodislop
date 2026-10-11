@@ -10,6 +10,7 @@ public sealed class PixelArtTextureImportPolicy : AssetPostprocessor
 {
     private const string ProgrammatorRoot = "Assets/Resources/Programmator/";
     private const string SkillsRoot = "Assets/Resources/Skills/";
+    private const string SurfaceRoot = "Assets/Textures/Surface/";
 
     // Для ветки Assets/Textures политика нужна единообразием редактора, а не
     // видом в игре: BuildTextureStager копирует эти файлы как есть в
@@ -23,7 +24,7 @@ public sealed class PixelArtTextureImportPolicy : AssetPostprocessor
 
     // Версия поднята вместе с новым корнем: без неё Unity не перечитает уже
     // импортированные текстуры Assets/Textures.
-    public override uint GetVersion() => 2;
+    public override uint GetVersion() => 3;
 
     private void OnPreprocessTexture()
     {
@@ -51,6 +52,12 @@ public sealed class PixelArtTextureImportPolicy : AssetPostprocessor
 
     private static bool IsPixelArtResource(string path)
     {
+        // Surface cutouts and 3D albedo use their authored mip/filter/wrap settings.
+        if (path.StartsWith(SurfaceRoot, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         return path.StartsWith(ProgrammatorRoot, StringComparison.Ordinal) ||
             path.StartsWith(SkillsRoot, StringComparison.Ordinal) ||
             path.StartsWith(TexturesRoot, StringComparison.Ordinal);

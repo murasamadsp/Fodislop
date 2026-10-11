@@ -14,7 +14,9 @@ public sealed class AnimationContainerDecoderTests
     [Test]
     public void DetectType_PngData_ReturnsPNG()
     {
-        byte[] pngHeader = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        byte[] pngHeader = new byte[] {
+0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+ };
         Assert.That(AnimationContainerDecoder.DetectType(pngHeader), Is.EqualTo(AnimationContainerDecoder.ContainerType.PNG));
     }
 
@@ -23,7 +25,7 @@ public sealed class AnimationContainerDecoderTests
     {
         Assert.That(AnimationContainerDecoder.DetectType(null!), Is.EqualTo(AnimationContainerDecoder.ContainerType.None));
         Assert.That(AnimationContainerDecoder.DetectType(Array.Empty<byte>()), Is.EqualTo(AnimationContainerDecoder.ContainerType.None));
-        Assert.That(AnimationContainerDecoder.DetectType([0x89, 0x50]), Is.EqualTo(AnimationContainerDecoder.ContainerType.None));
+        Assert.That(AnimationContainerDecoder.DetectType(new byte[] { 0x89, 0x50 }), Is.EqualTo(AnimationContainerDecoder.ContainerType.None));
     }
 
     [TestCase("vfx/bz", 16, 480, 16, 32, 15, 15f)]

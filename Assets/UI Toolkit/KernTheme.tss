@@ -21,3 +21,5 @@
 @import url("../Resources/Styles/Modal.uss");
 @import url("../Resources/Styles/PacketWindow.uss");
 @import url("../Resources/Styles/Auth.uss");
+/* Сенсорная раскладка — последней: переопределяет правила экранов. */
+@import url("../Resources/Styles/Touch.uss");

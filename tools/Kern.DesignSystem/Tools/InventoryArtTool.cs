@@ -3,8 +3,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using StbImageSharp;
 
 namespace Kern.DesignSystem.Tools;
 
@@ -105,7 +104,12 @@ internal static class InventoryArtTool
 
     private static Item Measure(string path, string root)
     {
-        using Image<Rgba32> image = Image.Load<Rgba32>(path);
+        ImageResult image;
+        using (FileStream input = File.OpenRead(path))
+        {
+            image = ImageResult.FromStream(input, ColorComponents.RedGreenBlueAlpha);
+        }
+
         int minX = image.Width;
         int minY = image.Height;
         int maxX = -1;
@@ -117,8 +121,12 @@ internal static class InventoryArtTool
         {
             for (int x = 0; x < image.Width; x++)
             {
-                Rgba32 pixel = image[x, y];
-                if (pixel.A == 0)
+                int pixelIndex = (y * image.Width + x) * 4;
+                byte red = image.Data[pixelIndex];
+                byte green = image.Data[pixelIndex + 1];
+                byte blue = image.Data[pixelIndex + 2];
+                byte alpha = image.Data[pixelIndex + 3];
+                if (alpha == 0)
                 {
                     continue;
                 }
@@ -127,8 +135,8 @@ internal static class InventoryArtTool
                 minY = Math.Min(minY, y);
                 maxX = Math.Max(maxX, x);
                 maxY = Math.Max(maxY, y);
-                double weight = pixel.A / 255.0;
-                pixels.Add((pixel.R / 255.0, pixel.G / 255.0, pixel.B / 255.0, weight));
+                double weight = alpha / 255.0;
+                pixels.Add((red / 255.0, green / 255.0, blue / 255.0, weight));
             }
         }
 
@@ -142,18 +150,18 @@ internal static class InventoryArtTool
         {
             for (int x = minX; x <= maxX; x++)
             {
-                edgeAlpha.Add(image[x, minY].A);
-                edgeAlpha.Add(image[x, maxY].A);
+                edgeAlpha.Add(image.Data[(minY * image.Width + x) * 4 + 3]);
+                edgeAlpha.Add(image.Data[(maxY * image.Width + x) * 4 + 3]);
                 if (minY > 0)
                 {
-                    edgeAlpha.Add(image[x, minY - 1].A);
+                    edgeAlpha.Add(image.Data[((minY - 1) * image.Width + x) * 4 + 3]);
                 }
             }
 
             for (int y = minY; y <= maxY; y++)
             {
-                edgeAlpha.Add(image[minX, y].A);
-                edgeAlpha.Add(image[maxX, y].A);
+                edgeAlpha.Add(image.Data[(y * image.Width + minX) * 4 + 3]);
+                edgeAlpha.Add(image.Data[(y * image.Width + maxX) * 4 + 3]);
             }
 
             List<byte> partial = edgeAlpha.Where(alpha => alpha is > 0 and < 255).ToList();

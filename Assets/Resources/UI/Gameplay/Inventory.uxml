@@ -20,8 +20,12 @@
             <!-- Короткий список: первые четыре предмета -->
             <ui:VisualElement name="HotbarSlots" class="inv-hotbar-slots" picking-mode="Position" />
 
-            <!-- Полный список: все предметы, та же раскладка, скрыт по умолчанию -->
-            <ui:VisualElement name="InventoryGrid" class="inv-hotbar-slots is-hidden" picking-mode="Position" />
+            <!-- Полный список: все предметы, та же раскладка, скрыт по умолчанию.
+                 Прокрутка нужна сенсорному окну (Touch.uss ограничивает высоту);
+                 на десктопе высота не ограничена и прокрутки нет. -->
+            <ui:ScrollView name="InventoryScroll" class="inv-scroll is-hidden" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" picking-mode="Position">
+                <ui:VisualElement name="InventoryGrid" class="inv-hotbar-slots is-hidden" picking-mode="Position" />
+            </ui:ScrollView>
 
             <ui:Button name="InventoryToggleBtn" class="inv-toggle-btn" tooltip="inventory.open" picking-mode="Position">
                 <ui:Label text="" />

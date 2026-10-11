@@ -49,6 +49,10 @@
                 </ui:VisualElement>
             </ui:VisualElement>
 
+            <!-- Форма — в прокрутке: на альбомном телефоне карточка становится
+                 двухколоночной (Touch.uss), и форма входа выше экрана. На
+                 десктопе высота не ограничена, и прокрутки нет. -->
+            <ui:ScrollView name="AuthFormScroll" class="auth-form-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
             <ui:VisualElement class="auth-tabs">
                 <ui:Button name="AuthTabLogin" class="auth-tab auth-tab--active" text="gateway.auth.login_tab" />
                 <ui:Button name="AuthTabRegister" class="auth-tab" text="gateway.auth.register_tab" />
@@ -115,6 +119,7 @@
             </ui:VisualElement>
 
             <ui:Label name="AuthHint" class="auth-hint" />
+            </ui:ScrollView>
         </ui:VisualElement>
      </ui:VisualElement>
     </ui:VisualElement>

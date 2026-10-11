@@ -22,8 +22,8 @@ internal sealed class MarkerBatch : IDisposable
 
     private readonly int _batchSize;
     private readonly int _framesPerBatch;
-    private readonly List<MarkerInfo> _queue = [];
-    private readonly List<(MarkerInfo Marker, ProfilerRecorder Recorder)> _open = [];
+    private readonly List<MarkerInfo> _queue = new();
+    private readonly List<(MarkerInfo Marker, ProfilerRecorder Recorder)> _open = new();
     private int _next;
     private int _frames;
 

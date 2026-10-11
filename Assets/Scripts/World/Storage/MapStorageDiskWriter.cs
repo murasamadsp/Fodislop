@@ -93,7 +93,7 @@ internal static class MapStorageDiskWriter
             () => PrepareWorldLayerFile(path, widthChunks, heightChunks, chunkSize, backupMapFilePath));
     }
 
-    private static void PrepareWorldLayerFile(
+    internal static void PrepareWorldLayerFile(
         string path,
         int widthChunks,
         int heightChunks,
@@ -106,6 +106,11 @@ internal static class MapStorageDiskWriter
             widthChunks,
             heightChunks,
             chunkSize);
+        if (HasCurrentHeader(path, widthChunks, heightChunks, chunkSize))
+        {
+            return;
+        }
+
         CreateBackup(path, backupMapFilePath);
         WorldLayer<CellType>.MigrateLegacyFileIfRequired(path, widthChunks, heightChunks, chunkSize);
     }

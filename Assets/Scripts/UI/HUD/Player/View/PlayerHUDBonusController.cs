@@ -170,7 +170,7 @@ public sealed class PlayerHUDBonusController
         }
     }
 
-    private void ClaimDailyBonus()
+    public void ClaimDailyBonus()
     {
         _sendPacket(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
     }

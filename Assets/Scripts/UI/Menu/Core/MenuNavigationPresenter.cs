@@ -142,6 +142,14 @@ public sealed class MenuNavigationPresenter
     {
         _routeOrbit?.RemoveFromClassList("mm-route-item--active");
         _routeDescent?.AddToClassList("mm-route-item--active");
+        _routeSurface?.RemoveFromClassList("mm-route-item--active");
+    }
+
+    public void SetOrbitRouteActive()
+    {
+        _routeDescent?.RemoveFromClassList("mm-route-item--active");
+        _routeOrbit?.AddToClassList("mm-route-item--active");
+        _routeSurface?.RemoveFromClassList("mm-route-item--active");
     }
 
     public void ApplyLocalization(ILocalizationService? loc)

@@ -17,7 +17,7 @@ namespace Kern.World.Terrain;
 public sealed class TerrainDoorOverlayBuilder : IDisposable
 {
     private readonly TerrainDoorOverlayRenderer _renderer = new();
-    private readonly List<int> _doorQuads = [];
+    private readonly List<int> _doorQuads = new();
 
     public void Rebuild(
         TerrainCellBuilder cellBuilder,

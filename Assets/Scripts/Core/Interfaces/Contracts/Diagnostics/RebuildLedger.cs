@@ -33,7 +33,7 @@ public static class RebuildLedger
         internal int CurrentSecond = -1;
     }
 
-    private static readonly List<Entry> s_entries = [];
+    private static readonly List<Entry> s_entries = new();
     private static readonly Dictionary<string, Entry> s_byName = new(StringComparer.Ordinal);
 
     public static IReadOnlyList<Entry> Entries => s_entries;

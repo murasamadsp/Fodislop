@@ -6,11 +6,17 @@ using UnityEngine;
 
 namespace Kern.Networking.Processors;
 
-public sealed class ClanProcessor(IPlayerStats stats) :
+public sealed class ClanProcessor :
     IPacketProcessor<ShowClanPacket>,
     IPacketProcessor<HideClanPacket>
 {
-    public void Process(ShowClanPacket packet) => stats.SetClanId(packet.ClanId);
+    private readonly IPlayerStats _stats;
+    public ClanProcessor(IPlayerStats stats)
+    {
+        _stats = stats;
+    }
 
-    public void Process(HideClanPacket packet) => stats.SetClanId(0);
+    public void Process(ShowClanPacket packet) => _stats.SetClanId(packet.ClanId);
+
+    public void Process(HideClanPacket packet) => _stats.SetClanId(0);
 }

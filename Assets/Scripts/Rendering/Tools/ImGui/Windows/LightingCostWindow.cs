@@ -24,8 +24,8 @@ public sealed class LightingCostWindow : ToolWindow
 
     private readonly LightingEngine? _lighting;
     private readonly IFrameTelemetry _telemetry;
-    private readonly List<CascadeCostSample> _samples = [];
-    private readonly List<string> _rows = [];
+    private readonly List<CascadeCostSample> _samples = new();
+    private readonly List<string> _rows = new();
 
     private long _totalRaySteps;
     private long _totalMergeTaps;
@@ -48,15 +48,15 @@ public sealed class LightingCostWindow : ToolWindow
     private string _applyMessage = string.Empty;
     private string _dynamicDetail = NoDetail;
     private string _probeDetail = NoDetail;
-    private static readonly string[] s_densityLabels = ["1", "2", "4", "8", "16", "32"];
-    private static readonly string[] s_probeLabels = ["1", "2", "4", "8", "16"];
-    private static readonly string[] s_staticAngleLabels = ["4", "8", "16", "32", "64"];
-    private static readonly int[] s_sampleValues = [1, 2, 4, 6, 8, 12, 16, 32, 64];
-    private static readonly string[] s_sampleLabels = ["1", "2", "4", "6", "8", "12", "16", "32", "64"];
-    private static readonly string[] s_emitterLabels = ["1×1", "2×2", "3×3", "4×4"];
-    private static readonly string[] s_polarLabels = ["4", "8", "16", "32", "64", "128", "256", "512", "1024"];
-    private static readonly string[] s_nearLabels = ["0.5", "1", "2", "4", "6", "8"];
-    private static readonly float[] s_nearValues = [0.5f, 1f, 2f, 4f, 6f, 8f];
+    private static readonly string[] s_densityLabels = { "1", "2", "4", "8", "16", "32" };
+    private static readonly string[] s_probeLabels = { "1", "2", "4", "8", "16" };
+    private static readonly string[] s_staticAngleLabels = { "4", "8", "16", "32", "64" };
+    private static readonly int[] s_sampleValues = { 1, 2, 4, 6, 8, 12, 16, 32, 64 };
+    private static readonly string[] s_sampleLabels = { "1", "2", "4", "6", "8", "12", "16", "32", "64" };
+    private static readonly string[] s_emitterLabels = { "1×1", "2×2", "3×3", "4×4" };
+    private static readonly string[] s_polarLabels = { "4", "8", "16", "32", "64", "128", "256", "512", "1024" };
+    private static readonly string[] s_nearLabels = { "0.5", "1", "2", "4", "6", "8" };
+    private static readonly float[] s_nearValues = { 0.5f, 1f, 2f, 4f, 6f, 8f };
 
     public LightingCostWindow(LightingEngine? lighting, IFrameTelemetry telemetry)
         : base("Цена света", new Rect(292f, 382f, 320f, 340f))
@@ -230,7 +230,13 @@ public sealed class LightingCostWindow : ToolWindow
     private void DrawQualityTuning()
     {
         ToolChrome.SectionHeader("АЛГОРИТМ ДИНАМИЧЕСКОГО СВЕТА");
-        if (_lighting?.ActiveGraphicsPreset == Kern.Rendering.GraphicsPreset.Standard)
+        if (_lighting == null)
+        {
+            ToolChrome.Banner("СИСТЕМА ОСВЕЩЕНИЯ НЕДОСТУПНА", ToolTheme.Warning);
+            return;
+        }
+
+        if (_lighting.ActiveGraphicsPreset == Kern.Rendering.GraphicsPreset.Standard)
         {
             ToolChrome.Banner(
                 "ПРЕСЕТ STANDARD ОТКЛЮЧАЕТ ДИНАМИЧЕСКИЙ СВЕТ · DDA / JFA СЕЙЧАС НЕ ВЫПОЛНЯЮТСЯ",
@@ -239,7 +245,7 @@ public sealed class LightingCostWindow : ToolWindow
         GUILayout.Label("Выбор действует сразу до конца сессии; при смене света пересчитывается.", MutedLabelStyle);
         int transportMode = (int)LightingQualityTuningController.DynamicTransportMode;
         int nextTransportMode = GUILayout.SelectionGrid(transportMode,
-            ["Точный DDA", "Однородные области", "SDF / JFA"], 3, ToolTheme.SegmentedButton);
+            new[] { "Точный DDA", "Однородные области", "SDF / JFA" }, 3, ToolTheme.SegmentedButton);
         if (nextTransportMode >= 0 && nextTransportMode != transportMode)
         {
             if (!_lighting.TrySetDynamicTransportMode(

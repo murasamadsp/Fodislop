@@ -12,12 +12,7 @@ using UnityEngine;
 
 namespace Kern.Networking.Processors;
 
-public sealed class StatusProcessor(
-    IPlayerStats stats,
-    NetworkStatusModel statusModel,
-    INetworkService networkService,
-    ILocalizationService? loc = null,
-    IConnectionService? connection = null) :
+public sealed class StatusProcessor :
     IPacketProcessor<OnlinePacket>,
     IPacketProcessor<PingPacket>,
     IPacketProcessor<OutdatedClientPacket>,
@@ -25,15 +20,34 @@ public sealed class StatusProcessor(
     IPacketProcessor<ClearStatusLinePacket>,
     IPacketProcessor<ClearStatusPacket>
 {
+    private readonly IPlayerStats _stats;
+    private readonly NetworkStatusModel _statusModel;
+    private readonly INetworkService _networkService;
+    private readonly ILocalizationService? _loc;
+    private readonly IConnectionService? _connection;
+    public StatusProcessor(
+    IPlayerStats stats,
+    NetworkStatusModel statusModel,
+    INetworkService networkService,
+    ILocalizationService? loc = null,
+    IConnectionService? connection = null)
+    {
+        _stats = stats;
+        _statusModel = statusModel;
+        _networkService = networkService;
+        _loc = loc;
+        _connection = connection;
+    }
+
     private bool _outdatedClientHandled;
 
     public void Process(OnlinePacket packet) =>
-        statusModel.SetOnline((int)packet.Players, (int)packet.Programmator);
+        _statusModel.SetOnline((int)packet.Players, (int)packet.Programmator);
 
     public void Process(PingPacket packet)
     {
-        statusModel.SetPing(packet.PreviousPing);
-        networkService.Send(new PongPacket(packet.SentAt));
+        _statusModel.SetPing(packet.PreviousPing);
+        _networkService.Send(new PongPacket(packet.SentAt));
     }
 
     public void Process(OutdatedClientPacket packet)
@@ -47,14 +61,14 @@ public sealed class StatusProcessor(
 
         // Description приходит от сервера свободным текстом; известные
         // клиентские причины передаются ключами словаря — резолвим их.
-        string description = loc != null && loc.HasKey(packet.Description)
-            ? loc.Get(packet.Description)
+        string description = _loc != null && _loc.HasKey(packet.Description)
+            ? _loc.Get(packet.Description)
             : packet.Description;
-        string detail = loc != null
-            ? loc.Get("network.error.outdated", packet.Name, description, packet.UpdateURL)
+        string detail = _loc != null
+            ? _loc.Get("network.error.outdated", packet.Name, description, packet.UpdateURL)
             : $"Версия: {packet.Name}\n{description}\nСкачать: {packet.UpdateURL}";
         Debug.LogWarning($"[StatusProcessor] Клиент устарел: {detail}");
-        connection?.HandleServerDisconnect(detail);
+        _connection?.HandleServerDisconnect(detail);
         if (!string.IsNullOrWhiteSpace(packet.UpdateURL))
         {
             ExternalUrlOpener.TryOpen(packet.UpdateURL, nameof(StatusProcessor));
@@ -71,12 +85,12 @@ public sealed class StatusProcessor(
             long.TryParse(packet.Text[1], out expiry);
         }
 
-        stats.AddStatusLine(packet.Tag, packet.Text.ToArray(), unityColor, packet.BlinkRate, expiry);
+        _stats.AddStatusLine(packet.Tag, packet.Text.ToArray(), unityColor, packet.BlinkRate, expiry);
     }
 
     public void Process(ClearStatusLinePacket packet) =>
-        stats.RemoveStatusLine(packet.Tag);
+        _stats.RemoveStatusLine(packet.Tag);
 
     public void Process(ClearStatusPacket packet) =>
-        stats.ClearStatusLines();
+        _stats.ClearStatusLines();
 }

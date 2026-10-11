@@ -62,8 +62,8 @@ internal sealed class PauseMenuTabRouter
             throw new InvalidOperationException("[PauseMenu] AdvancedTab is missing from PauseMenu.uxml.");
         advancedTab.text = loc.Get("pause.tab.advanced");
 
-        _pages =
-        [
+        _pages = new ScrollView[]
+        {
             graphicsScroll,
             displayScroll,
             effectsScroll,
@@ -71,9 +71,9 @@ internal sealed class PauseMenuTabRouter
             interfaceScroll,
             controlsScroll,
             advancedScroll,
-        ];
-        _tabs =
-        [
+        };
+        _tabs = new Button[]
+        {
             graphicsTab,
             displayTab,
             effectsTab,
@@ -81,7 +81,7 @@ internal sealed class PauseMenuTabRouter
             interfaceTab,
             controlsTab,
             advancedTab,
-        ];
+        };
 
         graphicsTab.clicked += () => ShowTab(0);
         displayTab.clicked += () => ShowTab(1);

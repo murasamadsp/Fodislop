@@ -73,7 +73,7 @@ internal sealed class AssetCacheEntry
     {
         lock (_lock)
         {
-            HashSet<Texture2D> textures = [];
+            HashSet<Texture2D> textures = new();
             if (_texture != null)
             {
                 textures.Add(_texture);

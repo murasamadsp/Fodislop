@@ -12,12 +12,24 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyAdminCommands(
+internal sealed class DummyAdminCommands
+{
+    private readonly Action<ServerPacket> _sendPacket;
+    private readonly DummyPlayerSimulationState _playerState;
+    private readonly DummyWorldSimulationState _worldState;
+    private readonly IDummyClock _clock;
+    internal DummyAdminCommands(
     Action<ServerPacket> sendPacket,
     DummyPlayerSimulationState playerState,
     DummyWorldSimulationState worldState,
     IDummyClock clock)
-{
+    {
+        _sendPacket = sendPacket;
+        _playerState = playerState;
+        _worldState = worldState;
+        _clock = clock;
+    }
+
     private const string CommandPrefix = "/";
 
     private const CellType DefaultPlacedCell = CellType.SuperRainbow;
@@ -94,9 +106,9 @@ internal sealed class DummyAdminCommands(
             return;
         }
 
-        playerState.SetPosition(x, y);
-        worldState.QueueChunksAround(x, y, sendPacket);
-        sendPacket(new ServerPacket(new TeleportPacket(x, y, false)));
+        _playerState.SetPosition(x, y);
+        _worldState.QueueChunksAround(x, y, _sendPacket);
+        _sendPacket(new ServerPacket(new TeleportPacket(x, y, false)));
         Reply($"Телепорт в ({x}, {y}).");
     }
 
@@ -109,7 +121,7 @@ internal sealed class DummyAdminCommands(
             return;
         }
 
-        (int offsetX, int offsetY) = playerState.Direction switch
+        (int offsetX, int offsetY) = _playerState.Direction switch
         {
             Direction.Up => (0, -1),
             Direction.Down => (0, 1),
@@ -118,8 +130,8 @@ internal sealed class DummyAdminCommands(
             _ => (0, 0),
         };
 
-        int targetX = playerState.X + offsetX;
-        int targetY = playerState.Y + offsetY;
+        int targetX = _playerState.X + offsetX;
+        int targetY = _playerState.Y + offsetY;
         if (targetX is < 0 or > ushort.MaxValue || targetY is < 0 or > ushort.MaxValue)
         {
             Reply("Перед роботом край мира.");
@@ -128,14 +140,14 @@ internal sealed class DummyAdminCommands(
 
         var cellX = (ushort)targetX;
         var cellY = (ushort)targetY;
-        worldState.SetCell(cellX, cellY, placed);
+        _worldState.SetCell(cellX, cellY, placed);
 
         // Тот же пакет, которым отвечает постройка: клиент не должен различать,
         // откуда клетка изменилась — командой или обычным действием.
-        sendPacket(new ServerPacket(new HBPacket(
-        [
-            new MapRegionPacket(cellX, cellY, 0, 0, [placed]),
-        ])));
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
+            new MapRegionPacket(cellX, cellY, 0, 0, new[] { placed }),
+        })));
 
         Reply($"{placed} поставлен в ({cellX}, {cellY}).");
     }
@@ -149,7 +161,7 @@ internal sealed class DummyAdminCommands(
             return;
         }
 
-        WorldLayer<CellType>? layer = worldState.Layer;
+        WorldLayer<CellType>? layer = _worldState.Layer;
         if (layer == null)
         {
             Reply("Мир ещё не загружен.");
@@ -166,22 +178,22 @@ internal sealed class DummyAdminCommands(
 
         int maxX = worldWidth - FillWidth;
         int maxY = worldHeight - FillHeight;
-        int startX = Math.Clamp(playerState.X - (FillWidth / 2), 0, maxX);
-        int startY = Math.Clamp(playerState.Y - (FillHeight / 2), 0, maxY);
+        int startX = Math.Clamp(_playerState.X - (FillWidth / 2), 0, maxX);
+        int startY = Math.Clamp(_playerState.Y - (FillHeight / 2), 0, maxY);
 
         var payload = new CellType[FillWidth * FillHeight];
         Array.Fill(payload, fillType);
         layer.SetRegion(startX, startY, FillWidth, FillHeight, payload);
 
-        sendPacket(new ServerPacket(new HBPacket(
-        [
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
             new MapRegionPacket(
                 (ushort)startX,
                 (ushort)startY,
                 (byte)(FillWidth - 1),
                 (byte)(FillHeight - 1),
                 payload),
-        ])));
+        })));
 
         Reply($"Область {FillWidth}x{FillHeight} заполнена клеткой {fillType} от ({startX}, {startY}).");
     }
@@ -191,7 +203,7 @@ internal sealed class DummyAdminCommands(
 
     private void Reply(string text)
     {
-        long now = DummyClockTime.UnixMilliseconds(clock);
+        long now = DummyClockTime.UnixMilliseconds(_clock);
         var message = new ChatMessagePacket(
             now,
             now,
@@ -201,8 +213,8 @@ internal sealed class DummyAdminCommands(
             "Сервер",
             s_serverColor,
             text);
-        sendPacket(new ServerPacket(new ChatMessageListPacket(
+        _sendPacket(new ServerPacket(new ChatMessageListPacket(
             ProjectRuntimeContracts.Chat.GlobalChannelTag,
-            [message])));
+            new[] { message })));
     }
 }

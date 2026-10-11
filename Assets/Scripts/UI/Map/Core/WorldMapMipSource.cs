@@ -22,6 +22,7 @@ internal sealed class WorldMapMipSource : IMapMipTextureSource, IDisposable
     private const int PendingBatchSize = 8;
 
     private readonly ConcurrentQueue<int> _pendingChunks = new();
+    private readonly ConcurrentDictionary<int, byte> _queuedChunkSet = new();
     private Action? _requestRender;
     private WorldMapMipPyramid? _pyramid;
     private Texture2D? _texture;
@@ -44,6 +45,8 @@ internal sealed class WorldMapMipSource : IMapMipTextureSource, IDisposable
     public int MipLevelCount => _pyramid?.MipLevelCount ?? 0;
 
     public int MipBlockSize => _mipBlockSize;
+
+    public bool HasPendingChunks => !_pendingChunks.IsEmpty;
 
     public Texture Texture
     {
@@ -75,6 +78,7 @@ internal sealed class WorldMapMipSource : IMapMipTextureSource, IDisposable
         while (_pendingChunks.TryDequeue(out _))
         {
         }
+        _queuedChunkSet.Clear();
 
         int widthChunks = cellLayer?.WidthChunks ?? 0;
         int heightChunks = cellLayer?.HeightChunks ?? 0;
@@ -123,7 +127,11 @@ internal sealed class WorldMapMipSource : IMapMipTextureSource, IDisposable
             return;
         }
 
-        _pendingChunks.Enqueue(chunkY + (chunkX * pyramid.HeightChunks));
+        int chunkIndex = chunkY + (chunkX * pyramid.HeightChunks);
+        if (_queuedChunkSet.TryAdd(chunkIndex, 0))
+        {
+            _pendingChunks.Enqueue(chunkIndex);
+        }
     }
 
     public void ApplyPending()
@@ -137,6 +145,7 @@ internal sealed class WorldMapMipSource : IMapMipTextureSource, IDisposable
         int processed = 0;
         while (processed < PendingBatchSize && _pendingChunks.TryDequeue(out int chunkIndex))
         {
+            _queuedChunkSet.TryRemove(chunkIndex, out _);
             processed++;
             ChunkReadResult<CellType> result = _cellLayer.ReadChunk(chunkIndex, touchLRU: false);
             if (result.Status == ChunkReadStatus.Available && result.Data != null)
@@ -149,7 +158,10 @@ internal sealed class WorldMapMipSource : IMapMipTextureSource, IDisposable
         if (changed)
         {
             _textureDirty = true;
-            _requestRender?.Invoke();
+            if (_pendingChunks.IsEmpty)
+            {
+                _requestRender?.Invoke();
+            }
         }
     }
 

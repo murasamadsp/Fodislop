@@ -82,7 +82,13 @@ public sealed class ProductionSceneContractValidator : IPreprocessBuildWithRepor
         }
         finally
         {
-            EditorSceneManager.RestoreSceneManagerSetup(setup);
+            // Batch-mode editors start without an open scene. Restoring that
+            // empty setup throws because Unity requires one active scene,
+            // masking the validator result during command-line builds.
+            if (setup.Length > 0)
+            {
+                EditorSceneManager.RestoreSceneManagerSetup(setup);
+            }
         }
 
         return errors;

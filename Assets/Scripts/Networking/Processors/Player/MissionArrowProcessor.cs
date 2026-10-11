@@ -5,8 +5,14 @@ using MinesServer.Networking.Server.Packets.Mission;
 
 namespace Kern.Networking.Processors;
 
-public sealed class MissionArrowProcessor(IPlayerStats playerStats) : IPacketProcessor<MissionArrowPacket>
+public sealed class MissionArrowProcessor : IPacketProcessor<MissionArrowPacket>
 {
+    private readonly IPlayerStats _playerStats;
+    public MissionArrowProcessor(IPlayerStats playerStats)
+    {
+        _playerStats = playerStats;
+    }
+
     public void Process(MissionArrowPacket packet) =>
-        playerStats.SetMissionArrow(packet.X, packet.Y);
+        _playerStats.SetMissionArrow(packet.X, packet.Y);
 }

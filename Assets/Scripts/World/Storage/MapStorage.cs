@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -102,6 +103,73 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
         cancellationToken.ThrowIfCancellationRequested();
     }
 
+    public static UniTask PrepareExistingWorldCachesAsync(CancellationToken cancellationToken = default)
+    {
+#if UNITY_ANDROID || UNITY_IOS
+        string dataRoot = Application.persistentDataPath;
+        return UniTask.RunOnThreadPool(() =>
+        {
+            if (!Directory.Exists(dataRoot))
+            {
+                return;
+            }
+
+            foreach (string mapPath in Directory.EnumerateFiles(dataRoot, "*" + MapExtension, SearchOption.TopDirectoryOnly))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string fileName = Path.GetFileName(mapPath);
+                if (fileName.EndsWith(BackupMapSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string backupPath = Path.Combine(dataRoot, Path.GetFileNameWithoutExtension(mapPath) + BackupMapSuffix);
+                try
+                {
+                    int widthChunks;
+                    int heightChunks;
+                    int chunkSize;
+                    int formatVersion;
+                    using (var stream = new FileStream(mapPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var reader = new BinaryReader(stream))
+                    {
+                        widthChunks = reader.ReadInt32();
+                        heightChunks = reader.ReadInt32();
+                        chunkSize = reader.ReadInt32();
+                        formatVersion = reader.ReadInt32();
+                    }
+
+                    if (widthChunks <= 0 || heightChunks <= 0 ||
+                        chunkSize != ProjectRuntimeContracts.World.ChunkSize ||
+                        formatVersion < 0 || formatVersion > WorldLayerFileHeader.CurrentFormatVersion)
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            $"[MapStorage] Skipping mobile map preflight for '{mapPath}': " +
+                            $"header {widthChunks}x{heightChunks}, chunkSize={chunkSize}, version={formatVersion}.");
+                        continue;
+                    }
+
+                    MapStorageDiskWriter.PrepareWorldLayerFile(
+                        mapPath,
+                        widthChunks,
+                        heightChunks,
+                        chunkSize,
+                        backupPath);
+                }
+                catch (Exception exception) when (
+                    exception is IOException or InvalidDataException or UnauthorizedAccessException or OverflowException)
+                {
+                    UnityEngine.Debug.LogWarning(
+                        $"[MapStorage] Could not preflight map '{mapPath}'; " +
+                        $"its storage error will be reported if that world is opened: {exception.Message}");
+                }
+            }
+        }, cancellationToken: cancellationToken);
+#else
+        return UniTask.CompletedTask;
+#endif
+    }
+
     public bool IsReady => _isInitialized && _cellLayer != null;
     public bool HasDirtyChunks => _cellLayer?.HasDirtyChunks == true;
 
@@ -180,6 +248,7 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
 
         string path = Path.Combine(DataRoot, worldCodeName + MapExtension);
         string backupPath = Path.Combine(DataRoot, worldCodeName + BackupMapSuffix);
+        Stopwatch openTimer = Stopwatch.StartNew();
         try
         {
             _cellLayer = MapStorageDiskWriter.OpenWorldLayer(
@@ -198,12 +267,18 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence, IRegionBatchStor
             _isInitialized = true;
             IsDisposed = false;
             Revision++;
+            UnityEngine.Debug.Log(
+                $"[MapStorage] Opened world '{worldCodeName}' ({width}x{height}; " +
+                $"{widthChunks}x{heightChunks} chunks) at '{path}' in {openTimer.ElapsedMilliseconds} ms.");
         }
-        catch
+        catch (Exception exception)
         {
             _cellLayer = null;
             _mapFilePath = null;
             _isInitialized = false;
+            UnityEngine.Debug.LogError(
+                $"[MapStorage] Failed to initialize world '{worldCodeName}' " +
+                $"({width}x{height}) at '{path}' after {openTimer.ElapsedMilliseconds} ms: {exception}");
             throw;
         }
     }

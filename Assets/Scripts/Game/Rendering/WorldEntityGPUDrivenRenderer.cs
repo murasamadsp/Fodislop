@@ -161,7 +161,18 @@ public sealed class WorldEntityGPUDrivenRenderer : IDisposable
 
         if (_quadMesh != null)
         {
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                UnityEngine.Object.DestroyImmediate(_quadMesh);
+            }
+            else
+            {
+                UnityEngine.Object.Destroy(_quadMesh);
+            }
+#else
             UnityEngine.Object.Destroy(_quadMesh);
+#endif
         }
     }
 

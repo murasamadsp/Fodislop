@@ -178,15 +178,15 @@ public static class TerrainCellData
         const int units = TerrainVertexDistortionCalculator.UnitsPerStep;
         const int classicStep = TerrainConfigHolder.ClassicDistortionStrengthSteps * units;
         const int organicMaximum = TerrainConfigHolder.OrganicMaximumOffsetSteps * units;
-        return
-        [
-            new(classicStep, TerrainConfigHolder.ClassicJitterRange,
+        return new Vector4[]
+        {
+            new Vector4(classicStep, TerrainConfigHolder.ClassicJitterRange,
                 ((TerrainConfigHolder.ClassicJitterRange - 1) / 2) * classicStep, 0f),
-            new(TerrainConfigHolder.ClassicXHashA, TerrainConfigHolder.ClassicXHashB,
+            new Vector4(TerrainConfigHolder.ClassicXHashA, TerrainConfigHolder.ClassicXHashB,
                 TerrainConfigHolder.ClassicXHashC, TerrainConfigHolder.ClassicXHashD),
-            new(TerrainConfigHolder.ClassicYHashA, TerrainConfigHolder.ClassicYHashB,
+            new Vector4(TerrainConfigHolder.ClassicYHashA, TerrainConfigHolder.ClassicYHashB,
                 TerrainConfigHolder.ClassicYHashC, TerrainConfigHolder.ClassicYHashD),
-            new(TerrainConfigHolder.ClassicXHashModulus, TerrainConfigHolder.ClassicYHashModulus,
+            new Vector4(TerrainConfigHolder.ClassicXHashModulus, TerrainConfigHolder.ClassicYHashModulus,
                 organicMaximum, organicMaximum / 2),
             new(TerrainConfigHolder.OrganicNoiseBroadPeriodCells, TerrainConfigHolder.OrganicNoiseMediumPeriodCells,
                 TerrainConfigHolder.OrganicNoiseFinePeriodCells, TerrainConfigHolder.OrganicNoiseContrast),
@@ -196,7 +196,7 @@ public static class TerrainCellData
                 TerrainConfigHolder.OrganicNoiseFineXSeed, TerrainVertexDistortionCalculator.OrganicHashBits),
             new(TerrainConfigHolder.OrganicNoiseBroadYSeed, TerrainConfigHolder.OrganicNoiseMediumYSeed,
                 TerrainConfigHolder.OrganicNoiseFineYSeed, 0f),
-        ];
+        };
     }
 
     public static uint PackDecal(TerrainDecalRule rule)

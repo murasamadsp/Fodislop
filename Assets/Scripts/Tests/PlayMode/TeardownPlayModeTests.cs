@@ -24,7 +24,9 @@ public sealed class TeardownPlayModeTests
     private const string TestDummyToken = "playmode-teardown-token";
 
     // Объект FMOD создаётся плагином лениво и живёт весь процесс.
-    private static readonly HashSet<string> s_processLifetimeObjects = ["FMOD.UnityIntegration.RuntimeManager"];
+    private static readonly HashSet<string> s_processLifetimeObjects = new() {
+"FMOD.UnityIntegration.RuntimeManager"
+ };
 
     private DummyAuthenticationScope _authentication = null!;
 
@@ -191,10 +193,12 @@ public sealed class TeardownPlayModeTests
     // Служебные цели редактора, URP и UI Toolkit живут весь процесс и
     // пересоздаются сами; игре они не принадлежат.
     private static readonly string[] s_engineRenderTexturePrefixes =
-    [
+    new[] {
+
         "GUIView", "GameView", "EditorAtlas", "UIR Dynamic Atlas", "_Camera",
         "_InternalColorGradingLut", "DefaultShadowTexture", "SceneView", "PreviewRenderUtility",
-    ];
+
+    };
 
     private static List<string> GameRenderTextures() =>
         Resources.FindObjectsOfTypeAll<RenderTexture>()
@@ -214,7 +218,7 @@ public sealed class TeardownPlayModeTests
         if (!FMODUnity.RuntimeManager.IsInitialized ||
             FMODUnity.RuntimeManager.StudioSystem.getBankList(out FMOD.Studio.Bank[] banks) != FMOD.RESULT.OK)
         {
-            return [];
+            return System.Array.Empty<string>();
         }
 
         var playing = new List<string>();

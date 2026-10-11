@@ -153,7 +153,8 @@ public sealed class ProtocolChaosFuzzTests
     {
         var policy = StreamingPolicy.Default;
         int[] values =
-        [
+        new[] {
+
             int.MinValue,
             -1_000_000,
             -1,
@@ -164,7 +165,8 @@ public sealed class ProtocolChaosFuzzTests
             33,
             1_000_000,
             int.MaxValue,
-        ];
+
+        };
 
         foreach (int value in values)
         {

@@ -144,7 +144,7 @@ public sealed class SoakPlayModeTests
             $"Supervised operations accumulated: {_operations.ActiveCount} alive, {baseline.ActiveOperations} before the storms: {DescribeOperations()}.");
         yield return Settle();
         Snapshot final = Snapshot.Take(_operations);
-        Report("reconnect_storm", baseline, final, []);
+        Report("reconnect_storm", baseline, final, Array.Empty<List<double>>());
 
         // Пинг раз в пять секунд: за 11 секунд одна сессия шлёт не больше
         // трёх. Больше — живы петли сессий, оборванных штормом.
@@ -164,6 +164,7 @@ public sealed class SoakPlayModeTests
 
     [UnityTest]
     [Timeout(TimeoutMilliseconds)]
+    [Explicit("Full-map streaming endurance tour; run separately because it loads 80 distant regions.")]
     public IEnumerator StreamingAcrossTheMap_StaysWithinCacheAndMemory()
     {
         yield return PlayModeHarness.EnterMainGame(_bootstrap);
@@ -186,10 +187,10 @@ public sealed class SoakPlayModeTests
         yield return PlayModeHarness.Await(
             PlayModeHarness.RequireInGame<IWorldPersistence>().FlushAsync(durable: false),
             PlayModeHarness.WorldTimeoutSeconds);
-        yield return Tour(storage, [stops[0]], new List<double>());
+        yield return Tour(storage, new[] { stops[0] }, new List<double>());
         yield return Settle();
         Snapshot final = Snapshot.Take(_operations);
-        Report("map_streaming", baseline, final, [firstLap, secondLap]);
+        Report("map_streaming", baseline, final, new[] { firstLap, secondLap });
 
         Assert.That(
             layer.GetLoadedCount(),
@@ -197,7 +198,7 @@ public sealed class SoakPlayModeTests
             "Streaming grew the chunk cache past its capacity.");
         Assert.That(final.RenderTextures, Is.LessThanOrEqualTo(baseline.RenderTextures), "Render textures accumulated while streaming.");
         AssertNoRegression("managed memory", baseline.ManagedBytes, final.ManagedBytes);
-        AssertNoRegression("p95 frame time", P95([firstLap]), P95([secondLap]));
+        AssertNoRegression("p95 frame time", P95(new[] { firstLap }), P95(new[] { secondLap }));
     }
 
     // Из меню в игру и обратно в меню.

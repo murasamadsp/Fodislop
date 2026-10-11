@@ -17,8 +17,8 @@ internal sealed class MapViewportRenderer : IDisposable
     private int _kernelHandle = -1;
 
     private MapChunkGrid _lastGrid;
-    private int _lastSamplerRevision = -1;
     private int _lastLoadedChunkCount;
+    private bool _hasPackedGrid;
 
     public Color32[] CellColorTable => _cellColorTable;
 
@@ -53,12 +53,10 @@ internal sealed class MapViewportRenderer : IDisposable
         _buffers.UploadPalette();
     }
 
-    // The next render re-uploads the visible chunk grid even when its bounds
-    // and the sampler revision are unchanged (texture or world replaced).
+    // The next render re-packs the visible grid (texture or world replaced).
     public void InvalidateViewState()
     {
-        _lastGrid = default;
-        _lastSamplerRevision = -1;
+        _hasPackedGrid = false;
         _lastLoadedChunkCount = 0;
     }
 
@@ -101,6 +99,14 @@ internal sealed class MapViewportRenderer : IDisposable
             viewCenterY);
         bool useMip = mipSource is { IsReady: true } &&
                       grid.Area > MapViewportChunkBudget.MaxPackedChunkSlots;
+        if (grid.Area > MapViewportChunkBudget.MaxPackedChunkSlots && !useMip)
+        {
+            // The overview is being prepared (or failed). Packing a partial
+            // world-sized grid here walks every loaded storage chunk and can
+            // repack up to the full GPU slot budget on the main thread. Keep
+            // the current texture until the mip source requests a render.
+            return false;
+        }
 
         int chunkSlot;
         if (useMip)
@@ -145,54 +151,39 @@ internal sealed class MapViewportRenderer : IDisposable
     private int PackVisibleChunks(MapCellSampler cellSampler, MapChunkGrid grid)
     {
         int gridArea = grid.Area;
-        _buffers.EnsureChunkBuffers(gridArea, MapViewportChunkBudget.MaxPackedChunkSlots);
+        _buffers.EnsureChunkBuffers(gridArea, gridArea);
 
-        bool gridUnchanged = grid.Matches(_lastGrid) &&
-                             cellSampler.Revision == _lastSamplerRevision &&
-                             _buffers.ChunkLookupBuffer.count >= gridArea;
-        if (gridUnchanged)
+        bool fullRefresh = !_hasPackedGrid || !grid.Matches(_lastGrid) ||
+                           cellSampler.RequiresFullRefresh ||
+                           _buffers.ChunkLookupBuffer.count < gridArea;
+        if (fullRefresh)
+        {
+            _lastGrid = grid;
+            _lastLoadedChunkCount = PackDenseGrid(cellSampler, grid);
+            _buffers.UploadLookup(gridArea);
+            UploadLoadedChunkRuns(gridArea);
+            cellSampler.CompleteRefresh();
+            _hasPackedGrid = true;
+            return _lastLoadedChunkCount;
+        }
+
+        if (cellSampler.DirtyChunks.Count == 0)
         {
             return _lastLoadedChunkCount;
         }
 
-        _lastGrid = grid;
-        _lastSamplerRevision = cellSampler.Revision;
-
-        int chunkSlot = PackGrid(cellSampler, grid);
-        _lastLoadedChunkCount = chunkSlot;
-        _buffers.UploadLookup(gridArea);
-        if (chunkSlot > 0)
-        {
-            _buffers.UploadChunkData(chunkSlot * MapGpuChunkPacker.PackedUIntCount);
-        }
-
-        return chunkSlot;
+        PatchDirtyChunks(cellSampler, grid);
+        cellSampler.CompleteRefresh();
+        return _lastLoadedChunkCount;
     }
 
-    private int PackGrid(MapCellSampler cellSampler, MapChunkGrid grid)
+    private int PackDenseGrid(MapCellSampler cellSampler, MapChunkGrid grid)
     {
         int storageChunkSize = cellSampler.ChunkSize;
         int subChunksPerStorageChunk = MapGpuChunkPacker.GetSubChunksPerStorageChunk(storageChunkSize);
         int[] lookup = _buffers.ChunkLookup;
         uint[] data = _buffers.ChunkData;
-
-        if (grid.Area <= MapViewportChunkBudget.MaxPackedChunkSlots)
-        {
-            return PackDenseGrid(cellSampler, grid, subChunksPerStorageChunk, storageChunkSize, lookup, data);
-        }
-
-        return PackLoadedChunks(cellSampler, grid, subChunksPerStorageChunk, storageChunkSize, lookup, data);
-    }
-
-    private static int PackDenseGrid(
-        MapCellSampler cellSampler,
-        MapChunkGrid grid,
-        int subChunksPerStorageChunk,
-        int storageChunkSize,
-        int[] lookup,
-        uint[] data)
-    {
-        int chunkSlot = 0;
+        int loadedCount = 0;
         for (int gy = 0; gy < grid.Height; gy++)
         {
             int chunkY = grid.MinChunkY + gy;
@@ -208,18 +199,18 @@ internal sealed class MapViewportRenderer : IDisposable
                     out int storageChunkY,
                     out int subChunkX,
                     out int subChunkY);
-                if (cellSampler.TryGetChunk(storageChunkX, storageChunkY, out CellType[]? chunk) &&
-                    chunk != null && chunkSlot < MapViewportChunkBudget.MaxPackedChunkSlots)
+                int slot = rowOffset + gx;
+                if (cellSampler.TryGetChunk(storageChunkX, storageChunkY, out CellType[]? chunk) && chunk != null)
                 {
-                    lookup[rowOffset + gx] = chunkSlot;
+                    lookup[slot] = slot;
                     MapGpuChunkPacker.PackSubChunk(
                         chunk,
                         storageChunkSize,
                         subChunkX,
                         subChunkY,
                         data,
-                        chunkSlot);
-                    chunkSlot++;
+                        slot);
+                    loadedCount++;
                 }
                 else
                 {
@@ -228,80 +219,118 @@ internal sealed class MapViewportRenderer : IDisposable
             }
         }
 
-        return chunkSlot;
+        return loadedCount;
     }
 
-    private static int PackLoadedChunks(
-        MapCellSampler cellSampler,
-        MapChunkGrid grid,
-        int subChunksPerStorageChunk,
-        int storageChunkSize,
-        int[] lookup,
-        uint[] data)
+    private void UploadLoadedChunkRuns(int gridArea)
     {
-        int gridArea = grid.Area;
-        Array.Fill(lookup, -1, 0, gridArea);
+        int[] lookup = _buffers.ChunkLookup;
+        int runStart = -1;
+        for (int slot = 0; slot <= gridArea; slot++)
+        {
+            bool loaded = slot < gridArea && lookup[slot] >= 0;
+            if (loaded && runStart < 0)
+            {
+                runStart = slot;
+            }
+            else if (!loaded && runStart >= 0)
+            {
+                _buffers.UploadChunkDataRange(
+                    runStart * MapGpuChunkPacker.PackedUIntCount,
+                    (slot - runStart) * MapGpuChunkPacker.PackedUIntCount);
+                runStart = -1;
+            }
+        }
+    }
+
+    private void PatchDirtyChunks(
+        MapCellSampler cellSampler,
+        MapChunkGrid grid)
+    {
         if (cellSampler.Layer == null || cellSampler.HeightChunks <= 0)
         {
-            return 0;
+            return;
         }
 
-        int gridMaxChunkX = grid.MinChunkX + grid.Width;
-        int gridMaxChunkY = grid.MinChunkY + grid.Height;
+        int[] lookup = _buffers.ChunkLookup;
+        uint[] data = _buffers.ChunkData;
+        int subChunksPerStorageChunk = MapGpuChunkPacker.GetSubChunksPerStorageChunk(cellSampler.ChunkSize);
+        int firstStorageChunkX = Math.Max(0, grid.MinChunkX / subChunksPerStorageChunk);
+        int lastStorageChunkX = (grid.MinChunkX + grid.Width - 1) / subChunksPerStorageChunk;
+        int firstStorageChunkY = Math.Max(0, grid.MinChunkY / subChunksPerStorageChunk);
+        int lastStorageChunkY = (grid.MinChunkY + grid.Height - 1) / subChunksPerStorageChunk;
         int heightChunks = cellSampler.HeightChunks;
-        int chunkSlot = 0;
-        foreach (int chunkIndex in cellSampler.Layer.GetLoadedChunkIndices())
+        foreach (int chunkIndex in cellSampler.DirtyChunks)
         {
             int storageChunkX = chunkIndex / heightChunks;
             int storageChunkY = chunkIndex % heightChunks;
-            int minGpuChunkX = storageChunkX * subChunksPerStorageChunk;
-            int maxGpuChunkX = minGpuChunkX + subChunksPerStorageChunk - 1;
-            int minGpuChunkY = storageChunkY * subChunksPerStorageChunk;
-            int maxGpuChunkY = minGpuChunkY + subChunksPerStorageChunk - 1;
-
-            if (maxGpuChunkX < grid.MinChunkX || minGpuChunkX >= gridMaxChunkX ||
-                maxGpuChunkY < grid.MinChunkY || minGpuChunkY >= gridMaxChunkY)
+            if (storageChunkX < firstStorageChunkX || storageChunkX > lastStorageChunkX ||
+                storageChunkY < firstStorageChunkY || storageChunkY > lastStorageChunkY)
             {
                 continue;
             }
 
-            if (!cellSampler.TryGetChunk(storageChunkX, storageChunkY, out CellType[]? chunk) || chunk == null)
-            {
-                continue;
-            }
+            bool available = cellSampler.TryGetChunk(storageChunkX, storageChunkY, out CellType[]? chunk) && chunk != null;
+            int gpuChunkXStart = storageChunkX * subChunksPerStorageChunk;
+            int gpuChunkYStart = storageChunkY * subChunksPerStorageChunk;
 
             for (int subChunkY = 0; subChunkY < subChunksPerStorageChunk; subChunkY++)
             {
-                int gpuChunkY = storageChunkY * subChunksPerStorageChunk + subChunkY;
+                int gpuChunkY = gpuChunkYStart + subChunkY;
                 int gy = gpuChunkY - grid.MinChunkY;
                 if (gy < 0 || gy >= grid.Height)
                 {
                     continue;
                 }
 
-                for (int subChunkX = 0; subChunkX < subChunksPerStorageChunk; subChunkX++)
+                int firstSubChunkX = Math.Max(0, grid.MinChunkX - gpuChunkXStart);
+                int lastSubChunkX = Math.Min(subChunksPerStorageChunk - 1,
+                    grid.MinChunkX + grid.Width - 1 - gpuChunkXStart);
+                int firstSlot = -1;
+                int slotCount = 0;
+                for (int subChunkX = firstSubChunkX; subChunkX <= lastSubChunkX; subChunkX++)
                 {
-                    int gpuChunkX = storageChunkX * subChunksPerStorageChunk + subChunkX;
+                    int gpuChunkX = gpuChunkXStart + subChunkX;
                     int gx = gpuChunkX - grid.MinChunkX;
-                    if (gx < 0 || gx >= grid.Width || chunkSlot >= MapViewportChunkBudget.MaxPackedChunkSlots)
+                    int slot = gy * grid.Width + gx;
+                    bool wasAvailable = lookup[slot] >= 0;
+                    if (firstSlot < 0)
                     {
-                        continue;
+                        firstSlot = slot;
                     }
 
-                    lookup[gy * grid.Width + gx] = chunkSlot;
-                    MapGpuChunkPacker.PackSubChunk(
-                        chunk,
-                        storageChunkSize,
-                        subChunkX,
-                        subChunkY,
-                        data,
-                        chunkSlot);
-                    chunkSlot++;
+                    if (available)
+                    {
+                        MapGpuChunkPacker.PackSubChunk(chunk!, cellSampler.ChunkSize, subChunkX, subChunkY, data, slot);
+                        lookup[slot] = slot;
+                        if (!wasAvailable)
+                        {
+                            _lastLoadedChunkCount++;
+                        }
+                    }
+                    else
+                    {
+                        lookup[slot] = -1;
+                        if (wasAvailable)
+                        {
+                            _lastLoadedChunkCount--;
+                        }
+                    }
+                    slotCount++;
+                }
+
+                if (slotCount > 0)
+                {
+                    _buffers.UploadLookupRange(firstSlot, slotCount);
+                    if (available)
+                    {
+                        _buffers.UploadChunkDataRange(
+                            firstSlot * MapGpuChunkPacker.PackedUIntCount,
+                            slotCount * MapGpuChunkPacker.PackedUIntCount);
+                    }
                 }
             }
         }
-
-        return chunkSlot;
     }
 
     private void EnsureComputeResources()

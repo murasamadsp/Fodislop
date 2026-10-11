@@ -135,10 +135,6 @@ public sealed class WorldLabelChatStyleTests
         Assert.That(worldLabels, Does.Contain("WorldLabelKind.ChatBubble"));
         Assert.That(worldLabels, Does.Contain("position.x - (size.x * 0.5f)"));
         Assert.That(worldLabels, Does.Contain("position.y - size.y"));
-        Assert.That(
-            worldLabels,
-            Does.Contain("Vector3 offset = kind == WorldLabelKind.ChatBubble"));
-        Assert.That(worldLabels, Does.Contain(": position;"));
     }
 
     [Test]

@@ -9,7 +9,7 @@ namespace Kern.Core.Bootstrap.WorldLighting;
 /// <summary>Main-thread data mailbox. It never calls either domain.</summary>
 public sealed class TerrainLightingExchange : ITerrainLightingExchange
 {
-    private readonly List<TerrainLightingChange> _terrainChanges = [];
+    private readonly List<TerrainLightingChange> _terrainChanges = new();
     private bool _hasRequirements;
     private LightingTerrainRequirements _requirements;
     private ulong _worldGeneration;

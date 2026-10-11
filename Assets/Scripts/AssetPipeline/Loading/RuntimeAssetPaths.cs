@@ -32,6 +32,11 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
     public async UniTask EnsureReadyAsync()
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
+        // Android: StreamingAssets лежат внутри APK, File.* их не видит — чтение
+        // идёт через UnityWebRequest, то есть с главного потока. Файловый
+        // ввод-вывод уходит в пул через RunOnThreadPool: он возвращает управление
+        // на главный поток, а `await File.WriteAllBytesAsync` — нет, и следующий
+        // виток цикла создавал бы UnityWebRequest уже с потока пула.
         string extractedRoot = Path.Combine(
             Application.persistentDataPath,
             "BundledAssets",
@@ -40,7 +45,10 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
         string manifest = await DownloadTextAsync(
             CombineStreamingURI(Application.streamingAssetsPath, "Textures.manifest"));
         if (!File.Exists(markerPath) ||
-            !string.Equals(await File.ReadAllTextAsync(markerPath), manifest, System.StringComparison.Ordinal))
+            !string.Equals(
+                await UniTask.RunOnThreadPool(() => File.ReadAllText(markerPath)),
+                manifest,
+                System.StringComparison.Ordinal))
         {
             if (Directory.Exists(extractedRoot))
             {
@@ -49,7 +57,7 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
 
             Directory.CreateDirectory(extractedRoot);
             string[] relativeFiles = manifest
-                .Split(['\r', '\n'], System.StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries)
                 .Select(path => path.Trim())
                 .Where(path => path.Length > 0)
                 .ToArray();
@@ -70,10 +78,10 @@ public sealed class RuntimeAssetPaths : IRuntimeAssetPaths
                     CombineStreamingURI(
                         Application.streamingAssetsPath,
                         $"Textures/{relativeFile}"));
-                await File.WriteAllBytesAsync(destination, bytes);
+                await UniTask.RunOnThreadPool(() => File.WriteAllBytes(destination, bytes));
             }
 
-            await File.WriteAllTextAsync(markerPath, manifest);
+            await UniTask.RunOnThreadPool(() => File.WriteAllText(markerPath, manifest));
         }
 
         _bundledTexturesRoot = extractedRoot;

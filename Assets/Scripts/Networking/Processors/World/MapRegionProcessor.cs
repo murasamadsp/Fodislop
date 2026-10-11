@@ -6,17 +6,23 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace Kern.Networking.Processors;
 
-public sealed class MapRegionProcessor(IWorldDataStorage storage) :
+public sealed class MapRegionProcessor :
     IPacketProcessor<MapRegionPacket>,
     IBatchAwareProcessor
 {
-    public void BeginBatch() => storage.BeginRegionBatch();
+    private readonly IWorldDataStorage _storage;
+    public MapRegionProcessor(IWorldDataStorage storage)
+    {
+        _storage = storage;
+    }
 
-    public void EndBatch() => storage.EndRegionBatch();
+    public void BeginBatch() => _storage.BeginRegionBatch();
+
+    public void EndBatch() => _storage.EndRegionBatch();
 
     public void Process(MapRegionPacket packet)
     {
-        if (!storage.IsReady || storage.CellLayer == null)
+        if (!_storage.IsReady || _storage.CellLayer == null)
         {
             throw new InvalidOperationException(
                 $"[MapRegionProcessor] MapStorage is not ready for region " +
@@ -40,7 +46,7 @@ public sealed class MapRegionProcessor(IWorldDataStorage storage) :
                 $"expected at least {expectedCellCount}.");
         }
 
-        storage.SetRegion(
+        _storage.SetRegion(
             packet.X,
             packet.Y,
             width,

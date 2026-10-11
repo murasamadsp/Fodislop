@@ -788,3 +788,10 @@
 .onb-btn--hidden {
     visibility: hidden;
 }
+
+/* Прокрутка формы нужна только сенсорной двухколоночной карточке
+   (Touch.uss); здесь она растёт по содержимому и не листается. */
+.auth-form-scroll {
+    flex-grow: 0;
+    flex-shrink: 0;
+}

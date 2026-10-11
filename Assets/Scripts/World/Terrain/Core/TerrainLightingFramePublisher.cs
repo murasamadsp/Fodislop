@@ -11,8 +11,15 @@ namespace Kern.World.Terrain;
 /// Owns Terrain's generation-scoped sequence numbers and publishes committed facts
 /// through the neutral Terrain/Lighting exchange.
 /// </summary>
-internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? exchange)
+internal sealed class TerrainLightingFramePublisher
 {
+    private readonly ITerrainLightingExchange? _exchange;
+
+    public TerrainLightingFramePublisher(ITerrainLightingExchange? exchange)
+    {
+        _exchange = exchange;
+    }
+
 #if UNITY_EDITOR
     private static readonly LightingTerrainRequirements s_editorPreviewRequirements = new(1, 3, 16);
 #endif
@@ -47,7 +54,7 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
 
     public LightingTerrainRequirements ReadRequirements()
     {
-        if (exchange != null && exchange.TryReadLightingRequirements(out LightingTerrainRequirements requirements))
+        if (_exchange != null && _exchange.TryReadLightingRequirements(out LightingTerrainRequirements requirements))
         {
             return requirements;
         }
@@ -66,7 +73,7 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
     public bool TryReadLightingOutput(out LightingOutputSnapshot output)
     {
         output = default;
-        return exchange != null && exchange.TryReadLightingOutput(out output);
+        return _exchange != null && _exchange.TryReadLightingOutput(out output);
     }
 
     /// <param name="textureRefreshOutstanding">
@@ -78,7 +85,7 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
         IReadOnlyList<RectInt> changedRegions,
         bool textureRefreshOutstanding)
     {
-        if (exchange == null)
+        if (_exchange == null)
         {
             return;
         }
@@ -136,7 +143,7 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
         ulong terrainContentRevision,
         ILightingGeometryContributor contributor)
     {
-        if (exchange == null ||
+        if (_exchange == null ||
             !window.CellsCommitted ||
             !window.HasOrigin ||
             camera == null ||
@@ -174,7 +181,7 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
             lightingViewport,
             camera,
             contributor);
-        exchange.PublishTerrainFrame(frame);
+        _exchange.PublishTerrainFrame(frame);
         _frameSequence = frameSequence;
         if (!holdingView)
         {
@@ -206,7 +213,7 @@ internal sealed class TerrainLightingFramePublisher(ITerrainLightingExchange? ex
             channels,
             region,
             fullResetReason);
-        exchange!.PublishTerrainChange(change);
+        _exchange!.PublishTerrainChange(change);
         _changeSequence = sequence;
     }
 

@@ -25,6 +25,13 @@ public static class ProjectRuntimeContracts
         // зависит от сериализованного диапазона зума: сдвиг диапазона в
         // инспекторе меняет стартовый зум, но не размер текста в мире.
         public const float ReferenceOrthographicSize = 17.5f;
+
+        // Потолок длинной стороны кадра: зум задаёт короткую сторону (в
+        // альбоме — высоту), а ширина растёт с соотношением сторон только до
+        // 2:1. На вытянутом телефоне (20:9) и ультрашироком мониторе обзор по
+        // горизонтали не больше, чем на 2:1 при той же высоте зума: экран
+        // шире не даёт видеть дальше. Правило — CameraViewRules.
+        public const float MaximumVisibleAspect = 2f;
     }
 
     public static class Gameplay
@@ -38,7 +45,10 @@ public static class ProjectRuntimeContracts
         // 127.0.0.1:8090 (порт из appsettings.json сервера, ключ Mines3:Port).
         // Заглушка включается кнопкой оффлайна в гейте входа или пунктом
         // DUMMY OFFLINE в окне выбора сервера и сохраняется в конфиге.
-        public const bool DefaultUseDummyConnection = false;
+        // По умолчанию включена: тестовые сборки (в том числе Android) должны
+        // играться без сервера. Реальный транспорт выбирается в окне выбора
+        // сервера и сохраняется в конфиге.
+        public const bool DefaultUseDummyConnection = true;
         public const string DefaultServerHost = "127.0.0.1";
         public const int DefaultServerPort = 8090;
         public const bool DefaultHDREnabled = true;
@@ -91,6 +101,7 @@ public static class ProjectRuntimeContracts
         public const int LargeAssetRequestTimeoutSeconds = 10;
         public const long AssetCacheCapacityBytes = 256L * 1024 * 1024;
         public const long DecodedAssetCacheCapacityBytes = 256L * 1024 * 1024;
+        public const long PersistentAssetCacheCapacityBytes = 512L * 1024 * 1024;
 
         // Картинки приходят от сервера и по ссылкам из его окон. Крупнейшая своя
         // картинка — 2496 по стороне, крупнейший ассет сервера — PNG 320×320

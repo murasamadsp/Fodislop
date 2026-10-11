@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Kern.Core;
 using Kern.Core.Interfaces;
@@ -9,10 +10,15 @@ using UnityEngine.UIElements;
 
 namespace Kern.UI;
 
-internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
+internal sealed class MenuSceneryPresenter
 {
-    private readonly IRuntimeAssetPaths _runtimeAssetPaths = runtimeAssetPaths;
+    private readonly IRuntimeAssetPaths _runtimeAssetPaths;
     private const float DescentAnimationSeconds = 2.6f;
+
+    public MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
+    {
+        _runtimeAssetPaths = runtimeAssetPaths;
+    }
 
     private VisualElement? _tree;
     private Image? _spaceBgImage;
@@ -28,6 +34,8 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
     private float _descentCameraProgress;
     private float _descentCameraTarget;
     private bool _uiTexturesReady;
+    private Texture2D? _logoTexture;
+    private readonly Dictionary<string, Texture2D> _iconTextures = new(StringComparer.Ordinal);
 
     public float DescentTarget
     {
@@ -120,8 +128,7 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
         TryApplySceneryTexture();
         ApplyImageTexture(_loaderShade, ref shadeTexture, "Assets/Textures/UI/mm_shade.png", nameof(_loaderShade));
 
-        Texture2D? logoCache = null;
-        ApplyImageTexture(_logoIcon, ref logoCache, "Assets/Textures/UI/mm_logo.png", nameof(_logoIcon));
+        ApplyImageTexture(_logoIcon, ref _logoTexture, "Assets/Textures/UI/mm_logo.png", nameof(_logoIcon));
 
         ApplyIconTexture("SideChronicleIcon", "Assets/Textures/UI/mm_icon_chronicle.png");
         ApplyIconTexture("SideSettingsIcon", "Assets/Textures/UI/mm_icon_settings.png");
@@ -161,8 +168,21 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
         }
 
         VisualElement? element = _tree.Q<VisualElement>(elementName);
-        Texture2D? iconTexture = LoadDirectTexture(assetPath);
-        if (element != null && iconTexture != null)
+        if (element == null)
+        {
+            return;
+        }
+
+        if (!_iconTextures.TryGetValue(assetPath, out Texture2D? iconTexture))
+        {
+            iconTexture = LoadDirectTexture(assetPath);
+            if (iconTexture != null)
+            {
+                _iconTextures.Add(assetPath, iconTexture);
+            }
+        }
+
+        if (iconTexture != null)
         {
             element.style.backgroundImage = new StyleBackground(iconTexture);
         }

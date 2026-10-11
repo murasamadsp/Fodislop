@@ -17,7 +17,9 @@ public sealed class LocalizationDictionaryValidator : IPreprocessBuildWithReport
 {
     private const string LocalizationDirectory = "Assets/Resources/Localization";
     private const string ReferenceLanguage = "ru";
-    private static readonly string[] s_languages = ["en", "ru", "zh", "zh-hant"];
+    private static readonly string[] s_languages = new[] {
+"en", "ru", "zh", "zh-hant"
+ };
     private static readonly Regex s_placeholderPattern = new(
         @"(?<!\{)\{(?<index>\d+)(?:,[^}:]+)?(?::[^}]*)?\}(?!\})",
         RegexOptions.CultureInvariant);
@@ -47,7 +49,7 @@ public sealed class LocalizationDictionaryValidator : IPreprocessBuildWithReport
 
     private static IReadOnlyList<string> CollectErrors()
     {
-        List<string> errors = [];
+        List<string> errors = new();
         Dictionary<string, string>? reference = LoadDictionary(ReferenceLanguage, errors);
         if (reference == null)
         {

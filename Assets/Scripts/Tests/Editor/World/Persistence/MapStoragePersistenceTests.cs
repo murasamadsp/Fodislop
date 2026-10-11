@@ -25,7 +25,7 @@ public sealed class MapStoragePersistenceTests
         Directory.CreateDirectory(root);
         string mapPath = Path.Combine(root, "world.map");
         string backupPath = Path.Combine(root, "world.map.backup");
-        File.WriteAllBytes(mapPath, [1, 2, 3, 4]);
+        File.WriteAllBytes(mapPath, new byte[] { 1, 2, 3, 4 });
 
         using (var backup = new FileStream(backupPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
         {
@@ -260,7 +260,7 @@ public sealed class MapStoragePersistenceTests
         Assert.Throws<InvalidOperationException>(storage.EndRegionBatch);
     }
 
-    private static CellType[] Fill(CellType type) => [type, type, type, type];
+    private static CellType[] Fill(CellType type) => new[] { type, type, type, type };
 
     private static void DeleteIfPresent(string path)
     {

@@ -13,9 +13,6 @@ namespace Kern.Rendering.PostProcessing
 {
     public class PostProcessRenderPass : ScriptableRenderPass2D
     {
-        private static readonly int s_finalVignetteId = Shader.PropertyToID("_KernFinalVignette");
-        private static readonly int s_finalVignetteColorId = Shader.PropertyToID("_KernFinalVignetteColor");
-        private static readonly int s_finalVignetteAspectId = Shader.PropertyToID("_KernFinalVignetteAspect");
         private readonly PostProcessWorkload _workload = new();
         private readonly PostProcessWorkload _diagnosticWorkload = new();
         internal PostProcessWorkloadSnapshot? LatestWorkload =>
@@ -106,12 +103,6 @@ namespace Kern.Rendering.PostProcessing
                 out int width,
                 out int height,
                 out TextureDesc desc);
-            Renderer2DWorldGridData worldGrid = frameData.Get<Renderer2DWorldGridData>();
-            bool scaleWorld = worldGrid.Active;
-            // Display effects execute once per world pixel. The renderer's
-            // existing final blit owns the guarded viewport crop and scaling.
-            // This keeps grain, LUT and vignette on the same lattice as geometry.
-
             Tonemapping output = stack.GetComponent<Tonemapping>();
             bool HDROutput = cameraData.isHDROutputActive;
 
@@ -132,7 +123,8 @@ namespace Kern.Rendering.PostProcessing
             bool lutActive = !bypass && PostProcessRuntimeState.LUT != null;
             bool diagnosticsActive = PostProcessRuntimeState.DebugView != PostProcessDebugView.None ||
                 PostProcessRuntimeState.CompareMode != CompareMode.Off;
-            bool passNeeded = scaleWorld || diagnosticsActive || vignetteActive || eigengrauActive || lutActive;
+            bool passNeeded = diagnosticsActive || vignetteActive || eigengrauActive || lutActive ||
+                PostProcessRuntimeState.DiagnosticWorldImage != null;
             if (!passNeeded)
             {
                 return;
@@ -159,13 +151,12 @@ namespace Kern.Rendering.PostProcessing
                 // the graphics API's preferred origin (imported camera targets
                 // and compute outputs can have different origins).
                 passData.ScalesWorldGrid = false;
-                passData.WorldGridRect = worldGrid.Active ? worldGrid.Layout.WorldRect : Vector4.zero;
-                if (scaleWorld)
-                {
-                    Vector4 crop = worldGrid.Layout.ViewportToWorldUv;
-                    passData.DisplayWorldToViewportUv = new Vector4(1f / crop.x, 1f / crop.y,
-                        -crop.z / crop.x, -crop.w / crop.y);
-                }
+                Vector3 rasterCenter = cameraData.camera.worldToCameraMatrix.inverse.GetColumn(3);
+                passData.WorldGridRect = new Vector4(
+                    rasterCenter.x - width / (2f * WorldRenderGrid.PixelsPerCell),
+                    rasterCenter.y - height / (2f * WorldRenderGrid.PixelsPerCell),
+                    width / (float)WorldRenderGrid.PixelsPerCell,
+                    height / (float)WorldRenderGrid.PixelsPerCell);
                 passData.DisplayViewportAspect = cameraData.camera.aspect;
 
                 passData.DisplayLinearFilter = false;
@@ -197,21 +188,7 @@ namespace Kern.Rendering.PostProcessing
                 passData.FrameIndex = Time.frameCount;
                 passData.CalibrationPattern = (int)PostProcessRuntimeState.CalibrationMode;
                 passData.CalibrationValue = PostProcessRuntimeState.CalibrationValue;
-                passData.VignetteInFinalBlit = scaleWorld;
-                if (scaleWorld)
-                {
-                    // The vignette belongs to the display: the final blit draws it
-                    // per screen pixel on the scene sample. Calibration patterns
-                    // and diagnostic views replace the frame and stay unvignetted.
-                    bool screenVignette = passData.VignetteActive && passData.CalibrationPattern == 0 &&
-                        passData.PostDebugView == 0;
-                    Shader.SetGlobalVector(s_finalVignetteId, new Vector4(
-                        screenVignette ? passData.VignetteIntensity : 0f, passData.VignetteSmoothness,
-                        passData.VignetteCenter.x, passData.VignetteCenter.y));
-                    Shader.SetGlobalVector(s_finalVignetteColorId,
-                        (Vector4)(passData.VignetteColor * Mathf.Max(paperWhite, 1f)));
-                    Shader.SetGlobalFloat(s_finalVignetteAspectId, cameraData.camera.aspect);
-                }
+                passData.VignetteInFinalBlit = false;
 
                 // Готовый кадр лежит в промежуточной текстуре. Если цель камеры —
                 // не экран, копировать его обратно не нужно: промежуточная

@@ -5,13 +5,19 @@ using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Kern.Networking.Processors;
 
-public sealed class ConnectionProcessor(IConnectionService connection) :
+public sealed class ConnectionProcessor :
     IPacketProcessor<DisconnectPacket>,
     IPacketProcessor<ReconnectPacket>
 {
+    private readonly IConnectionService _connection;
+    public ConnectionProcessor(IConnectionService connection)
+    {
+        _connection = connection;
+    }
+
     public void Process(DisconnectPacket packet) =>
-        connection.HandleServerDisconnect(packet.Reason);
+        _connection.HandleServerDisconnect(packet.Reason);
 
     public void Process(ReconnectPacket packet) =>
-        connection.HandleServerReconnect();
+        _connection.HandleServerReconnect();
 }

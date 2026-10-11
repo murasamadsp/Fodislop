@@ -52,10 +52,12 @@ public sealed class GraphicsPresetSwitchPlayModeTests
         GraphicsSettingsController graphics = PlayModeHarness.RequireInGame<GraphicsSettingsController>();
         LightingEngine lighting = PlayModeHarness.RequireInGame<LightingEngine>();
         GraphicsPreset[] presets =
-        [
+        new[] {
+
             GraphicsPreset.Standard,
             GraphicsPreset.Overdrive,
-        ];
+
+        };
 
         foreach (GraphicsPreset preset in presets)
         {
@@ -74,14 +76,16 @@ public sealed class GraphicsPresetSwitchPlayModeTests
     {
         GraphicsSettingsController graphics = PlayModeHarness.RequireInGame<GraphicsSettingsController>();
         GraphicsPreset[] sequence =
-        [
+        new[] {
+
             GraphicsPreset.Overdrive,
             GraphicsPreset.Standard,
             GraphicsPreset.Overdrive,
             GraphicsPreset.Standard,
             GraphicsPreset.Overdrive,
             GraphicsPreset.Standard,
-        ];
+
+        };
 
         foreach (GraphicsPreset preset in sequence)
         {

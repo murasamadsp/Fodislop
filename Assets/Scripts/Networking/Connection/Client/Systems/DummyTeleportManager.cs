@@ -16,21 +16,33 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyTeleportManager(
+internal sealed class DummyTeleportManager
+{
+    private readonly Action<ServerPacket> _onReceived;
+    private readonly List<(ushort X, ushort Y)> _teleportPositions;
+    private readonly IAsyncOperationSupervisor _operations;
+    private readonly Func<ushort, ushort, UniTask>? _onTeleport;
+    internal DummyTeleportManager(
     Action<ServerPacket> onReceived,
     List<(ushort X, ushort Y)> teleportPositions,
     IAsyncOperationSupervisor operations,
     Func<ushort, ushort, UniTask>? onTeleport = null)
-{
+    {
+        _onReceived = onReceived;
+        _teleportPositions = teleportPositions;
+        _operations = operations;
+        _onTeleport = onTeleport;
+    }
+
     private List<(ushort X, ushort Y)>? _teleportDestinations;
     private int _closeElement = -1;
-    private int[] _destinationElements = [];
+    private int[] _destinationElements = Array.Empty<int>();
 
     public bool WindowOpen { get; set; }
 
     public void CheckTeleportEntry(ushort x, ushort y)
     {
-        if (!teleportPositions.Contains((x, y)))
+        if (!_teleportPositions.Contains((x, y)))
         {
             return;
         }
@@ -40,7 +52,7 @@ internal sealed class DummyTeleportManager(
 
     public void SendTeleportWindow(ushort x, ushort y)
     {
-        _teleportDestinations = teleportPositions
+        _teleportDestinations = _teleportPositions
             .Where(tp => tp.X != x || tp.Y != y)
             .ToList();
 
@@ -86,33 +98,33 @@ internal sealed class DummyTeleportManager(
                 BorderWidth = 2,
                 Padding = new Margins(2, 8, 2, 8),
             },
-            Children =
-            [
+            Children = new IGUIComponentPacket[]
+            {
                 new DockPanelPacket
                 {
-                    AttachedProperties = [new("DockPanel.Dock", "Top")],
+                    AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
                     Style = new GUIStylePacket
                     {
                         Margin = new Margins(0, 0, 10, 0),
                         Padding = new Margins(0, 0, 0, 0),
                     },
-                    Children =
-                    [
+                    Children = new IGUIComponentPacket[]
+                    {
                         new TextPacket
                         {
                             Text = "<color=#B2A680>Телепорты</color>",
-                            AttachedProperties = [new("DockPanel.Dock", "Left")],
+                            AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
                         },
                         close,
-                    ],
+                    },
                 },
                 scrollViewer,
-            ],
+            },
         };
 
         _closeElement = DummyWindowElements.IndexOf(root, close);
         _destinationElements = rows.Select(row => DummyWindowElements.IndexOf(root, row)).ToArray();
-        onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
+        _onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
         WindowOpen = true;
     }
 
@@ -133,33 +145,33 @@ internal sealed class DummyTeleportManager(
                 BorderWidth = 2,
                 Padding = new Margins(0, 0, 0, 0),
             },
-            Children =
-            [
+            Children = new IGUIComponentPacket[]
+            {
                 new DockPanelPacket
                 {
-                    AttachedProperties = [new("DockPanel.Dock", "Top")],
+                    AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
                     Style = new GUIStylePacket
                     {
                         Margin = new Margins(0, 0, 0, 0),
                         Padding = new Margins(0, 0, 0, 0),
                     },
-                    Children =
-                    [
+                    Children = new IGUIComponentPacket[]
+                    {
                         new TextPacket
                         {
                             Text = "<color=#B2A680>Телепорты</color>",
-                            AttachedProperties = [new("DockPanel.Dock", "Left")],
+                            AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
                         },
                         close,
-                    ],
+                    },
                 },
                 text,
-            ],
+            },
         };
 
         _closeElement = DummyWindowElements.IndexOf(root, close);
-        _destinationElements = [];
-        onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
+        _destinationElements = Array.Empty<int>();
+        _onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
         WindowOpen = true;
     }
 
@@ -172,7 +184,7 @@ internal sealed class DummyTeleportManager(
     {
         Text = "<color=#B3B3B3>×</color>",
         OnClickContext = ".",
-        AttachedProperties = [new("DockPanel.Dock", "Right")],
+        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Right") },
     };
 
     public void HandleTeleportClick(int index)
@@ -187,19 +199,19 @@ internal sealed class DummyTeleportManager(
         // Через супервизора, а не .Forget(): брошенная задача переживает
         // разрыв соединения, а её исключение не достаётся никому. Супервизор
         // держит её в учёте и гасит вместе с жизненным циклом.
-        operations.Run(
+        _operations.Run(
             "DummyTeleportManager.SendTeleport",
             _ => SendTeleportAsync(destX, destY));
     }
 
     private async UniTask SendTeleportAsync(ushort destX, ushort destY)
     {
-        if (onTeleport != null)
+        if (_onTeleport != null)
         {
-            await onTeleport(destX, destY);
+            await _onTeleport(destX, destY);
         }
 
-        onReceived.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
-        onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
+        _onReceived.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
+        _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
     }
 }

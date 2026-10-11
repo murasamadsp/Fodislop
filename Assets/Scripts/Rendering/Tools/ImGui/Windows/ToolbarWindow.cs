@@ -9,7 +9,7 @@ namespace Kern.Tools.ImGui.Windows;
 public sealed class ToolbarWindow : ToolWindow
 {
     private readonly LightingEngine? _lighting;
-    private readonly Dictionary<ToolWindow, string> _labels = [];
+    private readonly Dictionary<ToolWindow, string> _labels = new();
     private int _labelSignature;
     private Vector2 _scroll;
     private float _labelScale = -1f;

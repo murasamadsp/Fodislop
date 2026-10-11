@@ -6,6 +6,48 @@
 body{font:16px/1.6 system-ui,sans-serif;margin:40px auto;max-width:1080px;padding:0 24px;color:#20252b;background:#fafafa}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{border:1px solid #ccd2d8;padding:9px;text-align:left;vertical-align:top}code{background:#e9edf0;padding:2px 5px}pre{white-space:pre-wrap;background:#e9edf0;padding:16px}.pending{color:#8b4300}
 </style>
 <h1>WorldRenderGrid — текущее состояние реализации</h1>
+<h2>2026-10-09 — восстановление растеризации через штатный URP</h2>
+<p>После удаления собственного URP hook сетка сохранилась в расчётах, но мировой color target стал экранным.
+WorldRenderGridBinding теперь задаёт PixelPerfectCamera reference target до растеризации Renderer2D:
+32 пикселя на клетку. Финальный штатный point blit только увеличивает уже готовый мировой буфер.
+Пакеты и PackageCache не изменены. Старые результаты ниже относятся к прежнему renderer.</p>
+<p>Владелец — Rendering. Изменение zoom/viewport пересчитывает reference target перед камерой;
+URP владеет color/depth и их перераспределением. После камеры восстанавливается публичная projection;
+Dispose feature освобождает binding и добавленные PixelPerfectCamera. Форматы цвета и владение HDR output не менялись.
+Terrain/Lighting revisions и orchestration не изменены.</p>
+<p>Production PlayMode test <code>MainGame_WorldGridZoomImage</code>: Passed, Metal,
+2026-10-09 19:07:43–19:07:51 UTC. При 16×16 видимых клетках исходный мировой буфер
+512×512; при 32×32 клетках — 1024×1024. Это замеры до финального увеличения,
+с настоящими сценой, mesh, материалами и shaders.</p>
+<pre>blockError=0; nonconstantBlocks=0; roundTripError=0; overlapError=0;
+artisticBlockError=0; bloomDispatches=7; bloomDraws=1; bloomBytes=346112; world=512x512</pre>
+<p>Артефакты: <code>Logs/Diagnostics/Rendering/world_grid_zoom_20261009_210747</code>:
+world_0/1/2.txt, PNG captures, image-oracle.txt, test-results.xml.</p>
+<p class="pending">Эта проверка подтверждает мировую растеризацию и zoom/image oracle.
+Полная сертификация FPS, HDR и UI lifecycle остаётся отдельным незавершённым gate.</p>
+<h3>Проверка attachment до рисования геометрии, 19:24:00–19:24:07 UTC</h3>
+<p>Расширенный MainGame_WorldGridZoomImage: Passed. Наблюдение в RenderPassEvent2D.BeforeRendering
+читает реальный activeColorTexture до Renderer2D sprite draws, bloom и DisplayFinal.
+Это отдельное доказательство от проверки блоков финального изображения.</p>
+<table><tr><th>Камера</th><th>Исходный geometry attachment</th><th>Выход</th></tr>
+<tr><td>Production diagnostic, 16×16 клеток</td><td>512×512</td><td>1024×1024</td></tr>
+<tr><td>Настоящая gameplay camera, высота 16 клеток</td><td>684×512</td><td>1368×1024</td></tr>
+<tr><td>Настоящая gameplay camera, высота 32 клетки</td><td>1368×1024</td><td>2736×2048</td></tr></table>
+<p>В batch mode основной камере явно отправлен штатный URP SingleCameraRequest;
+это проверка её production renderer с RenderTexture destination, а не проверка оконного display presentation.
+PNG/GPU oracle по-прежнему проходит с нулевыми ошибками.</p>
+<p>Исправлена регистрация PixelPerfectCamera: PrepareCameras вызывается в beginContextRendering,
+до первого beginCameraRendering. Поэтому native camera callback участвует уже в первом кадре,
+а не со второго. Диагностическое наблюдение создаётся только при зарегистрированном test callback,
+не добавляет GPU dispatch/draw и не хранит borrowed render targets.</p>
+<p>Артефакты: <code>Logs/Diagnostics/Rendering/world_grid_zoom_20261009_212404</code>, включая
+geometry_target_*.txt, gameplay_geometry_target_*.txt и test-results.xml.
+TL-OWN/TL-LIFE: изменения принадлежат Presentation, подписки освобождаются binding Dispose.
+TL-REV/TL-STAGE: Terrain и Lighting invalidation/solve не меняются.
+TL-VERIFY: фактический geometry attachment плюс независимый GPU image oracle.
+Производительность и полный HDR/UI gate этим тестом не сертифицированы.</p>
+<h2>Исторический отчёт 2026-09-30</h2>
+
 <p>2026-09-30. Renderer2D растеризует мир непосредственно в 32 пикселя/клетку.
 Перестройка всего плана пока не завершена; производительность и полный HDR/UI lifecycle gate не подтверждены.</p>
 <h2>Контракт изменений и владельцы</h2>

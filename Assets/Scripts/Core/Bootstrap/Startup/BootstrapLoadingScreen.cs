@@ -78,7 +78,10 @@ namespace Kern.Core
             tree.AddToClassList("ui-fullscreen");
             tree.pickingMode = PickingMode.Ignore;
             root.Add(tree);
-            UILayoutTier.Attach(tree);
+
+            // Конфиг на загрузочном экране ещё не прочитан: множитель масштаба
+            // остаётся тем, что уже стоит у панели.
+            UIScreen.Bind(document, null);
             UILocalizer.Apply(tree, _localization);
             _overlay = tree.Q<VisualElement>("BootstrapLoadingOverlay");
             _phase = tree.Q<Label>("BootstrapLoadingPhase");
@@ -94,6 +97,12 @@ namespace Kern.Core
 
         private void OnDestroy()
         {
+            UIDocument document = GetComponent<UIDocument>();
+            if (document != null)
+            {
+                UIScreen.Unbind(document);
+            }
+
             if (_bootstrap != null)
             {
                 _bootstrap.TransitionChanged -= OnTransitionChanged;

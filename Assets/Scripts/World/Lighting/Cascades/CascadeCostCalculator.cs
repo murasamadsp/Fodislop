@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace Kern.World.Lighting;
 public readonly record struct CascadeCostSample(
@@ -62,24 +61,26 @@ public static class CascadeCostCalculator
             // path. Early opacity termination and field clipping reduce this.
             // maximumSteps is retained for caller compatibility; it no longer
             // permits the transport solver to skip geometry.
-            float traceLength = Mathf.Max(cascade.IntervalEnd - cascade.IntervalStart, 0f);
+            double traceLength = Math.Max((double)cascade.IntervalEnd - cascade.IntervalStart, 0d);
             int traceCount = 1;
             long mergeTaps = 0;
             if (index + 1 < cascades.Count)
             {
                 CascadeLayout far = cascades[index + 1];
-                int branchCount = Mathf.Clamp(
-                    far.DirectionCount / Mathf.Max(1, cascade.DirectionCount),
+                int branchCount = Math.Clamp(
+                    far.DirectionCount / Math.Max(1, cascade.DirectionCount),
                     1,
                     4);
                 traceCount = branchCount * 4;
                 mergeTaps = (long)cascade.EntryCount * traceCount;
-                traceLength = Mathf.Abs(cascade.IntervalStart) + Mathf.Abs(far.IntervalStart) +
-                    Mathf.Sqrt(2f) * far.ProbeSpacing;
+                traceLength = Math.Abs((double)cascade.IntervalStart) + Math.Abs((double)far.IntervalStart) +
+                    Math.Sqrt(2d) * far.ProbeSpacing;
             }
 
-            int stepsPerTrace = Mathf.CeilToInt(Mathf.Sqrt(2f) * traceLength) + 2;
-            int stepCount = stepsPerTrace * traceCount;
+            double estimatedSteps = Math.Ceiling(Math.Sqrt(2d) * traceLength) + 2d;
+            int stepsPerTrace = estimatedSteps >= int.MaxValue ? int.MaxValue : (int)estimatedSteps;
+            long totalSteps = (long)stepsPerTrace * traceCount;
+            int stepCount = (int)Math.Min(totalSteps, int.MaxValue);
 
             destination.Add(new CascadeCostSample(
                 index,

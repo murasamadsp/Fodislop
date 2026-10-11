@@ -11,7 +11,7 @@ internal sealed class FrameProbeDiscoverer
     private const int MaxDiscoveredMarkers = 80;
     private const string OwnMarkerPrefix = "Kern.";
 
-    private readonly List<FrameProbe> _discovered = [];
+    private readonly List<FrameProbe> _discovered = new();
     private readonly HashSet<string> _known = new(StringComparer.Ordinal);
     private int _discoveredVersion = -1;
 

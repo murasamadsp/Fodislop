@@ -22,7 +22,7 @@ public struct GraphicsQualitySettings : IEquatable<GraphicsQualitySettings>
 {
     public const int MinimumLightingTextureDimension = 256;
 
-    public static readonly int[] AntiAliasingSampleCounts = [0, 2, 4, 8];
+    public static readonly int[] AntiAliasingSampleCounts = new[] { 0, 2, 4, 8 };
 
     [Range(1, 16)]
     [SettingLabel("settings.lighting.density")]

@@ -34,7 +34,8 @@ public sealed class LightingGPULifecyclePlayModeTests
 
     // Имена целей освещения из LightingResourceManager.CreateTexture.
     private static readonly HashSet<string> s_lightingTargetNames =
-    [
+    new() {
+
         "_LightingMaterialField",
         "_StaticGlowField",
         "_RadianceDirect",
@@ -47,7 +48,8 @@ public sealed class LightingGPULifecyclePlayModeTests
         "_LightingAmbientOcclusionField",
         "Lighting.ReanchorMaterial",
         "Lighting.ReanchorGlow",
-    ];
+
+    };
 
     private FrameBenchmarkPlayModeTests.NativeBenchmarkResolution? _subcellResolution;
     private FrameBenchmarkPlayModeTests.DiagnosticCameraScope? _batchLightingCamera;
@@ -273,10 +275,12 @@ public sealed class LightingGPULifecyclePlayModeTests
         _walkingProbeCamera.orthographicSize = ProjectRuntimeContracts.Camera.MinimumOrthographicSize;
         yield return PlayModeHarness.Frames(5);
         GraphicsPreset[] presets =
-        [
+        new[] {
+
             GraphicsPreset.Standard,
             GraphicsPreset.Overdrive,
-        ];
+
+        };
 
         for (int round = 0; round < 2; round++)
         {
@@ -373,7 +377,9 @@ public sealed class LightingGPULifecyclePlayModeTests
         int reanchors = 0;
         IFrameTelemetry telemetry = PlayModeHarness.RequireInGame<IFrameTelemetry>();
         float reanchoredCameraX = previousRect.x + previousRect.z - _walkingProbeCamera.orthographicSize + 1f;
-        float[] cameraShifts = [1f, -1f, 1f, -1f];
+        float[] cameraShifts = new[] {
+1f, -1f, 1f, -1f
+ };
         foreach (float shift in cameraShifts)
         {
             // Cross the original containment edge, then return. The fixed
@@ -406,8 +412,8 @@ public sealed class LightingGPULifecyclePlayModeTests
             float sampleX = shift > 0f ? originalFieldRect.x + originalFieldRect.z + 0.5f : receiver.x;
             int x = Mathf.FloorToInt((sampleX - rect.x) / rect.z * dynamic.width) - PatchWidth / 2;
             int y = Mathf.FloorToInt((receiver.y - rect.y) / rect.w * dynamic.height) - PatchSize / 2;
-            ushort[] retained = [];
-            ushort[] fresh = [];
+            ushort[] retained = new ushort[0];
+            ushort[] fresh = new ushort[0];
             yield return ReadHalfRegion(dynamic, x, y, PatchWidth, PatchSize, values => retained = values);
             // Rebuild only this source's rays at the identical final pose and
             // intensity. This reference has no retained optical-depth state;
@@ -556,8 +562,8 @@ public sealed class LightingGPULifecyclePlayModeTests
                     _walkingProbeLighting.DiagnosticTransportCounterBuffer.SetData(
                         new uint[LightingComputeBinder.LightingCounterCount]);
                     int[] densities = transportMode == DynamicLightingTransportMode.JumpFloodSdfSphereTracing
-                        ? [2]
-                        : [2, 4];
+                        ? new[] { 2 }
+                        : new[] { 2, 4 };
                     foreach (int density in densities)
                     {
                         LightingQualityTuningController.Apply(new LightingQualityTuning(
@@ -719,10 +725,18 @@ public sealed class LightingGPULifecyclePlayModeTests
         var mesh = new Mesh
         {
             name = "OutsideEmitterProductionAirQuad",
-            vertices = [new(-256f, -256f), new(256f, -256f), new(256f, 256f), new(-256f, 256f)],
-            uv = [Vector2.zero, Vector2.right, Vector2.one, Vector2.up],
-            uv2 = [Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero],
-            triangles = [0, 1, 2, 0, 2, 3],
+            vertices = new Vector3[] {
+new(-256f, -256f), new(256f, -256f), new(256f, 256f), new(-256f, 256f)
+ },
+            uv = new[] {
+Vector2.zero, Vector2.right, Vector2.one, Vector2.up
+ },
+            uv2 = new[] {
+Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero
+ },
+            triangles = new[] {
+0, 1, 2, 0, 2, 3
+ },
         };
         // Field rasters use a dedicated orthographic projection with a narrow
         // z slab around the world plane; copying the camera's z=-10 clips the
@@ -737,7 +751,9 @@ public sealed class LightingGPULifecyclePlayModeTests
         renderer.sortingOrder = 300;
         var contributor = new UniformAirContributor(mesh, surface, fixture.transform);
         registry.Register(contributor);
-        int[] additionalIds = [WalkingProbeLightId + 1, WalkingProbeLightId + 2, WalkingProbeLightId + 3];
+        int[] additionalIds = new[] {
+WalkingProbeLightId + 1, WalkingProbeLightId + 2, WalkingProbeLightId + 3
+ };
         try
         {
             yield return SelectAndSettle(GraphicsPreset.Overdrive);
@@ -791,14 +807,20 @@ public sealed class LightingGPULifecyclePlayModeTests
             }
             lighting.RemoveDynamicLight(WalkingProbeLightId);
             _walkingProbeLightRegistered = false;
-            Vector2[] positions =
-            [
+            Vector2[] positions = new Vector2[]
+            {
+
                 receiver - new Vector2(1.25f, 0f),
                 receiver - new Vector2(2.5f, 0f),
                 receiver - new Vector2(4.25f, 0f),
-            ];
-            Color[] colors = [new(1f, 0.25f, 0.125f), new(0f, 0.5f, 1f), new(0.3f, 1f, 0f)];
-            float[] intensities = [8f, 4f, 16f];
+
+            };
+            Color[] colors = new Color[] {
+new(1f, 0.25f, 0.125f), new(0f, 0.5f, 1f), new(0.3f, 1f, 0f)
+ };
+            float[] intensities = new float[] {
+8f, 4f, 16f
+ };
             for (int reference = 0; reference < 2; reference++)
             {
                 LightingComputeBinder.DiagnosticVectorPolarReference = reference != 0;
@@ -937,10 +959,18 @@ public sealed class LightingGPULifecyclePlayModeTests
         var mesh = new Mesh
         {
             name = "AsymmetricSolidCellQuad",
-            vertices = [Vector3.zero, new(cellSize, 0f), new(cellSize, cellSize), new(0f, cellSize)],
-            uv = [Vector2.zero, Vector2.right, Vector2.one, Vector2.up],
-            uv2 = [Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero],
-            triangles = [0, 1, 2, 0, 2, 3],
+            vertices = new[] {
+Vector3.zero, new(cellSize, 0f), new(cellSize, cellSize), new(0f, cellSize)
+ },
+            uv = new[] {
+Vector2.zero, Vector2.right, Vector2.one, Vector2.up
+ },
+            uv2 = new[] {
+Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero
+ },
+            triangles = new[] {
+0, 1, 2, 0, 2, 3
+ },
         };
         fixture.transform.position = new Vector3(wallCell.x * cellSize, wallCell.y * cellSize, 0f);
         var contributor = new SolidCellContributor(mesh, surface, fixture.transform);
@@ -1011,24 +1041,35 @@ public sealed class LightingGPULifecyclePlayModeTests
         }
     }
 
-    private sealed class SolidCellContributor(Mesh mesh, Material material, Transform transform)
+    private sealed class SolidCellContributor
         : Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor
     {
+        private readonly Mesh _mesh;
+        private readonly Material _material;
+        private readonly Transform _transform;
+
+        public SolidCellContributor(Mesh mesh, Material material, Transform transform)
+        {
+            _mesh = mesh;
+            _material = material;
+            _transform = transform;
+        }
+
         public ulong LightingGeometryRevision => 1;
 
         public void RenderMaterialGlowFields(CommandBuffer commands,
             in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context)
         {
             commands.ClearRenderTarget(false, true, Color.clear);
-            commands.DrawMesh(mesh, transform.localToWorldMatrix, material, 0, material.FindPass("LightingMaterialField"));
+            commands.DrawMesh(_mesh, _transform.localToWorldMatrix, _material, 0, _material.FindPass("LightingMaterialField"));
         }
 
         public void RenderAmbientOcclusionField(CommandBuffer commands,
             in Kern.Core.Interfaces.WorldLighting.LightingAmbientOcclusionContext context)
         {
             commands.ClearRenderTarget(false, true, Color.clear);
-            commands.DrawMesh(mesh, transform.localToWorldMatrix, material,
-                0, material.FindPass("LightingAmbientOcclusionField"));
+            commands.DrawMesh(_mesh, _transform.localToWorldMatrix, _material,
+                0, _material.FindPass("LightingAmbientOcclusionField"));
         }
     }
 
@@ -1054,16 +1095,27 @@ public sealed class LightingGPULifecyclePlayModeTests
         return sum * halfAngle / (8.0 * System.Math.PI);
     }
 
-    private sealed class UniformAirContributor(Mesh mesh, Material material, Transform transform)
+    private sealed class UniformAirContributor
         : Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor
     {
+        private readonly Mesh _mesh;
+        private readonly Material _material;
+        private readonly Transform _transform;
+
+        public UniformAirContributor(Mesh mesh, Material material, Transform transform)
+        {
+            _mesh = mesh;
+            _material = material;
+            _transform = transform;
+        }
+
         public ulong LightingGeometryRevision { get; set; } = 1;
 
         public void RenderMaterialGlowFields(CommandBuffer commands,
             in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context)
         {
             commands.ClearRenderTarget(false, true, Color.clear);
-            commands.DrawMesh(mesh, transform.localToWorldMatrix, material, 0, material.FindPass("LightingMaterialField"));
+            commands.DrawMesh(_mesh, _transform.localToWorldMatrix, _material, 0, _material.FindPass("LightingMaterialField"));
         }
 
         public void RenderAmbientOcclusionField(CommandBuffer commands,
@@ -1446,7 +1498,9 @@ public sealed class LightingGPULifecyclePlayModeTests
         }
         yield return PlayModeHarness.Frames(10);
         Assert.That(lighting.WorldRect, Is.EqualTo(rect), "The source fixture unexpectedly moved the transport region.");
-        float[] offsets = [0f, 0.0625f, 0.125f, 0.25f, 0.375f];
+        float[] offsets = new[] {
+0f, 0.0625f, 0.125f, 0.25f, 0.375f
+ };
         foreach (float offset in offsets)
         {
             ulong before = lighting.SolveCount;
@@ -2079,7 +2133,9 @@ public sealed class LightingGPULifecyclePlayModeTests
                 .Select(value => $"{value}:{alphaHistogram[value]}")));
         const int width = 128;
         const int height = 128;
-        (int X, int Y)[] directions = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+        (int X, int Y)[] directions = new[] {
+(-1, 0), (1, 0), (0, -1), (0, 1)
+ };
         int wallX = -1;
         int wallY = -1;
         (int X, int Y) airDirection = default;
@@ -2154,18 +2210,22 @@ public sealed class LightingGPULifecyclePlayModeTests
         // coordinates. Do not read SurfaceAirCache or call production helpers.
         double reach = LightingConfigHolder.SurfaceReflectionReachCells;
         int padding = Mathf.CeilToInt((float)(reach / System.Math.Min(cellsX, cellsY))) + 1;
-        double[] extinction =
-        [
+        double[] extinction = new double[]
+        {
+
             LightingConfigHolder.EmptyExtinctionRGB.r * LightingConfigHolder.EmptyExtinctionMultiplier,
             LightingConfigHolder.EmptyExtinctionRGB.g * LightingConfigHolder.EmptyExtinctionMultiplier,
             LightingConfigHolder.EmptyExtinctionRGB.b * LightingConfigHolder.EmptyExtinctionMultiplier,
-        ];
-        double[] ambient =
-        [
+
+        };
+        double[] ambient = new double[]
+        {
+
             LightingConfigHolder.AmbientColor.r * LightingConfigHolder.AmbientIntensity,
             LightingConfigHolder.AmbientColor.g * LightingConfigHolder.AmbientIntensity,
             LightingConfigHolder.AmbientColor.b * LightingConfigHolder.AmbientIntensity,
-        ];
+
+        };
         int MaterialIndex(int x, int y) =>
             (lighting.MaterialYFlip != 0 ? height - 1 - y : y) * width + x;
         double Incident(int x, int y, int channel)
@@ -2209,7 +2269,9 @@ public sealed class LightingGPULifecyclePlayModeTests
                 {
                     continue;
                 }
-                byte[] albedo = [surface.r, surface.g, surface.b];
+                byte[] albedo = new[] {
+surface.r, surface.g, surface.b
+ };
                 for (int channel = 0; channel < 3; channel++)
                 {
                     double center = Incident(x, y, channel);

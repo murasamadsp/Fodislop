@@ -14,14 +14,24 @@ namespace Kern.Networking.Processors;
 /// The server's metadata packet is keyed by <see cref="SelectItemPacket.Item"/>,
 /// not by a client slot, so it is applied directly to that type.
 /// </summary>
-public sealed class InventoryProcessor(IInventoryState model, IItemCatalog catalog) :
+public sealed class InventoryProcessor :
     IPacketProcessor<InventoryPacket>,
     IPacketProcessor<SelectItemPacket>,
     IPacketProcessor<DeselectItemPacket>,
     IBatchAwareProcessor
 {
-    private readonly int _knownTypeCount = catalog.AllTypes.Count();
-    private readonly IBatchAwareProcessor? _batchModel = model as IBatchAwareProcessor;
+    private readonly IInventoryState _model;
+    private readonly IItemCatalog _catalog;
+    public InventoryProcessor(IInventoryState model, IItemCatalog catalog)
+    {
+        _model = model;
+        _catalog = catalog;
+        _knownTypeCount = _catalog.AllTypes.Count();
+        _batchModel = _model as IBatchAwareProcessor;
+    }
+
+    private readonly int _knownTypeCount;
+    private readonly IBatchAwareProcessor? _batchModel;
 
     public void BeginBatch() => _batchModel?.BeginBatch();
 
@@ -31,16 +41,16 @@ public sealed class InventoryProcessor(IInventoryState model, IItemCatalog catal
     {
         if (packet.Changes.Count >= _knownTypeCount)
         {
-            model.ApplyFullSnapshot(packet.Changes);
+            _model.ApplyFullSnapshot(packet.Changes);
             return;
         }
 
-        model.MergeChanges(packet.Changes);
+        _model.MergeChanges(packet.Changes);
     }
 
     public void Process(SelectItemPacket packet) =>
-        model.ApplyItemMetadata(packet.Item, packet.Name, packet.Description);
+        _model.ApplyItemMetadata(packet.Item, packet.Name, packet.Description);
 
     public void Process(DeselectItemPacket packet) =>
-        model.ClearSelection();
+        _model.ClearSelection();
 }

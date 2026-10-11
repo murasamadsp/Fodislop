@@ -453,7 +453,7 @@ namespace Kern.World
                 _materialManager.SetMaterialWorldSize(
                     _transitMaterial,
                     _perspectiveMaterial,
-                    _redRockMaterial,
+                    _redRockMaterial, _horizonMaterial,
                     worldWidth,
                     worldHeight);
                 _lightingGeometryRevision++;
@@ -490,8 +490,6 @@ namespace Kern.World
             _registered = false;
         }
 
-        private void DestroyOwnedChild(string objectName) =>
-            SurfaceMeshUtilities.DestroyOwnedChild(transform, objectName);
-
+        private void DestroyOwnedChild(string objectName) => SurfaceMeshUtilities.DestroyOwnedChild(transform, objectName);
     }
 }

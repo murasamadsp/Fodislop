@@ -48,22 +48,26 @@ public sealed class DummyWorldMapSource : IDummyWorldMapSource
 
             // Распаковка живёт под надзором супервизора: он переживает отмену
             // отдельного ожидающего и останавливается вместе с приложением.
-            _operations.Run("dummy_world_map_prepare", _ => PrepareAsync(worldCodeName, started));
+            _operations.Run("dummy_world_map_prepare", token => PrepareAsync(worldCodeName, started, token));
         }
 
         // Отмена одного ожидающего не отменяет общую подготовку: её ждут другие.
         return preparation.Task.AttachExternalCancellation(cancellationToken);
     }
 
-    private async UniTask PrepareAsync(string worldCodeName, UniTaskCompletionSource<string> preparation)
+    private async UniTask PrepareAsync(
+        string worldCodeName,
+        UniTaskCompletionSource<string> preparation,
+        CancellationToken cancellationToken)
     {
         try
         {
-            string mapPath = await DummyWorldMapArchive.ResolveMapFileAsync(worldCodeName, CancellationToken.None);
+            string mapPath = await DummyWorldMapArchive.ResolveMapFileAsync(worldCodeName, cancellationToken);
             await DummyWorldMapLoader.PrepareMapFileAsync(
                 worldCodeName,
                 mapPath,
-                CancellationToken.None);
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             preparation.TrySetResult(mapPath);
         }
         catch (Exception exception)

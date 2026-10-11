@@ -14,10 +14,10 @@ public sealed class TerrainMeshManager
         Shader.PropertyToID("_TerrainGeometryCarrierPaddingWorld");
 
     private readonly RenderTargetIdentifier[] _lightingFieldTargets = new RenderTargetIdentifier[2];
-    private readonly RenderBufferLoadAction[] _lightingFieldLoads =
-        [RenderBufferLoadAction.DontCare, RenderBufferLoadAction.DontCare];
-    private readonly RenderBufferStoreAction[] _lightingFieldStores =
-        [RenderBufferStoreAction.Store, RenderBufferStoreAction.Store];
+    private readonly RenderBufferLoadAction[] _lightingFieldLoads = new RenderBufferLoadAction[]
+        { RenderBufferLoadAction.DontCare, RenderBufferLoadAction.DontCare };
+    private readonly RenderBufferStoreAction[] _lightingFieldStores = new RenderBufferStoreAction[]
+        { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store };
 
     public void RenderLightingMaterialFields(
         CommandBuffer commandBuffer,

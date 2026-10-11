@@ -877,3 +877,20 @@ otherwise re-enables its authored temporal input periodically. The subscription
 and original camera setting are restored before timed frames and in finally.
 Reference-to-reference drift is asserted separately from reference-to-optimized
 error; failing either prevents any performance acceptance.
+
+
+### Original surface albedo (2026-10-08)
+
+The original Transit/Perspective meshes and authored BaseMap projection remain active.
+`KernOriginalSurfaceAlbedo` applies linear albedo tint `(1, 0.38, 0.30)` in both
+Universal2D and LightingMaterialField; occupancy, AO and HDR glow are unchanged.
+Synthetic horizon relief/clouds/depth writes are removed. World reload updates the
+existing horizon material altitude alongside the three ground materials.
+Production captures, independent numeric field oracle and limits:
+[original surface evidence](../design/surface-original-improvement.html).
+
+The original surface color now samples a world-anchored 32×32 raster per cell.
+Horizontal source density is 32 texels/cell; each original two-cell band is
+resampled onto 64 presentation rows. Existing alpha UVs, occupancy/AO and glow
+remain independent. Visible and material-field albedo share the same raster;
+URP owns the linear-repeat sampler and texel size lives in UnityPerMaterial.

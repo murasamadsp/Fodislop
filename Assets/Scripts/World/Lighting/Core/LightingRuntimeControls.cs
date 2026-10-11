@@ -8,24 +8,39 @@ using UnityEngine;
 
 namespace Kern.World.Lighting;
 
-internal sealed class LightingRuntimeControls(
-    IClientConfigManager clientConfig,
-    LightingQualityController qualityController,
-    LightingRuntimeState runtimeState,
-    DynamicLightManager dynamicLightManager,
-    Action publishTerrainRequirements)
+internal sealed class LightingRuntimeControls
 {
+    private readonly IClientConfigManager _clientConfig;
+    private readonly LightingQualityController _qualityController;
+    private readonly LightingRuntimeState _runtimeState;
+    private readonly DynamicLightManager _dynamicLightManager;
+    private readonly Action _publishTerrainRequirements;
+
+    public LightingRuntimeControls(
+        IClientConfigManager clientConfig,
+        LightingQualityController qualityController,
+        LightingRuntimeState runtimeState,
+        DynamicLightManager dynamicLightManager,
+        Action publishTerrainRequirements)
+    {
+        _clientConfig = clientConfig;
+        _qualityController = qualityController;
+        _runtimeState = runtimeState;
+        _dynamicLightManager = dynamicLightManager;
+        _publishTerrainRequirements = publishTerrainRequirements;
+    }
+
     public void ApplyClientConfig()
     {
-        qualityController.Apply(
-            clientConfig.Config.GraphicsPreset,
-            clientConfig.Config.GraphicsQualitySettings);
-        publishTerrainRequirements();
-        LightingRuntimeInvalidation.ResetFieldAndRadiance(runtimeState);
-        dynamicLightManager.IncrementGeneration();
-        dynamicLightManager.MarkDirty();
+        _qualityController.Apply(
+            _clientConfig.Config.GraphicsPreset,
+            _clientConfig.Config.GraphicsQualitySettings);
+        _publishTerrainRequirements();
+        LightingRuntimeInvalidation.ResetFieldAndRadiance(_runtimeState);
+        _dynamicLightManager.IncrementGeneration();
+        _dynamicLightManager.MarkDirty();
         Debug.Log(
-            $"[LightingEngine] Applied client config (Preset={clientConfig.Config.GraphicsPreset})");
+            $"[LightingEngine] Applied client config (Preset={_clientConfig.Config.GraphicsPreset})");
     }
 
     public void SetDebugView(
@@ -38,22 +53,22 @@ internal sealed class LightingRuntimeControls(
         }
 
         current = requested;
-        runtimeState.HasRenderedLightState = false;
-        runtimeState.HasStaticRadianceState = false;
-        runtimeState.HasDynamicRadianceState = false;
-        runtimeState.CompositeDirty = true;
+        _runtimeState.HasRenderedLightState = false;
+        _runtimeState.HasStaticRadianceState = false;
+        _runtimeState.HasDynamicRadianceState = false;
+        _runtimeState.CompositeDirty = true;
         Debug.Log($"[LightingEngine] SetDebugView: {requested}");
     }
 
     public void InvalidateRadiance() =>
-        LightingRuntimeInvalidation.ResetRadiance(runtimeState);
+        LightingRuntimeInvalidation.ResetRadiance(_runtimeState);
 
     public void ResetRuntimeLightingPreferences()
     {
-        qualityController.Apply(
-            clientConfig.Config.GraphicsPreset,
-            clientConfig.Config.GraphicsQualitySettings);
-        publishTerrainRequirements();
-        LightingRuntimeInvalidation.ResetFieldAndRadiance(runtimeState);
+        _qualityController.Apply(
+            _clientConfig.Config.GraphicsPreset,
+            _clientConfig.Config.GraphicsQualitySettings);
+        _publishTerrainRequirements();
+        LightingRuntimeInvalidation.ResetFieldAndRadiance(_runtimeState);
     }
 }

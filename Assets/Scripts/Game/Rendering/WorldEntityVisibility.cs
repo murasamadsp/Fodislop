@@ -14,11 +14,11 @@ namespace Kern.Game
     {
         private readonly SpatialShardGrid<WorldEntityBatchRenderer.SpriteHandle> _grid;
         private readonly float _prefetchMargin;
-        private readonly List<WorldEntityBatchRenderer.SpriteHandle> _candidates = [];
+        private readonly List<WorldEntityBatchRenderer.SpriteHandle> _candidates = new();
 
-        public readonly List<WorldEntityBatchRenderer.SpriteHandle> UnderTentacles = [];
-        public readonly List<WorldEntityBatchRenderer.SpriteHandle> OverTentacles = [];
-        public readonly List<WorldEntityBatchRenderer.SpriteHandle> Overlay = [];
+        public readonly List<WorldEntityBatchRenderer.SpriteHandle> UnderTentacles = new();
+        public readonly List<WorldEntityBatchRenderer.SpriteHandle> OverTentacles = new();
+        public readonly List<WorldEntityBatchRenderer.SpriteHandle> Overlay = new();
 
         private Vector3 _lastCameraPosition;
         private float _lastCameraOrthographicSize;

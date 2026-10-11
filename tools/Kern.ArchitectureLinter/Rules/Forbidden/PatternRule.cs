@@ -34,7 +34,7 @@ public sealed class PatternRule : IRule
         (new Regex(@"new\s+Texture2D(Array)?\s*\("), "runtime Texture2D construction outside RuntimeTextureFactory", @"^(Assets/(?:Scripts/)?Editor/|Assets/Scripts/AssetPipeline/(?:Loading/)?RuntimeTextureFactory\.cs|Assets/Scripts/Tests/)", null),
         (new Regex(@"\.LoadImage\s*\("), "runtime image decoding outside RuntimeTextureFactory", @"^(Assets/(?:Scripts/)?Editor/|Assets/Scripts/AssetPipeline/(?:Loading/)?RuntimeTextureFactory\.cs|Assets/Scripts/Tests/)", null),
         (new Regex(@"\.styleSheets\.Add\s*\("), "controller-local UI Toolkit stylesheet", null, null),
-        (new Regex(@"new\s+Vector2\s*\([^,]+,\s*Screen\.height\s*-"), "manual screen-to-panel Y flip", null, null),
+        (new Regex(@"new\s+Vector2\s*\([^,]+,\s*Screen\.height\s*-"), "manual screen-to-panel Y flip", @"^Assets/Scripts/UI/Common/Interaction/UISafeArea\.cs$", null),
         (new Regex(@"\.style\.(width|height)\s*=[^;]*Screen\.(width|height)"), "UI root sized from Screen dimensions", null, null),
         (new Regex(@"LightingCascadeAtlasLimit\s*<=\s*256\s*\?"), "duplicated radiance-cascade count policy", null, @"return atlasDimension <= 256 \? 3 : 4;"),
         (new Regex(@"(FindAnyObjectByType|FindFirstObjectByType)<Camera>"), "ad-hoc gameplay camera lookup", null, null),

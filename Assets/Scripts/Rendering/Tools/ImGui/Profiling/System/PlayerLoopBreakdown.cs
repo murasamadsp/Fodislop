@@ -14,8 +14,8 @@ namespace Kern.Tools.ImGui.Profiling;
 // Сумма найденных маркеров не позволяет приписать остаток редактору.
 public sealed class PlayerLoopBreakdown : IDisposable
 {
-    private readonly List<FrameProbe> _systems = [];
-    private readonly List<FrameProbe> _sorted = [];
+    private readonly List<FrameProbe> _systems = new();
+    private readonly List<FrameProbe> _sorted = new();
 
     public IReadOnlyList<FrameProbe> Sorted => _sorted;
 

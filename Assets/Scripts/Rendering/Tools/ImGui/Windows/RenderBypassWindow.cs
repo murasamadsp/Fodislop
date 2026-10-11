@@ -54,7 +54,8 @@ public sealed class RenderBypassWindow : ToolWindow
         _entityRenderer = entityRenderer;
         _gameUIDocument = gameUIDocument;
         _sweep = new RenderBypassSweep(
-        [
+        new (string Label, Action<bool> Apply)[]
+        {
             ("Расчёт освещения", on => _debugSettings.BypassLightingCompute = on),
 
             // Внутри света отдельно: фонари роботов перетрассируются при
@@ -82,7 +83,7 @@ public sealed class RenderBypassWindow : ToolWindow
                 SetEverythingButTerrainBypassed(on);
                 SetDistortion(on ? false : _sweepDistortion);
             }),
-        ]);
+        });
     }
 
     public override void Tick()

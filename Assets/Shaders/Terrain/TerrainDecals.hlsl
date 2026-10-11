@@ -86,7 +86,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
             _TerrainDecalRockAtlas,
             sampler_TerrainDecalRockAtlas,
             atlasUV,
-            0);
+            0.0);
     }
     else
     {
@@ -94,7 +94,7 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
             _TerrainDecalAtlas,
             sampler_TerrainDecalAtlas,
             atlasUV,
-            0);
+            0.0);
     }
 
     if (useRock)

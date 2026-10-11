@@ -82,7 +82,7 @@ public class TerrainRenderer : MonoBehaviour, Kern.Core.Interfaces.WorldLighting
         private RectInt _lightingViewport;
         private bool _fatalBuildError;
         private TerrainLightingFramePublisher? _lightingFramePublisher;
-        private readonly List<RectInt> _publishedChangedRegions = [];
+        private readonly List<RectInt> _publishedChangedRegions = new();
 
         private TerrainLightingFramePublisher LightingFramePublisher =>
             _lightingFramePublisher ??= new(_terrainLightingExchange);

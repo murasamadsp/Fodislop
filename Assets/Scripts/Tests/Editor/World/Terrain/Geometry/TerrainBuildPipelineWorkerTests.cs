@@ -27,11 +27,13 @@ public sealed class TerrainBuildPipelineWorkerTests
     private const int StartX = 96;
     private const int StartY = 80;
 
-    private static readonly Vector2Int[] s_walk =
-    [
+    private static readonly Vector2Int[] s_walk = new Vector2Int[]
+    {
+
         new(1, 0), new(0, 1), new(1, 1), new(-1, 0), new(0, -1),
         new(3, 2), new(-2, -3), new(5, 0), new(0, 7), new(-4, 6),
-    ];
+
+    };
 
     [Test]
     public void WorkerSteps_WithScrollPatchAndTextureRefresh_MatchFullBuild()
@@ -114,8 +116,12 @@ public sealed class TerrainBuildPipelineWorkerTests
         // делать не имеет права, пока шаг идёт. Рабочий поток обязан назвать
         // дефект, а не нарисовать подделку.
         pipeline.CellCache.ClearCaches();
-        Assert.Throws<InvalidOperationException>(
-            () => pipeline.Execute(request, CancellationToken.None));
+        AggregateException exception = Assert.Throws<AggregateException>(
+            () => pipeline.Execute(request, CancellationToken.None))!;
+        Assert.That(exception.Flatten().InnerExceptions,
+            Has.Some.TypeOf<InvalidOperationException>());
+        Assert.That(exception.Flatten().InnerExceptions,
+            Has.Some.Message.Contains("was not resolved before the cache was read"));
     }
 
     private static TerrainBuildContext Context(TerrainTestWorld world, IFrameTelemetry telemetry) =>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мобильный стандарт</title>
+<style>
+:root { --bg:#0b1016; --fg:#e6edf2; --muted:#93a3ad; --line:#24313b; --accent:#5fd3cf; --gold:#f5c542; }
+@media (prefers-color-scheme: light) { :root { --bg:#fbfcfd; --fg:#16212a; --muted:#53636d; --line:#d7dee3; --accent:#0d7f7b; --gold:#9a6d00; } }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+main { max-width:920px; margin:0 auto; padding:24px 16px 64px; }
+h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:19px; margin:32px 0 8px; color:var(--accent); }
+p.lead { color:var(--muted); margin:0 0 16px; }
+table { width:100%; border-collapse:collapse; margin:8px 0; font-size:14px; }
+th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:600; }
+code { font:13px ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--gold); }
+ul { padding-left:20px; } li { margin:4px 0; }
+.wrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>Мобильный стандарт</h1>
+<p class="lead">Как интерфейс, камера и ввод работают на телефонах, планшетах, раскладушках и флипах. Только альбомная ориентация, обе стороны.</p>
+
+<h2>Модель экрана</h2>
+<ul>
+<li>Одна точка привязки документа к экрану — <code>UIScreen.Bind</code>: масштаб панели, безопасная область, классы формы. Смена экрана посреди сессии (поворот на 180°, раскрытие раскладушки, сплит) ловится опросом и переприменяет всё сразу.</li>
+<li>На мобильной платформе пиксель панели = dp (1/160 дюйма): <code>ScreenShapeRules.PhysicalPanelScale</code>. <code>UIScale</code> из настроек — множитель поверх dp (схема конфига 44 сбрасывает его к 1.0). Десктоп остаётся на опорных 1920×1080.</li>
+<li>Безопасная область — отступы корня документа (<code>UISafeArea</code>), считаются от размера панели, а не корня, и пишутся сравнением со стилем, а не с <code>resolvedStyle</code>.</li>
+</ul>
+
+<h2>Классы формы</h2>
+<div class="wrap"><table>
+<tr><th>Класс</th><th>Условие</th><th>Примеры</th></tr>
+<tr><td><code>form--micro</code> + <code>form--narrow</code></td><td>длинная сторона &lt; 600 dp</td><td>внешний экран Galaxy Z Flip (~391×376 dp)</td></tr>
+<tr><td><code>form--micro</code> + <code>form--short</code></td><td>короткая сторона &lt; 340 dp</td><td>телефон в сплите (~897×202 dp)</td></tr>
+<tr><td><code>form--phone</code></td><td>короткая &lt; 600 dp</td><td>iPhone SE (654×368), Pixel 8, iPhone Pro Max, внешний экран Fold</td></tr>
+<tr><td><code>form--tablet</code></td><td>короткая ≥ 600 dp</td><td>iPad mini/Pro, внутренний экран Fold (924×794)</td></tr>
+<tr><td><code>pointer--touch</code></td><td>ввод пальцем</td><td>мобильная платформа или подключённый тачскрин</td></tr>
+</table></div>
+<p>Классы стоят на <code>panel.visualTree</code> — их видят все деревья документа. Вся тач-раскладка — в <code>Assets/Resources/Styles/Touch.uss</code>, подключённом в теме последним.</p>
+
+<h2>Правила раскладки</h2>
+<ul>
+<li>Любая интерактивная цель — не меньше 44 dp по короткой стороне (общее правило для <code>Button</code>, <code>Toggle</code>, <code>TextField</code>, <code>DropdownField</code>).</li>
+<li>Всё интерактивное — внутри безопасной области; цели не перекрывают друг друга; текст помещается в коробку или обрезается многоточием намеренно.</li>
+<li>Окна, где содержимое выше экрана, листаются (<code>ScrollView</code>): вход, онбординг, настройки, раскрытый инвентарь, список программ.</li>
+<li>На Micro убираются задание, бонус, навыки, строки статуса; управление дроном, чат, меню и программатор остаются.</li>
+<li>Поля ввода (чат, «Сказать») — вверху экрана: снизу их закрывает системная клавиатура.</li>
+</ul>
+
+<h2>Ввод касанием</h2>
+<div class="wrap"><table>
+<tr><th>Действие</th><th>Клавиатура/мышь</th><th>Палец</th></tr>
+<tr><td>Движение</td><td>WASD</td><td>стик; малое отклонение — поворот на месте (Shift)</td></tr>
+<tr><td>Быстрый ход</td><td>Ctrl</td><td>тумблер «Бег»</td></tr>
+<tr><td>Копать / Лечение</td><td>Space / V (удержание — аура)</td><td>удержание кнопок</td></tr>
+<tr><td>Пауза</td><td>Esc (Android «Назад»)</td><td>кнопка «Меню»</td></tr>
+<tr><td>Глобальный / локальный чат</td><td>Tab / T</td><td>«Чат» / «Сказать»; отправка — кнопкой</td></tr>
+<tr><td>Карта мира</td><td>M, колесо</td><td>«Карта», пинч двумя пальцами</td></tr>
+<tr><td>Зум камеры</td><td>колесо</td><td>пинч по миру</td></tr>
+<tr><td>Клик по миру</td><td>ЛКМ</td><td>тап (любым пальцем, <code>TouchGestureTracker</code>)</td></tr>
+<tr><td>Применить предмет</td><td>Enter</td><td>повторный тап по выбранной ячейке</td></tr>
+<tr><td>Программатор: ПКМ / Ctrl+клик / Ctrl+Z… / Del</td><td>мышь, клавиши</td><td>повторный тап или долгое нажатие / «Несколько» / панель инструментов; сетка двигается пальцем</td></tr>
+<tr><td>Инструменты F1</td><td>F1</td><td>долгое нажатие на строку статуса</td></tr>
+</table></div>
+
+<h2>Камера</h2>
+<p>Зум задаёт короткую сторону кадра (в альбоме — высоту); длинная растёт с соотношением сторон до 2:1 (<code>CameraViewRules</code>, <code>MaximumVisibleAspect</code>). На 20:9 и ультрашироком мониторе обзор по ширине не больше, чем на 2:1.</p>
+
+<h2>Платформа</h2>
+<ul>
+<li>Сборка (<code>BuildScript</code>): Android и iOS — LandscapeLeft+Right, iOS — Metal, iPhone+iPad, отложенные системные жесты у краёв. Development-сборка — вариант кода Checked (<code>UNITY_ENABLE_CHECKS</code>).</li>
+<li>Частота кадров «без ограничения» на телефоне — частота экрана, а не 30; экран не гаснет в игре; предупреждение о памяти сбрасывает чанки на диск и декодированный кэш ассетов; кэш ассетов на iOS исключён из резервной копии iCloud.</li>
+</ul>
+
+<h2>Проверка</h2>
+<ul>
+<li><code>MobileLayoutPlayModeTests</code> — настоящие сцены и контроллеры, подменён только экран; 17 экранов и состояний (вход, регистрация, онбординг, меню, HUD, инвентарь, чаты, карта, программатор: список, создание, редактор, пауза, настройки) на 9 устройствах. Состояния открываются кнопками HUD. Отчёт и PNG — <code>Logs/Diagnostics/MobileLayout/</code>.</li>
+<li><code>TouchControlsPlayModeTests</code> — пальцы через Input System и UI Toolkit: стик и «Копать» одновременно, поворот на месте, тап по миру вторым пальцем, тап по кнопке не уходит в мир, пинч.</li>
+<li>EditMode: <code>ScreenShapeRulesTests</code>, <code>MobileScreenContractTests</code>, <code>MapPinchGestureTests</code>.</li>
+<li>Особенность batch-прогона: без фокуса приложения Input System отбрасывает ввод, а UI Toolkit не читает устройства. Виртуальные клавиатура и тачскрин теста включают <code>AllDeviceInputAlwaysGoesToGameView</code> и <code>IgnoreFocus</code>; палец подаётся и в Input System, и в панель.</li>
+</ul>
+</main>
+</body>
+</html>

@@ -109,10 +109,11 @@ public sealed class SurfaceMaterialManager
         Material? transitMaterial,
         Material? perspectiveMaterial,
         Material? redRockMaterial,
+        Material? horizonMaterial,
         int worldWidth,
         int worldHeight)
     {
-        if (transitMaterial == null || perspectiveMaterial == null || redRockMaterial == null)
+        if (transitMaterial == null || perspectiveMaterial == null || redRockMaterial == null || horizonMaterial == null)
         {
             throw new InvalidOperationException("SurfaceRenderer materials must be initialized.");
         }
@@ -121,6 +122,7 @@ public sealed class SurfaceMaterialManager
         transitMaterial.SetVector(s_worldSizeId, worldSize);
         perspectiveMaterial.SetVector(s_worldSizeId, worldSize);
         redRockMaterial.SetVector(s_worldSizeId, worldSize);
+        horizonMaterial.SetVector(s_worldSizeId, worldSize);
     }
 
     public Vector2 GetTerrainSheetTileCount(Texture2D texture)
@@ -140,8 +142,8 @@ public sealed class SurfaceMaterialManager
 
     private static void RequireShaderProperties(Material material)
     {
-        string[] requiredProperties =
-        [
+        string[] requiredProperties = new string[]
+        {
             "_BaseMap",
             "_GlowColor",
             "_GlowStrength",
@@ -150,7 +152,7 @@ public sealed class SurfaceMaterialManager
             "_WorldSize",
             "_SurfaceProjection",
             "_SkyColor",
-        ];
+        };
         foreach (string propertyName in requiredProperties)
         {
             if (!material.HasProperty(propertyName))

@@ -2,7 +2,21 @@
 
 namespace UnityEngine
 {
-    public class Camera;
+    public class Object
+    {
+        public static void DestroyImmediate(Object target) { }
+    }
+
+    public class GameObject : Object
+    {
+        public GameObject(string name) { }
+
+        public T AddComponent<T>() where T : Component, new() => new();
+    }
+
+    public class Component : Object;
+
+    public class Camera : Component;
 
     public class RenderTexture;
 

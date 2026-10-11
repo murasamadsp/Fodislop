@@ -15,12 +15,18 @@ namespace Kern.Game.Managers;
 
 // Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): здания создаются фабрикой
 // под Runtime/Buildings, сам сервис объекта на сцене не имеет.
-public sealed class BuildingManager(
-    IMapDataProvider mapDataProvider,
-    ISceneObjectFactory sceneObjects) : IBuildingService
+public sealed class BuildingManager : IBuildingService
 {
     private const string TAG = "[BuildingManager]";
+    private readonly IMapDataProvider _mapDataProvider;
+    private readonly ISceneObjectFactory _sceneObjects;
     private readonly Dictionary<Vector2Int, Building> _buildings = new();
+
+    public BuildingManager(IMapDataProvider mapDataProvider, ISceneObjectFactory sceneObjects)
+    {
+        _mapDataProvider = mapDataProvider;
+        _sceneObjects = sceneObjects;
+    }
 
     public void AddOrUpdateBuilding(ushort x, ushort y, BuildingType buildingType, byte variant, byte linkedClan)
     {
@@ -31,8 +37,8 @@ public sealed class BuildingManager(
             return;
         }
 
-        building = sceneObjects.Create<Building>($"Building_{x}_{y}", RuntimeOwner.Buildings);
-        building.transform.position = CoordinateUtils.ServerToUnityPos(x, y, mapDataProvider.WorldHeight);
+        building = _sceneObjects.Create<Building>($"Building_{x}_{y}", RuntimeOwner.Buildings);
+        building.transform.position = CoordinateUtils.ServerToUnityPos(x, y, _mapDataProvider.WorldHeight);
         building.Initialize(buildingType, variant, linkedClan);
         _buildings[pos] = building;
     }

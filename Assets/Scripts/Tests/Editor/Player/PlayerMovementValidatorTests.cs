@@ -250,14 +250,24 @@ public class PlayerMovementValidatorTests
         Assert.IsFalse(isPassable);
     }
 
-    private sealed class StubMapDataProvider(
-        ushort width = 100,
-        ushort height = 100,
-        float normalCooldown = 0.3f,
-        float emptyCooldown = 0.1f) : IMapDataProvider
+    private sealed class StubMapDataProvider : IMapDataProvider
     {
-        public ushort WorldWidth => width;
-        public ushort WorldHeight => height;
+        private readonly ushort _width;
+        private readonly ushort _height;
+        private readonly float _normalCooldown;
+        private readonly float _emptyCooldown;
+
+        public StubMapDataProvider(ushort width = 100, ushort height = 100,
+            float normalCooldown = 0.3f, float emptyCooldown = 0.1f)
+        {
+            _width = width;
+            _height = height;
+            _normalCooldown = normalCooldown;
+            _emptyCooldown = emptyCooldown;
+        }
+
+        public ushort WorldWidth => _width;
+        public ushort WorldHeight => _height;
         public Camera MainCamera => null!;
         public bool IsStandaloneMode => false;
 
@@ -266,9 +276,9 @@ public class PlayerMovementValidatorTests
                 (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
 
         public float GetMoveCooldown(CellType cellType) =>
-            cellType == CellType.Empty ? emptyCooldown : normalCooldown;
+            cellType == CellType.Empty ? _emptyCooldown : _normalCooldown;
 
-        public float GetMinMoveCooldown() => Mathf.Min(emptyCooldown, normalCooldown);
+        public float GetMinMoveCooldown() => Mathf.Min(_emptyCooldown, _normalCooldown);
 
         public bool TryGetTileGroup(CellType type, out int groupId)
         {
@@ -286,22 +296,31 @@ public class PlayerMovementValidatorTests
         public void ResetWorldState() { }
     }
 
-    private sealed class StubWorldStorage(bool cellLayerAvailable, CellType defaultCell) : IWorldDataStorage
+    private sealed class StubWorldStorage : IWorldDataStorage
     {
+        private readonly bool _cellLayerAvailable;
+        private readonly CellType _defaultCell;
+
+        public StubWorldStorage(bool cellLayerAvailable, CellType defaultCell)
+        {
+            _cellLayerAvailable = cellLayerAvailable;
+            _defaultCell = defaultCell;
+        }
+
         public event Action<int, int>? CellChanged { add { } remove { } }
         public event Action<int, int, int, int>? RegionChanged { add { } remove { } }
         public bool IsReady => true;
         public long Revision => 0;
-        public IWorldLayer<CellType>? CellLayer => cellLayerAvailable ? new StubWorldLayer() : null;
+        public IWorldLayer<CellType>? CellLayer => _cellLayerAvailable ? new StubWorldLayer() : null;
 
         public void SetCell(int x, int y, CellType type) { }
         public void SetRegion(int startX, int startY, int width, int height, CellType[] cells) { }
         public void SetRegion(int startX, int startY, int width, int height, ReadOnlySpan<CellType> cells) { }
-        public CellType GetCell(int x, int y) => defaultCell;
+        public CellType GetCell(int x, int y) => _defaultCell;
         public bool TryGetCell(int x, int y, out CellType cellType)
         {
-            cellType = defaultCell;
-            return cellLayerAvailable;
+            cellType = _defaultCell;
+            return _cellLayerAvailable;
         }
         public void InitWorld(string worldCodeName, int width, int height) { }
         public void Dispose() { }
@@ -326,7 +345,7 @@ public class PlayerMovementValidatorTests
         public CellType this[int x, int y] { get => CellType.Empty; set { } }
 
         public void NotifyRegionLoaded(int startX, int startY, int width, int height) { }
-        public IEnumerable<int> GetLoadedChunkIndices() => [];
+        public IEnumerable<int> GetLoadedChunkIndices() => Array.Empty<int>();
         public int GetLoadedCount() => 0;
         public int GetDirtyCount() => 0;
         public CellType GetCell(int x, int y, bool touchLRU = true) => CellType.Empty;
@@ -340,8 +359,9 @@ public class PlayerMovementValidatorTests
         public void SetCell(int x, int y, CellType value) { }
         public int SetRegion(int startX, int startY, int width, int height, CellType[] cells, int cellsOffset = 0) => 0;
         public int SetRegion(int startX, int startY, int width, int height, ReadOnlySpan<CellType> cells, int cellsOffset = 0) => 0;
-        public CellType[] GetOrCreateChunk(int chunkIndex, bool touchLRU = true) => [];
-        public ChunkReadResult<CellType> ReadChunk(int chunkIndex, bool touchLRU = true) => new(ChunkReadStatus.Available, [], null);
+        public CellType[] GetOrCreateChunk(int chunkIndex, bool touchLRU = true) => Array.Empty<CellType>();
+        public ChunkReadResult<CellType> ReadChunk(int chunkIndex, bool touchLRU = true) =>
+            new(ChunkReadStatus.Available, Array.Empty<CellType>(), null);
         public void Flush(bool flushToDisk = false) { }
         public bool GetChunkIndexAndLocal(int x, int y, out int chunkIndex, out int localIndex) { chunkIndex = 0; localIndex = 0; return true; }
         public void Dispose() { }

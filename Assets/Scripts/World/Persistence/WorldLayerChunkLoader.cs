@@ -40,7 +40,7 @@ internal sealed class WorldLayerChunkLoader<T>
     private readonly HashSet<int> _loadingChunks = new();
     private readonly Dictionary<int, Exception> _failedChunkLoads = new();
     private readonly object _loadingLock = new object();
-    private readonly HashSet<int> _loggedChunkLoadFailures = [];
+    private readonly HashSet<int> _loggedChunkLoadFailures = new();
     private bool _chunkDiskFailureCapLogged;
     private int _chunkLoadBatchDepth;
     private readonly List<RectInt> _batchedChunkRegions = new(8);

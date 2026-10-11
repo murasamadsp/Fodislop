@@ -20,10 +20,16 @@ public sealed class SpatialShardGrid<T> : ISpatialIndex<T> where T : class
     private readonly Dictionary<T, ItemRecord> _items = new();
     private readonly Stack<List<T>> _listPool = new();
 
-    private readonly struct ItemRecord(long shardKey, Vector2 position)
+    private readonly struct ItemRecord
     {
-        public readonly long ShardKey = shardKey;
-        public readonly Vector2 Position = position;
+        public readonly long ShardKey;
+        public readonly Vector2 Position;
+
+        public ItemRecord(long shardKey, Vector2 position)
+        {
+            ShardKey = shardKey;
+            Position = position;
+        }
     }
 
     public SpatialShardGrid(int shardSize = ProjectRuntimeContracts.World.ChunkSize)

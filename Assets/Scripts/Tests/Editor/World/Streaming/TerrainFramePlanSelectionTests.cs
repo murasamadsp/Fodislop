@@ -39,7 +39,7 @@ public sealed class TerrainFramePlanSelectionTests
     }
 
     [Test]
-    public void CameraViewportOutsideCommittedWindowIsNotClampedIntoLightingDemand()
+    public void CameraViewportOutsideCommittedWindowKeepsLightingDemandInsideCommittedBounds()
     {
         var calculator = new TerrainViewportCalculator();
         var committed = new StreamingWindow(new Vector2Int(0, 0), new Vector2Int(100, 80));
@@ -58,7 +58,11 @@ public sealed class TerrainFramePlanSelectionTests
             holdingPublishedView: false);
 
         Assert.That(plan.ShouldProcess, Is.True);
-        Assert.That(plan.LightingViewport, Is.EqualTo(camera));
+        Assert.That(plan.LightingViewport, Is.EqualTo(new RectInt(60, 0, 40, 30)));
+        Assert.That(plan.LightingViewport.xMin, Is.GreaterThanOrEqualTo(committed.Origin.x));
+        Assert.That(plan.LightingViewport.yMin, Is.GreaterThanOrEqualTo(committed.Origin.y));
+        Assert.That(plan.LightingViewport.xMax, Is.LessThanOrEqualTo(committed.Origin.x + committed.Size.x));
+        Assert.That(plan.LightingViewport.yMax, Is.LessThanOrEqualTo(committed.Origin.y + committed.Size.y));
     }
 
     [Test]

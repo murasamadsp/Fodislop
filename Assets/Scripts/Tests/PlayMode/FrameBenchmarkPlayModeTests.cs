@@ -58,7 +58,8 @@ public sealed class FrameBenchmarkPlayModeTests
     private const string TestDummyToken = "playmode-benchmark-token";
 
     private static readonly string[] s_markers =
-    [
+    new[] {
+
         "PlayerLoop",
         "Kern.Terrain.LateUpdate.CPU",
         "Kern.Terrain.MeshBuild",
@@ -68,13 +69,15 @@ public sealed class FrameBenchmarkPlayModeTests
         "Gfx.PresentFrame",
         "UIR.DrawChain",
         "GC.Collect",
-    ];
+
+    };
 
     // These are existing production CommandBuffer GPU scopes, not CPU helpers.
     // Each marker is reported independently: several scopes are nested and must
     // not be summed into a fictitious total.
     private static readonly string[] s_GPUStageMarkers =
-    [
+    new[] {
+
         "Kern.Terrain.RenderMaterialFields",
         "Kern.Terrain.RenderAmbientOcclusionField",
         "Kern.Lighting.MaterialField",
@@ -103,19 +106,28 @@ public sealed class FrameBenchmarkPlayModeTests
         "Kern.PostProcess.Bloom.Upsample",
         "Kern.PostProcess.Bloom.UpsampleComposite",
         "Kern.PostProcess.Bloom.Add",
-    ];
+
+    };
 
     // FrameTiming results arrive asynchronously. Drain a window each frame so
     // delayed GPU records are not discarded by asking only for the newest one.
     private static readonly FrameTiming[] s_frameTimingBuffer = new FrameTiming[64];
 
-    private sealed class RecorderLifetime(
-        List<(string Name, bool IsGPUStage, ProfilerRecorder Recorder)> cpu,
-        List<(string Name, ProfilerRecorder Recorder)> gpu) : IDisposable
+    private sealed class RecorderLifetime : IDisposable
     {
+        private readonly List<(string Name, bool IsGPUStage, ProfilerRecorder Recorder)> _cpu;
+        private readonly List<(string Name, ProfilerRecorder Recorder)> _gpu;
+
+        public RecorderLifetime(List<(string Name, bool IsGPUStage, ProfilerRecorder Recorder)> cpu,
+            List<(string Name, ProfilerRecorder Recorder)> gpu)
+        {
+            _cpu = cpu;
+            _gpu = gpu;
+        }
+
         public void Dispose()
         {
-            foreach (var entry in cpu)
+            foreach (var entry in _cpu)
             {
                 if (entry.Recorder.Valid)
                 {
@@ -123,7 +135,7 @@ public sealed class FrameBenchmarkPlayModeTests
                 }
             }
 
-            foreach (var entry in gpu)
+            foreach (var entry in _gpu)
             {
                 if (entry.Recorder.Valid)
                 {
@@ -135,71 +147,130 @@ public sealed class FrameBenchmarkPlayModeTests
 
     private BootstrapLifetimeScope _bootstrap = null!;
     private string _originalClientToken = string.Empty;
-    private HashSet<string> _originalDummyTokens = [];
+    private HashSet<string> _originalDummyTokens = new();
 
     // Observation only: no JSON objects, file IO or strings are created in the sample loop.
-    private readonly struct CaptureSample(IFrameTelemetry telemetry, long? allocatedBytes = null,
-        PostProcessRendererFeature? postprocess = null)
+    private readonly struct CaptureSample
     {
-        public readonly PostProcessWorkloadSnapshot? SceneWork = CorrelatedWork(postprocess?.SceneWorkload);
-        public readonly PostProcessWorkloadSnapshot? DisplayWork = CorrelatedWork(postprocess?.DisplayWorkload);
+        public CaptureSample(IFrameTelemetry telemetry, long? allocatedBytes = null,
+            PostProcessRendererFeature? postprocess = null)
+        {
+            SceneWork = CorrelatedWork(postprocess?.SceneWorkload);
+            DisplayWork = CorrelatedWork(postprocess?.DisplayWorkload);
+            FrameId = Time.frameCount - 1;
+            BloomDispatches = PostProcessRuntimeState.DiagnosticBloomFrame == Time.frameCount - 1
+? PostProcessRuntimeState.DiagnosticBloomDispatches : null;
+            TerrainTextureUpload = (telemetry as FrameTelemetry)?.CaptureTerrainTextureUploadSnapshot(Time.frameCount - 1);
+            ProducerFrameId = (telemetry as IFrameTelemetryProducerStamp)?.ProducerFrameId;
+            ProducerLifecycleValid = (telemetry as IFrameTelemetryProducerStamp)?.ProducerLifecycleValid;
+            TerrainMesh = telemetry.TerrainMeshTimeMs;
+            TerrainCache = telemetry.TerrainCacheTimeMs;
+            TerrainGPUUpload = telemetry.TerrainGPUUploadTimeMs;
+            TerrainAtlasUpload = telemetry.TerrainAtlasUploadTimeMs;
+            LightingBuildCommands = telemetry.LightingBuildCommandsTimeMs;
+            LightingExecuteCommands = telemetry.LightingExecuteCommandsTimeMs;
+            LightingCascadeTrace = telemetry.LightingCascadeTraceTimeMs;
+            LightingCascadeMerge = telemetry.LightingCascadeMergeTimeMs;
+            LightingDynamic = telemetry.LightingDynamicLightingTimeMs;
+            LightingComposite = telemetry.LightingCompositeTimeMs;
+            TerrainRebuilds = telemetry.TerrainRebuildCount;
+            TerrainFullPopulates = telemetry.TerrainFullPopulateCount;
+            TerrainDirtyPatches = telemetry.TerrainDirtyPatchCount;
+            TerrainChunkLoads = telemetry.TerrainChunkLoadCount;
+            TerrainMeshClears = telemetry.TerrainMeshClearCount;
+            TerrainBuildCancels = telemetry.TerrainBuildCancelCount;
+            LightingDynamicSolves = telemetry.LightingDynamicSolveCount;
+            LightingDynamicTraces = telemetry.LightingDynamicTraceCount;
+            LightingDynamicPolarDispatches = telemetry.LightingDynamicPolarDispatchCount;
+            LightingDynamicReceiverDispatches = telemetry.LightingDynamicReceiverDispatchCount;
+            LightingDynamicBatchDescriptorBytes = telemetry.LightingDynamicBatchDescriptorBytes;
+            LightingAtlasScrolls = telemetry.LightingAtlasScrollCount;
+            LightingFieldRebuilds = telemetry.LightingFieldRebuildCount;
+            LightingStaticSolves = telemetry.LightingStaticSolveFrameCount;
+            LightingStaticDependencyMaskSolves = telemetry.LightingStaticDependencyMaskSolveCount;
+            LightingStaticDenseFallbacks = telemetry.LightingStaticDenseFallbackCount;
+            LightingRegionInvalidations = telemetry.LightingRegionInvalidationFrameCount;
+            LightingRegionChanges = telemetry.LightingRegionChangeCount;
+            LightingGeometryChanges = telemetry.LightingGeometryChangeCount;
+            ActiveDynamicLights = telemetry.ActiveDynamicLights;
+            LightingCommandBufferBytes = telemetry.LightingCommandBufferBytes;
+            LightingDdaSegments = telemetry.LightingDdaSegments;
+            LightingDdaTexelVisits = telemetry.LightingDdaTexelVisits;
+            LightingCascadeMergeSamples = telemetry.LightingCascadeMergeSamples;
+            LightingDynamicDispatchPixels = telemetry.LightingDynamicDispatchPixels;
+            LightingDynamicComposePixels = telemetry.LightingDynamicComposePixels;
+            LightingCompositeDispatchPixels = telemetry.LightingCompositeDispatchPixels;
+            LightingPolarRayWorkUnits = telemetry.LightingPolarRayWorkUnits;
+            LightingEstimatedCascadeRayWorkUnits = telemetry.LightingEstimatedCascadeRayWorkUnits;
+            LightingEstimatedCascadeDispatchThreads = telemetry.LightingEstimatedCascadeDispatchThreads;
+            LightingCascadePartialEntries = telemetry.LightingCascadePartialEntriesFrame;
+            LightingCascadeFullEntries = telemetry.LightingCascadeFullEntriesFrame;
+            LightingCascadePartialEntriesTotal = telemetry.LightingCascadePartialEntries;
+            LightingCascadeFullEntriesTotal = telemetry.LightingCascadeFullEntries;
+            LightingAtlasReusedEntries = telemetry.LightingAtlasReusedEntries;
+            LightingAtlasClearedEntries = telemetry.LightingAtlasClearedEntries;
+            GcAllocPerFrameBytes = allocatedBytes;
+            GcCollectionCount = telemetry.GcCollectionCount;
+            LightingRegionInvalidationTotal = telemetry.LightingRegionInvalidationCount;
+        }
+
+        public readonly PostProcessWorkloadSnapshot? SceneWork;
+        public readonly PostProcessWorkloadSnapshot? DisplayWork;
         // Coroutine resumes after Update, before Terrain.LateUpdate resets the previous frame.
-        public readonly int FrameId = Time.frameCount - 1;
-        public readonly int? BloomDispatches = PostProcessRuntimeState.DiagnosticBloomFrame == Time.frameCount - 1
-            ? PostProcessRuntimeState.DiagnosticBloomDispatches : null;
-        public readonly TerrainTextureUploadSnapshot? TerrainTextureUpload =
-            (telemetry as FrameTelemetry)?.CaptureTerrainTextureUploadSnapshot(Time.frameCount - 1);
-        public readonly int? ProducerFrameId = (telemetry as IFrameTelemetryProducerStamp)?.ProducerFrameId;
-        public readonly bool? ProducerLifecycleValid = (telemetry as IFrameTelemetryProducerStamp)?.ProducerLifecycleValid;
-        public readonly float TerrainMesh = telemetry.TerrainMeshTimeMs;
-        public readonly float TerrainCache = telemetry.TerrainCacheTimeMs;
-        public readonly float TerrainGPUUpload = telemetry.TerrainGPUUploadTimeMs;
-        public readonly float TerrainAtlasUpload = telemetry.TerrainAtlasUploadTimeMs;
-        public readonly float LightingBuildCommands = telemetry.LightingBuildCommandsTimeMs;
-        public readonly float LightingExecuteCommands = telemetry.LightingExecuteCommandsTimeMs;
-        public readonly float LightingCascadeTrace = telemetry.LightingCascadeTraceTimeMs;
-        public readonly float LightingCascadeMerge = telemetry.LightingCascadeMergeTimeMs;
-        public readonly float LightingDynamic = telemetry.LightingDynamicLightingTimeMs;
-        public readonly float LightingComposite = telemetry.LightingCompositeTimeMs;
-        public readonly int TerrainRebuilds = telemetry.TerrainRebuildCount;
-        public readonly int TerrainFullPopulates = telemetry.TerrainFullPopulateCount;
-        public readonly int TerrainDirtyPatches = telemetry.TerrainDirtyPatchCount;
-        public readonly int TerrainChunkLoads = telemetry.TerrainChunkLoadCount;
-        public readonly int TerrainMeshClears = telemetry.TerrainMeshClearCount;
-        public readonly int TerrainBuildCancels = telemetry.TerrainBuildCancelCount;
-        public readonly int LightingDynamicSolves = telemetry.LightingDynamicSolveCount;
-        public readonly int LightingDynamicTraces = telemetry.LightingDynamicTraceCount;
-        public readonly int LightingDynamicPolarDispatches = telemetry.LightingDynamicPolarDispatchCount;
-        public readonly int LightingDynamicReceiverDispatches = telemetry.LightingDynamicReceiverDispatchCount;
-        public readonly int LightingDynamicBatchDescriptorBytes = telemetry.LightingDynamicBatchDescriptorBytes;
-        public readonly int LightingAtlasScrolls = telemetry.LightingAtlasScrollCount;
-        public readonly int LightingFieldRebuilds = telemetry.LightingFieldRebuildCount;
-        public readonly int LightingStaticSolves = telemetry.LightingStaticSolveFrameCount;
-        public readonly int LightingStaticDependencyMaskSolves = telemetry.LightingStaticDependencyMaskSolveCount;
-        public readonly int LightingStaticDenseFallbacks = telemetry.LightingStaticDenseFallbackCount;
-        public readonly int LightingRegionInvalidations = telemetry.LightingRegionInvalidationFrameCount;
-        public readonly int LightingRegionChanges = telemetry.LightingRegionChangeCount;
-        public readonly int LightingGeometryChanges = telemetry.LightingGeometryChangeCount;
-        public readonly int ActiveDynamicLights = telemetry.ActiveDynamicLights;
-        public readonly int LightingCommandBufferBytes = telemetry.LightingCommandBufferBytes;
-        public readonly int LightingDdaSegments = telemetry.LightingDdaSegments;
-        public readonly long LightingDdaTexelVisits = telemetry.LightingDdaTexelVisits;
-        public readonly int LightingCascadeMergeSamples = telemetry.LightingCascadeMergeSamples;
-        public readonly long LightingDynamicDispatchPixels = telemetry.LightingDynamicDispatchPixels;
-        public readonly long LightingDynamicComposePixels = telemetry.LightingDynamicComposePixels;
-        public readonly long LightingCompositeDispatchPixels = telemetry.LightingCompositeDispatchPixels;
-        public readonly long LightingPolarRayWorkUnits = telemetry.LightingPolarRayWorkUnits;
-        public readonly long LightingEstimatedCascadeRayWorkUnits = telemetry.LightingEstimatedCascadeRayWorkUnits;
-        public readonly long LightingEstimatedCascadeDispatchThreads = telemetry.LightingEstimatedCascadeDispatchThreads;
-        public readonly long LightingCascadePartialEntries = telemetry.LightingCascadePartialEntriesFrame;
-        public readonly long LightingCascadeFullEntries = telemetry.LightingCascadeFullEntriesFrame;
-        public readonly long LightingCascadePartialEntriesTotal = telemetry.LightingCascadePartialEntries;
-        public readonly long LightingCascadeFullEntriesTotal = telemetry.LightingCascadeFullEntries;
-        public readonly long LightingAtlasReusedEntries = telemetry.LightingAtlasReusedEntries;
-        public readonly long LightingAtlasClearedEntries = telemetry.LightingAtlasClearedEntries;
-        public readonly long? GcAllocPerFrameBytes = allocatedBytes;
-        public readonly int GcCollectionCount = telemetry.GcCollectionCount;
-        public readonly int LightingRegionInvalidationTotal = telemetry.LightingRegionInvalidationCount;
+        public readonly int FrameId;
+        public readonly int? BloomDispatches;
+        public readonly TerrainTextureUploadSnapshot? TerrainTextureUpload;
+        public readonly int? ProducerFrameId;
+        public readonly bool? ProducerLifecycleValid;
+        public readonly float TerrainMesh;
+        public readonly float TerrainCache;
+        public readonly float TerrainGPUUpload;
+        public readonly float TerrainAtlasUpload;
+        public readonly float LightingBuildCommands;
+        public readonly float LightingExecuteCommands;
+        public readonly float LightingCascadeTrace;
+        public readonly float LightingCascadeMerge;
+        public readonly float LightingDynamic;
+        public readonly float LightingComposite;
+        public readonly int TerrainRebuilds;
+        public readonly int TerrainFullPopulates;
+        public readonly int TerrainDirtyPatches;
+        public readonly int TerrainChunkLoads;
+        public readonly int TerrainMeshClears;
+        public readonly int TerrainBuildCancels;
+        public readonly int LightingDynamicSolves;
+        public readonly int LightingDynamicTraces;
+        public readonly int LightingDynamicPolarDispatches;
+        public readonly int LightingDynamicReceiverDispatches;
+        public readonly int LightingDynamicBatchDescriptorBytes;
+        public readonly int LightingAtlasScrolls;
+        public readonly int LightingFieldRebuilds;
+        public readonly int LightingStaticSolves;
+        public readonly int LightingStaticDependencyMaskSolves;
+        public readonly int LightingStaticDenseFallbacks;
+        public readonly int LightingRegionInvalidations;
+        public readonly int LightingRegionChanges;
+        public readonly int LightingGeometryChanges;
+        public readonly int ActiveDynamicLights;
+        public readonly int LightingCommandBufferBytes;
+        public readonly int LightingDdaSegments;
+        public readonly long LightingDdaTexelVisits;
+        public readonly int LightingCascadeMergeSamples;
+        public readonly long LightingDynamicDispatchPixels;
+        public readonly long LightingDynamicComposePixels;
+        public readonly long LightingCompositeDispatchPixels;
+        public readonly long LightingPolarRayWorkUnits;
+        public readonly long LightingEstimatedCascadeRayWorkUnits;
+        public readonly long LightingEstimatedCascadeDispatchThreads;
+        public readonly long LightingCascadePartialEntries;
+        public readonly long LightingCascadeFullEntries;
+        public readonly long LightingCascadePartialEntriesTotal;
+        public readonly long LightingCascadeFullEntriesTotal;
+        public readonly long LightingAtlasReusedEntries;
+        public readonly long LightingAtlasClearedEntries;
+        public readonly long? GcAllocPerFrameBytes;
+        public readonly int GcCollectionCount;
+        public readonly int LightingRegionInvalidationTotal;
 
         public object CumulativeJson()
         {
@@ -300,20 +371,32 @@ public sealed class FrameBenchmarkPlayModeTests
         }
     }
 
-    private sealed class CaptureWindow(string scenario, int count, Camera? renderingCamera = null)
+    private sealed class CaptureWindow
     {
-        public readonly string Scenario = scenario;
-        public readonly string CapturedAtUtc = DateTime.UtcNow.ToString("O");
-        public readonly int Width = (renderingCamera ?? ResolveInScene<IGameplayCamera>(SceneManager.GetSceneByName("MainGame")).Camera).pixelWidth;
-        public readonly int Height = (renderingCamera ?? ResolveInScene<IGameplayCamera>(SceneManager.GetSceneByName("MainGame")).Camera).pixelHeight;
-        public readonly int NativeUIWidth = Screen.width;
-        public readonly int NativeUIHeight = Screen.height;
-        public readonly CaptureSample[] Samples = new CaptureSample[count];
-        public readonly FrameTiming[] TimingObservations = new FrameTiming[count + s_frameTimingBuffer.Length];
+        public CaptureWindow(string scenario, int count, Camera? renderingCamera = null)
+        {
+            Scenario = scenario;
+            CapturedAtUtc = DateTime.UtcNow.ToString("O");
+            Width = (renderingCamera ?? ResolveInScene<IGameplayCamera>(SceneManager.GetSceneByName("MainGame")).Camera).pixelWidth;
+            Height = (renderingCamera ?? ResolveInScene<IGameplayCamera>(SceneManager.GetSceneByName("MainGame")).Camera).pixelHeight;
+            NativeUIWidth = Screen.width;
+            NativeUIHeight = Screen.height;
+            Samples = new CaptureSample[count];
+            TimingObservations = new FrameTiming[count + s_frameTimingBuffer.Length];
+        }
+
+        public readonly string Scenario;
+        public readonly string CapturedAtUtc;
+        public readonly int Width;
+        public readonly int Height;
+        public readonly int NativeUIWidth;
+        public readonly int NativeUIHeight;
+        public readonly CaptureSample[] Samples;
+        public readonly FrameTiming[] TimingObservations;
         public int TimingObservationCount;
         public string? QualityProfile;
         public CaptureSample Baseline;
-        public double[] FrameMs = [];
+        public double[] FrameMs = new double[0];
 
         public void Write(string runDirectory)
         {
@@ -574,7 +657,7 @@ public sealed class FrameBenchmarkPlayModeTests
         Shader surfaceShader = Shader.Find("Kern/World Surface")
             ?? throw new InvalidOperationException("Production world surface shader is missing.");
         var material = new Material(surfaceShader);
-        material.EnableKeyword("KERN_SURFACE_TRANSIT");
+        material.EnableKeyword("KERN_SURFACE_REDROCK");
         material.SetTexture("_BaseMap", texture);
         material.SetColor("_GlowColor", Color.white);
         material.SetFloat("_GlowStrength", 1f);
@@ -646,7 +729,7 @@ public sealed class FrameBenchmarkPlayModeTests
             PostProcessRuntimeState.DiagnosticOffscreenCamera = camera;
             PostProcessRuntimeState.BypassPostProcessEffects = false;
             yield return Skip(30);
-            float[] originalGlow = [];
+            float[] originalGlow = new float[0];
             bool glowRead = false;
             RenderTexture glow = lighting.GPUResources.Geometry.StaticGlow!;
             AsyncGPUReadback.Request(glow, 0, TextureFormat.RGBAFloat, readback =>
@@ -760,8 +843,8 @@ public sealed class FrameBenchmarkPlayModeTests
                 Assert.That(alphaError, Is.EqualTo(0f), "Additive bloom modified scene alpha.");
                 if (scenario == 0)
                 {
-                    Assert.That(prefilterEnergy, Is.EqualTo(11.25f).Within(0.01f),
-                        "A 64-unit white pixel must contribute (64/4 - 1)/4 per RGB channel.");
+                    Assert.That(prefilterEnergy, Is.EqualTo(3f * (peak / 4f - 1f) / 4f).Within(0.1f),
+                        "The actual lit HDR white pixel must contribute (radiance/4 - threshold)/4 per RGB channel.");
                 }
                 if (scenario == 2)
                 {
@@ -780,8 +863,12 @@ public sealed class FrameBenchmarkPlayModeTests
             contributor.Emits = false;
             contributor.Revision++;
             PostProcessDebugView[] layerViews =
-                [PostProcessDebugView.Vignette, PostProcessDebugView.FilmGrain, PostProcessDebugView.Bloom];
-            float[] layerExpected = [1f, 0.5f, 0f];
+                new[] {
+PostProcessDebugView.Vignette, PostProcessDebugView.FilmGrain, PostProcessDebugView.Bloom
+                };
+            float[] layerExpected = new[] {
+1f, 0.5f, 0f
+ };
             for (int layer = 0; layer < layerViews.Length; layer++)
             {
                 PostProcessRuntimeState.DebugView = layerViews[layer];
@@ -810,19 +897,41 @@ public sealed class FrameBenchmarkPlayModeTests
             PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
             // Observe native URP exposure after its grading pass, with the
             // production DisplayFinal observer and no custom curve enabled.
-            bloom.intensity.Override(0f);
+            // Keep the production pre-bloom observer active, with all fixture
+            // radiance below threshold so the output contains no bloom energy.
+            bloom.intensity.Override(1f);
+            bloom.threshold.Override(10_000f);
             float[] exposurePeaks = new float[2];
+            float[] scenePeaks = new float[2];
             for (int stops = 0; stops < 2; stops++)
             {
                 Color[] exposurePixels = new Color[32 * 32];
                 Array.Fill(exposurePixels, new Color(0f, 0f, 0f, 1f));
-                exposurePixels[16 * 32 + 16] = new Color(0.25f * (stops + 1), 0f, 0f, 1f);
+                // Keep both lit samples below SDR white after the output curve;
+                // clipped highlights cannot distinguish exposure from tonemapping.
+                exposurePixels[16 * 32 + 16] = new Color(0.01f * (stops + 1), 0f, 0f, 1f);
                 texture.SetPixels(exposurePixels);
                 texture.Apply(false);
                 contributor.Revision++;
                 yield return Skip(10);
                 bool received = false;
+                bool sceneReceived = false;
                 int captured = stops;
+                PostProcessRuntimeState.DiagnosticBloomImage = (cmd, stage, image, rect) =>
+                {
+                    if (stage != "before") { return; }
+                    PostProcessRuntimeState.DiagnosticBloomImage = null;
+                    cmd.RequestAsyncReadback(image, 0, TextureFormat.RGBAFloat, readback =>
+                    {
+                        Assert.That(readback.hasError, Is.False);
+                        var values = readback.GetData<float>();
+                        for (int index = 0; index < values.Length; index += 4)
+                        {
+                            scenePeaks[captured] = Mathf.Max(scenePeaks[captured], values[index]);
+                        }
+                        sceneReceived = true;
+                    });
+                };
                 PostProcessRuntimeState.DiagnosticWorldImage = (cmd, image, rect) =>
                 {
                     PostProcessRuntimeState.DiagnosticWorldImage = null;
@@ -837,10 +946,10 @@ public sealed class FrameBenchmarkPlayModeTests
                         received = true;
                     });
                 };
-                yield return WaitUntil(() => received, 10f, "Native URP exposure observation did not finish.");
+                yield return WaitUntil(() => received && sceneReceived, 10f, "Native URP exposure observation did not finish.");
             }
             File.AppendAllText(Path.Combine(directory, "oracle.txt"),
-                $"nativeExposure0={exposurePeaks[0]:R}; nativeExposure1={exposurePeaks[1]:R}\n");
+                $"scene0={scenePeaks[0]:R}; scene1={scenePeaks[1]:R}; nativeExposure0={exposurePeaks[0]:R}; nativeExposure1={exposurePeaks[1]:R}\n");
             // Independent literal Neutral curve: input is exposed once by the
             // production calibration volume (+1 stop), before native tonemapping.
             static double Neutral(double x)
@@ -850,8 +959,10 @@ public sealed class FrameBenchmarkPlayModeTests
                 double whiteScale = 1.0 / Curve(5.3);
                 return Curve(x * whiteScale) * whiteScale;
             }
-            Assert.That(exposurePeaks[0], Is.EqualTo(Neutral(0.5)).Within(0.005));
-            Assert.That(exposurePeaks[1], Is.EqualTo(Neutral(1.0)).Within(0.005),
+            Assert.That(scenePeaks[0], Is.GreaterThan(0f));
+            Assert.That(scenePeaks[1], Is.GreaterThan(scenePeaks[0]));
+            Assert.That(exposurePeaks[0], Is.EqualTo(Neutral(scenePeaks[0] * 2.0)).Within(0.005));
+            Assert.That(exposurePeaks[1], Is.EqualTo(Neutral(scenePeaks[1] * 2.0)).Within(0.005),
                 "Native exposure and Neutral tonemapping must each be applied exactly once.");
         }
         finally
@@ -893,20 +1004,34 @@ public sealed class FrameBenchmarkPlayModeTests
     {
         var mesh = new Mesh
         {
-            vertices = [Vector3.zero, new(size, 0f, 0f), new(size, size, 0f), new(0f, size, 0f)],
-            uv = [Vector2.zero, Vector2.right, Vector2.one, Vector2.up],
-            triangles = [0, 1, 2, 0, 2, 3],
+            vertices = new[] {
+Vector3.zero, new(size, 0f, 0f), new(size, size, 0f), new(0f, size, 0f)
+ },
+            uv = new[] {
+Vector2.zero, Vector2.right, Vector2.one, Vector2.up
+ },
+            triangles = new[] {
+0, 1, 2, 0, 2, 3
+ },
         };
         mesh.SetUVs(1, new List<Vector4> { Vector4.one, Vector4.one, Vector4.one, Vector4.one });
         mesh.RecalculateBounds();
         return mesh;
     }
 
-    private sealed class BloomFixtureContributor(Mesh mesh, Material material, Transform transform)
-        : Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor
+    private sealed class BloomFixtureContributor : Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor
     {
+        private readonly Mesh _mesh;
+        private readonly Transform _transform;
+
+        public BloomFixtureContributor(Mesh mesh, Material material, Transform transform)
+        {
+            _mesh = mesh;
+            _transform = transform;
+            FieldMaterial = material;
+        }
         public bool Emits = true;
-        public Material FieldMaterial { get; set; } = material;
+        public Material FieldMaterial { get; set; }
         public ulong Revision = 1;
         public ulong LightingGeometryRevision => Revision;
 
@@ -915,7 +1040,7 @@ public sealed class FrameBenchmarkPlayModeTests
         {
             if (Emits)
             {
-                cmd.DrawMesh(mesh, transform.localToWorldMatrix, FieldMaterial, 0,
+                cmd.DrawMesh(_mesh, _transform.localToWorldMatrix, FieldMaterial, 0,
                     FieldMaterial.FindPass("LightingMaterialField"));
             }
         }
@@ -974,8 +1099,8 @@ public sealed class FrameBenchmarkPlayModeTests
         fixture.transform.position = new Vector3(Mathf.Floor(origin.x) - 32f, Mathf.Floor(origin.y) - 32f, 0f);
         var contributor = new BloomFixtureContributor(mesh, material, fixture.transform);
         registry.Register(contributor);
-        List<Result> results = [];
-        List<CaptureWindow> captures = [];
+        List<Result> results = new();
+        List<CaptureWindow> captures = new();
         string directory = DiagnosticArtifactPaths.CreateDirectory("Performance", "render_path_ab");
         try
         {
@@ -989,8 +1114,10 @@ public sealed class FrameBenchmarkPlayModeTests
             PostProcessRuntimeState.DiagnosticOffscreenCamera = camera;
             PostProcessRuntimeState.BypassPostProcessEffects = false;
             follow.enabled = false;
-            float[] zooms = [ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
-                ProjectRuntimeContracts.Camera.MaximumOrthographicSize];
+            float[] zooms = new[] {
+ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
+                ProjectRuntimeContracts.Camera.MaximumOrthographicSize
+ };
             for (int repetition = 0; repetition < 3; repetition++)
             {
                 for (int zoomIndex = 0; zoomIndex < zooms.Length; zoomIndex++)
@@ -1181,14 +1308,14 @@ public sealed class FrameBenchmarkPlayModeTests
                 System.Reflection.BindingFlags.Static)!.GetValue(null)!;
             Type groupKind = editor.GetType("UnityEditor.GameViewSizeGroupType", throwOnError: true)!;
             _group = sizesType.GetMethod("GetGroup", Flags)!.Invoke(sizes,
-                [Enum.Parse(groupKind, "Standalone")])!;
+                new object[] { Enum.Parse(groupKind, "Standalone") })!;
             Type groupType = _group.GetType();
             Type sizeType = editor.GetType("UnityEditor.GameViewSize", throwOnError: true)!;
             Type sizeKind = editor.GetType("UnityEditor.GameViewSizeType", throwOnError: true)!;
             object size = Activator.CreateInstance(sizeType, Flags, binder: null,
-                args: [Enum.Parse(sizeKind, "FixedResolution"), width, height, "Kern temporary native benchmark"], culture: null)!;
+                args: new object[] { Enum.Parse(sizeKind, "FixedResolution"), width, height, "Kern temporary native benchmark" }, culture: null)!;
             _remove = groupType.GetMethod("RemoveCustomSize", Flags)!;
-            groupType.GetMethod("AddCustomSize", Flags)!.Invoke(_group, [size]);
+            groupType.GetMethod("AddCustomSize", Flags)!.Invoke(_group, new[] { size });
             int total = (int)groupType.GetMethod("GetTotalCount", Flags)!.Invoke(_group, null)!;
             // RemoveCustomSize takes an index in the complete list, including
             // built-in sizes; a custom-list offset removes the wrong entry.
@@ -1229,7 +1356,7 @@ public sealed class FrameBenchmarkPlayModeTests
             }
             UnityEditor.EditorApplication.playModeStateChanged -= RestoreAfterInterruptedRun;
             _selection.SetValue(_view, _previousSelection);
-            _remove.Invoke(_group, [_addedSelectionIndex]);
+            _remove.Invoke(_group, new object[] { _addedSelectionIndex });
             _view.Repaint();
 #endif
         }
@@ -1311,6 +1438,33 @@ public sealed class FrameBenchmarkPlayModeTests
                 Assert.That(cameraData.dithering, Is.False);
                 bool receivedWorldImage = false;
                 int capturedIndex = index;
+                bool observedGeometryTarget = false;
+                bool observedGameplayTarget = false;
+                int expectedHeight = index == 1 ? 1024 : 512;
+                int expectedGameplayWidth = Mathf.CeilToInt(expectedHeight * screenCamera.aspect / 2f) * 2;
+                PostProcessRuntimeState.DiagnosticWorldRasterTarget = (renderCamera, dimensions) =>
+                {
+                    if (renderCamera == screenCamera)
+                    {
+                        Assert.That(dimensions, Is.EqualTo(new Vector2Int(expectedGameplayWidth, expectedHeight)),
+                            "The real display camera must rasterize geometry directly at 32 pixels per cell.");
+                        File.WriteAllText(Path.Combine(directory, $"gameplay_geometry_target_{capturedIndex}.txt"),
+                            $"stage=BeforeRendering; attachment={dimensions.x}x{dimensions.y}; expected={expectedGameplayWidth}x{expectedHeight}");
+                        observedGameplayTarget = true;
+                    }
+
+                    if (renderCamera != camera)
+                    {
+                        return;
+                    }
+
+                    int expectedSize = capturedIndex == 1 ? 1024 : 512;
+                    Assert.That(dimensions, Is.EqualTo(new Vector2Int(expectedSize, expectedSize)),
+                        "Renderer2D must rasterize geometry directly at 32 pixels per cell before postprocessing.");
+                    File.WriteAllText(Path.Combine(directory, $"geometry_target_{capturedIndex}.txt"),
+                        $"stage=BeforeRendering; attachment={dimensions.x}x{dimensions.y}; expected={expectedSize}x{expectedSize}");
+                    observedGeometryTarget = true;
+                };
                 PostProcessRuntimeState.DiagnosticWorldImage = (cmd, worldTexture, worldRect) =>
                 {
                     PostProcessRuntimeState.DiagnosticWorldImage = null;
@@ -1354,6 +1508,28 @@ public sealed class FrameBenchmarkPlayModeTests
                 {
                     RenderTexture.active = previous;
                 }
+                Assert.That(observedGeometryTarget, Is.True,
+                    "The production geometry target must be observed before sprite rasterization.");
+                // Batch mode has no display presentation frame. Explicitly
+                // submit the actual gameplay camera through the same URP renderer.
+                RenderTexture gameplayTarget = RenderTexture.GetTemporary(expectedGameplayWidth * 2,
+                    expectedHeight * 2, 24, RenderTextureFormat.ARGBHalf);
+                try
+                {
+                    PostProcessRuntimeState.DiagnosticOffscreenCamera = screenCamera;
+                    RenderPipeline.SubmitRenderRequest(screenCamera, new UniversalRenderPipeline.SingleCameraRequest
+                    {
+                        destination = gameplayTarget,
+                    });
+                }
+                finally
+                {
+                    PostProcessRuntimeState.DiagnosticOffscreenCamera = camera;
+                    RenderTexture.ReleaseTemporary(gameplayTarget);
+                }
+                Assert.That(observedGameplayTarget, Is.True,
+                    "The display camera geometry target must also be observed before sprite rasterization.");
+                PostProcessRuntimeState.DiagnosticWorldRasterTarget = null;
             }
 
             TestContext.WriteLine($"Camera aspect={camera.aspect:R}; AA={cameraData.antialiasing}; bypass={PostProcessRuntimeState.BypassPostProcessEffects}; output={camera.pixelWidth}x{camera.pixelHeight}");
@@ -1448,13 +1624,15 @@ public sealed class FrameBenchmarkPlayModeTests
             PostProcessWorkloadSnapshot work = feature.SceneWorkload
                 ?? throw new InvalidOperationException("Production bloom did not publish its workload.");
             Assert.That(work.FrameId, Is.GreaterThanOrEqualTo(Time.frameCount - 2));
-            Assert.That(work.Width, Is.EqualTo(514));
-            Assert.That(work.Height, Is.EqualTo(514));
+            // Native URP PixelPerfectCamera renders the visible 16-cell span
+            // directly: 16 * 32 = 512, without the old fork's guard border.
+            Assert.That(work.Width, Is.EqualTo(512));
+            Assert.That(work.Height, Is.EqualTo(512));
             Assert.That(work.DispatchCount, Is.EqualTo(7));
             Assert.That(work.DrawCount, Is.EqualTo(1));
             Assert.That(work.TextureCount, Is.EqualTo(7));
-            Assert.That(feature.DisplayWorkload!.Value.Width, Is.EqualTo(514));
-            Assert.That(feature.DisplayWorkload!.Value.Height, Is.EqualTo(514));
+            Assert.That(feature.DisplayWorkload!.Value.Width, Is.EqualTo(512));
+            Assert.That(feature.DisplayWorkload!.Value.Height, Is.EqualTo(512));
             File.AppendAllText(Path.Combine(directory, "image-oracle.txt"),
                 $"; bloomDispatches={work.DispatchCount}; bloomDraws={work.DrawCount}; bloomBytes={work.TexturePayloadBytes}; world={work.Width}x{work.Height}");
 
@@ -1477,6 +1655,7 @@ public sealed class FrameBenchmarkPlayModeTests
             PostProcessRuntimeState.BypassPostProcessEffects = originalBypass;
             PostProcessRuntimeState.DiagnosticOffscreenCamera = originalDiagnostic;
             PostProcessRuntimeState.DiagnosticWorldImage = null;
+            PostProcessRuntimeState.DiagnosticWorldRasterTarget = null;
             postprocessController.BloomIntensity = originalBloomIntensity;
             zoomLighting.RemoveDynamicLight(ZoomProbeId);
             ResolveInScene<GraphicsSettingsController>(game).SelectPreset(originalPreset);
@@ -1659,8 +1838,10 @@ public sealed class FrameBenchmarkPlayModeTests
             yield return Skip(60);
             foreach (Robot robot in frozenRobots) { robot.enabled = false; }
             Assert.That(lighting.GPUResources.Direct.Static, Is.Not.Null, "Atlas oracle requires real static transport.");
-            Vector2Int[] moves = [new(1, 0), new(-1, 0), new(-1, 0), new(-1, 0),
-                new(0, -1), new(0, 1), new(-1, -1), new(1, 1)];
+            Vector2Int[] moves = new Vector2Int[] {
+new(1, 0), new(-1, 0), new(-1, 0), new(-1, 0),
+                new(0, -1), new(0, 1), new(-1, -1), new(1, 1)
+ };
             for (int move = 0; move < moves.Length; move++)
             {
                 byte[][] previousFields = new byte[2][];
@@ -1970,8 +2151,8 @@ public sealed class FrameBenchmarkPlayModeTests
                     new Vector2(origin.x, origin.y) + offset + shift, Color.white, intensity);
             }
         }
-        List<Result> results = [];
-        List<CaptureWindow> captures = [];
+        List<Result> results = new();
+        List<CaptureWindow> captures = new();
         ProfilerRecorder coldSdfBuildRecorder = default;
         double coldSdfBuildGpuP50Ms = 0.0;
         int coldSdfBuildGpuSampleCount = 0;

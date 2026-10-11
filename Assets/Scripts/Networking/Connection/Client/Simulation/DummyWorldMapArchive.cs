@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Kern.Core;
@@ -29,11 +30,14 @@ internal static class DummyWorldMapArchive
     {
         // Application.* доступны только с главного потока: читаются до ухода в пул.
         string streamingRoot = Application.streamingAssetsPath;
-        string streamingDirectory = Path.Combine(streamingRoot, StreamingFolderName);
+        bool isLocalStreamingAssets = IsLocalPath(streamingRoot);
+        string streamingDirectory = isLocalStreamingAssets
+            ? Path.Combine(streamingRoot, StreamingFolderName)
+            : CombineStreamingUri(streamingRoot, StreamingFolderName);
         string cacheDirectory = Path.Combine(Application.persistentDataPath, CacheFolderName);
-        string buildGuid = Application.buildGUID;
+        Debug.Log($"[DummyWorldMapArchive] Resolving '{worldCodeName}' map; cache='{cacheDirectory}'.");
 
-        string mapPath = IsLocalPath(streamingRoot)
+        string mapPath = isLocalStreamingAssets
             ? await UniTask.RunOnThreadPool(
                 () => ResolveFromLocalStreamingAssets(streamingDirectory, cacheDirectory, worldCodeName),
                 cancellationToken: cancellationToken)
@@ -41,7 +45,6 @@ internal static class DummyWorldMapArchive
                 streamingDirectory,
                 cacheDirectory,
                 worldCodeName,
-                buildGuid,
                 cancellationToken);
 
         return mapPath;
@@ -200,7 +203,10 @@ internal static class DummyWorldMapArchive
         {
             try
             {
-                return ReadDimensions(path);
+                // ReadDimensions validates every entry in the offset table. For
+                // Pallada that is hundreds of thousands of file reads; never do
+                // this validation on Unity's main thread during world entry.
+                return await UniTask.RunOnThreadPool(() => ReadDimensions(path));
             }
             catch (InvalidDataException ex) when (
                 attempt < maxAttempts - 1 &&
@@ -315,12 +321,33 @@ internal static class DummyWorldMapArchive
         string streamingDirectory,
         string cacheDirectory,
         string worldCodeName,
-        string buildGuid,
         CancellationToken cancellationToken)
     {
         // Android: StreamingAssets лежат внутри APK, File.* их не видит. Архив
         // копируется из пакета только если распакованная карта не от этой сборки.
-        string sourceStamp = $"package:{buildGuid}";
+        string sourceStamp;
+        string archiveName = ArchiveFileName(worldCodeName);
+        string manifest = await DownloadPackagedTextAsync(
+            $"{streamingDirectory}/{StreamingFolderName}.manifest",
+            cancellationToken);
+        string? archiveHash = null;
+        foreach (string line in manifest.Split('\n'))
+        {
+            string[] fields = line.TrimEnd('\r').Split('|');
+            if (fields.Length == 2 && string.Equals(fields[0], archiveName, StringComparison.Ordinal))
+            {
+                archiveHash = fields[1];
+                break;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(archiveHash))
+        {
+            throw new InvalidDataException(
+                $"Packaged world-map manifest does not contain SHA-256 for '{archiveName}'.");
+        }
+
+        sourceStamp = $"package:{archiveHash}";
         string mapPath = Path.Combine(cacheDirectory, MapFileName(worldCodeName));
         bool current = await UniTask.RunOnThreadPool(
             () =>
@@ -331,21 +358,34 @@ internal static class DummyWorldMapArchive
             cancellationToken: cancellationToken);
         if (current)
         {
+            Debug.Log($"[DummyWorldMapArchive] Reusing cached map '{mapPath}' for archive SHA-256 {archiveHash}.");
             return mapPath;
         }
 
-        string archiveCopy = Path.Combine(cacheDirectory, ArchiveFileName(worldCodeName));
-        await CopyPackagedFileAsync($"{streamingDirectory}/{ArchiveFileName(worldCodeName)}", archiveCopy, cancellationToken);
+        Debug.Log($"[DummyWorldMapArchive] Cache miss for '{worldCodeName}'; copying packaged archive '{archiveName}'.");
+        string archiveCopy = Path.Combine(cacheDirectory, archiveName);
+        await CopyPackagedFileAsync($"{streamingDirectory}/{archiveName}", archiveCopy, cancellationToken);
         try
         {
-            return await UniTask.RunOnThreadPool(
+            string extractedPath = await UniTask.RunOnThreadPool(
                 () => ExtractValidated(archiveCopy, cacheDirectory, worldCodeName, sourceStamp),
                 cancellationToken: cancellationToken);
+            Debug.Log($"[DummyWorldMapArchive] Map '{worldCodeName}' extracted and validated at '{extractedPath}'.");
+            return extractedPath;
         }
         finally
         {
             DeleteFileQuietly(archiveCopy);
         }
+    }
+
+    private static async UniTask<string> DownloadPackagedTextAsync(
+        string uri,
+        CancellationToken cancellationToken)
+    {
+        using var request = UnityWebRequest.Get(uri);
+        await request.SendWebRequest().WithCancellation(cancellationToken);
+        return request.downloadHandler.text;
     }
 
     private static string ExtractValidated(
@@ -419,7 +459,8 @@ internal static class DummyWorldMapArchive
             availableBytes = new DriveInfo(Path.GetFullPath(directory)).AvailableFreeSpace;
         }
         catch (Exception exception) when (
-            exception is ArgumentException or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+            exception is ArgumentException or IOException or UnauthorizedAccessException or
+                NotSupportedException)
         {
             // Размер тома узнать нельзя — нехватку места покажет сама запись.
             return;
@@ -518,6 +559,34 @@ internal static class DummyWorldMapArchive
     }
 
     private static bool IsLocalPath(string path) => !path.Contains("://", StringComparison.Ordinal);
+
+    internal static string CombineStreamingUri(string root, string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            throw new ArgumentException("StreamingAssets URI root is required.", nameof(root));
+        }
+
+        if (string.IsNullOrWhiteSpace(relativePath) || relativePath[0] is '/' or '\\')
+        {
+            throw new ArgumentException(
+                "StreamingAssets URI path must be relative.",
+                nameof(relativePath));
+        }
+
+        string[] segments = relativePath.Replace('\\', '/').Split('/');
+        if (segments.Any(segment =>
+                string.IsNullOrWhiteSpace(segment) ||
+                segment is "." or ".."))
+        {
+            throw new ArgumentException(
+                $"StreamingAssets URI path contains an invalid segment: '{relativePath}'.",
+                nameof(relativePath));
+        }
+
+        string escapedPath = string.Join("/", segments.Select(Uri.EscapeDataString));
+        return $"{root.TrimEnd('/')}/{escapedPath}";
+    }
 
     private static string MapFileName(string worldCodeName) => $"{worldCodeName}_cells.mapb";
 

@@ -36,7 +36,7 @@ public sealed class ServerWindowPresenter : IDisposable
     private readonly UIDocument _document;
     private readonly WindowCommandStream _commands;
     private readonly ModalWindowHandler _modalWindowHandler;
-    private readonly List<(string Tag, VisualElement Root, WindowBinding Binding)> _openWindows = [];
+    private readonly List<(string Tag, VisualElement Root, WindowBinding Binding)> _openWindows = new();
 
     public ServerWindowPresenter(
         IAssetLoader assetLoader,
@@ -173,17 +173,13 @@ public sealed class ServerWindowPresenter : IDisposable
                 children.Add(footerButton with
                 {
                     AttachedProperties = isExit
-                        ?
-                        [
-                            .. footerButton.AttachedProperties,
+                        ? AppendProperties(
+                            footerButton.AttachedProperties,
                             new StringPairPacket("PacketUI.FooterAction", "1"),
-                            new StringPairPacket("PacketUI.ExitAction", "1"),
-                        ]
-                        :
-                        [
-                            .. footerButton.AttachedProperties,
-                            new StringPairPacket("PacketUI.FooterAction", "1"),
-                        ],
+                            new StringPairPacket("PacketUI.ExitAction", "1"))
+                        : AppendProperties(
+                            footerButton.AttachedProperties,
+                            new StringPairPacket("PacketUI.FooterAction", "1")),
                 });
                 index++;
                 continue;
@@ -194,12 +190,10 @@ public sealed class ServerWindowPresenter : IDisposable
             {
                 children.Add(title with
                 {
-                    AttachedProperties =
-                    [
-                        .. title.AttachedProperties,
+                    AttachedProperties = AppendProperties(
+                        title.AttachedProperties,
                         new StringPairPacket("PacketUI.Title", "1"),
-                        new StringPairPacket("Text.Align", "Center"),
-                    ],
+                        new StringPairPacket("Text.Align", "Center")),
                 });
                 index++;
 
@@ -261,19 +255,29 @@ public sealed class ServerWindowPresenter : IDisposable
             var tab = (TextPacket)children[start + i];
             tabs.Add(tab with
             {
-                AttachedProperties =
-                [
-                    .. tab.AttachedProperties,
-                    new StringPairPacket("DockPanel.Dock", "Left"),
-                ],
+                AttachedProperties = AppendProperties(
+                    tab.AttachedProperties,
+                    new StringPairPacket("DockPanel.Dock", "Left")),
             });
         }
 
         return new DockPanelPacket
         {
             Children = tabs,
-            AttachedProperties = [new StringPairPacket("DockPanel.Dock", "Top")],
+            AttachedProperties = new[] {
+new StringPairPacket("DockPanel.Dock", "Top")
+ },
         };
+    }
+
+    private static StringPairPacket[] AppendProperties(
+        StringPairPacket[] existing,
+        params StringPairPacket[] additions)
+    {
+        var combined = new StringPairPacket[existing.Length + additions.Length];
+        Array.Copy(existing, combined, existing.Length);
+        Array.Copy(additions, 0, combined, existing.Length, additions.Length);
+        return combined;
     }
 
     private static void ExpandSerializedContent(TextPacket source, List<IGUIComponentPacket> children)
@@ -298,24 +302,24 @@ public sealed class ServerWindowPresenter : IDisposable
 
                 children.Add(new CanvasPacket
                 {
-                    AttachedProperties =
-                    [
+                    AttachedProperties = new[]
+                    {
                         new StringPairPacket("PacketUI.CanvasHeight", (y + height).ToString(CultureInfo.InvariantCulture)),
-                    ],
-                    Children =
-                    [
+                    },
+                    Children = new IGUIComponentPacket[]
+                    {
                         new TextPacket
                         {
-                            AttachedProperties =
-                            [
+                            AttachedProperties = new[]
+                            {
                                 new StringPairPacket("PacketUI.ImageURI", canvasImage.Groups["uri"].Value),
                                 new StringPairPacket("Canvas.X", x.ToString(CultureInfo.InvariantCulture)),
                                 new StringPairPacket("Canvas.Y", y.ToString(CultureInfo.InvariantCulture)),
                                 new StringPairPacket("Canvas.Width", width.ToString(CultureInfo.InvariantCulture)),
                                 new StringPairPacket("Canvas.Height", height.ToString(CultureInfo.InvariantCulture)),
-                            ],
+                            },
                         },
-                    ],
+                    },
                 });
                 index++;
                 continue;
@@ -335,7 +339,9 @@ public sealed class ServerWindowPresenter : IDisposable
                 children.Add(new TextPacket
                 {
                     Text = lines[index],
-                    AttachedProperties = [new StringPairPacket("PacketUI.RowLabel", "1")],
+                    AttachedProperties = new[] {
+new StringPairPacket("PacketUI.RowLabel", "1")
+ },
                 });
                 children.Add(new TextPacket
                 {
@@ -547,7 +553,7 @@ public sealed class ServerWindowPresenter : IDisposable
             int elementIndex = PacketIndex(packetOrder, exit);
             string clickContext = exit.OnClickContext;
             closeButton.clicked += () => _networkService.Send(
-                new ElementClickPacket(clickContext, elementIndex, []));
+                new ElementClickPacket(clickContext, elementIndex, Array.Empty<StringPairPacket>()));
             frame.Add(closeButton);
             return;
         }
@@ -573,7 +579,7 @@ public sealed class ServerWindowPresenter : IDisposable
             _networkService.Send(new ElementClickPacket(
                 componentPacket.OnClickContext,
                 elementIndex,
-                []));
+                Array.Empty<StringPairPacket>()));
             return;
         }
 

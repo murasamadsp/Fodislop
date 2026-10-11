@@ -15,6 +15,7 @@ using Kern.UI.Programmator;
 using Kern.World.Lighting;
 using Kern.World.Terrain;
 using MinesServer.Networking.Client.Packets.GUI;
+using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
@@ -52,7 +53,7 @@ namespace Kern.UI
         private VisualElement? _mainPage;
         private VisualElement? _settingsPage;
         private bool _isOpen;
-        private readonly List<Action> _settingsRefreshers = [];
+        private readonly List<Action> _settingsRefreshers = new();
         private bool _initialized;
         private bool _initializationFailed;
 
@@ -66,6 +67,9 @@ namespace Kern.UI
         private IInputBlocker _inputBlocker = null!;
         [Inject]
         private UIInputManager _uiInput = null!;
+        [Inject]
+        private TouchCommands _touchCommands = null!;
+        private bool _touchSubscribed;
         private PauseMenuSettingsBuilder? _settingsBuilder;
         private PauseMenuTabRouter? _tabRouter;
 
@@ -88,24 +92,42 @@ namespace Kern.UI
                     return;
                 }
 
-                // Перехват клавиши на вкладке «Управление» поглощает Escape:
-                // он отменяет перехват и не должен заодно закрывать меню.
-                if (_uiInput.IsKeyCaptureInProgress)
-                {
-                    return;
-                }
-
-                // Показанное серверное окно — верхний владелец Escape: оно
-                // модальное и держит IInputBlocker.IsInputBlocked, а закрыть его
-                // больше нечем. Escape в паузе не открывает меню поверх
-                // заблокированного ввода, а гасит окно.
-                if (TryDismissServerModal())
-                {
-                    return;
-                }
-
-                ToggleMenu();
+                HandleBack();
             }
+        }
+
+        // Кнопка «Меню» HUD: на сенсорном экране это единственный путь в
+        // паузу (у iOS нет системной «Назад», у Android она приходит как
+        // Escape и идёт через Update).
+        private void OnTouchPauseRequested()
+        {
+            if (!_isOpen && _uiInput.IsChatFocused)
+            {
+                return;
+            }
+
+            HandleBack();
+        }
+
+        private void HandleBack()
+        {
+            // Перехват клавиши на вкладке «Управление» поглощает Escape:
+            // он отменяет перехват и не должен заодно закрывать меню.
+            if (_uiInput.IsKeyCaptureInProgress)
+            {
+                return;
+            }
+
+            // Показанное серверное окно — верхний владелец Escape: оно
+            // модальное и держит IInputBlocker.IsInputBlocked, а закрыть его
+            // больше нечем. Escape в паузе не открывает меню поверх
+            // заблокированного ввода, а гасит окно.
+            if (TryDismissServerModal())
+            {
+                return;
+            }
+
+            ToggleMenu();
         }
 
         private bool TryDismissServerModal()
@@ -204,22 +226,25 @@ namespace Kern.UI
 
             HideMenu();
 
-            var savedScale = _clientConfig.Config.Interface.UIScale;
-            float effectiveScale = UIScaleUtility.ResolveEffectiveScale(savedScale);
-            if (Mathf.Abs(_doc.panelSettings.scale - effectiveScale) > 0.0001f)
-            {
-                _doc.panelSettings.scale = effectiveScale;
-            }
+            UIScreen.Bind(_doc, _clientConfig.Config.Interface.UIScale);
 
             // Реестр применяет текст сразу и на каждой смене языка — подписка
             // вручную не нужна и запрещена линтером.
             _loc.RegisterLocalizable(this);
+
+            _touchCommands.PauseRequested += OnTouchPauseRequested;
+            _touchSubscribed = true;
 
             _initialized = true;
         }
 
         private void OnDestroy()
         {
+            if (_doc != null)
+            {
+                UIScreen.Unbind(_doc);
+            }
+
             if (_loc != null)
             {
                 _loc.UnregisterLocalizable(this);
@@ -228,6 +253,12 @@ namespace Kern.UI
             if (_lightingEngine != null)
             {
                 _lightingEngine.OnInitialized -= OnLightingReady;
+            }
+
+            if (_touchSubscribed)
+            {
+                _touchCommands.PauseRequested -= OnTouchPauseRequested;
+                _touchSubscribed = false;
             }
 
             _uiInput.IsPauseMenuOpen = false;
@@ -346,7 +377,8 @@ namespace Kern.UI
                 var topTag = _inputBlocker.TopWindowTag;
                 if (topTag != null)
                 {
-                    _networkService.Send(new ElementClickPacket(topTag, 0, []));
+                    _networkService.Send(new ElementClickPacket(
+                        topTag, 0, Array.Empty<StringPairPacket>()));
                     return;
                 }
             }

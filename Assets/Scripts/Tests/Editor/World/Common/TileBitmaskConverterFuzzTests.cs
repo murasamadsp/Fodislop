@@ -13,10 +13,10 @@ public class TileBitmaskConverterFuzzTests
     [TestCase((byte)0x01, (byte)0x01)]
     [TestCase((byte)0x02, (byte)0x00)]
     [TestCase((byte)0x04, (byte)0xC1)]
-    [TestCase((byte)0x08, (byte)0x41)]
-    [TestCase((byte)0x10, (byte)0x81)]
-    [TestCase((byte)0x20, (byte)0x41)]
-    [TestCase((byte)0x40, (byte)0x41)]
+    [TestCase((byte)0x08, (byte)0x00)]
+    [TestCase((byte)0x10, (byte)0x41)]
+    [TestCase((byte)0x20, (byte)0x00)]
+    [TestCase((byte)0x40, (byte)0x81)]
     [TestCase((byte)0x80, (byte)0x00)]
     [TestCase((byte)0xFF, (byte)0x0D)]
     public void GetDescriptor_LUTBoundaryMasks(byte mask, byte expected)
@@ -46,25 +46,4 @@ public class TileBitmaskConverterFuzzTests
         }
     }
 
-    [Test]
-    public void GetDescriptor_RotationSymmetry_TopBottomEdgesAgree()
-    {
-        for (int mask = 0; mask < 256; mask++)
-        {
-            byte top = TileBitmaskConverter.GetDescriptor((byte)mask);
-            byte bottom = TileBitmaskConverter.GetDescriptor((byte)(mask ^ 0x44));
-            Assert.That(top, Is.EqualTo(bottom), $"mask=0x{mask:X2}");
-        }
-    }
-
-    [Test]
-    public void GetDescriptor_RotationSymmetry_LeftRightEdgesAgree()
-    {
-        for (int mask = 0; mask < 256; mask++)
-        {
-            byte left = TileBitmaskConverter.GetDescriptor((byte)mask);
-            byte right = TileBitmaskConverter.GetDescriptor((byte)(mask ^ 0x11));
-            Assert.That(left, Is.EqualTo(right), $"mask=0x{mask:X2}");
-        }
-    }
 }

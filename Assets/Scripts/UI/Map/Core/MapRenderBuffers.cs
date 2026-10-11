@@ -77,8 +77,11 @@ internal sealed class MapRenderBuffers : IDisposable
     public void UploadLookup(int entryCount) =>
         _chunkLookupBuffer!.SetData(_chunkLookup!, 0, 0, entryCount);
 
-    public void UploadChunkData(int uintCount) =>
-        _chunkDataBuffer!.SetData(_chunkData!, 0, 0, uintCount);
+    public void UploadLookupRange(int start, int count) =>
+        _chunkLookupBuffer!.SetData(_chunkLookup!, start, start, count);
+
+    public void UploadChunkDataRange(int start, int count) =>
+        _chunkDataBuffer!.SetData(_chunkData!, start, start, count);
 
     public Texture2D GetDummyMipTexture()
     {

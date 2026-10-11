@@ -8,8 +8,8 @@ public static class FrameProbeCatalog
 {
     // Время видеокарты по этим участкам снимается GPU-рекордером: маркер
     // сам по себе даёт только время записи команд на процессоре.
-    public static List<FrameProbe> CreateGPUProbes() =>
-    [
+    public static List<FrameProbe> CreateGPUProbes() => new()
+    {
         new("Свет — весь блок", "Kern.RadianceCascades", gpu: true),
         new("· поле материалов", "Kern.Lighting.MaterialField", isDetail: true, gpu: true),
         new("· сборка свечения", "Kern.Lighting.ComposeGlow", isDetail: true, gpu: true),
@@ -23,18 +23,18 @@ public static class FrameProbeCatalog
         new("· блум, вниз", "Kern.PostProcess.Bloom.Downsample", isDetail: true, gpu: true),
         new("· блум, вверх", "Kern.PostProcess.Bloom.Upsample", isDetail: true, gpu: true),
         new("· возврат в кадр", "Kern.PostProcess.BlitBack", isDetail: true, gpu: true),
-    ];
+    };
 
     // Записи рендера этих же участков на процессоре.
-    public static List<FrameProbe> CreateGPURecordProbes() =>
-    [
+    public static List<FrameProbe> CreateGPURecordProbes() => new()
+    {
         new("Свет — запись блока", "Kern.RadianceCascades"),
         new("Террейн — запись полей", "Kern.Terrain.RenderMaterialFields"),
         new("Постпроцесс — запись композита", "Kern.PostProcess.Composite"),
-    ];
+    };
 
-    public static List<FrameProbe> CreateCPUProbes() =>
-    [
+    public static List<FrameProbe> CreateCPUProbes() => new()
+    {
         new("Движок — рендер и вывод", "PostLateUpdate.FinishFrameRendering", false, false,
             "RenderPipelineManager.DoRenderLoop_Internal()", "UniversalRenderPipeline.RenderCameraStack"),
         new("· камера URP", "UniversalRenderPipeline.RenderSingleCameraInternal", true, false,
@@ -63,15 +63,17 @@ public static class FrameProbeCatalog
         new("Сущности мира", "Kern.WorldEntities.LateUpdate"),
         new("Мировые подписи", "Kern.WorldLabels.PostLateTick"),
         new("Сеть — разбор очереди", "Kern.Net.DrainPacketQueue"),
-    ];
+    };
 
     // Набор фонового монитора провисов: участки окна «Разбор кадра» плюс то,
     // что провисает вне наших участков. Фазы цикла игры покрывают его целиком,
     // поэтому провис вне скриптов ложится ровно в одну из них. Набор
     // фиксированный и открывается один раз: перебор всех маркеров в фоне сам
     // давал длинные кадры при открытии каждой пачки.
-    public static List<FrameProbe> CreateStallProbes() =>
-    [
+    public static List<FrameProbe> CreateStallProbes()
+    {
+        var probes = new List<FrameProbe>
+        {
         new("Цикл игры", "PlayerLoop"),
         new("Цикл редактора", "EditorLoop"),
         new("Фаза Initialization", "Initialization"),
@@ -81,8 +83,6 @@ public static class FrameProbeCatalog
         new("Фаза Update", "Update"),
         new("Фаза PreLateUpdate", "PreLateUpdate"),
         new("Фаза PostLateUpdate", "PostLateUpdate"),
-        ..CreateCPUProbes(),
-        ..CreateInterfaceProbes(),
         new("Физика 2D", "Physics2D.Simulate", false, false, "Physics2D.FixedUpdate"),
         new("Анимация", "Director.ProcessFrame", false, false, "PreLateUpdate.DirectorUpdateAnimationBegin"),
         new("UniTask Update", "UniTaskLoopRunnerUpdate"),
@@ -99,19 +99,23 @@ public static class FrameProbeCatalog
         new("Рендер: компиляция шейдера", "Shader.CreateGPUProgram"),
         new("Рендер: разбор шейдера", "Shader.Parse"),
         new("Загрузка текстуры на GPU", "Texture.AwakeFromLoad"),
-    ];
+        };
+        probes.AddRange(CreateCPUProbes());
+        probes.AddRange(CreateInterfaceProbes());
+        return probes;
+    }
 
     // В редакторе эти маркеры суммируют и перерисовку окон самого редактора.
-    public static List<FrameProbe> CreateInterfaceProbes() =>
-    [
+    public static List<FrameProbe> CreateInterfaceProbes() => new()
+    {
         new("UI Toolkit — отрисовка панелей", "UIR.DrawChain"),
         new("UI Toolkit — обновление панелей", "UIElementsUpdateRuntimePanels", false, false, "UIElements.UpdateRuntimePanels"),
         new("IMGUI — перерисовка", "GUI.Repaint"),
         new("IMGUI — события", "GUI.ProcessEvents", false, false, "GUIUtility.ProcessEvent"),
-    ];
+    };
 
-    public static List<FrameProbe> CreateMemoryProbes() =>
-    [
+    public static List<FrameProbe> CreateMemoryProbes() => new()
+    {
         new("Мусор за кадр", "GC Allocated In Frame"),
         new("Аллокаций за кадр", "GC Allocation In Frame Count"),
         new("Куча занята", "GC Used Memory"),
@@ -122,15 +126,15 @@ public static class FrameProbeCatalog
         new("Память текстур", "Texture Memory"),
         new("Render target'ов", "Render Textures Count", false, false, "RenderTextures Count"),
         new("Память render target'ов", "Render Textures Bytes", false, false, "RenderTextures Bytes"),
-    ];
+    };
 
-    public static List<FrameProbe> CreateRenderCounters() =>
-    [
+    public static List<FrameProbe> CreateRenderCounters() => new()
+    {
         new("Вызовов отрисовки", "Draw Calls Count", false, false, "Draw Calls", "DrawCalls Count"),
         new("Смен материала", "SetPass Calls Count", false, false, "SetPass Calls", "SetPasses Count"),
         new("Пакетов", "Batches Count", false, false, "SRP Batches Count", "SRP Batches"),
         new("Треугольников", "Triangles Count", false, false, "Triangles"),
         new("Вершин", "Vertices Count", false, false, "Vertices"),
         new("Буферов в работе", "Used Buffers Count", false, false, "Buffers Count"),
-    ];
+    };
 }

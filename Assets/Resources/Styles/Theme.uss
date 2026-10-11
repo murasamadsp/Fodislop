@@ -763,6 +763,11 @@ Button#ServerSelectButton Label {
     font-size: var(--size-sm);
 }
 
+.mm-loader-phase-label--error {
+    color: var(--state-danger);
+    white-space: normal;
+}
+
 .mm-loader-phase-count {
     -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
     color: var(--text-primary);

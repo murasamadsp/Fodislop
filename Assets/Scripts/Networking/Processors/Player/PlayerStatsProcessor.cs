@@ -6,7 +6,7 @@ using MinesServer.Networking.Server.Packets.Information;
 
 namespace Kern.Networking.Processors;
 
-public sealed class PlayerStatsProcessor(IPlayerStats stats) :
+public sealed class PlayerStatsProcessor :
     IPacketProcessor<LevelPacket>,
     IPacketProcessor<HealthPacket>,
     IPacketProcessor<CurrencyPacket>,
@@ -17,29 +17,36 @@ public sealed class PlayerStatsProcessor(IPlayerStats stats) :
     IPacketProcessor<SkillProgressPacket>,
     IBatchAwareProcessor
 {
-    private readonly IBatchAwareProcessor? _batchStats = stats as IBatchAwareProcessor;
+    private readonly IPlayerStats _stats;
+    public PlayerStatsProcessor(IPlayerStats stats)
+    {
+        _stats = stats;
+        _batchStats = _stats as IBatchAwareProcessor;
+    }
+
+    private readonly IBatchAwareProcessor? _batchStats;
 
     public void BeginBatch() => _batchStats?.BeginBatch();
 
     public void EndBatch() => _batchStats?.EndBatch();
 
-    public void Process(LevelPacket packet) => stats.SetLevel(packet.Level);
+    public void Process(LevelPacket packet) => _stats.SetLevel(packet.Level);
 
-    public void Process(HealthPacket packet) => stats.SetHealth(packet.Current, packet.Max);
+    public void Process(HealthPacket packet) => _stats.SetHealth(packet.Current, packet.Max);
 
-    public void Process(CurrencyPacket packet) => stats.SetCurrency(packet.Money, packet.Creds);
+    public void Process(CurrencyPacket packet) => _stats.SetCurrency(packet.Money, packet.Creds);
 
     public void Process(GeologyPacket packet) =>
-        stats.SetGeology(packet.Current, packet.Max, packet.Cell, packet.Text);
+        _stats.SetGeology(packet.Current, packet.Max, packet.Cell, packet.Text);
 
     public void Process(BasketPacket packet) =>
-        stats.SetBasket(packet.Capacity, packet.Contents);
+        _stats.SetBasket(packet.Capacity, packet.Contents);
 
-    public void Process(MaxDepthPacket packet) => stats.SetMaxDepth(packet.Depth);
+    public void Process(MaxDepthPacket packet) => _stats.SetMaxDepth(packet.Depth);
 
     public void Process(DailyBonusStatePacket packet) =>
-        stats.SetDailyBonusAvailable(packet.Enabled);
+        _stats.SetDailyBonusAvailable(packet.Enabled);
 
     public void Process(SkillProgressPacket packet) =>
-        stats.SetSkillProgress(packet.Skill, packet.Current, packet.Max);
+        _stats.SetSkillProgress(packet.Skill, packet.Current, packet.Max);
 }

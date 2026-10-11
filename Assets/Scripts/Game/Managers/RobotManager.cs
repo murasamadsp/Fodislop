@@ -11,16 +11,22 @@ namespace Kern.Game.Managers;
 
 // Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): роботы создаются фабрикой
 // под Runtime/Robots, сам сервис объекта на сцене не имеет.
-public sealed class RobotManager(
-    ISceneObjectFactory sceneObjects,
-    ILocalPlayerState localPlayer) : IRobotService
+public sealed class RobotManager : IRobotService
 {
     private const string TAG = "[RobotManager]";
+    private readonly ISceneObjectFactory _sceneObjects;
+    private readonly ILocalPlayerState _localPlayer;
     private readonly Dictionary<uint, Robot> _robots = new();
     private readonly Dictionary<uint, float> _lastSeenAt = new();
-    private readonly HashSet<uint> _overwriteWarningsLogged = [];
-    private readonly List<uint> _keysToRemove = [];
+    private readonly HashSet<uint> _overwriteWarningsLogged = new();
+    private readonly List<uint> _keysToRemove = new();
     private bool _robotLimitWarningLogged;
+
+    public RobotManager(ISceneObjectFactory sceneObjects, ILocalPlayerState localPlayer)
+    {
+        _sceneObjects = sceneObjects;
+        _localPlayer = localPlayer;
+    }
 
     public uint LocalPlayerBotId { get; private set; }
 
@@ -78,7 +84,7 @@ public sealed class RobotManager(
 
         if (botId != 0 && botId == LocalPlayerBotId)
         {
-            var pmc = localPlayer.Current;
+            var pmc = _localPlayer.Current;
             var playerObj = pmc != null ? pmc.gameObject : null;
             if (playerObj != null)
             {
@@ -106,7 +112,7 @@ public sealed class RobotManager(
             return false;
         }
 
-        robot = sceneObjects.Create<Robot>($"Robot_{botId}", RuntimeOwner.Robots);
+        robot = _sceneObjects.Create<Robot>($"Robot_{botId}", RuntimeOwner.Robots);
 
         robot.Initialize(botId);
         _robots[botId] = robot;
@@ -156,7 +162,7 @@ public sealed class RobotManager(
         // сообщил наш BotId (PlayerInfoPacket), — заменяем его игровым
         // объектом локального игрока, иначе метаданные/визуалы навсегда
         // достанутся фабричному боту и world-readiness gate не сойдётся.
-        var pmc = localPlayer.Current;
+        var pmc = _localPlayer.Current;
         var playerRobot = pmc != null ? pmc.GetComponent<Robot>() : null;
         if (playerRobot != null && _robots.TryGetValue(botId, out var existing) &&
             !ReferenceEquals(existing, playerRobot))

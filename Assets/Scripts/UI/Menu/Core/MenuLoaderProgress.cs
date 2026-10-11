@@ -33,6 +33,7 @@ internal sealed class MenuLoaderProgress
     private bool _lastAppliedDone;
     private int _lastAppliedPhaseIndex = -1;
     private float _lastAppliedProgress = -1f;
+    private bool _failed;
 
     public MenuLoaderProgress(
         VisualElement? loaderProgressFill,
@@ -83,8 +84,34 @@ internal sealed class MenuLoaderProgress
 
     public void RefreshLocalization() => BuildPhaseList();
 
+    public void ResetFailure()
+    {
+        _failed = false;
+        _loaderPhaseLabel?.RemoveFromClassList("mm-loader-phase-label--error");
+    }
+
+    public void ShowFailure(string message)
+    {
+        _failed = true;
+        if (_loaderPhaseLabel != null)
+        {
+            _loaderPhaseLabel.text = message;
+            _loaderPhaseLabel.AddToClassList("mm-loader-phase-label--error");
+        }
+
+        if (_loaderPhaseCount != null)
+        {
+            _loaderPhaseCount.text = string.Empty;
+        }
+    }
+
     public void UpdateProgress(WorldLoadPhase phase)
     {
+        if (_failed)
+        {
+            return;
+        }
+
         int totalPhases = _PhaseSteps.Length;
         bool done = phase >= WorldLoadPhase.Done;
         int phaseIndex = Mathf.Clamp((int)phase, 0, totalPhases);

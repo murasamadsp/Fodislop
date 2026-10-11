@@ -6,12 +6,16 @@ using UnityEngine;
 
 namespace Kern.Core;
 
-public sealed class ConfigSaveScheduler(IClientConfigManager clientConfig)
+public sealed class ConfigSaveScheduler
 {
     public const float DebounceSeconds = 0.25f;
 
-    private readonly IClientConfigManager _clientConfig = clientConfig ??
-        throw new ArgumentNullException(nameof(clientConfig));
+    private readonly IClientConfigManager _clientConfig;
+
+    public ConfigSaveScheduler(IClientConfigManager clientConfig)
+    {
+        _clientConfig = clientConfig ?? throw new ArgumentNullException(nameof(clientConfig));
+    }
 
     private bool _pending;
     private float _dueTime;

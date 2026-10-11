@@ -17,6 +17,19 @@ namespace Kern.Tests.World.Lighting;
 [TestFixture]
 public sealed class TerrainLightingExchangeTests
 {
+    private static GameObject s_cameraOwner = null!;
+    private static Camera s_camera = null!;
+
+    [OneTimeSetUp]
+    public void CreateCamera()
+    {
+        s_cameraOwner = new GameObject(nameof(TerrainLightingExchangeTests));
+        s_camera = s_cameraOwner.AddComponent<Camera>();
+    }
+
+    [OneTimeTearDown]
+    public void DestroyCamera() => Object.DestroyImmediate(s_cameraOwner);
+
     [Test]
     public void GameScopeHasExactlyOneSingletonExchangeBinding()
     {
@@ -304,7 +317,7 @@ public sealed class TerrainLightingExchangeTests
                 1,
                 new RectInt(0, 0, 0, 4),
                 new RectInt(0, 0, 4, 4),
-                new Camera(),
+                s_camera,
                 new TestContributor())));
     }
 
@@ -526,7 +539,7 @@ public sealed class TerrainLightingExchangeTests
             2,
             new RectInt(-12, -4, 8, 6),
             new RectInt(-20, -12, 24, 22),
-            new Camera(),
+            s_camera,
             new TestContributor());
         exchange.PublishTerrainFrame(held);
         TerrainLightingFrameSnapshot processed = default;
@@ -746,7 +759,7 @@ public sealed class TerrainLightingExchangeTests
 
     private static TerrainLightingFrameSnapshot Frame(ulong generation, ulong sequence) =>
         new(generation, sequence, TerrainLightingFrameState.Ready, sequence,
-            new RectInt(0, 0, 20, 10), new RectInt(-4, -4, 28, 18), new Camera(), new TestContributor());
+            new RectInt(0, 0, 20, 10), new RectInt(-4, -4, 28, 18), s_camera, new TestContributor());
 
     private sealed class TestContributor : ILightingGeometryContributor
     {

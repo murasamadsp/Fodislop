@@ -12,7 +12,7 @@ internal sealed class PlayerHUDSkeletonPulse
     private const float PulseMax = 0.7f;
     private const float PulseDuration = 0.8f;
 
-    private readonly List<VisualElement> _elements = [];
+    private readonly List<VisualElement> _elements = new();
     private IVisualElementScheduledItem? _scheduledItem;
     private float _timer;
     private bool _rising = true;

@@ -21,4 +21,23 @@ public interface IPlayerInput
     bool IsCtrlPressed { get; }
     bool IsGamepadActive { get; }
     void SetMovementInput(Vector2 input);
+    void SetTouchMovementInput(Vector2 input);
+    void SetTouchDigHeld(bool held);
+    void SetTouchHealHeld(bool held);
+    bool IsTouchFastMove { get; }
+    void SetTouchFastMove(bool enabled);
+    void QueueTouchAction(TouchPlayerAction action);
+    void ClearQueuedTouchActions();
+}
+
+public enum TouchPlayerAction
+{
+    ToggleAutoDig,
+    ToggleAggression,
+    Geo,
+    Heal,
+    BuildCyan,
+    BuildGray,
+    BuildGreen,
+    BuildWhite,
 }

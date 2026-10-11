@@ -56,6 +56,23 @@ namespace Kern
             _cache = new AssetCache(LoadBytesFromServer, () => _operations);
         }
 
+        protected void OnEnable()
+        {
+            Application.lowMemory += OnLowMemory;
+        }
+
+        protected void OnDisable()
+        {
+            Application.lowMemory -= OnLowMemory;
+        }
+
+        // Телефон шлёт предупреждение раньше, чем убивает процесс: отпускаем
+        // то, что восстанавливается без сети.
+        private void OnLowMemory()
+        {
+            _cache?.ReleaseDecodedForLowMemory();
+        }
+
         protected void Start()
         {
             TryStartBatchLoop();

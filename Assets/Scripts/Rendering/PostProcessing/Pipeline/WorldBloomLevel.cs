@@ -5,13 +5,22 @@ using System;
 namespace Kern.Rendering.PostProcessing;
 
 /// <summary>Absolute world-pixel addressing for a small bloom target; never camera-relative phase.</summary>
-internal readonly struct WorldBloomLevel(int minX, int minY, int width, int height, int stride)
+internal readonly struct WorldBloomLevel
 {
-    public int MinX { get; } = minX;
-    public int MinY { get; } = minY;
-    public int Width { get; } = width;
-    public int Height { get; } = height;
-    public int Stride { get; } = stride;
+    public WorldBloomLevel(int minX, int minY, int width, int height, int stride)
+    {
+        MinX = minX;
+        MinY = minY;
+        Width = width;
+        Height = height;
+        Stride = stride;
+    }
+
+    public int MinX { get; }
+    public int MinY { get; }
+    public int Width { get; }
+    public int Height { get; }
+    public int Stride { get; }
 
     public static WorldBloomLevel Cover(int worldMinX, int worldMinY, int worldWidth, int worldHeight, int stride)
     {

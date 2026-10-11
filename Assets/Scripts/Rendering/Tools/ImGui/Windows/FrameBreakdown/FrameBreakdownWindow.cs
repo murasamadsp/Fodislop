@@ -31,7 +31,8 @@ public sealed class FrameBreakdownWindow : ToolWindow
     }
 
     private static readonly (Tab Tab, string Label)[] s_tabs =
-    [
+    new[] {
+
         (Tab.Frame, "Кадр"),
         (Tab.Loop, "Цикл"),
         (Tab.Hot, "Горячее"),
@@ -42,10 +43,11 @@ public sealed class FrameBreakdownWindow : ToolWindow
         (Tab.Memory, "Память"),
         (Tab.Search, "Поиск"),
         (Tab.Scene, "Сцена"),
-    ];
+
+    };
 
     private readonly FrameBreakdownRowRenderer _rowRenderer = new();
-    private readonly List<ToolWindow> _toolWindowRows = [];
+    private readonly List<ToolWindow> _toolWindowRows = new();
     private readonly ThreadTimings _timings = new();
     private readonly PlayerLoopBreakdown _loop = new();
     private readonly MarkerSearch _search = new();
@@ -69,16 +71,16 @@ public sealed class FrameBreakdownWindow : ToolWindow
     private readonly HashSet<string> _catalogNames = new(StringComparer.Ordinal);
     private readonly Dictionary<Tab, List<FrameBreakdownRow>> _rows = new()
     {
-        [Tab.Frame] = [],
-        [Tab.Loop] = [],
-        [Tab.Hot] = [],
-        [Tab.Spikes] = [],
-        [Tab.Layout] = [],
-        [Tab.Stages] = [],
-        [Tab.Tools] = [],
-        [Tab.Memory] = [],
-        [Tab.Search] = [],
-        [Tab.Scene] = [],
+        [Tab.Frame] = new(),
+        [Tab.Loop] = new(),
+        [Tab.Hot] = new(),
+        [Tab.Spikes] = new(),
+        [Tab.Layout] = new(),
+        [Tab.Stages] = new(),
+        [Tab.Tools] = new(),
+        [Tab.Memory] = new(),
+        [Tab.Search] = new(),
+        [Tab.Scene] = new(),
     };
 
     private Tab _tab = Tab.Frame;

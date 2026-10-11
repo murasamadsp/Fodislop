@@ -14,7 +14,9 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
 {
     private const string FmodSourceBuildPath = "KernAudio/Build/Desktop";
     private const string StreamingAssetsAudioPath = "Assets/StreamingAssets/Audio";
-    private static readonly string[] s_requiredBanks = ["Master.bank", "Master.strings.bank"];
+    private static readonly string[] s_requiredBanks = new[] {
+"Master.bank", "Master.strings.bank"
+ };
 
     public int callbackOrder => 0;
 
@@ -40,7 +42,7 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
         var sourceDir = Path.Combine(projectRoot, FmodSourceBuildPath);
         var targetDir = Path.Combine(projectRoot, StreamingAssetsAudioPath);
 
-        bool compiled = TryCompileFmodStudioProject(fsproPath);
+        TryCompileFmodStudioProject(fsproPath);
 
         Log($"Starting FMOD Banks sync from '{sourceDir}' to '{targetDir}'...");
 
@@ -57,26 +59,12 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
             return;
         }
 
-        // Without the FMOD compiler, an already populated StreamingAssets
-        // directory may contain a newer local build than the checked-in
-        // fallback binaries. Preserve that build on this machine.
-        if (!compiled && RequiredBanksExist(targetDir))
-        {
-            Log("FMOD CLI unavailable; preserving the existing complete StreamingAssets bank set.");
-            return;
-        }
-
         Directory.CreateDirectory(targetDir);
         int syncedCount = 0;
         foreach (var bankFile in bankFiles)
         {
             var fileName = Path.GetFileName(bankFile);
             var destPath = Path.Combine(targetDir, fileName);
-
-            if (!compiled && File.Exists(destPath))
-            {
-                continue;
-            }
 
             File.Copy(bankFile, destPath, true);
             syncedCount++;
@@ -107,44 +95,41 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
         return true;
     }
 
-    private static bool TryCompileFmodStudioProject(string fsproPath)
+    private static void TryCompileFmodStudioProject(string fsproPath)
     {
         if (!File.Exists(fsproPath))
         {
-            Log($"FMOD project not found at: {fsproPath}");
-            return false;
+            throw new BuildFailedException($"FMOD project not found at: {fsproPath}");
         }
 
         var fmodCliPath = ResolveFmodStudioCliPath();
         if (fmodCliPath == null)
         {
-            Log("FMOD Studio CLI not found. Skipping compilation step — sync will use previously built banks.");
-            return false;
+            throw new BuildFailedException("FMOD Studio command-line compiler was not found. Install FMOD Studio before building.");
         }
 
-        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-        bool macCommandLine = fmodCliPath.EndsWith(".app/Contents/MacOS/fmodstudio", StringComparison.Ordinal);
-        string arguments = macCommandLine
-            ? $"-working-dir \"{projectRoot}\" -build -ignore-warnings \"{fsproPath}\""
-            : $"-build -ignore-warnings \"{fsproPath}\"";
+        string fmodProjectDirectory = Path.GetDirectoryName(fsproPath)
+            ?? throw new BuildFailedException($"FMOD project path has no directory: {fsproPath}");
+        bool macCommandLine = fmodCliPath.EndsWith("/fmodstudiocl", StringComparison.Ordinal);
+        string arguments = $"-build -ignore-warnings {QuoteArgument(fsproPath)}";
 
         try
         {
-            Log($"Invoking FMOD Studio CLI compiler: '{fmodCliPath}' {arguments}...");
+            string executable = macCommandLine ? "/usr/bin/script" : fmodCliPath;
+            string processArguments = macCommandLine
+                ? $"-q /dev/null {QuoteArgument(fmodCliPath)} {arguments}"
+                : arguments;
+            Log($"Invoking FMOD Studio CLI compiler: '{executable}' {processArguments}...");
             var psi = new System.Diagnostics.ProcessStartInfo
             {
-                FileName = fmodCliPath,
-                Arguments = arguments,
-                WorkingDirectory = projectRoot,
+                FileName = executable,
+                Arguments = processArguments,
+                WorkingDirectory = fmodProjectDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
             };
-            if (macCommandLine)
-            {
-                psi.EnvironmentVariables["FMODSTUDIOCMDLINE"] = "1";
-            }
 
             using var process = System.Diagnostics.Process.Start(psi) ??
                 throw new BuildFailedException("FMOD Studio CLI could not be started.");
@@ -158,7 +143,7 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
                 process.Kill();
                 process.WaitForExit();
                 Task.WhenAll(standardOutputTask, standardErrorTask).GetAwaiter().GetResult();
-                throw new BuildFailedException("FMOD Studio CLI build timed out after 5 minutes. Banks were not synced.");
+                throw new BuildFailedException("FMOD Studio CLI build timed out after 5 minutes. Bank synchronization aborted; existing banks were not used.");
             }
 
             Task.WhenAll(standardOutputTask, standardErrorTask).GetAwaiter().GetResult();
@@ -169,22 +154,22 @@ public sealed class FmodBankBuilder : IPreprocessBuildWithReport
                     $"FMOD Studio CLI build failed with exit code {process.ExitCode}: {details}");
             }
 
+            Log(standardOutputTask.Result.Trim());
             Log("FMOD Studio CLI build completed successfully.");
-            return true;
         }
         catch (Exception ex) when (ex is not BuildFailedException)
         {
-            throw new BuildFailedException($"Could not run FMOD Studio CLI compiler: {ex.Message}");
+            throw new BuildFailedException($"Could not run FMOD Studio CLI compiler: {ex}");
         }
     }
 
+    private static string QuoteArgument(string argument) => $"\"{argument.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+
     private static string? ResolveFmodStudioCliPath()
     {
-        // macOS fmodstudiocl is only a shell wrapper: it relaunches the app
-        // through `open -W ... --stdout $(tty)`, so it fails whenever the
-        // caller has no controlling terminal — which is every Unity build.
-        // Run the real binary in command-line mode instead.
-        const string macos = "/Applications/FMOD Studio.app/Contents/MacOS/fmodstudio";
+        // The supported macOS launcher is a wrapper that requires a TTY.
+        // TryCompileFmodStudioProject provides one with /usr/bin/script.
+        const string macos = "/Applications/FMOD Studio.app/Contents/MacOS/fmodstudiocl";
 
         // Windows default installation path (64-bit)
         const string windows = @"C:\Program Files (x86)\FMOD SoundSystem\FMOD Studio\fmodstudiocl.exe";

@@ -1,6 +1,5 @@
 using AngleSharp.Html.Parser;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using StbImageWriteSharp;
 
 namespace Kern.DesignSystem.Tools;
 
@@ -58,8 +57,11 @@ internal static class EmitIconTexturesTool
             }
             else
             {
-                using var img = new SixLabors.ImageSharp.Image<Rgba32>(128, 128);
-                img.Save(path);
+                byte[] pixels = new byte[128 * 128 * 4];
+                using (var output = File.Create(path))
+                {
+                    new ImageWriter().WritePng(pixels, 128, 128, ColorComponents.RedGreenBlueAlpha, output);
+                }
                 Console.WriteLine($"  {Path.GetRelativePath(repo, path)}  0 байт (placeholder)");
             }
         }

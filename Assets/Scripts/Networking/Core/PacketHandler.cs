@@ -22,65 +22,88 @@ namespace Kern.Networking;
 
 // Чистый сервис контейнера (docs/architecture/SCENE_STANDARD.md §1): подписка на пакеты при
 // старте scope, отписка при его уничтожении.
-public sealed class PacketHandler(
-    INetworkService networkService,
-    WorldInitProcessor worldInit,
-    PlayerInfoProcessor playerInfo,
-    WindowPacketProcessor windowProcessor,
-    MapRegionProcessor mapRegion,
-    BuildingProcessor building,
-    PlayerStatsProcessor playerStats,
-    ChatProcessor chat,
-    StatusProcessor status,
-    AudioPacketProcessor audio,
-    VFXPacketProcessor vfx,
-    InventoryProcessor inventory,
-    ClanProcessor clan,
-    MissionProcessor mission,
-    MissionArrowProcessor missionArrow,
-    ConnectionProcessor connection,
-    AuthTokenProcessor authToken,
-    ClientConfigProcessor clientConfig) : IStartable, IDisposable
+public sealed class PacketHandler : IStartable, IDisposable
 {
-    private readonly INetworkService _networkService = networkService;
-    private readonly WorldInitProcessor _worldInit = worldInit;
-    private readonly PlayerInfoProcessor _playerInfo = playerInfo;
-    private readonly WindowPacketProcessor _windowProcessor = windowProcessor;
-    private readonly MapRegionProcessor _mapRegion = mapRegion;
-    private readonly BuildingProcessor _building = building;
-    private readonly PlayerStatsProcessor _playerStats = playerStats;
-    private readonly ChatProcessor _chat = chat;
-    private readonly StatusProcessor _status = status;
-    private readonly AudioPacketProcessor _audio = audio;
-    private readonly VFXPacketProcessor _vfx = vfx;
-    private readonly InventoryProcessor _inventory = inventory;
-    private readonly ClanProcessor _clan = clan;
-    private readonly MissionProcessor _mission = mission;
-    private readonly MissionArrowProcessor _missionArrow = missionArrow;
-    private readonly ConnectionProcessor _connection = connection;
-    private readonly AuthTokenProcessor _authToken = authToken;
-    private readonly ClientConfigProcessor _clientConfig = clientConfig;
-    private readonly List<Action> _unsubscribers = [];
-    private readonly IBatchAwareProcessor[] _batchAwareProcessors = new object[]
+    private readonly INetworkService _networkService;
+    private readonly WorldInitProcessor _worldInit;
+    private readonly PlayerInfoProcessor _playerInfo;
+    private readonly WindowPacketProcessor _windowProcessor;
+    private readonly MapRegionProcessor _mapRegion;
+    private readonly BuildingProcessor _building;
+    private readonly PlayerStatsProcessor _playerStats;
+    private readonly ChatProcessor _chat;
+    private readonly StatusProcessor _status;
+    private readonly AudioPacketProcessor _audio;
+    private readonly VFXPacketProcessor _vfx;
+    private readonly InventoryProcessor _inventory;
+    private readonly ClanProcessor _clan;
+    private readonly MissionProcessor _mission;
+    private readonly MissionArrowProcessor _missionArrow;
+    private readonly ConnectionProcessor _connection;
+    private readonly AuthTokenProcessor _authToken;
+    private readonly ClientConfigProcessor _clientConfig;
+    private readonly List<Action> _unsubscribers = new();
+    private readonly IBatchAwareProcessor[] _batchAwareProcessors;
+
+    public PacketHandler(
+        INetworkService networkService,
+        WorldInitProcessor worldInit,
+        PlayerInfoProcessor playerInfo,
+        WindowPacketProcessor windowProcessor,
+        MapRegionProcessor mapRegion,
+        BuildingProcessor building,
+        PlayerStatsProcessor playerStats,
+        ChatProcessor chat,
+        StatusProcessor status,
+        AudioPacketProcessor audio,
+        VFXPacketProcessor vfx,
+        InventoryProcessor inventory,
+        ClanProcessor clan,
+        MissionProcessor mission,
+        MissionArrowProcessor missionArrow,
+        ConnectionProcessor connection,
+        AuthTokenProcessor authToken,
+        ClientConfigProcessor clientConfig)
     {
-        worldInit,
-        playerInfo,
-        windowProcessor,
-        mapRegion,
-        building,
-        playerStats,
-        chat,
-        status,
-        audio,
-        vfx,
-        inventory,
-        clan,
-        mission,
-        missionArrow,
-        connection,
-        authToken,
-        clientConfig,
-    }.OfType<IBatchAwareProcessor>().ToArray();
+        _networkService = networkService;
+        _worldInit = worldInit;
+        _playerInfo = playerInfo;
+        _windowProcessor = windowProcessor;
+        _mapRegion = mapRegion;
+        _building = building;
+        _playerStats = playerStats;
+        _chat = chat;
+        _status = status;
+        _audio = audio;
+        _vfx = vfx;
+        _inventory = inventory;
+        _clan = clan;
+        _mission = mission;
+        _missionArrow = missionArrow;
+        _connection = connection;
+        _authToken = authToken;
+        _clientConfig = clientConfig;
+        _batchAwareProcessors = new object[]
+        {
+            worldInit,
+            playerInfo,
+            windowProcessor,
+            mapRegion,
+            building,
+            playerStats,
+            chat,
+            status,
+            audio,
+            vfx,
+            inventory,
+            clan,
+            mission,
+            missionArrow,
+            connection,
+            authToken,
+            clientConfig,
+        }.OfType<IBatchAwareProcessor>().ToArray();
+    }
 
     public bool IsSubscribed { get; private set; }
 

@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Kern.Core.Interfaces;
 using Kern.Core.Models;
 using Kern.Networking;
@@ -13,6 +14,7 @@ using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.World;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Kern.Tests.Networking;
 
@@ -55,6 +57,43 @@ public class NetworkBatchingTests
         Assert.AreEqual(1, completedCount);
 
         UnityEngine.Object.DestroyImmediate(go);
+    }
+
+    [Test]
+    public void NetworkService_WorldInitHandlerFailure_PropagatesToConnectionBoundary()
+    {
+        var go = new GameObject("TestNetworkServiceWorldInitFailure");
+        try
+        {
+            NetworkService networkService = go.AddComponent<NetworkService>();
+            networkService.Subscribe<WorldInitPacket>(
+                _ => throw new InvalidOperationException("world storage failed"));
+
+            LogAssert.Expect(
+                LogType.Exception,
+                new System.Text.RegularExpressions.Regex("InvalidOperationException: world storage failed"));
+            MethodInfo onPacketReceived = typeof(NetworkService).GetMethod(
+                "OnPacketReceived",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var packet = new MinesServer.Networking.Server.Packets.ServerPacket(
+                new WorldInitPacket(
+                    "testworld",
+                    "Test",
+                    1,
+                    1,
+                    Array.Empty<CellConfigurationPacket>(),
+                    Array.Empty<byte[]>()));
+
+            TargetInvocationException invocation = Assert.Throws<TargetInvocationException>(
+                () => onPacketReceived.Invoke(networkService, new object[] { packet }))!;
+
+            Assert.That(invocation.InnerException, Is.TypeOf<InvalidOperationException>());
+            Assert.That(invocation.InnerException!.Message, Is.EqualTo("world storage failed"));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(go);
+        }
     }
 
     [Test]
@@ -154,20 +193,89 @@ public class NetworkBatchingTests
         public void RemoveStatusLine(string tag) { }
         public void ClearStatusLines() { }
 
-        public event Action? OnStatsChanged;
-        public event Action? OnHealthChanged;
-        public event Action<int, int>? OnHealthUpdated;
-        public event Action? OnCurrencyChanged;
-        public event Action<long, long>? OnCurrencyUpdated;
-        public event Action? OnGeologyChanged;
-        public event Action? OnLevelChanged;
-        public event Action? OnNicknameChanged;
-        public event Action? OnBasketChanged;
-        public event Action<SkillType, long, long>? OnSkillProgress;
-        public event Action? OnDailyBonusChanged;
-        public event Action? OnMissionChanged;
-        public event Action? OnMissionArrowChanged;
-        public event Action? OnStatusLinesChanged;
+        public event Action? OnStatsChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnHealthChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action<int, int>? OnHealthUpdated
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnCurrencyChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action<long, long>? OnCurrencyUpdated
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnGeologyChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnLevelChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnNicknameChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnBasketChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action<SkillType, long, long>? OnSkillProgress
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnDailyBonusChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnMissionChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnMissionArrowChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action? OnStatusLinesChanged
+        {
+            add { }
+            remove { }
+        }
     }
 
     private sealed class StubMapDataProvider : IMapDataProvider

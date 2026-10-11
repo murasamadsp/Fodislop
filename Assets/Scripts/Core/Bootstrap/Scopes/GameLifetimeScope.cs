@@ -211,6 +211,8 @@ namespace Kern.Core
             builder.Register<ServerConfig>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder, "UI");
             builder.Register<UIInputManager>(Lifetime.Singleton);
+            builder.Register<TouchCommands>(Lifetime.Singleton);
+            builder.RegisterEntryPoint<Kern.Player.Input.TouchGestureTracker>().AsSelf();
             RegisterManager<FPSCounter>(builder, "UI");
             RegisterManager<FloatingChatManager>(builder, "UI");
             RegisterManager<ReconnectUI>(builder, "UI");
@@ -300,6 +302,11 @@ namespace Kern.Core
 
         public async UniTask PrepareForUnloadAsync()
         {
+            if (_uiDocument != null)
+            {
+                Kern.UI.UIScreen.Unbind(_uiDocument);
+            }
+
             if (Container == null)
             {
                 return;
@@ -315,7 +322,9 @@ namespace Kern.Core
             // ReturnToMainMenu: любой уход из MainGame (прямой переход, сбой,
             // выход) иначе оставлял циклы офлайн-сервера слать пакеты в меню.
             // Первым — пока контейнер сцены жив. Повторный Disconnect безвреден.
-            if (Container.TryResolve(out IConnectionService? connection) && connection != null)
+            if (Container.TryResolve(out IConnectionService? connection) &&
+                connection != null &&
+                !connection.IsAutoReconnecting)
             {
                 connection.Disconnect();
             }
@@ -424,7 +433,8 @@ namespace Kern.Core
         private void ValidateSceneRoots()
         {
             (Transform value, string name)[] required =
-            [
+            new[] {
+
                 (_servicesRoot, nameof(_servicesRoot)),
                 (_runtimeRoot, nameof(_runtimeRoot)),
                 (_robotsRoot, nameof(_robotsRoot)),
@@ -432,7 +442,8 @@ namespace Kern.Core
                 (_vfxRoot, nameof(_vfxRoot)),
                 (_floatingUIRoot, nameof(_floatingUIRoot)),
                 (_audioEventsRoot, nameof(_audioEventsRoot)),
-            ];
+
+            };
 
             foreach ((Transform value, string name) in required)
             {
@@ -461,7 +472,9 @@ namespace Kern.Core
         {
             // Группа существует, только пока в ней есть компонент, которому нужен
             // GameObject. Сеть и геймплей — чистый C# в контейнере (docs/architecture/SCENE_STANDARD.md §1).
-            string[] requiredGroups = ["World", "Rendering", "UI", "Audio"];
+            string[] requiredGroups = new[] {
+"World", "Rendering", "UI", "Audio"
+ };
             foreach (string group in requiredGroups)
             {
                 if (!HasSerializedServiceGroup(group))

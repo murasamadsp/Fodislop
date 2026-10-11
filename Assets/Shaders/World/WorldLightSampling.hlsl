@@ -1,7 +1,7 @@
 #ifndef KERN_WORLD_LIGHT_SAMPLING_INCLUDED
 #define KERN_WORLD_LIGHT_SAMPLING_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/WorldRenderGrid.hlsl"
+#include "WorldRenderGrid.hlsl"
 
 Texture2D<float4> _WorldLightTexture;
 SamplerState sampler_WorldLightTexture;

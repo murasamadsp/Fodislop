@@ -136,7 +136,8 @@ public sealed class ShaderWarmupContractTests
 #endif
 
     private static readonly string[] s_requiredShaders =
-    [
+    new[] {
+
         ProjectRuntimeContracts.ShaderNames.Terrain,
         ProjectRuntimeContracts.ShaderNames.WorldSurface,
         ProjectRuntimeContracts.ShaderNames.WorldEntity,
@@ -144,10 +145,12 @@ public sealed class ShaderWarmupContractTests
         ProjectRuntimeContracts.ShaderNames.MenuLineUnlit,
         ProjectRuntimeContracts.ShaderNames.UnpremultiplyAlpha,
         ProjectRuntimeContracts.ShaderNames.MissionVirtualRing,
-    ];
+
+    };
 
     private static readonly string[] s_requiredLightingKernels =
-    [
+    new[] {
+
         "SolveCascade",
         "ScrollRadianceAtlas",
         "SolveDynamicLighting",
@@ -161,7 +164,8 @@ public sealed class ShaderWarmupContractTests
         "SeedDynamicDistanceField",
         "JumpFloodDynamicDistanceField",
         "ResolveDynamicDistanceField",
-    ];
+
+    };
 
     [Test]
     public void RequiredShaders_AreFoundAndSupported()

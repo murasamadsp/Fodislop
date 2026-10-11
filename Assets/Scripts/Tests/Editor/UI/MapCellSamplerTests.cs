@@ -13,6 +13,23 @@ namespace Kern.Tests.UI;
 public sealed class MapCellSamplerTests
 {
     [Test]
+    public void ChunkInvalidation_TracksOnlyTheAffectedChunkAfterFullRefresh()
+    {
+        var layer = new CountingLayer(widthChunks: 4);
+        var sampler = new MapCellSampler();
+        sampler.Bind(layer);
+
+        Assert.That(sampler.RequiresFullRefresh, Is.True);
+        sampler.CompleteRefresh();
+        sampler.InvalidateChunk(2, 0);
+
+        Assert.That(sampler.RequiresFullRefresh, Is.False);
+        Assert.That(sampler.DirtyChunks, Is.EquivalentTo(new[] { 2 }));
+        sampler.CompleteRefresh();
+        Assert.That(sampler.DirtyChunks, Is.Empty);
+    }
+
+    [Test]
     public void InvalidateChunk_RemovesItsOldCachePositionBeforeReload()
     {
         var layer = new CountingLayer(widthChunks: 4097);
@@ -34,8 +51,12 @@ public sealed class MapCellSamplerTests
         Assert.That(layer.ReadCounts[0], Is.EqualTo(2), "The reloaded chunk should remain newer than chunk 1 in the eviction order.");
     }
 
-    private sealed class CountingLayer(int widthChunks) : IWorldLayer<CellType>
+    private sealed class CountingLayer : IWorldLayer<CellType>
     {
+        private readonly int _widthChunks;
+
+        public CountingLayer(int widthChunks) => _widthChunks = widthChunks;
+
         public Dictionary<int, int> ReadCounts { get; } = new();
 
         public event Action<int, int, int, int>? ChunkLoaded
@@ -45,7 +66,7 @@ public sealed class MapCellSamplerTests
         }
 
         public int ChunkSize => 1;
-        public int WidthChunks => widthChunks;
+        public int WidthChunks => _widthChunks;
         public int HeightChunks => 1;
         public int MaxChunksInMemory => int.MaxValue;
         public bool HasDirtyChunks => false;
@@ -70,7 +91,7 @@ public sealed class MapCellSamplerTests
         }
 
         public void Flush(bool flushToDisk = false) => throw new NotSupportedException();
-        public bool GetChunkIndexAndLocal(int x, int y, out int chunkIndex, out int localIndex) { chunkIndex = x; localIndex = 0; return (uint)x < widthChunks && y == 0; }
+        public bool GetChunkIndexAndLocal(int x, int y, out int chunkIndex, out int localIndex) { chunkIndex = x; localIndex = 0; return (uint)x < _widthChunks && y == 0; }
         public void Dispose() { }
     }
 }

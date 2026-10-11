@@ -20,7 +20,6 @@ public sealed class ApplicationBootstrap : IStartable
     private readonly IRuntimeAssetPaths _runtimeAssetPaths;
     private readonly IShaderWarmupService _shaderWarmup;
     private readonly ILocalizationService _localization;
-    private readonly IAudioSystem _audioSystem;
     private readonly IWorldEntryPreparation _worldEntryPreparation;
 
     public ApplicationBootstrap(
@@ -31,7 +30,6 @@ public sealed class ApplicationBootstrap : IStartable
         IRuntimeAssetPaths runtimeAssetPaths,
         IShaderWarmupService shaderWarmup,
         ILocalizationService localization,
-        IAudioSystem audioSystem,
         IWorldEntryPreparation worldEntryPreparation)
     {
         _scope = scope;
@@ -41,7 +39,6 @@ public sealed class ApplicationBootstrap : IStartable
         _runtimeAssetPaths = runtimeAssetPaths;
         _shaderWarmup = shaderWarmup;
         _localization = localization;
-        _audioSystem = audioSystem;
         _worldEntryPreparation = worldEntryPreparation;
     }
 
@@ -79,9 +76,7 @@ public sealed class ApplicationBootstrap : IStartable
 
             await UniTask.Yield(Cysharp.Threading.Tasks.PlayerLoopTiming.Update, scopeToken);
             _loadingScreen.SetPhaseText(_localization.Get("assetload.resources"));
-            await UniTask.WhenAll(
-                _runtimeAssetPaths.EnsureReadyAsync(),
-                _audioSystem.WaitUntilBanksReadyAsync(scopeToken));
+            await _runtimeAssetPaths.EnsureReadyAsync();
 
             string targetScene = ResolveInitialScene();
             if (targetScene == ProjectRuntimeContracts.SceneNames.MainGame)
@@ -98,6 +93,14 @@ public sealed class ApplicationBootstrap : IStartable
         catch (Exception exception)
         {
             UnityEngine.Debug.LogException(exception);
+            try
+            {
+                _loadingScreen.ShowDirect($"Startup failed: {exception.Message}");
+            }
+            catch (Exception displayException)
+            {
+                UnityEngine.Debug.LogException(displayException);
+            }
         }
     }
 

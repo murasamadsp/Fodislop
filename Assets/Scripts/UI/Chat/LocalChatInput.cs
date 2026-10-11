@@ -31,6 +31,7 @@ internal sealed class LocalChatInput : IDisposable
     private readonly IInputBlocker _inputBlocker;
     private readonly UIInputManager _uiInput;
     private readonly ChatBlinkController _blink;
+    private readonly TouchCommands _touchCommands;
 
     private VisualElement? _tree;
     private VisualElement? _panel;
@@ -45,9 +46,11 @@ internal sealed class LocalChatInput : IDisposable
         IInputBlocker inputBlocker,
         UIInputManager uiInput,
         IAsyncOperationSupervisor operations,
+        TouchCommands touchCommands,
         CancellationToken destroyToken)
     {
         _doc = doc;
+        _touchCommands = touchCommands;
         _networkService = networkService;
         _inputBlocker = inputBlocker;
         _uiInput = uiInput;
@@ -61,13 +64,30 @@ internal sealed class LocalChatInput : IDisposable
         {
             _panel.style.display = DisplayStyle.None;
         }
+
+        _touchCommands.LocalChatRequested += OnTouchSayRequested;
     }
 
     public bool IsOpen => _isOpen;
 
+    // Кнопка «Сказать» HUD — тач-аналог T; повторное нажатие закрывает поле.
+    private void OnTouchSayRequested()
+    {
+        if (_isOpen)
+        {
+            Hide();
+            return;
+        }
+
+        if (!_inputBlocker.IsInputBlocked)
+        {
+            Show();
+        }
+    }
+
     public void Tick()
     {
-        if (Keyboard.current == null || _field == null)
+        if (_field == null)
         {
             return;
         }
@@ -82,6 +102,15 @@ internal sealed class LocalChatInput : IDisposable
         if (_ownsChatFocus)
         {
             _uiInput.IsChatFocused = _isOpen;
+        }
+
+        // Без клавиатуры (телефон) дальше только клавиши: открытие — кнопкой
+        // «Сказать», отправка — кнопкой рядом с полем. Сверка фокуса выше
+        // идёт и без клавиатуры, иначе ввод залипал бы после скрытия
+        // системной клавиатуры.
+        if (Keyboard.current == null)
+        {
+            return;
         }
 
         if (!_isOpen)
@@ -122,6 +151,8 @@ internal sealed class LocalChatInput : IDisposable
 
         _isOpen = true;
         _panel.style.display = DisplayStyle.Flex;
+        _tree?.BringToFront();
+        MarkSayOpen(true);
         TakeChatFocus();
 
         // Фокус откладывается на следующий тик панели: клавиша открытия (T,
@@ -139,6 +170,7 @@ internal sealed class LocalChatInput : IDisposable
     public void Hide()
     {
         _isOpen = false;
+        MarkSayOpen(false);
         ReleaseChatFocus();
 
         if (_panel == null || _field == null)
@@ -152,6 +184,13 @@ internal sealed class LocalChatInput : IDisposable
         // Blur() идёт после сброса владения, иначе BlurEvent уводит фокус
         // у глобального чата, который к этому моменту мог его уже забрать.
         _field.Blur();
+    }
+
+    // На малых экранах поле «Сказать» встаёт на место хотбара и
+    // программатора; класс на корне панели убирает их, пока поле открыто.
+    private void MarkSayOpen(bool open)
+    {
+        _doc.rootVisualElement?.panel?.visualTree.EnableInClassList("ui--say-open", open);
     }
 
     // Флаг ставится здесь, а не в колбэке FocusEvent: событие приходит
@@ -177,6 +216,7 @@ internal sealed class LocalChatInput : IDisposable
 
     public void Dispose()
     {
+        _touchCommands.LocalChatRequested -= OnTouchSayRequested;
         Hide();
         _blink.Dispose();
         _tree?.RemoveFromHierarchy();
@@ -202,11 +242,14 @@ internal sealed class LocalChatInput : IDisposable
 
         _panel = tree.Q<VisualElement>("LocalChatPanel");
         _field = tree.Q<TextField>("LocalChatField");
-        if (_panel == null || _field == null)
+        Button? send = tree.Q<Button>("LocalChatSendButton");
+        if (_panel == null || _field == null || send == null)
         {
             throw new InvalidOperationException(
-                $"{Tag} LocalChat.uxml must contain LocalChatPanel and LocalChatField.");
+                $"{Tag} LocalChat.uxml must contain LocalChatPanel, LocalChatField and LocalChatSendButton.");
         }
+
+        send.clicked += Submit;
 
         _tree = tree;
         _doc.rootVisualElement.Add(tree);

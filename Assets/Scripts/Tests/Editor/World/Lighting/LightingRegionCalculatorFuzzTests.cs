@@ -17,11 +17,17 @@ public class LightingRegionCalculatorFuzzTests
     private const int MinCell = StreamingPolicy.DefaultMinimumWindowDimension;
     private const int MaximumCellWindow = StreamingPolicy.DefaultMaximumWindowDimension;
 
-    private static readonly int[] s_seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
+    private static readonly int[] s_seeds = new[] {
+1, 7, 42, 1337, 90210, 2147483, 8675309
+ };
 
-    private static readonly int[] s_hostileCoords = [-10_000_000, -1000, -17, -8, -1, 0, 1, 7, 8, 9, 1000, 10_000_000];
+    private static readonly int[] s_hostileCoords = new[] {
+-10_000_000, -1000, -17, -8, -1, 0, 1, 7, 8, 9, 1000, 10_000_000
+ };
 
-    private static readonly int[] s_hostileExtents = [-1_000_000, -32, -1, 0, 1, 7, 32, 1000, 10_000_000];
+    private static readonly int[] s_hostileExtents = new[] {
+-1_000_000, -32, -1, 0, 1, 7, 32, 1000, 10_000_000
+ };
 
     [Test]
     public void FreshRegionsAreAnchoredQuantizedAndCoverThePaddedViewport([ValueSource(nameof(s_seeds))] int seed)
@@ -106,15 +112,17 @@ public class LightingRegionCalculatorFuzzTests
     public void HostilePreviousRegionsNeverThrowAndNeverProduceNaN([ValueSource(nameof(s_seeds))] int seed)
     {
         var random = new System.Random(seed);
-        Vector4[] hostileRegions =
-        [
+        Vector4[] hostileRegions = new Vector4[]
+        {
+
             new(float.NaN, 0, 0, 0),                       // the sentinel
             new(float.NaN, 1000, 2000, 3000),              // sentinel + plausible garbage
             new(0, 0, -100, 200),                          // negative width
             new(-16, -16, 100, -100),                      // negative height
             new(0, 0, 2, 2),                               // degenerate minimum
             new(-10_000_000, -10_000_000, 20_000_000, 20_000_000), // giant
-        ];
+
+        };
 
         for (int iteration = 0; iteration < 1000; iteration++)
         {

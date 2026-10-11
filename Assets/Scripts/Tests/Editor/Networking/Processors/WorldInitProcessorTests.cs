@@ -59,8 +59,8 @@ public class WorldInitProcessorTests
             "World 2",
             128,
             256,
-            [],
-            []);
+            Array.Empty<CellConfigurationPacket>(),
+            Array.Empty<byte[]>());
 
         _processor.Process(packet);
 

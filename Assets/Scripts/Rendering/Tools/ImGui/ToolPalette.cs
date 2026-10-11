@@ -33,7 +33,7 @@ public static class ToolPalette
     private static readonly Color32 s_errorSolid = new(255, 45, 85, 255);
     private static readonly Color32 s_edgeDim = new(44, 56, 66, 255);
 
-    private static readonly List<Texture2D> s_textures = [];
+    private static readonly List<Texture2D> s_textures = new();
 
     public const int NotchSize = 9;
 
@@ -145,11 +145,13 @@ public static class ToolPalette
     {
         Texture2D texture = Allocate(name, 3, 3);
         Color32[] pixels =
-        [
+        new[] {
+
             border, border, border,
             border, fill, border,
             border, border, border,
-        ];
+
+        };
         texture.SetPixels32(pixels);
         texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
         return texture;

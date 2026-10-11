@@ -11,7 +11,7 @@ public static class ToolLayoutStore
 {
     private const string FileName = "tool_layout.json";
 
-    private static readonly Dictionary<string, LayoutEntry> s_entries = [];
+    private static readonly Dictionary<string, LayoutEntry> s_entries = new();
     private static bool s_loaded;
     private static bool s_dirty;
     private static float s_scale;

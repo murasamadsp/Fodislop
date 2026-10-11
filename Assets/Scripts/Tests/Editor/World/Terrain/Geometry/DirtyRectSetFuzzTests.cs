@@ -16,7 +16,9 @@ public class DirtyRectSetFuzzTests
 
     private static RectInt Bounds => new(1000, 2000, MeshWidth, MeshHeight);
 
-    private static readonly int[] s_seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
+    private static readonly int[] s_seeds = new[] {
+1, 7, 42, 1337, 90210, 2147483, 8675309
+ };
 
     private static IEnumerable<int> HostileCoordinates()
     {

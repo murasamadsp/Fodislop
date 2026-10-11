@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -13,6 +14,7 @@ using Kern.Core;
 [assembly: InternalsVisibleTo("Kern.Tests.Editor")]
 [assembly: InternalsVisibleTo("Kern.Tests.PlayMode")]
 [assembly: InternalsVisibleTo("Kern.World")]
+[assembly: InternalsVisibleTo("Kern.Editor")]
 
 namespace Kern.Persistence;
 public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
@@ -65,9 +67,33 @@ public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        int? sourceFormatVersion;
+        using (var stream = File.OpenRead(filePath))
+        {
+            sourceFormatVersion = WorldLayerFileHeader.TryReadFormatVersion(stream);
+        }
+
+        bool requiresMigration = sourceFormatVersion.HasValue &&
+            sourceFormatVersion.Value < WorldLayerFileHeader.CurrentFormatVersion;
+        Stopwatch? migrationTimer = null;
+        if (requiresMigration)
+        {
+            migrationTimer = Stopwatch.StartNew();
+            UnityEngine.Debug.Log(
+                $"[WorldLayerMigration] Converting '{filePath}' from format {sourceFormatVersion} " +
+                $"to {WorldLayerFileHeader.CurrentFormatVersion}.");
+        }
+
         await UniTask.RunOnThreadPool(
             () => MigrateLegacyFileIfRequired(filePath, widthChunks, heightChunks, chunkSize));
         cancellationToken.ThrowIfCancellationRequested();
+        if (migrationTimer != null)
+        {
+            migrationTimer.Stop();
+            UnityEngine.Debug.Log(
+                $"[WorldLayerMigration] Converted '{filePath}' in " +
+                $"{migrationTimer.Elapsed.TotalSeconds:F1} s.");
+        }
     }
 
     public WorldLayer(
@@ -199,6 +225,15 @@ public sealed class WorldLayer<T> : IWorldLayer<T>, IStoredChunkSource<T>
         {
             WorldLayerFileMigrator.MigrateV2ToCurrent<T>(filePath, widthChunks, heightChunks, chunkSize);
         }
+    }
+
+    internal static void MigrateLegacyFileSynchronously(
+        string filePath,
+        int widthChunks,
+        int heightChunks,
+        int chunkSize)
+    {
+        MigrateLegacyFileIfRequired(filePath, widthChunks, heightChunks, chunkSize);
     }
 
     public int ChunkSize => _chunkSize;

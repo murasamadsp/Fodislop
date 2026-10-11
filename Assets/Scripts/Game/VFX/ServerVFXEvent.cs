@@ -116,9 +116,9 @@ public sealed class ServerVFXEvent : IServerWorldEffect
     // летят справа от кристаллика и гаснут после прилёта.
     private WorldEntityBatchRenderer _batchRenderer = null!;
     private ISceneObjectFactory _sceneObjects = null!;
-    private readonly List<GameObject> _digitObjects = [];
-    private readonly List<WorldEntityBatchRenderer.SpriteHandle> _digitHandles = [];
-    private readonly List<Sprite> _digitSprites = [];
+    private readonly List<GameObject> _digitObjects = new();
+    private readonly List<WorldEntityBatchRenderer.SpriteHandle> _digitHandles = new();
+    private readonly List<Sprite> _digitSprites = new();
     private float _digitRowOffset;
     private float _digitStep;
     private bool _digitsLingering;

@@ -88,15 +88,21 @@ float2 TerrainPolygonVertex(
 
 float4 TerrainOrganicGeometryBends(float packedEdges)
 {
-    int code = (int)round(packedEdges) - KERN_TERRAIN_ORGANIC_EDGE_CODE_OFFSET;
+    // Organic codes are encoded as [1, 625]. Keep the base-five decoder
+    // unsigned so Metal does not emit its slow signed integer divide path.
+    uint code = (uint)round(packedEdges) - (uint)KERN_TERRAIN_ORGANIC_EDGE_CODE_OFFSET;
     float4 bends;
-    bends.x = (code % KERN_TERRAIN_ORGANIC_EDGE_BASE) - KERN_TERRAIN_ORGANIC_EDGE_CENTER;
-    code /= KERN_TERRAIN_ORGANIC_EDGE_BASE;
-    bends.y = (code % KERN_TERRAIN_ORGANIC_EDGE_BASE) - KERN_TERRAIN_ORGANIC_EDGE_CENTER;
-    code /= KERN_TERRAIN_ORGANIC_EDGE_BASE;
-    bends.z = (code % KERN_TERRAIN_ORGANIC_EDGE_BASE) - KERN_TERRAIN_ORGANIC_EDGE_CENTER;
-    code /= KERN_TERRAIN_ORGANIC_EDGE_BASE;
-    bends.w = (code % KERN_TERRAIN_ORGANIC_EDGE_BASE) - KERN_TERRAIN_ORGANIC_EDGE_CENTER;
+    bends.x = (float)(code % (uint)KERN_TERRAIN_ORGANIC_EDGE_BASE) -
+        (float)KERN_TERRAIN_ORGANIC_EDGE_CENTER;
+    code /= (uint)KERN_TERRAIN_ORGANIC_EDGE_BASE;
+    bends.y = (float)(code % (uint)KERN_TERRAIN_ORGANIC_EDGE_BASE) -
+        (float)KERN_TERRAIN_ORGANIC_EDGE_CENTER;
+    code /= (uint)KERN_TERRAIN_ORGANIC_EDGE_BASE;
+    bends.z = (float)(code % (uint)KERN_TERRAIN_ORGANIC_EDGE_BASE) -
+        (float)KERN_TERRAIN_ORGANIC_EDGE_CENTER;
+    code /= (uint)KERN_TERRAIN_ORGANIC_EDGE_BASE;
+    bends.w = (float)(code % (uint)KERN_TERRAIN_ORGANIC_EDGE_BASE) -
+        (float)KERN_TERRAIN_ORGANIC_EDGE_CENTER;
     return bends * (_OrganicBendStrength / KERN_TERRAIN_FACE_GRID_SIZE);
 }
 
@@ -169,8 +175,8 @@ float TerrainGeometryCoverage(
     // Classic distortion moves each corner by less than a quarter cell, so its
     // four-corner contour remains convex. The signed edge tests avoid the
     // divisions and scanline branches of the general polygon test.
-    bool insidePositive = true;
-    bool insideNegative = true;
+    float insidePositive = 1.0;
+    float insideNegative = 1.0;
     [unroll]
     for (int side = 0; side < KERN_TERRAIN_ORGANIC_EDGE_COUNT; side++)
     {
@@ -178,11 +184,11 @@ float TerrainGeometryCoverage(
         float2 edgeEnd = TerrainGeometryCorner(
             cornersX, cornersY, (side + 1) % KERN_TERRAIN_ORGANIC_EDGE_COUNT);
         float edgeCross = TerrainGeometryEdgeCross(edgeStart, edgeEnd, samplePosition);
-        insidePositive = insidePositive && edgeCross >= -KERN_TERRAIN_GEOMETRY_EPSILON;
-        insideNegative = insideNegative && edgeCross <= KERN_TERRAIN_GEOMETRY_EPSILON;
+        insidePositive *= edgeCross >= -KERN_TERRAIN_GEOMETRY_EPSILON ? 1.0 : 0.0;
+        insideNegative *= edgeCross <= KERN_TERRAIN_GEOMETRY_EPSILON ? 1.0 : 0.0;
     }
 
-    return insidePositive || insideNegative ? 1.0 : 0.0;
+    return insidePositive > 0.5 || insideNegative > 0.5 ? 1.0 : 0.0;
 }
 
 // Distortion changes each side's direction and distance from the carrier
@@ -232,8 +238,8 @@ float TerrainOrganicGeometryCoverage(
     // Это большая часть клетки: цикл по восьми рёбрам нужен только у края.
     float interiorMargin = TerrainOrganicInteriorMargin();
     float interiorMarginSquared = interiorMargin * interiorMargin;
-    bool insidePositive = true;
-    bool insideNegative = true;
+    float insidePositive = 1.0;
+    float insideNegative = 1.0;
     for (int side = 0; side < KERN_TERRAIN_ORGANIC_EDGE_COUNT; side++)
     {
         float2 sideStart = TerrainGeometryCorner(cornersX, cornersY, side);
@@ -241,14 +247,16 @@ float TerrainOrganicGeometryCoverage(
             cornersX, cornersY, (side + 1) % KERN_TERRAIN_ORGANIC_EDGE_COUNT);
         float2 sideVector = sideEnd - sideStart;
         float edgeCross = TerrainGeometryEdgeCross(sideStart, sideEnd, samplePosition);
-        bool outsideMargin = edgeCross * edgeCross >
-            interiorMarginSquared * max(dot(sideVector, sideVector), KERN_TERRAIN_GEOMETRY_EPSILON);
-        insidePositive = insidePositive && edgeCross > 0.0 && outsideMargin;
-        insideNegative = insideNegative && edgeCross < 0.0 && outsideMargin;
+        float outsideMargin = edgeCross * edgeCross >
+            interiorMarginSquared * max(dot(sideVector, sideVector), KERN_TERRAIN_GEOMETRY_EPSILON)
+                ? 1.0
+                : 0.0;
+        insidePositive *= (edgeCross > 0.0 ? 1.0 : 0.0) * outsideMargin;
+        insideNegative *= (edgeCross < 0.0 ? 1.0 : 0.0) * outsideMargin;
     }
 
     // Обход углов в любую сторону: внутри — все расстояния одного знака.
-    if (insidePositive || insideNegative)
+    if (insidePositive > 0.5 || insideNegative > 0.5)
     {
         return 1.0;
     }
@@ -274,8 +282,8 @@ bool TerrainGeometryIsDeepInterior(
         ? TerrainOrganicInteriorMargin()
         : 0.0;
     float marginSquared = margin * margin;
-    bool insidePositive = true;
-    bool insideNegative = true;
+    float insidePositive = 1.0;
+    float insideNegative = 1.0;
     [unroll]
     for (int side = 0; side < KERN_TERRAIN_ORGANIC_EDGE_COUNT; side++)
     {
@@ -284,13 +292,15 @@ bool TerrainGeometryIsDeepInterior(
             cornersX, cornersY, (side + 1) % KERN_TERRAIN_ORGANIC_EDGE_COUNT);
         float2 edge = edgeEnd - edgeStart;
         float edgeCross = TerrainGeometryEdgeCross(edgeStart, edgeEnd, samplePosition);
-        bool beyondBendReach = edgeCross * edgeCross >
-            marginSquared * max(dot(edge, edge), KERN_TERRAIN_GEOMETRY_EPSILON);
-        insidePositive = insidePositive && edgeCross > 0.0 && beyondBendReach;
-        insideNegative = insideNegative && edgeCross < 0.0 && beyondBendReach;
+        float beyondBendReach = edgeCross * edgeCross >
+            marginSquared * max(dot(edge, edge), KERN_TERRAIN_GEOMETRY_EPSILON)
+                ? 1.0
+                : 0.0;
+        insidePositive *= (edgeCross > 0.0 ? 1.0 : 0.0) * beyondBendReach;
+        insideNegative *= (edgeCross < 0.0 ? 1.0 : 0.0) * beyondBendReach;
     }
 
-    return insidePositive || insideNegative;
+    return insidePositive > 0.5 || insideNegative > 0.5;
 }
 
 float TerrainGeometrySignedDistance(

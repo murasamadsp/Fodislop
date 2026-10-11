@@ -12,14 +12,30 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyInventoryResponder(
+internal sealed class DummyInventoryResponder
+{
+    private readonly Action<ServerPacket> _sendPacket;
+    private readonly Action<string, int, System.Drawing.Color, string> _activateBuff;
+    private readonly List<(ushort X, ushort Y)> _teleportPositions;
+    private readonly Action<int> _setHealth;
+    private readonly Func<ushort, ushort, CellType> _getCell;
+    private readonly Action<ushort, ushort, CellType> _setCell;
+    internal DummyInventoryResponder(
     Action<ServerPacket> sendPacket,
     Action<string, int, System.Drawing.Color, string> activateBuff,
     List<(ushort X, ushort Y)> teleportPositions,
     Action<int> setHealth,
     Func<ushort, ushort, CellType> getCell,
     Action<ushort, ushort, CellType> setCell)
-{
+    {
+        _sendPacket = sendPacket;
+        _activateBuff = activateBuff;
+        _teleportPositions = teleportPositions;
+        _setHealth = setHealth;
+        _getCell = getCell;
+        _setCell = setCell;
+    }
+
     private ItemType? _selectedItemType;
 
     public Dictionary<ItemType, long> Items { get; } = new();
@@ -37,7 +53,7 @@ internal sealed class DummyInventoryResponder(
     {
         _selectedItemType = item;
         var (name, description) = DummyItemInfo.GetItemInfo(item);
-        sendPacket(new ServerPacket(
+        _sendPacket(new ServerPacket(
             new SelectItemPacket(
                 item,
                 name,
@@ -52,7 +68,7 @@ internal sealed class DummyInventoryResponder(
     public void Deselect()
     {
         _selectedItemType = null;
-        sendPacket(new ServerPacket(default(DeselectItemPacket)));
+        _sendPacket(new ServerPacket(default(DeselectItemPacket)));
     }
 
     public void Use(ushort playerX, ushort playerY, Direction direction)
@@ -71,20 +87,20 @@ internal sealed class DummyInventoryResponder(
         switch (selectedType)
         {
             case ItemType.Rem:
-                setHealth(500);
-                sendPacket(new ServerPacket(new HealthPacket(500, 500)));
+                _setHealth(500);
+                _sendPacket(new ServerPacket(new HealthPacket(500, 500)));
                 break;
             case ItemType.UpgradeBooster:
-                activateBuff("xp3", 86400, System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3");
+                _activateBuff("xp3", 86400, System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3");
                 break;
             case ItemType.FreeUp:
-                activateBuff("freeup", 43200, System.Drawing.Color.Cyan, "Freeup");
+                _activateBuff("freeup", 43200, System.Drawing.Color.Cyan, "Freeup");
                 break;
             case ItemType.MineBooster:
-                activateBuff("x4", 43200, System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4");
+                _activateBuff("x4", 43200, System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4");
                 break;
             case ItemType.Battery:
-                activateBuff("battery", 3600, System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор");
+                _activateBuff("battery", 3600, System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор");
                 break;
             default:
                 break;
@@ -125,15 +141,15 @@ internal sealed class DummyInventoryResponder(
 
         var anchorX = (ushort)anchorXValue;
         var anchorY = (ushort)anchorYValue;
-        List<IHBPacket> placementPackets =
-        [
+        List<IHBPacket> placementPackets = new()
+        {
             new PackPacket(anchorX, anchorY, packType, 0, 0),
-        ];
+        };
         PlaceBuildingCells(placementPackets, anchorX, anchorY, packType);
-        sendPacket(new ServerPacket(new HBPacket([.. placementPackets])));
+        _sendPacket(new ServerPacket(new HBPacket(placementPackets)));
         if (packType == PackType.Teleport)
         {
-            teleportPositions.Add((anchorX, anchorY));
+            _teleportPositions.Add((anchorX, anchorY));
         }
 
         DummyItemInfo.ConsumeItem(Items, selectedType, 1);
@@ -162,7 +178,7 @@ internal sealed class DummyInventoryResponder(
 
             var targetX = (ushort)targetXValue;
             var targetY = (ushort)targetYValue;
-            CellType current = getCell(targetX, targetY);
+            CellType current = _getCell(targetX, targetY);
             bool isAllowedBase = current is CellType.Empty or CellType.Road or
                 CellType.GoldenRoad or CellType.BuildingRoad;
             if (!isAllowedBase)
@@ -170,13 +186,13 @@ internal sealed class DummyInventoryResponder(
                 continue;
             }
 
-            setCell(targetX, targetY, cell);
+            _setCell(targetX, targetY, cell);
             packets.Add(new MapRegionPacket(
                 targetX,
                 targetY,
                 0,
                 0,
-                [cell]));
+                new[] { cell }));
         }
     }
 }

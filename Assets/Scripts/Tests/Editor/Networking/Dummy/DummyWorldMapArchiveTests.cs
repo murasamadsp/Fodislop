@@ -36,6 +36,27 @@ public sealed class DummyWorldMapArchiveTests
         }
     }
 
+    [TestCase("jar:file:///data/app/game.apk!/assets", "WorldMaps/WorldMaps.manifest", "jar:file:///data/app/game.apk!/assets/WorldMaps/WorldMaps.manifest")]
+    [TestCase("jar:file:///data/app/game.apk!/assets/", "World Maps/map file.zip", "jar:file:///data/app/game.apk!/assets/World%20Maps/map%20file.zip")]
+    public void CombineStreamingUri_UsesUriSeparatorsAndEscapesPathSegments(
+        string root,
+        string relativePath,
+        string expected)
+    {
+        Assert.That(
+            DummyWorldMapArchive.CombineStreamingUri(root, relativePath),
+            Is.EqualTo(expected));
+    }
+
+    [TestCase("../outside")]
+    [TestCase("/absolute")]
+    [TestCase("WorldMaps//map.zip")]
+    public void CombineStreamingUri_RejectsInvalidRelativePaths(string relativePath)
+    {
+        Assert.Throws<ArgumentException>(() =>
+            DummyWorldMapArchive.CombineStreamingUri("jar:file:///game.apk!/assets", relativePath));
+    }
+
     [Test]
     public void FirstExtraction_WritesMapAndStampWithoutTempFiles()
     {
@@ -266,7 +287,7 @@ public sealed class DummyWorldMapArchiveTests
 
     private string CacheDirectory => Path.Combine(_root, "cache");
 
-    private static byte[] Marker => [1, 2, 3];
+    private static byte[] Marker => new byte[] { 1, 2, 3 };
 
     private static int ReadFormatVersion(string path)
     {

@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using Kern.Core;
+using Kern.Core.Interfaces;
 using UnityEngine;
 
 namespace Kern.Tools.ImGui;
@@ -11,8 +12,8 @@ public static class ToolWindows
     private const int FirstWindowId = 0x7700;
     private const float ScreenMargin = 8f;
 
-    private static readonly List<ToolWindow> s_windows = [];
-    private static readonly Dictionary<ToolWindow, bool> s_pendingVisibility = [];
+    private static readonly List<ToolWindow> s_windows = new();
+    private static readonly Dictionary<ToolWindow, bool> s_pendingVisibility = new();
     private static int s_nextId = FirstWindowId;
     private static bool s_enabled;
     private static bool s_keyboardCaptured;
@@ -27,9 +28,13 @@ public static class ToolWindows
 
     public static int SessionGeneration { get; private set; }
 
+    // На телефоне и планшете окно меряется в dp, как интерфейс: удвоение
+    // для Retina на экране 400+ ppi давало заголовки тоньше пальца.
     public static float Scale => ToolLayoutStore.Scale > 0f
         ? ToolLayoutStore.Scale
-        : UIScaleUtility.IsRetinaOrHighDpi ? 2f : 1f;
+        : UIScaleUtility.UsesPhysicalScale
+            ? ScreenShapeRules.ResolveDpi(Screen.dpi) / ScreenShapeRules.ReferenceDpi
+            : UIScaleUtility.IsRetinaOrHighDpi ? 2f : 1f;
 
     public static void RequestScale(float scale) => s_pendingScale = scale;
 
@@ -363,10 +368,15 @@ public static class ToolWindows
         s_pointerCaptured = GUIUtility.hotControl != 0;
     }
 
+    // Окна держатся в безопасной области экрана: под вырезом камеры и
+    // скруглёнными углами заголовок не схватить пальцем.
     private static Rect ConstrainToScreen(ToolWindow window, Rect rect, float scale = 1f)
     {
-        float availableWidth = Mathf.Max(1f, (Screen.width / scale) - ScreenMargin * 2f);
-        float availableHeight = Mathf.Max(1f, (Screen.height / scale) - ScreenMargin * 2f);
+        Rect safe = Screen.safeArea;
+        float safeLeft = safe.xMin / scale;
+        float safeTop = (Screen.height - safe.yMax) / scale;
+        float availableWidth = Mathf.Max(1f, (safe.width / scale) - ScreenMargin * 2f);
+        float availableHeight = Mathf.Max(1f, (safe.height / scale) - ScreenMargin * 2f);
         float minimumWidth = Mathf.Min(window.MinimumSize.x, availableWidth);
 
         // Свёрнутому окну нижняя граница не по содержимому, а по полосе
@@ -376,8 +386,10 @@ public static class ToolWindows
             : Mathf.Min(window.MinimumSize.y, availableHeight);
         rect.width = Mathf.Clamp(rect.width, minimumWidth, availableWidth);
         rect.height = Mathf.Clamp(rect.height, minimumHeight, availableHeight);
-        rect.x = Mathf.Clamp(rect.x, ScreenMargin, Mathf.Max(ScreenMargin, (Screen.width / scale) - rect.width - ScreenMargin));
-        rect.y = Mathf.Clamp(rect.y, ScreenMargin, Mathf.Max(ScreenMargin, (Screen.height / scale) - rect.height - ScreenMargin));
+        float minX = safeLeft + ScreenMargin;
+        float minY = safeTop + ScreenMargin;
+        rect.x = Mathf.Clamp(rect.x, minX, Mathf.Max(minX, safeLeft + (safe.width / scale) - rect.width - ScreenMargin));
+        rect.y = Mathf.Clamp(rect.y, minY, Mathf.Max(minY, safeTop + (safe.height / scale) - rect.height - ScreenMargin));
         return rect;
     }
 

@@ -1,0 +1,1261 @@
+/* ═══════════════════════════════════════════════════════════════════
+   СЕНСОРНАЯ РАСКЛАДКА — все экраны в одном файле.
+
+   Класс pointer--touch ставит UIScreen на корень панели, когда ввод —
+   палец; форма экрана приходит классом form--micro|phone|tablet
+   (UILayoutTier). Пиксель панели на мобильной платформе равен dp,
+   поэтому числа ниже — физические размеры.
+
+   Инварианты, которые проверяет MobileLayoutPlayModeTests на матрице
+   устройств (iPhone SE … iPad Pro, флипы и раскладушки):
+     • любая интерактивная цель не меньше 44 dp по короткой стороне;
+     • всё интерактивное — внутри безопасной области (корень документа
+       уже сжат UISafeArea, поэтому отступы ниже — от её краёв);
+     • цели не перекрывают друг друга, текст помещается в свою коробку.
+
+   Файл подключается в KernTheme.tss последним: при равной
+   специфичности побеждают правила, объявленные позже.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+    --touch-target: 44px;
+    --touch-gap: 4px;
+    --touch-edge: 6px;
+    --touch-pad: 120px;
+    --touch-minimap: 104px;
+}
+
+.form--tablet {
+    --touch-pad: 148px;
+    --touch-minimap: 136px;
+}
+
+.form--micro {
+    --touch-pad: 104px;
+}
+
+/* Мелкий текст на телефоне держит Apple-минимум читаемости (11 pt). */
+.pointer--touch {
+    --size-micro: 10px;
+    --size-2xs: 11px;
+    --size-xs: 12px;
+    --size-sm: 13px;
+}
+
+/* ─── Общие цели касания ──────────────────────────────────────────
+   Любой контрол не ниже пальца. Тип-селектор слабее правил экранов с
+   двумя классами, поэтому экран, которому нужно иначе, говорит это явно. */
+
+.pointer--touch Button,
+.pointer--touch Toggle,
+.pointer--touch DropdownField,
+.pointer--touch TextField,
+.pointer--touch IntegerField {
+    min-height: var(--touch-target);
+}
+
+.pointer--touch Button {
+    min-width: var(--touch-target);
+}
+
+/* ─── Видимость блока управления ───────────────────────────────── */
+
+.pointer--touch .hud-mobile-move-pad,
+.pointer--touch .hud-mobile-actions,
+.pointer--touch .hud-mobile-build-actions,
+.pointer--touch .hud-touch-system {
+    display: flex;
+}
+
+.hud-touch-system,
+.hud-mobile-right-dock {
+    display: none;
+}
+
+.pointer--touch .hud-mobile-right-dock {
+    display: flex;
+}
+
+/* Перетаскивание панели — мышиная возможность: пальцем панель
+   таскалась бы вместо стика. */
+.pointer--touch .hud-drag-handle {
+    display: none;
+}
+
+/* ─── Левый верхний угол: панель игрока ────────────────────────── */
+
+.pointer--touch .hud-panel {
+    top: var(--touch-edge);
+    left: var(--touch-edge);
+    width: 176px;
+    padding: var(--space-3);
+}
+
+.pointer--touch .hud-title-row {
+    margin-bottom: var(--space-2);
+    min-height: var(--touch-target);
+}
+
+.pointer--touch .hud-nickname {
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pointer--touch .hud-clan-button {
+    width: var(--touch-target);
+    height: var(--touch-target);
+    flex-shrink: 0;
+}
+
+.pointer--touch .hud-hp-bar,
+.pointer--touch .hud-hp-fill {
+    height: 22px;
+}
+
+.pointer--touch .hud-hp-count {
+    font-size: var(--size-sm);
+    margin: 0;
+    translate: 0 0;
+}
+
+.pointer--touch .hud-minimap-coords {
+    height: 18px;
+    padding: 0;
+    margin-top: 0;
+}
+
+.pointer--touch .hud-level,
+.pointer--touch .hud-credits,
+.pointer--touch .hud-panel .hud-stat {
+    display: none;
+}
+
+.pointer--touch .hud-bonus-button {
+    top: var(--touch-edge);
+    left: auto;
+    right: 124px;
+    width: auto;
+    min-width: 72px;
+    height: var(--touch-target);
+}
+
+.pointer--touch .hud-status-panel {
+    top: 56px;
+    left: auto;
+    right: 124px;
+    width: 160px;
+}
+
+.form--tablet .hud-bonus-button,
+.form--tablet .hud-status-panel {
+    right: 156px;
+}
+
+/* ─── Верх по центру: строка статуса и задание ─────────────────── */
+
+.pointer--touch .hud-top-pill-container {
+    top: 0;
+}
+
+.pointer--touch .hud-mission-panel {
+    top: 28px;
+    min-width: 0;
+    max-width: 32%;
+    padding: var(--space-3);
+}
+
+/* ─── Правый верх: миникарта, системные кнопки, ряд действий ───── */
+
+.pointer--touch .hud-minimap-panel {
+    top: var(--touch-edge);
+    right: var(--touch-edge);
+    bottom: auto;
+    left: auto;
+    padding: var(--space-2);
+}
+
+.pointer--touch .hud-minimap-container {
+    width: var(--touch-minimap);
+    height: var(--touch-minimap);
+}
+
+.hud-touch-system {
+    position: absolute;
+    right: var(--touch-edge);
+    top: 146px;
+    flex-direction: row;
+}
+
+.form--tablet .hud-touch-system {
+    top: 178px;
+}
+
+.hud-touch-system-btn {
+    min-width: 56px;
+    height: var(--touch-target);
+    margin: 0 0 0 var(--touch-gap);
+    padding: 0 var(--space-4);
+    background-color: var(--surface-shelf-dense);
+    border-color: var(--accent-cyan-deep);
+    border-width: 1px;
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: var(--size-sm);
+    -unity-font-style: bold;
+}
+
+.pointer--touch .hud-btn-top-row {
+    top: 196px;
+    width: auto;
+    min-width: 56px;
+    height: var(--touch-target);
+    padding: 0 var(--space-4);
+}
+
+.form--tablet .hud-btn-top-row {
+    top: 228px;
+}
+
+/* Ряд «Респавн · Мои здания · FAQ» справа под системными кнопками.
+   Ширины подписей разные, поэтому правые края заданы явно. */
+.pointer--touch .hud-btn-top-row--faq { right: var(--touch-edge); }
+.pointer--touch .hud-btn-top-row--buildings { right: 68px; }
+.pointer--touch .hud-btn-top-row--respawn { right: 186px; }
+
+/* ─── Левый низ: стик и режимы над ним ─────────────────────────── */
+
+.pointer--touch .hud-mobile-move-pad {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: var(--touch-pad);
+    height: var(--touch-pad);
+}
+
+.pointer--touch .hud-toggle-btn {
+    width: 92px;
+    min-width: 0;
+    height: var(--touch-target);
+    bottom: 144px;
+    padding: 0 var(--space-1);
+}
+
+.pointer--touch .hud-toggle-btn-label {
+    font-size: var(--size-xs);
+    margin: 0;
+    padding: 0;
+}
+
+.pointer--touch .hud-toggle-aggression {
+    left: var(--touch-edge);
+}
+
+.pointer--touch .hud-toggle-auto-dig {
+    left: 102px;
+}
+
+/* Программатор — под заданием, правее панели игрока: в левой колонке
+   между панелью и стиком на телефоне помещается только ряд режимов. */
+.pointer--touch .hud-programmator-button,
+.pointer--touch .hud-program-run-btn {
+    top: 156px;
+    bottom: auto;
+    height: var(--touch-target);
+}
+
+.pointer--touch .hud-program-run-btn {
+    left: 200px;
+    width: var(--touch-target);
+}
+
+.pointer--touch .hud-programmator-button {
+    left: 248px;
+    width: 140px;
+    padding-left: var(--space-3);
+}
+
+.form--tablet .hud-toggle-btn {
+    bottom: 176px;
+}
+
+/* ─── Правый низ: действия ─────────────────────────────────────── */
+
+.pointer--touch .hud-mobile-right-dock {
+    position: absolute;
+    right: var(--touch-edge);
+    bottom: var(--touch-edge);
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.pointer--touch .hud-mobile-actions {
+    flex-direction: row;
+    align-items: flex-end;
+}
+
+.pointer--touch .hud-mobile-build-actions {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    margin-bottom: var(--touch-gap);
+}
+
+.pointer--touch .hud-mobile-action {
+    min-width: 48px;
+    height: var(--touch-target);
+    margin: 0 0 0 var(--touch-gap);
+    padding: 0 var(--space-2);
+    font-size: var(--size-sm);
+    white-space: nowrap;
+}
+
+.pointer--touch .hud-mobile-action--primary {
+    min-width: 72px;
+    height: 64px;
+    font-size: var(--size-md);
+}
+
+.pointer--touch .hud-mobile-build-action {
+    min-width: 52px;
+    font-size: var(--size-xs);
+}
+
+.hud-touch-toggle--active {
+    background-color: rgba(21, 105, 111, 0.9);
+    border-color: var(--accent-cyan-hover);
+}
+
+/* Навыки — между стиком и действиями, над хотбаром. */
+.pointer--touch .hud-skill-container {
+    bottom: 60px;
+    right: auto;
+    left: 144px;
+    padding: 0;
+    flex-direction: row;
+}
+
+.form--tablet .hud-skill-container {
+    left: 172px;
+}
+
+/* ─── Инвентарь: строка у нижнего края правее стика ────────────── */
+
+.pointer--touch .inv-hotbar {
+    top: auto;
+    right: auto;
+    bottom: var(--touch-edge);
+    left: 144px;
+    flex-direction: row;
+    align-items: flex-end;
+}
+
+.form--tablet .inv-hotbar {
+    left: 172px;
+}
+
+/* Колонка из четырёх ячеек становится строкой, а лишние «колонки»
+   полного списка встают строками над ней. */
+.pointer--touch .inv-hotbar-slots {
+    flex-direction: column-reverse;
+    align-items: flex-start;
+}
+
+.pointer--touch .inv-slot-column {
+    flex-direction: row;
+}
+
+.pointer--touch .inv-root--modal {
+    background-color: rgba(0, 0, 0, 0.45);
+}
+
+/* Раскрытый список — окно по центру: группы по четыре предмета идут
+   строками и переносятся по ширине окна, лишнее листается пальцем. */
+.pointer--touch .inv-hotbar.inv-hotbar--popup {
+    left: 50%;
+    top: 50%;
+    bottom: auto;
+    right: auto;
+    translate: -50% -50%;
+    max-width: 96%;
+    padding: var(--space-3);
+    background-color: var(--surface-panel);
+    border-color: var(--border-subtle);
+    border-width: 1px;
+    border-radius: var(--radius-md);
+    align-items: center;
+}
+
+.pointer--touch .inv-hotbar--popup .inv-scroll {
+    max-height: 240px;
+    flex-shrink: 1;
+}
+
+.form--short .inv-hotbar--popup .inv-scroll {
+    max-height: 150px;
+}
+
+.pointer--touch .inv-hotbar--popup .inv-hotbar-slots {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-width: 564px;
+}
+
+.form--narrow .inv-hotbar--popup .inv-hotbar-slots {
+    max-width: 282px;
+}
+
+.pointer--touch .inv-toggle-btn {
+    width: var(--touch-target);
+    min-width: var(--touch-target);
+    height: var(--touch-target);
+}
+
+.pointer--touch .inv-cell {
+    width: var(--touch-target);
+    min-width: var(--touch-target);
+    height: var(--touch-target);
+    min-height: var(--touch-target);
+    margin: 1px;
+}
+
+/* ─── Чат: окно уходит наверх — снизу его закрыла бы клавиатура ── */
+
+/* Окно глобального чата — вверху между панелью игрока и миникартой:
+   системные кнопки под миникартой остаются открытыми (ими чат и
+   закрывается), а клавиатура выезжает снизу и окно не закрывает. */
+.pointer--touch .gchat-panel {
+    top: var(--touch-edge);
+    bottom: auto;
+    left: 188px;
+    right: 124px;
+    height: 134px;
+}
+
+.form--tablet .gchat-panel {
+    right: 156px;
+    height: 144px;
+}
+
+.pointer--touch .gchat-bottom-row {
+    height: var(--touch-target);
+}
+
+.pointer--touch .gchat-send-button,
+.pointer--touch .gchat-color-button {
+    width: var(--touch-target);
+    height: var(--touch-target);
+}
+
+/* Поле «Сказать» — вверху по центру: снизу его закрыла бы клавиатура. */
+.pointer--touch .lchat-panel {
+    top: var(--touch-edge);
+    width: 40%;
+}
+
+.form--micro .lchat-panel {
+    top: 56px;
+    width: 96%;
+}
+
+.pointer--touch .lchat-input {
+    min-height: var(--touch-target);
+}
+
+.pointer--touch .lchat-send {
+    display: flex;
+    width: var(--touch-target);
+    height: var(--touch-target);
+    margin: 0 0 0 var(--space-2);
+}
+
+/* ─── Micro ──────────────────────────────────────────────────────
+   Две разные нехватки места, у каждой своя раскладка:
+     form--narrow — внешний экран флипа (~390×380 dp): мало ширины;
+     form--short  — окно в сплите (~900×200 dp): мало высоты.
+   Обоим не хватает места на задание, бонус, навыки и строки статуса —
+   они уходят; управление дроном, чат, меню и программатор остаются. */
+
+.form--micro .hud-mission-panel,
+.form--micro .hud-status-panel,
+.form--micro .hud-bonus-button,
+.form--micro .hud-basket,
+.form--micro .hud-basket-container,
+.form--micro .hud-panel .hud-separator,
+.form--micro .hud-panel .hud-stat,
+.form--micro .hud-skill-container,
+.form--micro .hud-top-pill-version,
+.form--micro .hud-top-pill-asset,
+.form--micro .hud-top-pill-divider,
+.form--micro .hud-minimap-panel {
+    display: none;
+}
+
+.form--micro .hud-panel {
+    width: 130px;
+}
+
+.pointer--touch .hud-panel .hud-stat {
+    white-space: normal;
+}
+
+.form--micro .hud-top-pill {
+    max-width: 96%;
+}
+
+.form--micro .hud-top-pill-fps {
+    flex-grow: 0;
+    flex-shrink: 1;
+    font-size: var(--size-micro);
+}
+
+.form--micro .hud-mobile-action {
+    min-width: var(--touch-target);
+    font-size: var(--size-xs);
+}
+
+.form--micro .hud-mobile-action--primary {
+    min-width: 64px;
+}
+
+.form--micro .hud-mobile-build-action {
+    min-width: var(--touch-target);
+}
+
+/* Узкий: системные кнопки — вверху справа, под ними хотбар и программатор. */
+.form--narrow .hud-touch-system {
+    top: var(--touch-edge);
+}
+
+.form--narrow .inv-hotbar {
+    top: 56px;
+    bottom: auto;
+    left: auto;
+    right: var(--touch-edge);
+}
+
+.form--narrow .hud-btn-top-row {
+    display: none;
+}
+
+.form--narrow .hud-program-run-btn {
+    top: 106px;
+    left: auto;
+    right: 152px;
+}
+
+.form--narrow .hud-programmator-button {
+    top: 106px;
+    left: auto;
+    right: var(--touch-edge);
+}
+
+.form--narrow .gchat-panel {
+    top: 56px;
+    left: var(--touch-edge);
+    right: var(--touch-edge);
+    height: 126px;
+}
+
+.form--narrow.ui--say-open .inv-hotbar,
+.form--narrow.ui--say-open .hud-program-run-btn,
+.form--narrow.ui--say-open .hud-programmator-button,
+.form--narrow.ui--chat-open .inv-hotbar,
+.form--narrow.ui--chat-open .hud-program-run-btn,
+.form--narrow.ui--chat-open .hud-programmator-button {
+    display: none;
+}
+
+/* Низкий: всё в два пояса — верхний (панель, режимы, программатор,
+   системные кнопки) и нижний (стик, хотбар, действия). */
+.form--short {
+    --touch-pad: 96px;
+}
+
+.form--short .hud-panel .hud-title-row {
+    display: none;
+}
+
+.form--short .hud-touch-system {
+    top: var(--touch-edge);
+}
+
+.form--short .hud-toggle-btn {
+    top: var(--touch-edge);
+    bottom: auto;
+}
+
+.form--short .hud-toggle-aggression {
+    left: 142px;
+}
+
+.form--short .hud-toggle-auto-dig {
+    left: 238px;
+}
+
+.form--short .hud-program-run-btn {
+    top: var(--touch-edge);
+    left: 336px;
+}
+
+.form--short .hud-programmator-button {
+    top: var(--touch-edge);
+    left: 384px;
+}
+
+.form--short .hud-btn-top-row {
+    display: none;
+}
+
+.form--short .inv-hotbar {
+    left: 116px;
+}
+
+.form--short .hud-mobile-build-actions {
+    display: none;
+}
+
+.form--short .gchat-panel {
+    top: 56px;
+    left: 116px;
+    right: var(--touch-edge);
+    height: 136px;
+}
+
+.form--short .lchat-panel {
+    top: 56px;
+    left: 116px;
+    right: var(--touch-edge);
+    width: auto;
+    translate: 0 0;
+}
+
+.form--short.ui--say-open .hud-mobile-right-dock,
+.form--short.ui--say-open .inv-hotbar,
+.form--short.ui--chat-open .hud-mobile-right-dock,
+.form--short.ui--chat-open .inv-hotbar {
+    display: none;
+}
+
+/* ─── Карта мира ───────────────────────────────────────────────── */
+
+.pointer--touch .world-map-window {
+    width: 92%;
+    height: 92%;
+    min-width: 0;
+    min-height: 0;
+}
+
+.pointer--touch .world-map-header {
+    height: 52px;
+}
+
+.pointer--touch .world-map-close,
+.pointer--touch .world-map-follow {
+    height: var(--touch-target);
+}
+
+.pointer--touch .world-map-close {
+    width: var(--touch-target);
+}
+
+/* ─── Пауза ─────────────────────────────────────────────────────── */
+
+.pointer--touch .pause-btn {
+    height: var(--touch-target);
+    margin-bottom: var(--space-3);
+}
+
+/* Панель паузы — во всю высоту безопасной области: на низком экране
+   кнопки иначе уходили за нижний край, а список листается. */
+.pointer--touch .pause-panel {
+    height: 96%;
+    max-height: 96%;
+    padding: var(--space-6) var(--space-8);
+}
+
+/* ─── Главное меню ──────────────────────────────────────────────────
+   Колонка меню слева, иконки справа, шапка и подвал — по 52 dp.
+   Подсказки клавиш (ENTER/ESC) и маршрут спуска в подвале на пальце
+   не нужны: первые без клавиатуры бессмысленны, второй не помещается. */
+
+.pointer--touch .mm-header {
+    height: 52px;
+    padding: 0 var(--space-6);
+    align-items: center;
+}
+
+.pointer--touch .mm-wordmark-icon {
+    width: 28px;
+    height: 28px;
+    margin-right: var(--space-4);
+}
+
+.pointer--touch .mm-brand-title {
+    font-size: var(--size-lg);
+}
+
+.pointer--touch .mm-user-pill {
+    max-height: 48px;
+    padding: var(--space-1) var(--space-4);
+}
+
+.pointer--touch .mm-user-avatar {
+    width: 32px;
+    height: 32px;
+    margin-right: var(--space-3);
+}
+
+.pointer--touch .mm-menu {
+    left: var(--space-8);
+    top: 60px;
+    bottom: 58px;
+    width: 52%;
+    max-width: 460px;
+    justify-content: center;
+}
+
+.pointer--touch .mm-eyebrow,
+.pointer--touch .mm-hotkey-row,
+.pointer--touch .mm-route,
+.pointer--touch .mm-sidebar-sep {
+    display: none;
+}
+
+.pointer--touch .mm-heading-group {
+    margin-bottom: var(--space-4);
+}
+
+.pointer--touch .mm-heading-white,
+.pointer--touch .mm-heading-gold {
+    font-size: var(--size-2xl);
+    white-space: normal;
+}
+
+.form--phone .mm-subtitle,
+.form--micro .mm-subtitle {
+    display: none;
+}
+
+.pointer--touch .mm-update-banner {
+    min-height: var(--touch-target);
+    padding: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.pointer--touch .mm-update-banner-sub {
+    display: none;
+}
+
+.pointer--touch .mm-button-group {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+/* Иконки — колонкой справа; не помещаются в высоту — встают второй
+   колонкой левее. */
+.pointer--touch .mm-sidebar {
+    top: 60px;
+    bottom: 58px;
+    right: var(--space-6);
+    flex-wrap: wrap-reverse;
+    align-content: flex-start;
+}
+
+.pointer--touch .mm-side-btn {
+    width: var(--touch-target);
+    height: var(--touch-target);
+    margin: 0 0 var(--space-3) var(--space-3);
+}
+
+.pointer--touch .mm-footer {
+    height: 52px;
+    padding: 0 var(--space-6);
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pointer--touch .mm-news-ticker {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 70%;
+    min-height: var(--touch-target);
+    align-items: center;
+}
+
+.pointer--touch .mm-footer-link {
+    width: auto;
+    padding: 0 var(--space-3);
+}
+
+.form--micro .mm-heading-white,
+.form--micro .mm-heading-gold {
+    font-size: var(--size-xl);
+}
+
+.form--narrow .mm-menu {
+    width: auto;
+    right: 112px;
+    max-width: none;
+}
+
+.form--narrow .mm-brand-sub,
+.form--narrow .mm-footer-meta {
+    display: none;
+}
+
+/* Низкий: шапка без подвала, кнопки спуска — в ряд, иконки — рядом. */
+.form--short .mm-footer,
+.form--short .mm-heading-group,
+.form--short .mm-update-banner {
+    display: none;
+}
+
+.form--short .mm-menu {
+    top: 56px;
+    bottom: var(--space-3);
+    width: 56%;
+    max-width: none;
+}
+
+.form--short .mm-button-group {
+    flex-direction: row;
+}
+
+.form--short .mm-btn-primary,
+.form--short .mm-btn-secondary {
+    flex-grow: 1;
+    flex-basis: 0;
+    margin-right: var(--space-3);
+}
+
+.form--short .mm-sidebar {
+    top: 56px;
+    bottom: var(--space-3);
+}
+
+/* Заголовок переносится, а не обрезается: высота — по тексту. */
+.pointer--touch .mm-heading-white,
+.pointer--touch .mm-heading-gold {
+    height: auto;
+}
+
+.form--phone .mm-heading-white,
+.form--phone .mm-heading-gold {
+    font-size: var(--size-xl);
+}
+
+/* Баннер обновления на телефоне не помещается в колонку: о
+   необходимости обновления говорит значок на иконке «Обновление». */
+.form--phone .mm-update-banner {
+    display: none;
+}
+
+.pointer--touch .mm-brand-title {
+    margin: 0;
+    padding: 0;
+}
+
+.pointer--touch .mm-btn-primary-arrow-box {
+    min-width: 28px;
+    min-height: 28px;
+}
+
+.pointer--touch .mm-btn-primary-arrow {
+    margin: 0;
+    padding: 0;
+}
+
+/* ─── Вход ─────────────────────────────────────────────────────────
+   Альбомный телефон: карточка в две колонки — бренд слева, форма справа
+   с прокруткой. Карточка — во всю безопасную область по высоте. */
+
+.pointer--touch .auth-card-wrap {
+    width: 96%;
+    max-width: 820px;
+    max-height: 96%;
+}
+
+.pointer--touch .auth-card {
+    width: 100%;
+    max-height: 100%;
+    flex-direction: row;
+    padding: var(--space-6) var(--space-8);
+}
+
+.pointer--touch .auth-brand {
+    width: 34%;
+    flex-shrink: 0;
+    justify-content: center;
+    padding: 0 var(--space-6) 0 0;
+    margin: 0 var(--space-6) 0 0;
+    border-bottom-width: 0;
+    border-right-width: 1px;
+    border-right-color: var(--border-subtle);
+}
+
+.pointer--touch .auth-brand-subtitle {
+    white-space: normal;
+    -unity-text-align: middle-center;
+}
+
+.pointer--touch .auth-systems {
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.pointer--touch .auth-form-scroll {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.pointer--touch .auth-tab {
+    height: var(--touch-target);
+}
+
+.pointer--touch .auth-input {
+    height: var(--touch-target);
+}
+
+.pointer--touch .auth-submit,
+.pointer--touch .auth-vk,
+.pointer--touch .auth-footer-link {
+    min-height: var(--touch-target);
+}
+
+.pointer--touch .auth-vk-label {
+    height: auto;
+}
+
+.form--narrow .auth-card {
+    flex-direction: column;
+}
+
+.form--narrow .auth-brand {
+    width: auto;
+    border-right-width: 0;
+    margin: 0 0 var(--space-4) 0;
+    padding: 0;
+}
+
+.form--narrow .auth-brand-subtitle,
+.form--narrow .auth-systems,
+.form--narrow .auth-brand-logo-wrap,
+.form--short .auth-systems,
+.form--short .auth-brand-logo-wrap {
+    display: none;
+}
+
+.pointer--touch .auth-card-shadow {
+    display: none;
+}
+
+/* ─── Онбординг ────────────────────────────────────────────────────
+   Карточка — во весь экран; шапка и подвал не сжимаются, середина
+   листается. Контрол в строке настройки — справа, но не шире 45 %. */
+
+.pointer--touch .onb-card {
+    width: 96%;
+    max-width: 820px;
+    max-height: 96%;
+}
+
+.pointer--touch .onb-header {
+    flex-wrap: wrap;
+    padding: var(--space-4) var(--space-6);
+}
+
+.pointer--touch .onb-header-text {
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.pointer--touch .onb-title {
+    white-space: normal;
+    font-size: var(--size-md);
+}
+
+.pointer--touch .onb-steps {
+    flex-wrap: wrap;
+}
+
+.pointer--touch .onb-row {
+    padding: var(--space-3) var(--space-4);
+    align-items: center;
+}
+
+.pointer--touch .onb-row-text {
+    flex-shrink: 1;
+    min-width: 0;
+    margin-right: var(--space-4);
+}
+
+.pointer--touch .onb-row-text Label,
+.pointer--touch .onb-step Label {
+    white-space: normal;
+}
+
+.pointer--touch .onb-select,
+.pointer--touch .onb-slider-group {
+    width: 45%;
+    flex-shrink: 0;
+}
+
+.pointer--touch .onb-footer {
+    padding: var(--space-3) var(--space-6);
+}
+
+.pointer--touch .onb-btn {
+    height: var(--touch-target);
+    min-width: 96px;
+}
+
+.form--narrow .onb-steps,
+.form--short .onb-steps {
+    display: none;
+}
+
+.form--narrow .onb-row {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.form--narrow .onb-select,
+.form--narrow .onb-slider-group {
+    width: 100%;
+}
+
+.pointer--touch .auth-vk-label,
+.pointer--touch .auth-vk-badge {
+    margin: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Строки колонки меню не сжимаются: при нехватке высоты сжатие резало
+   перенесённый заголовок до одной строки. */
+.pointer--touch .mm-heading-white,
+.pointer--touch .mm-heading-gold,
+.pointer--touch .mm-heading-group,
+.pointer--touch .mm-button-group,
+.pointer--touch .mm-update-banner {
+    flex-shrink: 0;
+}
+
+.form--tablet .mm-menu {
+    max-width: 580px;
+}
+
+/* Узкий: подвал с новостями не помещается под колонку меню. */
+.form--narrow .mm-footer {
+    display: none;
+}
+
+.form--narrow .mm-menu,
+.form--narrow .mm-sidebar {
+    bottom: var(--space-3);
+}
+
+/* ─── Настройки в паузе ──────────────────────────────────────────
+   Вкладки — строкой над содержимым, с переносом: столбцом семь вкладок
+   по 44 dp не помещаются в высоту телефона. */
+.pointer--touch .pause-settings {
+    width: 96%;
+    max-width: 96%;
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
+}
+
+.pointer--touch .pause-title {
+    margin-bottom: var(--space-3);
+}
+
+.pointer--touch .settings-layout {
+    flex-direction: column;
+    margin-bottom: var(--space-3);
+}
+
+.pointer--touch .settings-navigation {
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0 0 var(--space-3) 0;
+    margin: 0 0 var(--space-3) 0;
+    border-right-width: 0;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--border-subtle);
+}
+
+.pointer--touch .settings-tab {
+    width: auto;
+    height: var(--touch-target);
+    margin: 0 var(--space-3) var(--space-3) 0;
+    padding: 0 var(--space-5);
+}
+
+.pointer--touch .settings-content {
+    padding-left: 0;
+}
+
+/* Заголовок меню — одной строкой: перенос в колонке с выравниванием
+   по началу не получал ширины и обрезался до строки. */
+.form--tablet .mm-heading-white,
+.form--tablet .mm-heading-gold {
+    font-size: var(--size-xl);
+    white-space: nowrap;
+}
+
+.form--phone .mm-heading-white,
+.form--phone .mm-heading-gold,
+.form--micro .mm-heading-white,
+.form--micro .mm-heading-gold {
+    font-size: var(--size-lg);
+    white-space: nowrap;
+}
+
+/* Заголовок «Настройки» над вкладками на таче лишний: вкладки сами
+   говорят, где мы, а высота нужна содержимому. */
+.pointer--touch .pause-settings .pause-title {
+    display: none;
+}
+
+/* ─── Программатор ─────────────────────────────────────────────────
+   Окно — во всю безопасную область. Клетки по 44 dp: сетка 16×12 больше
+   экрана телефона и двигается пальцем внутри своего окна
+   (ProgrammatorTouchGrid). Правка — панелью инструментов: клавиатурных
+   Ctrl+Z/C/V и ПКМ у пальца нет (ПКМ — долгое нажатие или повторный тап). */
+
+.prog-touch-toolbar {
+    display: none;
+}
+
+.pointer--touch .prog-touch-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    margin-bottom: var(--space-3);
+}
+
+.prog-touch-tool {
+    height: var(--touch-target);
+    margin: 0 var(--space-2) var(--space-2) 0;
+    padding: 0 var(--space-4);
+    font-size: var(--size-xs);
+}
+
+.prog-touch-tool--active {
+    background-color: rgba(21, 105, 111, 0.9);
+    border-color: var(--accent-cyan-hover);
+}
+
+.pointer--touch .prog-panel {
+    width: 98%;
+    max-width: 98%;
+    height: 98%;
+    max-height: 98%;
+    padding: var(--space-3);
+}
+
+.pointer--touch .prog-top {
+    margin-bottom: var(--space-2);
+}
+
+.pointer--touch .prog-row,
+.pointer--touch .prog-action-row {
+    flex-wrap: wrap;
+}
+
+.pointer--touch .prog-ctrl-btn,
+.pointer--touch .prog-close-btn,
+.pointer--touch .prog-page-input {
+    width: var(--touch-target);
+    height: var(--touch-target);
+    margin: 0 var(--space-1) var(--space-1) 0;
+}
+
+.pointer--touch .prog-grid-scroll {
+    overflow: hidden;
+}
+
+.pointer--touch .prog-grid-container {
+    width: 768px;
+    max-width: none;
+    flex-shrink: 0;
+}
+
+.pointer--touch .prog-cell {
+    width: var(--touch-target);
+    height: var(--touch-target);
+    margin: 2px;
+}
+
+/* Список программ и диалог создания — во всю высоту, с прокруткой. */
+.pointer--touch .prog-list-panel {
+    width: 70%;
+    max-width: 560px;
+    min-height: 0;
+    max-height: 96%;
+    padding: var(--space-4) var(--space-6);
+}
+
+.pointer--touch .prog-list-scroll {
+    min-height: 0;
+    flex-shrink: 1;
+}
+
+.pointer--touch .prog-create-btn {
+    height: var(--touch-target);
+}
+
+.pointer--touch .prog-dialog-panel {
+    width: 70%;
+    max-width: 480px;
+}
+
+.form--micro .prog-list-panel,
+.form--micro .prog-dialog-panel {
+    width: 96%;
+}
+
+/* Окно программатора на таче непрозрачно: оно во весь экран, и HUD под
+   полупрозрачной подложкой читался бы сквозь сетку. Шапка не сжимается —
+   иначе ряд «сохранить/запуск/стоп» наезжал на сетку. */
+.pointer--touch .prog-panel {
+    background-color: var(--surface-solid);
+}
+
+/* Шапка — строка в колонке окна: по высоте не сжимается; её левая часть
+   сжимается по ширине и переносит кнопки, оставляя место крестику. */
+.pointer--touch .prog-header-row {
+    flex-shrink: 0;
+}
+
+.pointer--touch .prog-top {
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.prog-touch-tool {
+    background-color: var(--surface-shelf-dense);
+    border-color: var(--accent-cyan-deep);
+    border-width: 1px;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    -unity-font-style: bold;
+}
+
+/* Шапка и кнопка «Создать» списка программ не сжимаются: сжимается и
+   листается только сам список. */
+.pointer--touch .prog-list-header-row,
+.pointer--touch .prog-create-container {
+    flex-shrink: 0;
+}
+
+.form--short .prog-list-panel {
+    max-height: 98%;
+    padding: var(--space-2) var(--space-4);
+}

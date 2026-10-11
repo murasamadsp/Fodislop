@@ -10,9 +10,11 @@ namespace Kern.Tests.World;
 [TestFixture]
 public class SpatialShardGridTests
 {
-    private sealed class MockEntity(string name)
+    private sealed class MockEntity
     {
-        public string Name { get; } = name;
+        public MockEntity(string name) => Name = name;
+
+        public string Name { get; }
     }
 
     [Test]
