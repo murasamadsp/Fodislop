@@ -154,8 +154,13 @@ namespace Kern.Game
         public static bool IsInView(WorldEntityBatchRenderer.SpriteHandle handle, bool hasCamera, in Rect visibleRect) =>
             !hasCamera || visibleRect.Contains((Vector2)handle.GetWorldPosition());
 
-        public static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect) =>
-            !hasCamera || visibleRect.Contains((Vector2)tentacle.RootPosition);
+public static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect) =>
+        !hasCamera
+        ||
+        // Both ends, not just the root: the claw reaches past the last chain point, so a strand
+        // whose robot is off screen can still have its claw and tail tip on screen.
+        visibleRect.Contains((Vector2)tentacle.RootPosition)
+        || visibleRect.Contains((Vector2)tentacle.TipPosition);
 
         private static bool Contains(in Rect outer, in Rect inner) =>
             inner.xMin >= outer.xMin &&
