@@ -5,13 +5,16 @@ void near(float got,float expected,float tolerance,const char* label) {
         throw std::runtime_error(std::string(label)+": got "+std::to_string(got)+", expected "+std::to_string(expected));
 }
 void setup(int w,int h,int scale=1) {
-    _FieldSize={w*scale,h*scale}; _WorldRect={0,0,(float)w,(float)h};
-    _MaterialField.reset(w*scale,h*scale); _EmissionField.reset(w*scale,h*scale);
+    _FieldSize={w*scale,h*scale}; _LightSize=_FieldSize; _FieldTexelsPerLightTexel=1; _WorldRect={0,0,(float)w,(float)h};
+    _MaterialField.reset(w*scale,h*scale); _GlowField.reset(w*scale,h*scale);
     _LightingCounters.assign(3, 0);
     _DirtyRegions.assign(1, int4{0,0,0,0});
     _CascadeChangedMask.clear();
     _DirtyRegionCount=0; _CascadeMaskEnabled=0;
     _MaterialYFlip=0; _EmptyExtinctionRGB={.2f,.1f,.4f,0}; _SolidExtinctionRGB={4.f,8.f,16.f,0};
+    _DynamicPolarScalarExtinction=0;
+    _NeutralExtinction=0;
+    _DynamicTilesScalarRadiance=0;
 }
 // Rebuilds the per-cell solid mask from the current material fixture, as the
 // engine does whenever the material field is redrawn.
@@ -20,10 +23,17 @@ void buildMask() {
     _CellSolidMaskOutput.reset(_CellGridSize.x,_CellGridSize.y);
     for(int y=0;y<_CellGridSize.y;y++)for(int x=0;x<_CellGridSize.x;x++)BuildCellSolidMask(uint3{(uint)x,(uint)y,0});
     _CellSolidMask=_CellSolidMaskOutput;
+    size_t cells=(size_t)_CellGridSize.x*_CellGridSize.y;
+    _CleanCellRowsOutput.assign(cells,make_uint2(0u,0u)); _CleanCellPrefixOutput.assign(cells,make_uint2(0u,0u));
+    for(int y=0;y<_CellGridSize.y;y++)BuildCleanCellRows(uint3{(uint)y,0,0});
+    _CleanCellRows=_CleanCellRowsOutput;
+    for(int x=0;x<_CellGridSize.x;x++)BuildCleanCellColumns(uint3{(uint)x,0,0});
+    _CleanCellPrefix=_CleanCellPrefixOutput;
 }
 // Rebuilds the per-texel surface air cache from the current material fixture,
 // as the engine does whenever the material field is redrawn.
 void buildAirCache() {
+    buildMask();
     _SurfaceAirCacheOutput.reset(_FieldSize.x,_FieldSize.y);
     for(int y=0;y<_FieldSize.y;y++)for(int x=0;x<_FieldSize.x;x++)BuildSurfaceAirCache(uint3{(uint)x,(uint)y,0});
     _SurfaceAirCache=_SurfaceAirCacheOutput;
@@ -65,34 +75,42 @@ void solveField(int count=3, bool dependencyMask=false, int4 dirty={0,0,0,0}) {
 }
 // Dynamic lights as the engine dispatches them: each dynamic light traced into its own tile
 // (here a whole-field tile stacked vertically), then the tiles composed.
-// fullReach: сбор без отсечения по дальности фонаря — эталон для проверки
-// отсечения.
-void solveDynamicLights(bool writeDirect=false,bool fullReach=false) {
+void solveDynamicLights(bool writeDirect=false,
+    int2 receiverOrigin={0,0},int2 receiverSize={0,0}) {
     int w=_FieldSize.x,h=_FieldSize.y,count=std::max(_DynamicLightCount,1);
-    _DynamicTiles.reset(w,h*count); _DynamicTileInfos.clear();
     _DirectTexture.reset(w,h);
-    _DynamicDispatchOrigin={0,0}; _DynamicDispatchSize=_FieldSize;
+    _DynamicDispatchOrigin=receiverOrigin;
+    _DynamicDispatchSize=receiverSize.x>0 && receiverSize.y>0 ? receiverSize : _FieldSize;
     _WriteDynamicDirect=(writeDirect && _DynamicLightCount==1) ? 1 : 0;
+    if (_WriteDynamicDirect!=0) _DynamicTiles.reset(1,1);
+    else _DynamicTiles.reset(w,h,count);
+    _DynamicTileInfos.clear();
     for(_DynamicLightIndex=0;_DynamicLightIndex<_DynamicLightCount;_DynamicLightIndex++) {
+        // Model persistent slots independently of the uploaded source order.
+        _DynamicReachIndex = (_DynamicLightIndex + 1) % count;
+        _DynamicPolarLayerOffset = 0;
         int radii=(int)std::ceil(std::sqrt((float)(w*w+h*h)))+8;
-        int angles=std::max(64,(int)std::ceil(2*PI*radii));
-        int rows=radii*_DynamicEmitterPointsPerAxis*_DynamicEmitterPointsPerAxis;
+        // Match the authored production fan; angular density does not depend
+        // on the ray length or this supplementary fixture's resolution.
+        int angles=64;
+        int layers=_DynamicEmitterPointsPerAxis*_DynamicEmitterPointsPerAxis;
         // Полярная текстура несёт по одной обёрточной колонке с каждого края
         // (WriteDynamicPolar), поэтому её ширина на две колонки больше числа лучей.
-        _DynamicPolar.reset(angles+2,rows); _DynamicPolarSize={angles,radii}; _DynamicPolarTextureSize={angles+2,rows};
-        _DynamicReach.at(_DynamicLightIndex)=0;
+        _DynamicPolar.reset(angles+2,radii,layers); _DynamicPolarSize={angles,radii}; _DynamicPolarTextureSize={angles+2,radii};
+        _DynamicHorizonStride=angles; _DynamicHorizonBase=_DynamicReachIndex*layers*angles;
         for(int point=0;point<_DynamicEmitterPointsPerAxis*_DynamicEmitterPointsPerAxis;point++)
             for(int a=0;a<angles;a++)TraceDynamicPolar(uint3{(uint)a,(uint)point,0});
-        if(fullReach) _DynamicReach.at(_DynamicLightIndex)=1u<<30;
         _DynamicPolarInput=_DynamicPolar;
-        _DynamicTileOffset={0,h*_DynamicLightIndex};
-        for(int y=0;y<h;y++)for(int x=0;x<w;x++)SolveDynamicLighting(uint3{(uint)x,(uint)y,0});
-        _DynamicTileInfos.push_back({{0,0},_FieldSize,_DynamicTileOffset});
+        _DynamicTileOffset={0,0};
+        for(int y=0;y<_DynamicDispatchSize.y;y++)for(int x=0;x<_DynamicDispatchSize.x;x++)
+            SolveDynamicLighting(uint3{(uint)x,(uint)y,0});
+        _DynamicTileInfos.push_back({_DynamicDispatchOrigin,_DynamicDispatchSize,_DynamicTileOffset,_DynamicReachIndex,0});
     }
     _DynamicTilesInput=_DynamicTiles; _DynamicTileCount=_DynamicLightCount;
     if(_WriteDynamicDirect==0) {
-        _ComposeOrigin={0,0}; _ComposeSize=_FieldSize;
-        for(int y=0;y<h;y++)for(int x=0;x<w;x++)ComposeDynamicLighting(uint3{(uint)x,(uint)y,0});
+        _ComposeOrigin=_DynamicDispatchOrigin; _ComposeSize=_DynamicDispatchSize;
+        for(int y=0;y<_ComposeSize.y;y++)for(int x=0;x<_ComposeSize.x;x++)
+            ComposeDynamicLighting(uint3{(uint)x,(uint)y,0});
     }
     _WriteDynamicDirect=0;
 }
@@ -100,8 +118,170 @@ float direct(int x,int y) {
     float value=0;for(int d=0;d<4;d++)value+=UnpackRadiance(_RadianceAtlas[(y*_FieldSize.x+x)*4+d].xy).x*.25f;
     return value;
 }
+// Independent continuous-square integral in uniform air. The receiver is
+// horizontally to the right of the emitter; neither field clipping nor the
+// production gather is used to define the expected result.
+float airSquareRadiance(double sourceX,double receiverX,double extinction,double radiance) {
+    double separation=receiverX-sourceX;
+    double halfAngle=std::atan(.5/(separation-.5));
+    double sum=0;
+    for(int sample=0;sample<8;sample++) {
+        double angle=(sample+.5)*2*halfAngle/8-halfAngle;
+        double dx=std::cos(angle),dy=std::abs(std::sin(angle));
+        double entry=(separation-.5)/dx;
+        double exit=std::min((separation+.5)/dx,.5/dy);
+        if(exit>entry) {
+            double weight=extinction==0 ? exit-entry :
+                -std::expm1(-extinction*(exit-entry))/-std::expm1(-extinction);
+            sum+=std::exp(-extinction*entry)*radiance*weight;
+        }
+    }
+    return float(sum*halfAngle/(8*std::acos(-1.0)));
+}
+void verifyUniformSourceTraversal() {
+    // Actual HLSL, supplementary to the production GPU oracle. Both variants
+    // retain cell skipping: the baseline is today's implementation, not a
+    // deliberately slower texel-only marcher.
+    for(int scale: {2,8,32})for(int scene=0;scene<7;scene++) {
+        setup(20,12,scale);
+        _EmptyExtinctionRGB={.02f,.03f,.04f,0};
+        _SolidExtinctionRGB={.4f,.8f,1.6f,0};
+        _GlowScale=12;
+        if(scene==1)for(auto& m:_MaterialField.data)m.w=1;
+        if(scene==2)for(auto& m:_MaterialField.data)m.w=64.f/255.f;
+        if(scene==3)for(int y=0;y<_FieldSize.y;y++)
+            _MaterialField.data[y*_FieldSize.x+10*scale].w=1; // one-texel wall
+        if(scene==4)for(int y=0;y<_FieldSize.y;y++)for(int x=0;x<_FieldSize.x;x++)
+            if(y<5*scale || y>=7*scale)_MaterialField.data[y*_FieldSize.x+x].w=1; // tunnel
+        if(scene==5)_GlowField.data[6*scale*_FieldSize.x+10*scale]={8,4,2,0};
+        if(scene==6)for(int y=0;y<_FieldSize.y;y++)for(int x=0;x<_FieldSize.x;x++)
+            if((x/scale+y/scale)%2==0)_MaterialField.data[y*_FieldSize.x+x].w=1;
+        buildMask();
+        long reads[2]={0,0};
+        uint visits[2]={0,0};
+        for(float shift: {-.375f,-.125f,0.f,.125f,.375f})for(int y=3;y<=9;y++)for(int x=5;x<=15;x++) {
+            DynamicLight source={{10.f+shift,6.f+.1875f,0,0},{1,.5f,.25f,1}};
+            float2 receiver={(x+.25f)*scale,(y+.375f)*scale};
+            float3 outputs[2];
+            for(int variant=0;variant<2;variant++) {
+                _UniformSourceTraversalEnabled=variant;
+                _LightingCountersEnabled=1;
+                _LightingCounters.assign(3,0);
+                textureReads=0;
+                outputs[variant]=GatherDynamicSource(receiver,source,8);
+                reads[variant]+=textureReads;
+                visits[variant]+=_LightingCounters[1];
+            }
+            for(int channel=0;channel<3;channel++)
+                near(outputs[1][channel],outputs[0][channel],.00003f+std::abs(outputs[0][channel])*.00003f,
+                    "uniform source agrees with current cell DDA across moving subcell positions");
+        }
+        if(scene==0 && reads[1]>=reads[0])throw std::runtime_error("air proof did not reduce total resource reads");
+        if(scene==0 && visits[1]!=0)throw std::runtime_error("proven uniform air still traverses texels");
+        std::cout<<"Uniform-source fixture: density="<<scale<<", scene="<<scene
+            <<", baselineReads="<<reads[0]<<", candidateReads="<<reads[1]
+            <<", baselineVisits="<<visits[0]<<", candidateVisits="<<visits[1]<<"\n";
+    }
+    // Independent double-precision continuous-medium oracle, including source
+    // movement across the field border. Stone is tested strictly inside.
+    for(int scale: {2,32})for(int stone: {0,1})for(float sourceX: {-.75f,0.f,.75f,4.25f}) {
+        if(stone && sourceX<4)continue;
+        setup(16,8,scale);
+        _EmptyExtinctionRGB={0.f,.0001f,.2f,0};
+        _SolidExtinctionRGB={.1f,.3f,.8f,0};
+        if(stone)for(auto& m:_MaterialField.data)m.w=1;
+        buildMask();
+        _UniformSourceTraversalEnabled=1;
+        _GlowScale=12;
+        DynamicLight source={{sourceX,4.f,0,0},{1,.5f,.25f,1}};
+        float3 actual=GatherDynamicSource(float2{8.25f*scale,4.f*scale},source,8);
+        for(int channel=0;channel<3;channel++) {
+            double extinction=stone ? _SolidExtinctionRGB[channel] : _EmptyExtinctionRGB[channel];
+            near(actual[channel],airSquareRadiance(sourceX,8.25,extinction,12*source.colorIntensity[channel]),
+                .00001f,"uniform source preserves continuous RGB HDR integral");
+        }
+    }
+    // A newly inserted blocker must reject yesterday's air proof; removing it
+    // must restore the proof after the same cache rebuild production performs.
+    setup(16,8,2); _SolidExtinctionRGB={1600,1600,1600,0};
+    _UniformSourceTraversalEnabled=1;
+    DynamicLight source={{4.25f,4.25f,0,0},{1,.5f,.25f,8}};
+    float open=0;
+    for(int revision=0;revision<3;revision++) {
+        for(int y=0;y<_FieldSize.y;y++)_MaterialField.data[y*_FieldSize.x+12].w=revision==1 ? 1.f : 0.f;
+        buildMask();
+        float value=GatherDynamicSource(float2{16.5f,8.5f},source,8).x;
+        if(revision==0) { open=value; if(open<=0)throw std::runtime_error("air oracle is dark"); }
+        else near(value,revision==1 ? 0.f : open,.000001f,"geometry rebuild invalidates uniform source proof");
+    }
+    _UniformSourceTraversalEnabled=0;
+    _LightingCountersEnabled=0;
+    _GlowScale=1;
+}
+
 int main() {
     try {
+        // Independent double-precision attenuation/integral, with colored HDR
+        // radiance. Sharing neutral-medium math must not share source color.
+        for(int scalar: {0,1})for(float extinction: {0.f,.0001f,.2f,4.f})for(float distance: {.03125f,.5f,3.f}) {
+            _NeutralExtinction=scalar;
+            float3 source={16.f,4.f,.5f};
+            float3 actual=OpticalDepthTransmission(float3{extinction,extinction,extinction}*distance)*source;
+            double transmission=std::exp(-double(extinction)*distance);
+            float3 weight=MediumGlowWeight(float3{extinction,extinction,extinction},distance);
+            double expectedWeight=extinction==0 ? distance :
+                -std::expm1(-double(extinction)*distance)/-std::expm1(-double(extinction));
+            for(int channel=0;channel<3;channel++) {
+                near(actual[channel],float(transmission*source[channel]),2e-6f,"neutral extinction preserves colored HDR");
+                near(weight[channel],float(expectedWeight),2e-6f,"neutral glow has independent continuous integral");
+            }
+        }
+        _DynamicPolarScalarExtinction=0;
+        _NeutralExtinction=0;
+        for(float sourceX: {-.75f,-.25f,0.f,.25f,.75f}) {
+            setup(8,4,32); _GlowScale=12;
+            buildMask();
+            DynamicLight source={{sourceX,1.515625f,0,0},{1,.5f,.25f,1}};
+            _DynamicLights={source}; _DynamicLightCount=1;
+            for(int pixelX: {48,240}) {
+                float receiverX=(pixelX+.5f)/32;
+                float3 result=GatherDynamicSource(float2{pixelX+.5f,48.5f},source,8);
+                for(int channel=0;channel<3;channel++) {
+                    float expected=airSquareRadiance(sourceX,receiverX,_EmptyExtinctionRGB[channel],
+                        12*source.colorIntensity[channel]);
+                    near(result[channel],expected,.0003f,"field boundary never clips a continuous dynamic emitter");
+                }
+                solveDynamicLights(false,int2{pixelX,48},int2{1,1});
+                float3 dynamic=_DirectTexture.Load(int3{pixelX,48,0}).xyz;
+                for(int channel=0;channel<3;channel++) {
+                    float expected=airSquareRadiance(sourceX,receiverX,_EmptyExtinctionRGB[channel],
+                        12*source.colorIntensity[channel]);
+                    near(dynamic[channel],expected,expected*.03f+1e-7f,
+                        "production near/polar receiver preserves an outside-field emitter");
+                }
+            }
+        }
+        _GlowScale=1;
+        setup(12,4,4); _EmptyExtinctionRGB={.2f,.2f,.2f,0}; _SolidExtinctionRGB={1,1,1,0}; _GlowScale=12;
+        buildMask();
+        _DynamicLights={
+            DynamicLight{{1.5f,1.375f,0,0},{1,.3f,.11f,.8f}},
+            DynamicLight{{3.125f,1.375f,0,0},{0,.5f,1,3}},
+            DynamicLight{{5.25f,1.375f,0,0},{.2f,1,0,1.3f}}};
+        _DynamicLightCount=3;
+        for(int scalar: {0,1}) {
+            _DynamicTilesScalarRadiance=scalar;
+            solveDynamicLights();
+            float3 result=_DirectTexture.Load(int3{25,5,0}).xyz;
+            for(int channel=0;channel<3;channel++) {
+                double expected=0;
+                for(auto source:_DynamicLights)
+                    expected+=airSquareRadiance(source.positionRadius.x,6.375,.2,
+                        12*source.colorIntensity[channel]*source.colorIntensity.w);
+                near(result[channel],float(expected),.0003f,"scalar RGB cache preserves independent colored HDR sum");
+            }
+        }
+        _GlowScale=1;
         for(int scale: {1,2,3,4}) {
             setup(32,8,scale);
             float2 a=float2{2.5f,3.5f}*scale,b=float2{28.5f,3.5f}*scale;
@@ -115,20 +295,20 @@ int main() {
             auto reverse=trace(b,a); near(t.x,reverse.x,2e-6f,"reciprocity");
             _SolidExtinctionRGB={1600,1600,1600,0};
             t=trace(a,b); near(t.x,0,1e-30f,"solid=1600 wall blocks");
-            _EmissionField.data[(3*scale)*_FieldSize.x+20*scale]={16,16,16,0};
+            _GlowField.data[(3*scale)*_FieldSize.x+20*scale]={16,16,16,0};
             float3 light; trace(a,b,&light); near(light.x,0,1e-30f,"source behind wall cannot bypass absorption");
         }
         setup(32,8); _EmptyExtinctionRGB={0,0,0,0};
         near(trace(float2{0,4},float2{32,4}).x,1,0,"zero absorption");
         for(float sigma: {0.f,1e-8f,1e-4f,.2f,4.f,1600.f}) {
             setup(8,8); _EmptyExtinctionRGB={sigma,sigma,sigma,0};
-            for(auto& e:_EmissionField.data)e={1,1,1,0};
+            for(auto& e:_GlowField.data)e={1,1,1,0};
             float3 whole,left,right;
             auto tw=trace(float2{2,4},float2{3,4},&whole);
             auto tl=trace(float2{2,4},float2{2.37f,4},&left);
             auto tr=trace(float2{2.37f,4},float2{3,4},&right);
             near(whole.x,1,2e-5f,"one-cell source normalization");
-            near(whole.x,left.x+tl.x*right.x,3e-5f,"emission split invariance");
+            near(whole.x,left.x+tl.x*right.x,3e-5f,"glow split invariance");
             near(tw.x,tl.x*tr.x,2e-6f,"transmission split invariance");
         }
         setup(8,8); _MaterialField.data[2*8+3].w=1; _SolidExtinctionRGB={20,20,20,0};
@@ -156,7 +336,7 @@ int main() {
             near(trace(a,b).x,std::exp(-.2f*length(b-a)),2e-6f,"clipped ray");
         // Entire production cascade merge and half-float atlas, not just exp().
         setup(24,24); _EmptyExtinctionRGB={.2f,.2f,.2f,0};
-        _EmissionField.data[12*24+18]={16,16,16,0};
+        _GlowField.data[12*24+18]={16,16,16,0};
         solveField(); float open=direct(8,12);
         if(open<=0)throw std::runtime_error("cascade source missing in open air");
         for(int y=0;y<24;y++)_MaterialField.data[y*24+12].w=1;
@@ -186,7 +366,7 @@ int main() {
         }
         // Full four-cascade PerPixel fixture at four texels per world cell.
         setup(16,16,4);_SolidExtinctionRGB={1600,1600,1600,0};
-        for(int y=32;y<36;y++)for(int x=48;x<52;x++)_EmissionField.data[y*64+x]={16,16,16,0};
+        for(int y=32;y<36;y++)for(int x=48;x<52;x++)_GlowField.data[y*64+x]={16,16,16,0};
         solveField(4);float pixelOpen=direct(18,34);
         if(pixelOpen<=0)throw std::runtime_error("four-cascade source missing");
         for(int y=0;y<64;y++)for(int x=32;x<36;x++)_MaterialField.data[y*64+x].w=1;
@@ -199,7 +379,7 @@ int main() {
         // Dependency mask must produce the exact same packed atlas as a full
         // solve after a localized geometry change.
         setup(16,16,4); _SolidExtinctionRGB={1600,1600,1600,0};
-        for(int y=0;y<64;y++)for(int x=48;x<52;x++)_EmissionField.data[y*64+x]={16,16,16,0};
+        for(int y=0;y<64;y++)for(int x=48;x<52;x++)_GlowField.data[y*64+x]={16,16,16,0};
         solveField(4); auto atlasBefore=_RadianceAtlas;
         for(int y=0;y<64;y++)for(int x=32;x<36;x++)_MaterialField.data[y*64+x].w=1;
         solveField(4); auto atlasFull=_RadianceAtlas;
@@ -209,12 +389,30 @@ int main() {
             throw std::runtime_error("dependency mask differs from full cascade solve");
         ++checks;
         setup(16,16,4);_SolidExtinctionRGB={1600,1600,1600,0};
+        {
+            DynamicLight before={{12.02f,8.5f,0,0},{1,1,1,1}};
+            DynamicLight after={{12.04f,8.5f,0,0},{1,1,1,1}};
+            float2 beforePoint, afterPoint;
+            float beforeArea, afterArea;
+            bool beforeEmits, afterEmits;
+            DynamicEmitterPoint(before,4,beforePoint,beforeArea,beforeEmits);
+            DynamicEmitterPoint(after,4,afterPoint,afterArea,afterEmits);
+            float expectedTexelDelta = (after.positionRadius.x - before.positionRadius.x) *
+                _FieldSize.x / _WorldRect.z;
+            near(afterPoint.x - beforePoint.x, expectedTexelDelta, 1e-5f,
+                "dynamic emitter follows sub-texel source movement");
+            if(!beforeEmits || !afterEmits)
+                throw std::runtime_error("Moving dynamic emitter unexpectedly left the field");
+        }
         DynamicLight light={{12.5f,8.5f,0,0},{16,16,16,1}};
-        for(int y=32;y<36;y++)for(int x=48;x<52;x++)_EmissionField.data[y*64+x]={16,16,16,0};
+        for(int y=32;y<36;y++)for(int x=48;x<52;x++)_GlowField.data[y*64+x]={16,16,16,0};
         textureReads=0;solveField(4);long cascadeReads=textureReads;
         _DynamicLights={light};_DynamicLightCount=1;
         textureReads=0;
-        solveDynamicLights();
+        // Production applies dynamic radiance to the visible receiver window,
+        // retaining the full stable field for transport. Ten visible cells in
+        // this 16-cell field correspond to this 40-texel supplementary fixture.
+        solveDynamicLights(false,int2{12,12},int2{40,40});
         long targetedReads=textureReads;
         std::cout<<"Moving light: cascade reads="<<cascadeReads<<", targeted reads="<<targetedReads
                  <<", reduction="<<(double)cascadeReads/targetedReads<<"x\n";
@@ -235,6 +433,7 @@ int main() {
         float singleLight=_DirectTexture.Load(int3{18,34,0}).x;
         solveDynamicLights(true);
         near(_DirectTexture.Load(int3{18,34,0}).x,singleLight,1e-6f,"single light direct fast path");
+        near(_DynamicTiles.Load(int3{0,0,0}).w,0,0,"single light never writes its one-texel binding");
         // Dynamic-centred rays against the exact per-pixel gather, beyond DynamicNearCells.
         for(int2 receiver: {int2{18,34},int2{18,18},int2{50,4},int2{8,60}}) {
             float reference=GatherDynamicSource(float2{receiver.x+.5f,receiver.y+.5f},light,8).x;
@@ -252,11 +451,91 @@ int main() {
         solveDynamicLights();near(_DirectTexture.Load(int3{18,34,0}).x,0,0,"removed light clears output");
         setup(2,2);_SolidExtinctionRGB={1600,1600,1600,0};
         _MaterialField.data[1].w=1;_MaterialField.data[2].w=1;
-        _EmissionField.data[3]={16,16,16,0};
+        _GlowField.data[3]={16,16,16,0};
         float3 cornerLight;trace(float2{.5f,.5f},float2{1.5f,1.5f},&cornerLight);
         near(cornerLight.x,0,1e-30f,"emitter behind closed diagonal corner");
+        {
+            setup(2,2,2);_SolidExtinctionRGB={1.25f,1.25f,1.25f,0};
+            for(int y=0;y<2;y++)for(int x=2;x<4;x++)_MaterialField.data[y*4+x].w=1;
+            for(int y=2;y<4;y++)for(int x=0;x<2;x++)_MaterialField.data[y*4+x].w=1;
+            _MaterialField.data[2*4+0].w = 0.95f; // edge of block has 0.95 alpha (still solid!)
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_GlowField.data[y*4+x]={16,16,16,0};
+            float3 light;
+            float3 t1 = trace(float2{.1f,1.91f},float2{3.8f,2.29f},&light);
+            near(t1.x, 0.219059f, 0.005f, "shallow ray attenuates with solid extinction");
+            float3 t2 = trace(float2{1.f,1.f},float2{3.f,3.f},&light);
+            near(t2.x, 0.215921f, 0.005f, "45-deg ray attenuates with solid extinction");
+            float3 t3 = trace(float2{1.91f,.1f},float2{2.29f,3.8f},&light);
+            near(t3.x, 0.218922f, 0.005f, "steep ray attenuates with solid extinction");
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_GlowField.data[y*4+x]={0,0,0,0};
+            _GlowField.data[0]={16,16,16,0};
+            float3 t4 = trace(float2{3.8f,2.29f},float2{.1f,1.91f},&light);
+            near(t4.x, t1.x, 1e-5f, "forward and reverse diagonal transmittance match");
+            // 5. Open ray in air within cell (1,1) must NOT be sealed
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_GlowField.data[y*4+x]={16,16,16,0};
+            trace(float2{2.1f,2.5f},float2{3.9f,2.5f},&light);
+            if (light.x <= 0.001f) throw std::runtime_error("open air ray was incorrectly sealed");
+            // 6. Solitary block: open ray grazing its convex corner must NOT be sealed
+            setup(2,2,2);_SolidExtinctionRGB={1.25f,1.25f,1.25f,0};
+            for(int y=2;y<4;y++)for(int x=0;x<2;x++)_MaterialField.data[y*4+x].w=1; // only top-left is solid
+            for(int y=2;y<4;y++)for(int x=2;x<4;x++)_GlowField.data[y*4+x]={16,16,16,0};
+            trace(float2{1.f,1.f},float2{3.f,3.f},&light);
+            if (light.x <= 0.001f) throw std::runtime_error("ray grazing solitary block corner was incorrectly sealed");
+        }
+        // Supplementary arithmetic proof using the actual HLSL gather and an
+        // independent continuous-square integral. This does not replace GPU
+        // production-camera verification.
+        setup(4,4,32); _EmptyExtinctionRGB={.2f,.2f,.2f,0}; _GlowScale=12;
+        buildMask();
+        for(float offset: {-.375f,-.25f,-.125f,-.0625f,0.f,.0625f,.125f,.25f,.375f}) {
+            DynamicLight source={{1.515625f+offset,1.515625f,0,0},{1,0,0,1}};
+            double expected=0;
+            for(int sample=0;sample<8;sample++) {
+                double angle=-std::acos(-1.0)+(sample+.5)*2*std::acos(-1.0)/8;
+                double dx=std::cos(angle),dy=std::sin(angle);
+                double exitX=(dx>0 ? offset+.5 : offset-.5)/dx;
+                double distance=std::min(exitX,.5/std::abs(dy));
+                expected+=12*(1-std::exp(-.2*distance))/(1-std::exp(-.2))/8;
+            }
+            near(GatherDynamicSource(float2{48.5f,48.5f},source,8).x,float(expected),.0003f,
+                "dense continuous source preserves HDR at its center and between texels");
+        }
+        _GlowScale=1;
+        // Independent Beer-Lambert checks for exhaustive constant-occupancy
+        // proofs. Dynamic transport must ignore unrelated static emitters;
+        // static transport must still visit even one glowing base texel.
+        for(float alpha: {0.f, 64.f/255.f, 204.f/255.f, 1.f}) {
+            setup(4,2,32);
+            for(auto& m:_MaterialField.data)m.w=alpha;
+            _GlowField.data[32*128+64]={8,0,0,0};
+            buildMask();
+            near(_CellSolidMask.Load(int3{2,1,0}).w,1,0,"dynamic uniform proof tolerates static glow");
+            near(_CellSolidMask.Load(int3{2,1,0}).y,0,0,"one glowing texel excludes static jump");
+            float3 r,transmission;
+            _LightingCountersEnabled=1;
+            _LightingCounters.assign(3,0);
+            TraceLightSegment(float2{.5f,32.5f},float2{127.5f,32.5f},false,true,
+                float4{},float3{},r,transmission);
+            float expected=std::exp(-(.2f+(4.f-.2f)*alpha)*127.f/32.f);
+            near(transmission.x,expected,2e-6f,"uniform occupancy keeps original UNorm alpha");
+            if(_LightingCounters[1]>4)throw std::runtime_error("constant extinction still marched individual texels");
+            auto optimized=transmission;
+            _UniformCellTraversalEnabled=0;
+            TraceLightSegment(float2{.5f,32.5f},float2{127.5f,32.5f},false,true,
+                float4{},float3{},r,transmission);
+            near(transmission.x,optimized.x,3e-6f,"constant cell equals exhaustive texel reference");
+            _UniformCellTraversalEnabled=1;
+            _LightingCountersEnabled=0;
+        }
+        setup(4,2,32); _SolidExtinctionRGB={1600,1600,1600,0};
+        _MaterialField.data[32*128+64].w=1;
+        buildMask();
+        near(_CellSolidMask.Load(int3{2,1,0}).w,0,0,"one texel blocker excludes cell jump");
+        near(trace(float2{.5f,32.5f},float2{127.5f,32.5f}).x,0,1e-20f,
+            "one of 1024 texels still casts its full shadow");
         // Surface reflection follows the light along the face texel by texel,
-        // never one flat value per block, and still reaches only one cell deep.
+        // never one flat value per block. Its authored half-cell depth fades
+        // per receiver; it must not copy a face value through a whole cell.
         // It now reads the cached first-air texel per direction and takes the
         // centre incident light from the caller.
         setup(8,4,4); _EmptyExtinctionRGB={.2f,.2f,.2f,0};
@@ -264,37 +543,32 @@ int main() {
         _DirectInput.reset(32,16); _StaticDirectInput.reset(32,16);
         for(int y=0;y<16;y++)for(int x=0;x<12;x++)_StaticDirectInput.data[y*32+x]={(float)y,(float)y,(float)y,0};
         buildAirCache();
-        float faceTransmission=std::exp(-.2f*_SurfaceReflectionReachCells);
+        // At density four the first solid texel's centre is half a texel
+        // (1/8 cell) behind the face. Over the half-cell support that is
+        // t = 1/4: weight 1 - (3t^2 - 2t^3) = 27/32, transmission exp(-.2/8).
+        float faceTransmission=(27.f/32.f)*std::exp(-.2f*.125f);
         for(int y: {1,6,13}) {
-            near(SurfaceReflection(int2{12,y},float3{1,1,1},float3{0,0,0}).x,y*faceTransmission,1e-5f,"surface light follows the face per texel");
-            near(SurfaceReflection(int2{15,y},float3{1,1,1},float3{0,0,0}).x,y*faceTransmission,1e-5f,"whole first cell reads its own row at the face");
-            near(SurfaceReflection(int2{16,y},float3{1,1,1},float3{0,0,0}).x,0,0,"surface light stays one cell deep");
+            near(SurfaceIncidentLighting(int2{12,y},float3{0,0,0}).x,y*faceTransmission,1e-5f,"surface light follows the face per texel");
+            near(SurfaceIncidentLighting(int2{15,y},float3{0,0,0}).x,0,0,"receiver outside authored surface depth stays dark");
+            near(SurfaceIncidentLighting(int2{16,y},float3{0,0,0}).x,0,0,"surface light stays within authored depth");
         }
-        // Сбор фонаря отсекается за дальностью, где ни один его луч не несёт
-        // видимого света. Под породой отсечение обязано срабатывать и не
-        // менять ни одного пикселя больше чем на порог невидимости.
-        {
-            // Поле 96×64 клетки по 2 тексела — порядок игрового (128 клеток):
-            // свету нужно ~20 клеток породы, чтобы погаснуть.
-            setup(96,64,2); _EmptyExtinctionRGB={.2f,.2f,.2f,0}; _SolidExtinctionRGB={1,1,1,0}; _EmissionScale=20;
-            for(auto& m:_MaterialField.data)m.w=1;
-            for(int y=62;y<66;y++)for(int x=80;x<112;x++)_MaterialField.data[y*192+x].w=0;
-            buildMask();
-            _DynamicLights={DynamicLight{{48.5f,32.2f,0,0},{.9f,.7f,.5f,2}}};_DynamicLightCount=1;
-            solveDynamicLights(false,true); Texture full=_DynamicTiles;
-            solveDynamicLights(); Texture cut=_DynamicTiles;
-            int skipped=0; float worst=0;
-            for(size_t i=0;i<full.data.size();i++) {
-                float3 a=full.data[i].xyz,b=cut.data[i].xyz;
-                worst=std::max(worst,std::max(std::abs(a.x-b.x),std::max(std::abs(a.y-b.y),std::abs(a.z-b.z))));
-                if(b.x==0&&b.y==0&&b.z==0&&(a.x>0||a.y>0||a.z>0))++skipped;
-            }
-            near(worst,0,InvisibleDynamicRadiance,"reach cut changes nothing visible");
-            ++checks;
-            if(skipped<(int)full.data.size()/4)
-                throw std::runtime_error("reach cut skipped only "+std::to_string(skipped)+" of "+std::to_string(full.data.size())+" pixels under rock");
-            _EmissionScale=1;
+        setup(4,2,32); _EmptyExtinctionRGB={.2f,.2f,.2f,0};
+        for(int y=0;y<64;y++)for(int x=64;x<128;x++)_MaterialField.data[y*128+x].w=1;
+        _DirectInput.reset(128,64); _StaticDirectInput.reset(128,64);
+        for(int y=0;y<64;y++)for(int x=0;x<64;x++)_StaticDirectInput.data[y*128+x]={8,8,8,0};
+        buildAirCache();
+        float previousReflection=8;
+        for(int depth=1;depth<=32;depth++) {
+            // Texel centre, measured from the face: half a texel in.
+            double position=(depth-.5)/32.0;
+            double t=std::min(position/.5,1.0);
+            float expected=float(8*(1-3*t*t+2*t*t*t)*std::exp(-.2*position));
+            float actual=SurfaceIncidentLighting(int2{63+depth,32},float3{0,0,0}).x;
+            near(actual,expected,1e-5f,"dense surface depth has independent per-texel falloff");
+            if(actual>previousReflection)throw std::runtime_error("surface reflection increased behind the exposed face");
+            previousReflection=actual;
         }
+        verifyUniformSourceTraversal();
         std::cout<<checks<<" transport checks passed (actual HLSL functions, float32).\n";
     } catch(const std::exception& e) {std::cerr<<e.what()<<"\n";return 1;}
 }

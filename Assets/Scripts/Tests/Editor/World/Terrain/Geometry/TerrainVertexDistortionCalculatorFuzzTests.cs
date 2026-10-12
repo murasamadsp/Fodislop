@@ -1,5 +1,6 @@
 #nullable enable
 
+using Kern.World;
 using Kern.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -56,7 +57,7 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     [TestCase(10, 100, 100, 100)]
     public void ComputeOffset_OnWorldEdge_ReturnsZero(int worldX, int worldY, int w, int h)
     {
-        var c = new CachedCellData { Distortion = CellDistortionType.Cause };
+        var c = new CachedCellData { Outline = CellOutline.Wavy };
         TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(c, c, c, c, worldX, worldY, w, h);
         Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero));
     }
@@ -65,7 +66,7 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     [Test]
     public void ComputeOffset_AllCauses_IsDeterministicAndBounded()
     {
-        var c = new CachedCellData { Distortion = CellDistortionType.Cause };
+        var c = new CachedCellData { Outline = CellOutline.Wavy };
         for (int x = 1; x < 30; x++)
         {
             for (int y = 1; y < 30; y++)
@@ -81,8 +82,8 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     [Test]
     public void ComputeOffset_AnyBlock_ReturnsZero()
     {
-        var block = new CachedCellData { Distortion = CellDistortionType.Block };
-        var none = new CachedCellData { Distortion = CellDistortionType.Neutral };
+        var block = new CachedCellData { Outline = CellOutline.Rigid };
+        var none = new CachedCellData { Outline = CellOutline.Pliant };
         TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(none, none, none, block, 10, 10, 100, 100);
         Assert.That(offset, Is.EqualTo(TerrainVertexOffset.Zero));
     }
@@ -90,8 +91,8 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     [Test]
     public void ComputeOffset_OnlyOneCause_HasNonZeroOffset()
     {
-        var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
-        var none = new CachedCellData { Distortion = CellDistortionType.Neutral };
+        var cause = new CachedCellData { Outline = CellOutline.Wavy };
+        var none = new CachedCellData { Outline = CellOutline.Pliant };
         TerrainVertexOffset offset = TerrainVertexDistortionCalculator.ComputeOffset(cause, none, none, none, 10, 10, 100, 100);
         Assert.That(offset.ZSteps, Is.EqualTo(0));
         float mag = (offset.XSteps * offset.XSteps) + (offset.YSteps * offset.YSteps);
@@ -99,14 +100,14 @@ public class TerrainVertexDistortionCalculatorFuzzTests
     }
 
     [Test]
-    public void IsCause_IsBlock_AreMutuallyExclusive()
+    public void IsWavy_Holds_AreMutuallyExclusive()
     {
-        for (byte d = 0; d < 4; d++)
+        foreach (CellOutline outline in System.Enum.GetValues(typeof(CellOutline)))
         {
-            var data = new CachedCellData { Distortion = (CellDistortionType)d };
-            bool isCause = TerrainVertexDistortionCalculator.IsCause(data);
-            bool isBlock = TerrainVertexDistortionCalculator.IsBlock(data);
-            Assert.That(isCause && isBlock, Is.False, $"d={d}");
+            var data = new CachedCellData { Outline = outline };
+            bool wavy = TerrainVertexDistortionCalculator.IsWavy(data);
+            bool holds = TerrainVertexDistortionCalculator.Holds(data);
+            Assert.That(wavy && holds, Is.False, $"{outline}");
         }
     }
 }

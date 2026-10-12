@@ -9,20 +9,8 @@ namespace Kern.Game
     public static class WorldRenderConfigHolder
     {
         public const float SpriteAlphaCull = 0.003f;
-        public const float EmissiveFieldThreshold = 0.05f;
+        public const float GlowFieldThreshold = 0.05f;
         public const float SurfaceFieldThreshold = 0.05f;
-    }
-}
-
-namespace Kern.UI.Backgrounds
-{
-    // Авторские параметры процедурного меню-фона.
-    public static class FractalBackgroundLook
-    {
-        public const float Speed = 1f;
-        public const float FoldFrequency = 32f;
-        public const int Iterations = 50;
-        public static Color Tint => Color.white;
     }
 }
 
@@ -110,7 +98,7 @@ namespace Kern.World.Terrain
 {
     // Авторский вид поверхности террейна. Отсюда читает дефолты
     // TerrainSettings: масштаб потока, скорости шиммера и пульсации,
-    // цвета и силы эмиссии переходов и дальней поверхности, занятость
+    // цвета и силы свечения переходов и дальней поверхности, занятость
     // поверхности. Это величины террейна, поэтому живут они здесь, а не
     // в постобработке.
     public static class TerrainConfigHolder
@@ -120,11 +108,6 @@ namespace Kern.World.Terrain
         // -OrganicMaximumOffsetSteps/2 .. +OrganicMaximumOffsetSteps/2.
         public const int ClassicDistortionStrengthSteps = 1;
         public const int OrganicMaximumOffsetSteps = 4;
-
-        // Скорости профилей записаны в legacy единицах данных клетки; шейдер
-        // сам переводит их в фазу анимации.
-        public const float PrismaticCrystalAnimationSpeed = 50f;
-        public const float FacetedCrystalAnimationSpeed = 0.06f;
 
 
         // Ключи классического джиттера задают пространственный рисунок.
@@ -144,14 +127,19 @@ namespace Kern.World.Terrain
         // Три пространственных масштаба органического смещения и их веса.
         // Оба направления используют одинаковые масштабы и веса, но разные
         // ключи шума, чтобы не двигаться по диагонали синхронно.
+        //
+        // Шум считается целыми числами (TerrainVertexDistortionCalculator и
+        // шейдер одинаково), поэтому веса — проценты (в сумме 100), контраст —
+        // целый множитель, центр — процент. Период не больше 10 клеток:
+        // иначе билинейная интерполяция выходит за 32 бита.
         public const int OrganicNoiseBroadPeriodCells = 9;
         public const int OrganicNoiseMediumPeriodCells = 4;
         public const int OrganicNoiseFinePeriodCells = 2;
-        public const float OrganicNoiseBroadWeight = 0.50f;
-        public const float OrganicNoiseMediumWeight = 0.35f;
-        public const float OrganicNoiseFineWeight = 0.15f;
-        public const float OrganicNoiseContrast = 2f;
-        public const float OrganicNoiseCenter = 0.5f;
+        public const int OrganicNoiseBroadWeightPercent = 50;
+        public const int OrganicNoiseMediumWeightPercent = 35;
+        public const int OrganicNoiseFineWeightPercent = 15;
+        public const int OrganicNoiseContrast = 2;
+        public const int OrganicNoiseCenterPercent = 50;
         public const uint OrganicNoiseBroadXSeed = 0xA53u;
         public const uint OrganicNoiseMediumXSeed = 0xB71u;
         public const uint OrganicNoiseFineXSeed = 0xC25u;
@@ -177,7 +165,7 @@ namespace Kern.World.Terrain
         // 3. Поверхностные координаты и базовая цветовая анимация.
         public static Vector2 FlowScale => new(12f, 10f);
         public const float ShimmerSpeedScale = 0.05f;
-        public const float PulseSpeedScale = 0.5f;
+        public const float BlinkingSpeedScale = 0.5f;
         public static Color ShimmerColor => Color.white;
         public const float ShimmerChromaFloor = 0.65f;
 
@@ -208,7 +196,7 @@ namespace Kern.World.Terrain
 
         // 4. Декали подмешиваются после базовой цветовой анимации.
         public const float GroundDecalStrength = 0.35f;
-        public const float StoneDecalStrength = 0.7f;
+        public const float RockDecalStrength = 0.7f;
         public const float DecalPlacementOffset = 0.5f;
         public const uint GroundDecalPlacementPercent = 24u;
 
@@ -218,10 +206,10 @@ namespace Kern.World.Terrain
 
         // 5. Параметры world-surface field публикуются в материал и поле света.
         public const float SurfaceOccupancy = 1f;
-        public static Color TransitEmissionColor => Color.white;
-        public const float TransitEmissionStrength = 0.35f;
-        public static Color PerspectiveEmissionColor => Color.white;
-        public const float PerspectiveEmissionStrength = 0.12f;
+        public static Color TransitGlowColor => Color.white;
+        public const float TransitGlowStrength = 0.35f;
+        public static Color PerspectiveGlowColor => Color.white;
+        public const float PerspectiveGlowStrength = 0.12f;
 
         // 6. Контактное затенение: сила контраста и самый тёмный уровень,
         // до которого оно опускает поверхность.
@@ -242,9 +230,9 @@ namespace Kern.World.Terrain
 
         // Фаска открытых сторон клетки: масштаб расстояния от геометрического
         // ребра и максимальная доля затемнения у самого ребра.
-        public const bool ReliefRimQuantizationEnabled = true;
-        public const float ReliefRimDistanceScale = 8f;
-        public const float ReliefRimFalloff = 0.5f;
+        public const bool RimQuantizationEnabled = true;
+        public const float RimDistanceScale = 4f;
+        public const float RimFalloff = 0.5f;
 
         // 7. Выход: premultiplied alpha корректируется после умножения света.
         public const float PremultiplyAlphaFloor = 0.15f;
@@ -263,6 +251,41 @@ namespace Kern.World.Lighting
 
     public static class LightingConfigHolder
     {
+        // МЕНЯТЬ ЗДЕСЬ: стартовые параметры качества, без зависимости от зума.
+        // В игре: инструменты → «Цена света» → «Качество света» → «Применить».
+        // Кнопка «Копировать в VisualTuning» выдаёт такой же блок для сохранения.
+        public static readonly LightingQualityTuning DefaultQuality = new(
+            FieldPixelsPerCell: 2,               // Перенос: material/albedo/glow, DDA; цена ~ плотность.
+            LightPixelsPerCell: 2,               // Карта света: static/dynamic direct, итог; ≤ FieldPixelsPerCell.
+            CascadeProbePixelsPerCell: 2,         // Пробы статики на клетку; цена ~ плотность².
+            MaximumStaticCascadeDirections: 16,   // Удерживает стандартное окно в бюджете статики без автоснижения качества.
+            DynamicNearCells: 6f,                 // Зона точного DDA вокруг лампы; цена ~ радиус².
+            DynamicAngularSampleCount: 6,         // На 25% меньше выборок динамического света; 8 оставить для A/B сравнения.
+            DynamicEmitterPointsPerAxis: 3,       // 3×3 точек источника; цена веера ~ значение².
+            DynamicPolarDirectionCount: 64);      // Углы на точку источника вне ближней зоны.
+
+        // Разрешения в пикселях на одну мировую клетку, независимо от зума.
+        // FieldPixelsPerCell: material/albedo/glow, по которым идёт DDA;
+        // цена лучей растёт с ней только на неоднородных клетках.
+        // LightPixelsPerCell: приёмники static/dynamic direct и итоговая карта
+        // света; цена приёмников ~ плотность². Пробы каскадов — отдельно.
+        // Зум ни одну из плотностей не задаёт.
+
+        // Контактное AO вычисляется сразу на сетке мирового растра 32x32.
+        // Лимит текстур транспорта света эту плотность не уменьшает.
+        public const int AmbientOcclusionPixelsPerCell = 32;
+
+        // Ограничения выделения памяти: максимальная сторона в пикселях.
+        // Плотность геометрии не снижается. Невместившийся регион — ошибка.
+        public const int MaximumFieldTextureSize = 8192;
+        public const int CascadeAtlasTextureSize = 1280;
+
+        // Углы статической трассировки и бюджет полного пересчёта каскадов.
+        // Бюджет НЕ в миллисекундах: это оценка числа шагов лучей.
+        // Жёсткий предел для принятия настроек; качество автоматически не снижается.
+        // Конфигурация вне бюджета отклоняется с требованием изменить настройки явно.
+        public const long MaximumStaticCascadeRayWorkUnits = 200_000_000;
+
         public static LightingFeatureFlags EnabledFeatures { get; set; } =
             LightingFeatureFlags.StaticRC |
             LightingFeatureFlags.DynamicLights;
@@ -271,49 +294,13 @@ namespace Kern.World.Lighting
         public const float SolidOccupancyThreshold = 0.5f;
         public const float TransportSolidThreshold = 0.4f;
 
-        // Общая экспозиция сцены. Одно число, на которое умножается весь свет:
-        // и заполняющий, и прямой, и эмиссия. Соотношения между ними не
-        // меняются — меняется только то, где вся картина стоит относительно
-        // белой точки дисплея.
-        //
-        // Яркость нельзя чинить эмиссией. Эмиссия поднимает только источники,
-        // то есть ровно то, что и так лежит выше белого и всё равно будет
-        // сжато выводом: кадр от неё не светлеет, а источники выжигаются.
-        // Темноту двигает экспозиция, и двигать её надо здесь, у источника
-        // величин, а не грейдом на выводе: грейд стоит полноэкранного прохода,
-        // а здесь это тот же умножитель, что уже уходит в шейдер.
-        //
-        // Единица — исходная авторская калибровка. При ней даже полностью
-        // освещённая поверхность не доходила до белой точки, выше единицы
-        // жили только сами источники, и вся работа вывода — плавное сжатие
-        // пересвета — не начиналась вовсе: сжимать было нечего. Штатные два
-        // поднимают сцену на стоп, после чего освещённое доходит до белого,
-        // а пересвет попадает туда, где SDR его свернёт, а HDR покажет.
-        // Это единственная ручка общей яркости; крутить её и только её.
-        //
-        // Свойство, а не константа: ручка вынесена в инструменты (F1, окно
-        // «Цвет и вывод»), и подбирать экспозицию надо глазом на живой сцене.
-        // Значение здесь — штатное; инструмент меняет его на сессию, файл
-        // остаётся авторским источником правды.
-        public const float DefaultSceneExposureScale = 2.0f;
-
-        public static float SceneExposureScale { get; set; } = DefaultSceneExposureScale;
-
-        // 2. Экспозиция и интенсивности источников/заполняющего света.
-        // Базовые величины — авторская калибровка при экспозиции 1. Наружу
-        // отдаются уже помноженными: потребители читают их каждый кадр, и
-        // поворот ручки виден сразу, без пересборки.
-        public const float BaseAmbientIntensity = 0.25f;
-        public const float BaseEmissionScale = 10.0f;
-        public const float BaseDynamicLightIntensity = 1.0f;
-        public const float BaseMaximumLightMultiplier = 8.0f;
-
-        public static float AmbientIntensity => BaseAmbientIntensity * SceneExposureScale;
-        public static float EmissionScale => BaseEmissionScale * SceneExposureScale;
+        // 2. Авторские интенсивности света в scene-linear единицах.
+        // Общую экспозицию применяет штатный URP Volume перед tonemapping.
+        public const float AmbientIntensity = 0.20f;
+        public const float GlowScale = 12.0f;
+        public const float DynamicLightIntensity = 1.0f;
         public static readonly Color AmbientColor = Color.white;
         public static bool DynamicLightEnabled => (EnabledFeatures & LightingFeatureFlags.DynamicLights) != 0;
-        public static float DynamicLightIntensity =>
-            BaseDynamicLightIntensity * SceneExposureScale;
         public static readonly Color DynamicLightColor = Color.white;
 
         // Пропускание однородной среды применяется трассировщиком вдоль пути.
@@ -324,28 +311,23 @@ namespace Kern.World.Lighting
         public static readonly Color EmptyExtinctionRGB = Color.white;
         public static readonly Color SolidExtinctionRGB = Color.white;
         public const float EmptyExtinctionMultiplier = 0.20f;
-        public const float SolidExtinctionMultiplier = 1.0f;
+        public const float SolidExtinctionMultiplier = 1.25f;
 
         // 3. Пространственный бюджет и фильтрация трассировки.
         // Плечо отражения поверхности: путь до лицевой грани, в клетках.
         public const float SurfaceReflectionReachCells = 0.5f;
 
         // Ближняя зона динамики использует прямой DDA, дальше — полярный веер.
-        public const float DynamicNearCells = 6.0f;
-
-        // Запас дальности до отсечения по затуханию; это slack, не радиус.
-        public const float DynamicReachSlackTexels = 2f;
-        public const float DynamicReachSlackCells = 1.5f;
-
-        // Маржа входа источника и границы невидимости в полярном веере.
-        public const float DynamicPolarMargin = 1.5f;
 
         // Угловая плотность сэмплов на источник, стоимость растёт линейно.
-        public const int DynamicAngularSampleCount = 8;
 
-        // Плотность сэмплирования эмиттера по оси. Зеркалится в
-        // LightingComputeBinder.DynamicEmitterPointCount — менять только парой.
-        public const int DynamicEmitterPointsPerAxis = 3;
+        // Число слоёв веера вычисляется из этой плотности автоматически.
+
+        // Общий бюджет угловых вееров изменившихся источников. Длина луча
+        // всегда полная; бюджет регулирует число углов, не дальность света.
+        // Fixed angular quality per source, independent of zoom or moving-light count.
+        // Explicit cost guard; exceeding it reports an error, never lowers quality.
+        public const long MaximumDynamicPolarRayWorkUnits = 200_000_000;
 
         // Билинейный фикс при чтении соседних записей атласа каскада.
         public const bool EnableBilinearFix = true;
@@ -353,28 +335,15 @@ namespace Kern.World.Lighting
         // 4. Производная величина для exposure-зебры после расчёта света.
         // Стеля exposure-зебры (вид 9): всё выше — згорить і після тонмаппа.
         // Шкала в стопах від білого: 8.0 = +3 стопи. Контент HDR by design
-        // (емісія до EmissionScale), тому стеля 1.0 фарбувала червоним весь
+        // (емісія до GlowScale), тому стеля 1.0 фарбувала червоним весь
         // робочий HDR-запас.
-        // Масштабируется вместе со сценой: это потолок в тех же величинах,
-        // и без множителя ложная раскраска показывала бы пересвет там, где
-        // его нет.
-        public static float MaximumLightMultiplier =>
-            BaseMaximumLightMultiplier * SceneExposureScale;
+        public const float MaximumLightMultiplier = 8.0f;
 
     }
 }
 
 namespace Kern.Rendering.PostProcessing
 {
-    public enum BloomStyle
-    {
-        [SettingLabel("settings.effects.bloom_variant.standard")]
-        Standard = 0,
-
-        [SettingLabel("settings.effects.bloom_variant.cyberpunk")]
-        Cyberpunk = 1,
-    }
-
     public static class PostProcessLook
     {
         // Переключатели включают соответствующие этапы графа.
@@ -388,36 +357,24 @@ namespace Kern.Rendering.PostProcessing
         // 1. Пирамида блум собирается из HDR-входа до финального композита.
         public static class Bloom
         {
-            public const float Intensity = 0.35f;
-            public const float Threshold = 0.5f;
+            // Значения — те, с которыми блум фактически рисовался: исполнитель
+            // прежде домножал базовые числа на коэффициенты второго стиля для
+            // обоих стилей (0.35·2, 0.5·0.8, 1.5·1.3, рассеяние 0.58).
+            public const float Intensity = 0.7f;
+            public const float Threshold = 0.4f;
             public const float SoftKnee = 0.5f;
-            public const float Radius = 1.5f;
-            public const float Scatter = 0.35f;
-
-            // Общие параметры обоих стилей для прямого сравнения цвета ореола.
-            public const float CyberpunkThresholdScale = 0.8f;
-            public const float CyberpunkRadiusScale = 1.3f;
-            public const float CyberpunkScatter = 0.58f;
-            public const float CyberpunkIntensityScale = 2f;
+            public const float Radius = 1.95f;
+            public const float Scatter = 0.58f;
 
             public static Color Tint => Color.white;
         }
 
-        // 2. Творческий грейд выполняется в композитном проходе.
-        public static class ColorGrading
+        // 2. Кадр вдвое ярче сцены (+1 стоп) до тонмаппинга URP. Пики сжимает
+        // сам URP: в SDR — плавное плечо Neutral, в HDR — BT.2390, который
+        // трогает только то, что подходит к пику дисплея.
+        public static class Exposure
         {
-            public const float Exposure = 0f;
-            public const float Contrast = 0f;
-            public const float Saturation = 1f;
-
-            public static Color Filter => Color.white;
-
-            public const float ContrastPivot = 0.5f;
-            public const float TonalAdjustment = 0f;
-            public const float CdlSaturation = 1f;
-            public const float Vibrance = 0f;
-            public const float Hue = 0f;
-            public static Vector3 CdlMaster => new(1f, 0f, 1f);
+            public const float Stops = 1f;
         }
 
         // 3. Nits профиля задают нормализацию входа и предел вывода дисплея.
@@ -427,51 +384,7 @@ namespace Kern.Rendering.PostProcessing
             public const float PeakBrightnessNits = 1300f;
         }
 
-        // 4. Display transform, LUT и кривые выводят кадр в сигнал дисплея.
-        public static class Grade
-        {
-            public const DisplayTransform Transform = DisplayTransform.None;
-            public const float WhitePoint = 1f;
-            public const float Temperature = 0f;
-            public const float Tint = 0f;
-
-            public static Vector3 Slope => Vector3.one;
-
-            public static Vector3 Offset => Vector3.zero;
-
-            public static Vector3 Power => Vector3.one;
-
-            public const float GreyOut = 0.18f;
-            public const float ShoulderPower = 4f;
-            public const float ToePower = 1.6f;
-            public const float ToeStops = 12f;
-
-            // Настройки сжатия гамута применяются в display pass.
-            public const bool GamutCompressionEnabled = false;
-            public const float GamutCompressionStrength = 1f;
-
-            public static Vector3 PrimaryLift => Vector3.zero;
-            public static Vector3 PrimaryGamma => Vector3.one;
-            public static Vector3 PrimaryGain => Vector3.one;
-            public static Vector3 PrimaryOffset => Vector3.zero;
-            public static Vector4 PrimaryMaster => new(0f, 1f, 1f, 0f);
-        }
-
-        // Начальные настройки квалификатора оттенка, насыщенности и яркости.
-        public static class Qualifier
-        {
-            public const float HueCenter = 120f;
-            public const float HueWidth = 30f;
-            public const float HueSoftness = 15f;
-            public const float SaturationCenter = 0.5f;
-            public const float SaturationWidth = 0.5f;
-            public const float SaturationSoftness = 0.1f;
-            public const float LuminanceCenter = 0.5f;
-            public const float LuminanceWidth = 0.5f;
-            public const float LuminanceSoftness = 0.1f;
-        }
-
-        // 5. Виньетка применяется к уже преобразованному сигналу дисплея.
+        // 4. LUT от сервера и виньетка ложатся на сигнал дисплея после тонмаппинга.
         public static class Vignette
         {
             public const float Intensity = 0.4f;
@@ -482,7 +395,7 @@ namespace Kern.Rendering.PostProcessing
             public static Vector2 Center => new(0.5f, 0.5f);
         }
 
-        // 6. Eigengrau добавляется после виньетки в DisplayFinal.
+        // 5. Eigengrau добавляется после виньетки в DisplayFinal.
         public static class FilmGrain
         {
             public const float Intensity = 1f;

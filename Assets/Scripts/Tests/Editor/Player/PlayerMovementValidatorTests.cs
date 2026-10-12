@@ -54,7 +54,7 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
-    public void CalculateMoveCooldown_WithCtrlPressed_UsesEmptyTileCooldown()
+    public void CalculateMoveCooldown_WithCtrlPressed_UsesMinServerCooldown()
     {
         var mapProvider = new StubMapDataProvider(normalCooldown: 0.5f, emptyCooldown: 0.1f);
 
@@ -90,7 +90,7 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
-    public void CalculateMoveCooldown_UnloadedCell_UsesEmptyTileCooldown()
+    public void CalculateMoveCooldown_UnloadedCell_UsesMinServerCooldown()
     {
         var mapProvider = new StubMapDataProvider(normalCooldown: 0.5f, emptyCooldown: 0.1f);
 
@@ -104,10 +104,24 @@ public class PlayerMovementValidatorTests
     }
 
     [Test]
-    public void IsPassable_EmptyCell_AlwaysReturnsTrue()
+    public void CalculateMoveCooldown_PregenerCell_UsesMinServerCooldown()
+    {
+        var mapProvider = new StubMapDataProvider(normalCooldown: 0.5f, emptyCooldown: 0.1f);
+
+        float cooldown = PlayerMovementValidator.CalculateMoveCooldown(
+            mapProvider,
+            CellType.Pregener,
+            isCtrlPressed: false,
+            ignoreCollision: false);
+
+        Assert.AreEqual(0.1f, cooldown);
+    }
+
+    [Test]
+    public void IsPassable_EmptyCell_FollowsServerFlag()
     {
         var nonPassableConfig = new CellConfigurationPacket(CellConfigProperties.None, (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
-        Assert.IsTrue(PlayerMovementValidator.IsPassable(CellType.Empty, nonPassableConfig));
+        Assert.IsFalse(PlayerMovementValidator.IsPassable(CellType.Empty, nonPassableConfig));
     }
 
     [Test]
@@ -115,6 +129,13 @@ public class PlayerMovementValidatorTests
     {
         var passableConfig = new CellConfigurationPacket(CellConfigProperties.Passable, (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
         Assert.IsFalse(PlayerMovementValidator.IsPassable(CellType.Unloaded, passableConfig));
+    }
+
+    [Test]
+    public void IsPassable_PregenerCell_ReturnsFalse()
+    {
+        var passableConfig = new CellConfigurationPacket(CellConfigProperties.Passable, (CellDistortionType)0, CellAnimationType.None, 0, 0, 0, 0);
+        Assert.IsFalse(PlayerMovementValidator.IsPassable(CellType.Pregener, passableConfig));
     }
 
     [Test]
@@ -209,6 +230,26 @@ public class PlayerMovementValidatorTests
         Assert.IsFalse(isPassable);
     }
 
+    [Test]
+    public void TryEvaluateStep_PregenerCell_ReturnsFalse()
+    {
+        var storage = new StubWorldStorage(cellLayerAvailable: true, defaultCell: CellType.Pregener);
+        var mapProvider = new StubMapDataProvider(100, 100);
+
+        bool evaluated = PlayerMovementValidator.TryEvaluateStep(
+            new Vector2Int(10, 10),
+            Vector2Int.right,
+            mapProvider,
+            storage,
+            out Vector2Int targetPosition,
+            out CellType cellType,
+            out bool isPassable);
+
+        Assert.IsFalse(evaluated);
+        Assert.AreEqual(CellType.Unloaded, cellType);
+        Assert.IsFalse(isPassable);
+    }
+
     private sealed class StubMapDataProvider(
         ushort width = 100,
         ushort height = 100,
@@ -227,9 +268,11 @@ public class PlayerMovementValidatorTests
         public float GetMoveCooldown(CellType cellType) =>
             cellType == CellType.Empty ? emptyCooldown : normalCooldown;
 
-        public bool TryGetTileGroup(CellType type, out int groupID)
+        public float GetMinMoveCooldown() => Mathf.Min(emptyCooldown, normalCooldown);
+
+        public bool TryGetTileGroup(CellType type, out int groupId)
         {
-            groupID = 0;
+            groupId = 0;
             return false;
         }
 
@@ -268,6 +311,8 @@ public class PlayerMovementValidatorTests
         public bool IsInitialized() => true;
         public string GetWorldCodeName() => "test";
         public void EnsureEditorInitialized() { }
+        public void BeginRegionBatch() { }
+        public void EndRegionBatch() { }
     }
 
     private sealed class StubWorldLayer : IWorldLayer<CellType>
@@ -284,8 +329,8 @@ public class PlayerMovementValidatorTests
         public IEnumerable<int> GetLoadedChunkIndices() => [];
         public int GetLoadedCount() => 0;
         public int GetDirtyCount() => 0;
-        public CellType GetCell(int x, int y, bool touchLru = true) => CellType.Empty;
-        public CellType GetCellSync(int x, int y, bool touchLru = true) => CellType.Empty;
+        public CellType GetCell(int x, int y, bool touchLRU = true) => CellType.Empty;
+        public CellType GetCellSync(int x, int y, bool touchLRU = true) => CellType.Empty;
         public bool TryGetCell(int x, int y, out CellType value)
         {
             value = CellType.Empty;
@@ -295,8 +340,8 @@ public class PlayerMovementValidatorTests
         public void SetCell(int x, int y, CellType value) { }
         public int SetRegion(int startX, int startY, int width, int height, CellType[] cells, int cellsOffset = 0) => 0;
         public int SetRegion(int startX, int startY, int width, int height, ReadOnlySpan<CellType> cells, int cellsOffset = 0) => 0;
-        public CellType[] GetOrCreateChunk(int chunkIndex, bool touchLru = true) => [];
-        public ChunkReadResult<CellType> ReadChunk(int chunkIndex, bool touchLru = true) => new(ChunkReadStatus.Available, [], null);
+        public CellType[] GetOrCreateChunk(int chunkIndex, bool touchLRU = true) => [];
+        public ChunkReadResult<CellType> ReadChunk(int chunkIndex, bool touchLRU = true) => new(ChunkReadStatus.Available, [], null);
         public void Flush(bool flushToDisk = false) { }
         public bool GetChunkIndexAndLocal(int x, int y, out int chunkIndex, out int localIndex) { chunkIndex = 0; localIndex = 0; return true; }
         public void Dispose() { }

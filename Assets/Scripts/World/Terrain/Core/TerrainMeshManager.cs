@@ -2,6 +2,7 @@
 
 using System;
 using Kern.Core;
+using Kern.Core.Interfaces.WorldLighting;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -9,31 +10,19 @@ namespace Kern.World.Terrain;
 
 public sealed class TerrainMeshManager
 {
-    private static readonly int _geometryCarrierPaddingWorldID =
+    private static readonly int s_geometryCarrierPaddingWorldId =
         Shader.PropertyToID("_TerrainGeometryCarrierPaddingWorld");
 
-    // Раскладка вершины осталась только у накладки дверей: сам террейн
-    // рисуется мешем идентификаторов по текстурам данных клетки.
-    internal static readonly VertexAttributeDescriptor[] VertexLayout =
-    [
-        new(VertexAttribute.Position,  VertexAttributeFormat.Float32, 3),
-        new(VertexAttribute.Color,     VertexAttributeFormat.UNorm8,  4),
-        new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 2), // quad UV          16 → 4 bytes
-        new(VertexAttribute.TexCoord1, VertexAttributeFormat.Float16, 4), // atlasRect        16 → 8 bytes
-        new(VertexAttribute.TexCoord2, VertexAttributeFormat.Float16, 4), // tileSizeVec      16 → 8 bytes
-        new(VertexAttribute.TexCoord3, VertexAttributeFormat.Float32, 4), // worldPos: stays float32 (coords > 2048)
-        new(VertexAttribute.TexCoord4, VertexAttributeFormat.Float16, 4), // animData         16 → 8 bytes
-        new(VertexAttribute.TexCoord5, VertexAttributeFormat.Float16, 4), // anchorData       16 → 8 bytes
-        new(VertexAttribute.TexCoord6, VertexAttributeFormat.Float32, 4), // glowVec: stays float32 (packed RGB > 65504)
-    ];
-
     private readonly RenderTargetIdentifier[] _lightingFieldTargets = new RenderTargetIdentifier[2];
-    private readonly RenderTargetIdentifier[] _ambientOcclusionTarget = new RenderTargetIdentifier[1];
+    private readonly RenderBufferLoadAction[] _lightingFieldLoads =
+        [RenderBufferLoadAction.DontCare, RenderBufferLoadAction.DontCare];
+    private readonly RenderBufferStoreAction[] _lightingFieldStores =
+        [RenderBufferStoreAction.Store, RenderBufferStoreAction.Store];
 
     public void RenderLightingMaterialFields(
         CommandBuffer commandBuffer,
         RenderTexture materialField,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         Vector4 worldRect,
         Matrix4x4 localToWorldMatrix,
         Material[] materials,
@@ -41,21 +30,28 @@ public sealed class TerrainMeshManager
         Vector4 screenViewOffset)
     {
         if (mesh == null || materials.Length == 0 ||
-            !materialField.IsCreated() || !emissionField.IsCreated())
+            !materialField.IsCreated() || !glowField.IsCreated())
         {
             throw new InvalidOperationException(
                 "Terrain material fields cannot be rendered before the terrain mesh and targets are ready.");
         }
 
         _lightingFieldTargets[0] = new RenderTargetIdentifier(materialField);
-        _lightingFieldTargets[1] = new RenderTargetIdentifier(emissionField);
-        commandBuffer.SetRenderTarget(
-            _lightingFieldTargets,
-            new RenderTargetIdentifier(BuiltinRenderTextureType.None));
+        _lightingFieldTargets[1] = new RenderTargetIdentifier(glowField);
+        commandBuffer.DisableScissorRect();
+        // Anchor the attachment extent to this offscreen target. Builtin None
+        // leaves the raster pass dependent on the preceding camera target.
+        // The field has no depth storage; no extra depth texture is allocated.
+        commandBuffer.SetRenderTarget(new RenderTargetBinding(
+            _lightingFieldTargets, _lightingFieldLoads, _lightingFieldStores,
+            new RenderTargetIdentifier(materialField),
+            RenderBufferLoadAction.DontCare, RenderBufferStoreAction.DontCare));
         commandBuffer.ClearRenderTarget(
             clearDepth: false,
             clearColor: true,
             backgroundColor: Color.clear);
+        commandBuffer.SetViewport(new Rect(0f, 0f, materialField.width, materialField.height));
+        commandBuffer.EnableScissorRect(new Rect(0f, 0f, materialField.width, materialField.height));
 
         DrawLightingField(
             commandBuffer,
@@ -76,7 +72,8 @@ public sealed class TerrainMeshManager
         Matrix4x4 localToWorldMatrix,
         Material[] materials,
         Mesh? mesh,
-        Vector4 screenViewOffset)
+        Vector4 screenViewOffset,
+        RectInt? rasterRect = null)
     {
         if (mesh == null || materials.Length == 0 || !ambientOcclusionField.IsCreated())
         {
@@ -84,14 +81,10 @@ public sealed class TerrainMeshManager
                 "Terrain AO field cannot be rendered before the terrain mesh and target are ready.");
         }
 
-        _ambientOcclusionTarget[0] = new RenderTargetIdentifier(ambientOcclusionField);
-        commandBuffer.SetRenderTarget(
-            _ambientOcclusionTarget,
-            new RenderTargetIdentifier(BuiltinRenderTextureType.None));
-        commandBuffer.ClearRenderTarget(
-            clearDepth: false,
-            clearColor: true,
-            backgroundColor: Color.clear);
+        // Lighting owns attachment binding and clearing; retained pixels are preserved.
+        commandBuffer.SetViewport(new Rect(0f, 0f, ambientOcclusionField.width, ambientOcclusionField.height));
+        RectInt rect = rasterRect ?? new RectInt(0, 0, ambientOcclusionField.width, ambientOcclusionField.height);
+        commandBuffer.EnableScissorRect(new Rect(rect.x, rect.y, rect.width, rect.height));
 
         DrawLightingField(
             commandBuffer,
@@ -102,10 +95,12 @@ public sealed class TerrainMeshManager
             materials,
             mesh,
             screenViewOffset,
+            // Носитель расширен на всю длину спада контакта: меньший запас
+            // отрезал хвост тени ровной линией.
             new Vector2(
-                ProjectRuntimeContracts.World.CellSize * 0.5f +
+                ProjectRuntimeContracts.World.CellSize * TerrainConfigHolder.AmbientOcclusionDistanceCells +
                     worldRect.z / ambientOcclusionField.width * 0.5f,
-                ProjectRuntimeContracts.World.CellSize * 0.5f +
+                ProjectRuntimeContracts.World.CellSize * TerrainConfigHolder.AmbientOcclusionDistanceCells +
                     worldRect.w / ambientOcclusionField.height * 0.5f));
     }
 
@@ -121,16 +116,10 @@ public sealed class TerrainMeshManager
         Vector2 carrierPaddingWorld)
     {
 
-        Matrix4x4 projection = Matrix4x4.Ortho(
-            worldRect.x,
-            worldRect.x + worldRect.z,
-            worldRect.y,
-            worldRect.y + worldRect.w,
-            -100f,
-            100f);
-        commandBuffer.SetViewProjectionMatrices(
-            Matrix4x4.identity,
-            GL.GetGPUProjectionMatrix(projection, renderIntoTexture: true));
+        // Field layout in texture memory has one owner shared with every
+        // reader. Camera matrices are not touched: field vertices read only
+        // these explicit globals, so no implicit API conversion is involved.
+        LightingFieldOrientation.BindRaster(commandBuffer, worldRect, localToWorldMatrix);
 
         int shaderPass = materials[0].FindPass(shaderPassName);
         if (shaderPass < 0)
@@ -144,22 +133,20 @@ public sealed class TerrainMeshManager
         // Каждый вызов рисует свою целевую семантику отдельным проходом одного
         // материала; AO-проход читает альфа атласа, material-проход — его RGB.
         //
-        // Частичная перерисовка по прямоугольникам отсюда убрана: очистка под
-        // ножницами на Metal чистит ЦЕЛЬ, а не прямоугольник, поэтому каждый
-        // патч стирал поле полностью и дорисовывал только свой кусок. В игре это
-        // выглядело так, что свет пропадал, появлялся частями и уезжал при
-        // движении. Возвращать эту оптимизацию можно только вместе со способом
-        // чистить прямоугольник, которому можно доверять на всех бэкендах.
+        // Material/glow fields are cleared and drawn in full. AO may use
+        // a scissor rectangle: its owner clears that rectangle by rasterization,
+        // because ClearRenderTarget ignores scissor on Metal.
         // Поля покрывают всю сетку со смещением ноль; экранное смещение
         // возвращается сразу после, чтобы кадр камеры не съехал.
-        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, Vector4.zero);
+        commandBuffer.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, Vector4.zero);
         commandBuffer.SetGlobalVector(
-            _geometryCarrierPaddingWorldID,
+            s_geometryCarrierPaddingWorldId,
             new Vector4(carrierPaddingWorld.x, carrierPaddingWorld.y, 0f, 0f));
         commandBuffer.DrawMesh(mesh, localToWorldMatrix, materials[0], 0, shaderPass);
-        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetID, screenViewOffset);
-        commandBuffer.SetGlobalVector(_geometryCarrierPaddingWorldID, Vector4.zero);
+        commandBuffer.SetGlobalVector(TerrainCellBuffers.ViewOffsetId, screenViewOffset);
+        commandBuffer.SetGlobalVector(s_geometryCarrierPaddingWorldId, Vector4.zero);
 
         commandBuffer.EndSample(sampleName);
+        commandBuffer.DisableScissorRect();
     }
 }

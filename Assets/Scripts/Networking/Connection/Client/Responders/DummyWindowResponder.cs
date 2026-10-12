@@ -16,7 +16,8 @@ internal sealed class DummyWindowResponder(
     DummyInventoryResponder inventoryResponder,
     DummyTeleportManager teleportManager,
     DummyClanManager clanManager,
-    DummyMissionRunner missionRunner)
+    DummyMissionRunner missionRunner,
+    DummyBlockSpawner blockSpawner)
 {
 
     public void Handle(ElementClickPacket packet, ushort playerX, ushort playerY)
@@ -47,6 +48,10 @@ internal sealed class DummyWindowResponder(
             case "open_url_test":
                 sendPacket(DummyWindowBuilder.BuildOpenUrlPacket("https://vk.ru/mines4reborn"));
                 break;
+            case "toggle_block_spawner":
+                blockSpawner.Enabled = !blockSpawner.Enabled;
+                Debug.Log($"[DummyWindowResponder] Спавнер блоков: {(blockSpawner.Enabled ? "включён" : "выключен")}.");
+                break;
             case "test_mission_arrow":
                 sendPacket(new ServerPacket(new MissionInitPacket(
                     string.Empty,
@@ -75,29 +80,29 @@ internal sealed class DummyWindowResponder(
             return;
         }
 
-        if (packet.ElementIndex == 0)
+        if (teleportManager.IsCloseElement(packet.ElementIndex))
         {
             teleportManager.WindowOpen = false;
             sendPacket(new ServerPacket(new CloseWindowPacket()));
             return;
         }
 
-        teleportManager.HandleTeleportClick(packet.ElementIndex - 1);
+        teleportManager.HandleTeleportClick(teleportManager.DestinationOfElement(packet.ElementIndex));
     }
 
     private void HandleMission(ElementClickPacket packet, ushort playerX, ushort playerY)
     {
-        if (packet.ElementIndex == 0)
+        if (missionRunner.IsCloseElement(packet.ElementIndex))
         {
             sendPacket(new ServerPacket(new CloseWindowPacket()));
         }
-        else if (packet.ElementIndex <= missionRunner.MissionCount)
+        else if (missionRunner.IsCancelElement(packet.ElementIndex))
         {
-            missionRunner.StartMission(packet.ElementIndex - 1, playerX, playerY);
+            missionRunner.CancelMission();
         }
         else
         {
-            missionRunner.CancelMission();
+            missionRunner.StartMission(missionRunner.MissionOfElement(packet.ElementIndex), playerX, playerY);
         }
     }
 }

@@ -5,27 +5,24 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         // Runtime materials must inject both textures. Neutral shader values
         // deliberately make a missing injection visible instead of rendering
         // an implicit white/gray world.
-        [MainTexture] _BaseMap ("Texture Atlas", 2D) = "black" {}
         _PrismaticFlowMap ("X Crystal Phase Vectors", 2D) = "black" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
         _TerrainDecalAtlas ("Terrain Decal Atlas", 2D) = "black" {}
-        _TerrainDecalStoneAtlas ("Terrain Decal Stone Atlas", 2D) = "black" {}
+        _TerrainDecalRockAtlas ("Terrain Decal Rock Atlas", 2D) = "black" {}
         _ShimmerColor ("Shimmer Color", Color) = (0,0,0,0)
         _FlowScale ("Flow Scale", Vector) = (0,0,0,0)
         _ShimmerSpeedScale ("Shimmer Speed Scale", Float) = 0
-        _PulseSpeedScale ("Pulse Speed Scale", Float) = 0
+        _BlinkingSpeedScale ("Blinking Speed Scale", Float) = 0
         _OrganicBendStrength ("Organic Bend Strength", Float) = 1
         _OrganicBendPivot ("Organic Bend Pivot", Float) = 0.35
         _RoundableCornerRadius ("Roundable Corner Radius", Float) = 0.51
-        [HideInInspector] _ReliefRimDistanceScale ("Relief Rim Distance Scale", Float) = 0
-        [HideInInspector] _ReliefRimFalloff ("Relief Rim Falloff", Float) = 0
-        [HideInInspector] _ReliefRimQuantizationEnabled ("Relief Rim Quantization Enabled", Float) = 0
-        _DebugColor ("Debug Color", Color) = (0,0,0,0)
-        [ToggleUI] _DebugMode ("Debug Mode", Float) = 0
+        [HideInInspector] _RimDistanceScale ("Rim Distance Scale", Float) = 0
+        [HideInInspector] _RimFalloff ("Rim Falloff", Float) = 0
+        [HideInInspector] _RimQuantizationEnabled ("Rim Quantization Enabled", Float) = 0
         // Авторский вид поверхности: значения приезжают из TerrainConfigHolder
         // свойствами материала, дефолт здесь — те же числа.
         _GroundDecalStrength ("Ground Decal Strength", Float) = 0.35
-        _StoneDecalStrength ("Stone Decal Strength", Float) = 0.7
+        _RockDecalStrength ("Rock Decal Strength", Float) = 0.7
         _DecalPlacementOffset ("Decal Placement Offset", Float) = 0.5
         _TerrainDebugDeltaContrast ("Terrain Debug Delta Contrast", Float) = 128
         _FacetedGlintDirection ("Faceted Glint Direction", Vector) = (0.62,0.38,0,0)
@@ -51,7 +48,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         _PrismaticTintE ("Prismatic Tint E", Color) = (1,0,0,1)
         _PremultiplyAlphaFloor ("Premultiply Alpha Floor", Float) = 0.15
         _AlphaCutoff ("Alpha Cutoff", Float) = 0.05
-        [HideInInspector] _TerrainAtlasIndex ("Terrain Atlas Index", Float) = 0
         [HideInInspector] _TerrainAtlas0 ("Terrain Atlas 0", 2D) = "black" {}
         [HideInInspector] _TerrainAtlas1 ("Terrain Atlas 1", 2D) = "black" {}
         [HideInInspector] _TerrainAtlas2 ("Terrain Atlas 2", 2D) = "black" {}
@@ -84,13 +80,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile _ KERN_WORLD_LIGHTING
-            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/Terrain/TerrainColorAnimation.hlsl"
             #include "TerrainTileAddressing.hlsl"
             #define KERN_TERRAIN_DEBUG_BACKGROUND_TILE_VIEW
-            #include "Assets/Shaders/Terrain/TerrainCellData.hlsl"
             #include "Assets/Shaders/Terrain/TerrainLightingData.hlsl"
             #include "Assets/Shaders/PixelArtFiltering.hlsl"
             #include "Assets/Shaders/World/WorldLightSampling.hlsl"
@@ -98,13 +92,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/Terrain/TerrainAtlasSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainContour.hlsl"
+            #include "Assets/Shaders/Terrain/TerrainCellData.hlsl"
             #include "Assets/Shaders/Terrain/TerrainAmbientOcclusion.hlsl"
             #include "Assets/Shaders/Terrain/TerrainDecals.hlsl"
 
             #define EPS 0.0001
+            // Explicit benchmark-only cumulative fragment checkpoints; zero is production.
+            int _KernTerrainBenchmarkStage;
 
-            TEXTURE2D(_BaseMap);
-            SAMPLER(sampler_BaseMap);
             TEXTURE2D(_PrismaticFlowMap);
             SAMPLER(sampler_PrismaticFlowMap);
             TEXTURE2D(_FlowMap);
@@ -117,24 +112,24 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             {
                 float4 positionCS   : SV_POSITION;
                 float2 uv           : TEXCOORD0;
-                float4 color        : COLOR;
                 float4 subAtlasRect : TEXCOORD1;
                 float4 tileSizeUV   : TEXCOORD2;
                 float4 worldPos     : TEXCOORD3;
                 float4 animData     : TEXCOORD4;
                 float4 packedData   : TEXCOORD5;
                 float3 worldPosition : TEXCOORD6;
-                float4 glowData     : TEXCOORD7;
+                float4 lightContourDecal : TEXCOORD7;
                 nointerpolation float atlasIndex : TEXCOORD8;
                 nointerpolation float isForeground : TEXCOORD9;
                 nointerpolation float4 geometryCornersX : TEXCOORD10;
                 nointerpolation float4 geometryCornersY : TEXCOORD11;
                 nointerpolation float uvBits : TEXCOORD12;
+                // Мировая клетка квада — целые числа, точные в float32.
+                nointerpolation float2 cellWorldOrigin : TEXCOORD13;
             };
 
             half4 SampleAtlasColor(int slot, float2 uv)
             {
-            #if defined(KERN_TERRAIN_CELLS)
                 [branch]
                 if (_PixelArtFiltering < 0.5)
                 {
@@ -142,15 +137,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 }
 
                 return TerrainSampleAtlas(slot, sampler_LinearClamp, uv);
-            #else
-                [branch]
-                if (_PixelArtFiltering < 0.5)
-                {
-                    return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, uv, 0);
-                }
-
-                return SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, uv, 0);
-            #endif
             }
 
             float MissingTextureHash(float2 position)
@@ -174,34 +160,51 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Varyings vert (TerrainVertexInput input)
             {
                 Varyings output = (Varyings)0;
-            #if defined(KERN_TERRAIN_CELLS)
                 TERRAIN_RESOLVE_CELL_VERTEX(input, output)
                 output.worldPosition = TransformObjectToWorld(cell.positionOS);
+                output.cellWorldOrigin = TransformObjectToWorld(float3(
+                    cell.positionOS.xy - (cell.packedData.yz * _TerrainCellGridSize.z),
+                    0.0)).xy;
+                float3 rasterWorldPosition = KernWorldGridVertex(output.worldPosition);
+                if (output.atlasIndex >= 0.0)
+                {
+                    output.positionCS = KernWorldGridClipPosition(rasterWorldPosition);
+                }
+                output.worldPosition = rasterWorldPosition;
                 return output;
-            #else
-                TERRAIN_RESOLVE_ATTRIBUTE_VERTEX(input, output)
-                output.worldPosition = TransformObjectToWorld(input.positionOS.xyz);
-                return output;
-            #endif
             }
 
             half4 frag (Varyings input) : SV_Target
             {
+                // До любых ветвлений и clip: см. TerrainPixelArtWidthTexels.
+                float2 carrierPixelWidth = fwidth(input.packedData.yz);
+                [branch]
+                if (_KernTerrainBenchmarkStage == 1)
+                {
+                    return half4(0.5, 0.5, 0.5, 1.0);
+                }
+
+                // Мировая позиция фрагмента нужна только свету и AO. Интерполянт
+                // около y≈40000 держит 1/256 клетки (1/8 арт-пикселя): у границы
+                // текселя AO (32 на клетку, точечный) до 17% строк пикселей брали
+                // соседний тексель, и какие именно — менялось с зумом и сдвигом
+                // камеры. Точка выборки собирается из целой клетки и центра
+                // арт-пикселя внутри неё — оба числа float32 хранит точно.
+                // Текстура и силуэт считаются по packedData, как прежде.
+                input.worldPosition.xy = input.cellWorldOrigin +
+                    (QuantizeTerrainPixelCenter(input.packedData.yz) * _TerrainCellGridSize.z);
                 TerrainSurfaceInputs surface = BuildTerrainSurfaceInputs(
                     input.packedData,
                     input.uv,
                     input.geometryCornersX,
                     input.geometryCornersY,
-                    input.glowData,
+                    input.lightContourDecal,
                     input.animData.w);
-                int animationProfile = surface.animationProfile;
-                float applyGeometry = 0.0;
-            #if defined(KERN_TERRAIN_CELLS)
+                int cellSurfaceEffect = surface.cellSurfaceEffect;
                 // Geometry belongs to the foreground layer.  Keep the
                 // background quad rectangular so it can fill the area exposed
                 // by a displaced foreground silhouette.
-                applyGeometry = input.isForeground;
-            #endif
+                float applyGeometry = input.isForeground;
                 float cellCoverage = EvaluateTerrainCellCoverage(
                     surface,
                     1.0,
@@ -210,12 +213,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (!KernTerrainDebugActive() &&
                     _WorldLightDebugView != 0 && _WorldLightDebugView != 9)
                 {
-                #if defined(KERN_TERRAIN_CELLS)
                     if (input.isForeground > 0.5)
                     {
                         clip(cellCoverage - 0.5);
                     }
-                #endif
                     return half4(
                         GetWorldLightColor(input.worldPosition.xy).rgb,
                         1.0);
@@ -223,12 +224,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (!KernTerrainDebugActive() && _WorldLightDebugView == 9)
                 {
-                #if defined(KERN_TERRAIN_CELLS)
                     if (input.isForeground > 0.5)
                     {
                         clip(cellCoverage - 0.5);
                     }
-                #endif
                     float occlusion = KernSampleTerrainAmbientOcclusion(
                         input.worldPosition.xy,
                         _WorldLightRect);
@@ -251,12 +250,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                             }
                             else
                             {
-                            #if defined(KERN_TERRAIN_CELLS)
                                 clip(input.isForeground - 0.5);
                                 clip(cellCoverage - 0.5);
-                            #else
-                                clip(-1.0);
-                            #endif
                             }
 
                             int debugAtlasSlot = (int)round(input.atlasIndex);
@@ -289,24 +284,19 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                                 1.0);
                         }
 
-                    #if defined(KERN_TERRAIN_CELLS)
                         if (input.isForeground > 0.5 &&
                             _TerrainDebugView != KERN_TERRAIN_DEBUG_COVERAGE)
                         {
                             clip(cellCoverage - 0.5);
                         }
-                    #endif
                         float debugOcclusion = 1.0;
                         #ifdef KERN_WORLD_LIGHTING
                         debugOcclusion = KernTerrainAmbientOcclusionMultiplier(
-                            input.glowData.y,
+                            input.lightContourDecal.y,
                             input.worldPosition.xy,
                             _WorldLightRect);
                         #endif
-                        float debugForeground = 1.0;
-                    #if defined(KERN_TERRAIN_CELLS)
-                        debugForeground = input.isForeground;
-                    #endif
+                        float debugForeground = input.isForeground;
                         return half4(
                             KernTerrainDebugColor(
                                 surface,
@@ -318,9 +308,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     }
                 }
 
-            #if defined(KERN_TERRAIN_CELLS)
                 clip(cellCoverage - 0.5);
-            #endif
+                [branch]
+                if (_KernTerrainBenchmarkStage == 2)
+                {
+                    return half4(0.5, 0.5, 0.5, cellCoverage);
+                }
 
                 if (input.subAtlasRect.z < 0.0001)
                 {
@@ -329,18 +322,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         return half4(1.0, 0.0, 0.8, 1.0);
                     }
 
-                    if (input.color.a < _AlphaCutoff)
-                    {
-                        return half4(0.0, 0.0, 0.0, 0.0);
-                    }
-
                     float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                     float3 diagnosticTexture = SampleMissingTexture(input.worldPos.xy);
                     return half4(
                         diagnosticTexture * worldLight.rgb,
-                        input.color.a * cellCoverage);
+                        cellCoverage);
                 }
-                if (input.color.a < _AlphaCutoff) return half4(0.0, 0.0, 0.0, 0.0);
 
                 int atlasSlot = (int)round(input.atlasIndex);
                 float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(atlasSlot);
@@ -371,15 +358,18 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     }
 
                     float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
-                    return half4(0.0, 0.0, 0.0, input.color.a * cellCoverage * worldLight.r);
+                    return half4(0.0, 0.0, 0.0, cellCoverage * worldLight.r);
                 }
 
-                int animType = (int)(input.animData.x + 0.5);
+                int cellAnimationType = (int)(input.animData.x + 0.5);
                 float3 flowSample = TerrainResolveFlowSample(
-                    animationProfile, animType, input.worldPos, input.packedData, _FlowScale);
+                    cellSurfaceEffect, cellAnimationType, input.worldPos, input.packedData, _FlowScale);
 
                 float2 finalUV = tileUV.finalUV;
-                finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
+                finalUV = PixelArtSampleUV(
+                    finalUV,
+                    atlasTexelSize.zw,
+                    TerrainPixelArtWidthTexels(carrierPixelWidth, input.tileSizeUV, atlasTexelSize));
                 finalUV = ClampTerrainTileUV(finalUV, tileUV);
 
                 half4 texColor = SampleAtlasColor(atlasSlot, finalUV);
@@ -388,27 +378,38 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
+                [branch]
+                if (_KernTerrainBenchmarkStage == 3)
+                {
+                    return half4(texColor.rgb, cellCoverage);
+                }
+
                 float3 animatedRGB = AnimateTerrainColor(
                     texColor.rgb,
                     texColor.rgb,
                     terrainTileUv,
-                    animType,
-                    animationProfile,
+                    TerrainAnimationWorldPosition(input.worldPos, input.packedData),
+                    cellAnimationType,
+                    cellSurfaceEffect,
                     input.animData.y,
                     input.animData.z,
                     flowSample,
-                    input.glowData.x,
                     _ShimmerColor.rgb,
                     _ShimmerSpeedScale,
-                    _PulseSpeedScale);
+                    _BlinkingSpeedScale);
                 float3 decalRGB = ApplyTerrainDecal(
                     animatedRGB,
                     terrainTileUv,
-                    input.glowData.w);
+                    input.lightContourDecal.w);
                 // The bevel is a surface-lighting term: apply after animated
                 // color and decals, before incoming world illumination.
-                float reliefBevel = TerrainReliefBevel(surface);
-                float3 finalRGB = decalRGB * reliefBevel;
+                float rimBevel = TerrainRimBevel(surface);
+                float3 finalRGB = decalRGB * rimBevel;
+                [branch]
+                if (_KernTerrainBenchmarkStage == 4)
+                {
+                    return half4(finalRGB, cellCoverage);
+                }
                 if (KernTerrainDebugNeedsSurfaceSample())
                 {
                     float glintSignal = 0.0;
@@ -417,7 +418,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         float glintStrength = EvaluateFacetedGlintStrength(
                             terrainTileUv,
                             texColor.rgb,
-                            animationProfile,
+                            cellSurfaceEffect,
                             input.animData.y,
                             input.animData.z);
                         glintSignal = glintStrength / max(_FacetedGlintStrength, 0.0001);
@@ -430,8 +431,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                             animatedRGB,
                             decalRGB,
                             glintSignal,
-                            animationProfile,
-                            animType,
+                            cellSurfaceEffect,
+                            cellAnimationType,
                             _TerrainDebugDeltaContrast),
                         1.0);
                 }
@@ -441,7 +442,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float3 litRGB = finalRGB * worldLight.rgb;
                 #ifdef KERN_WORLD_LIGHTING
                 litRGB *= KernTerrainAmbientOcclusionMultiplier(
-                    input.glowData.y,
+                    input.lightContourDecal.y,
                     input.worldPosition.xy,
                     _WorldLightRect);
                 #endif
@@ -459,8 +460,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Name "LightingMaterialField"
             Tags { "LightMode" = "KernLightingMaterialField" }
 
-            Blend One One
-            BlendOp Max
+            // Альбедо видимого слоя: меш рисует все фоновые квады раньше
+            // передних, поэтому передний план цвет фона перезаписывает, как
+            // на экране. Занятость и сила свечения — максимум.
+            Blend One Zero, One One
+            BlendOp Add, Max
             ZWrite Off
             ZTest Always
             Cull Off
@@ -469,58 +473,59 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma target 4.5
             #pragma vertex TerrainLightingFieldVert
             #pragma fragment MaterialFieldFrag
-            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/PixelArtFiltering.hlsl"
-            #include "Assets/Shaders/Terrain/TerrainColorAnimation.hlsl"
-            #include "Assets/Shaders/Terrain/TerrainCellData.hlsl"
             #include "TerrainTileAddressing.hlsl"
             #include "Assets/Shaders/Terrain/TerrainLightingData.hlsl"
             #include "Assets/Shaders/Terrain/TerrainAtlasSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainContour.hlsl"
+            #include "Assets/Shaders/Terrain/TerrainCellData.hlsl"
             #include "Assets/Shaders/Terrain/TerrainDecals.hlsl"
 
-            TEXTURE2D(_PrismaticFlowMap);
-            SAMPLER(sampler_PrismaticFlowMap);
-            TEXTURE2D(_FlowMap);
-            SAMPLER(sampler_FlowMap);
-
-            // Альбедо поля — из атласа тем же UV-конвейером, что видимый пасс.
-            TEXTURE2D(_BaseMap);
+            // Lighting field stores a time-independent albedo snapshot. Visual
+            // crystal/shimmer animation belongs to the screen pass; sampling it
+            // here would make a region rebuild capture a different random phase.
 
             #include "Assets/Shaders/Terrain/TerrainMaterialCBuffer.hlsl"
             #include "Assets/Shaders/Terrain/TerrainPassCommon.hlsl"
-            #include "Assets/Shaders/Terrain/TerrainAnimationSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainLightingFieldCommon.hlsl"
 
             struct MaterialFieldOutput
             {
                 half4 material : SV_Target0;
-                half4 emission : SV_Target1;
+                half4 glow : SV_Target1;
             };
+
+            int _KernLightingFieldDiagnosticStage;
 
             MaterialFieldOutput MaterialFieldFrag(TerrainLightingFieldVaryings input)
             {
+                // До любых ветвлений и clip: см. TerrainPixelArtWidthTexels.
+                float2 carrierPixelWidth = fwidth(input.packedData.yz);
                 MaterialFieldOutput output;
+                if (_KernLightingFieldDiagnosticStage == 1)
+                {
+                    output.material = half4(0.0, 1.0, 0.0, 1.0);
+                    output.glow = 0.0;
+                    return output;
+                }
 
-                // Тот же разбор вершины, что и в экранном проходе: поле
-                // материалов обязано нести ровно то альбедо, которое видно,
-                // иначе свет отскакивает от цвета, которого в кадре нет.
+                // Keep the same geometry and atlas addressing as the screen
+                // pass, but use the authored base albedo rather than its
+                // time-varying display animation. Static transport must not
+                // change merely because this field was rebuilt at a new time.
                 TerrainSurfaceInputs surface = BuildTerrainSurfaceInputs(
                     input.packedData,
                     input.uv,
                     input.geometryCornersX,
                     input.geometryCornersY,
-                    input.glowData,
+                    input.lightContourDecal,
                     input.animData.w);
 
-                float isForeground = input.isForeground;
                 int albedoAtlasSlot = (int)round(input.atlasIndex);
                 float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(albedoAtlasSlot);
-                int albedoAnimationType = (int)(input.animData.x + 0.5);
-                int albedoAnimationProfile = surface.animationProfile;
                 float2 geometryTileUv = TerrainResolveGeometryTileUV(
                     input.uv,
                     input.packedData.yz,
@@ -528,13 +533,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.geometryCornersY,
                     input.uvBits,
                     input.packedData.x);
-                float3 flowSample = TerrainResolveFlowSample(
-                    albedoAnimationProfile,
-                    albedoAnimationType,
-                    input.worldPos,
-                    input.packedData,
-                    _FlowScale);
-
                 half4 albedoTexel = SampleTerrainLightingFieldAlbedoTexel(
                     geometryTileUv,
                     input.packedData.yz,
@@ -544,62 +542,57 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.animData,
                     input.packedData,
                     albedoAtlasSlot,
-                    atlasTexelSize);
+                    atlasTexelSize,
+                    carrierPixelWidth);
+                if (_KernLightingFieldDiagnosticStage == 2)
+                {
+                    output.material = albedoTexel;
+                    output.glow = 0.0;
+                    return output;
+                }
 
                 // Без фолбеков: нет текселя — нет альбедо. Плоский цвет
                 // миникарты сюда больше не попадает ни в каком виде.
                 float3 surfaceAlbedo = albedoTexel.a >= _AlphaCutoff
                     ? albedoTexel.rgb
                     : 0.0;
-                uint lightingFlags = KernTerrainLightingFlags(input.glowData.y);
-                float emissionStrength = KernTerrainEmissionStrength(
-                    input.glowData.y,
+                uint lightingFlags = KernTerrainLightingFlags(input.lightContourDecal.y);
+                float glow = KernTerrainGlow(
+                    input.lightContourDecal.y,
                     lightingFlags);
                 bool isPhysicalMass = KernTerrainIsPhysicalMass(lightingFlags);
                 // Occupancy — физическая масса переднего плана. isPhysicalMass уже
                 // гарантирует !isBackground (фон не получает PhysicalMass),
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
-                float applyGeometry = 0.0;
-            #if defined(KERN_TERRAIN_CELLS)
-                applyGeometry = input.isForeground;
-            #endif
+                float applyGeometry = input.isForeground;
                 float cellCoverage = EvaluateTerrainCellCoverage(
                     surface,
                     1.0,
                     applyGeometry);
                 float occupancy = isPhysicalMass ? cellCoverage : 0.0;
-                // Material occupancy is the hard physical-solid input for
+                // The carrier encloses the displaced polygon but is not the
+                // material itself. Reject the same absent fragments as the
+                // visible pass before decals or glow can color them.
+                clip(cellCoverage - 0.5);
+                clip(albedoTexel.a - _AlphaCutoff);
+                // Material occupancy is the hard physical-mass input for
                 // lighting transport. AO filtering is isolated in its own pass.
                 occupancy *= albedoTexel.a >= _AlphaCutoff ? 1.0 : 0.0;
 
-                surfaceAlbedo = AnimateTerrainColor(
-                    surfaceAlbedo,
-                    surfaceAlbedo,
-                    geometryTileUv,
-                    albedoAnimationType,
-                    albedoAnimationProfile,
-                    input.animData.y,
-                    input.animData.z,
-                    flowSample,
-                    input.glowData.x,
-                    _ShimmerColor.rgb,
-                    _ShimmerSpeedScale,
-                    _PulseSpeedScale);
                 surfaceAlbedo = ApplyTerrainDecal(
                     surfaceAlbedo,
                     geometryTileUv,
-                    input.glowData.w);
-                float3 emissionAlbedo = surfaceAlbedo;
-                surfaceAlbedo *= TerrainReliefBevel(surface);
+                    input.lightContourDecal.w);
+                float3 glowAlbedo = surfaceAlbedo;
+                surfaceAlbedo *= TerrainRimBevel(surface);
 
-                // Маска присутствия материала в поле: прозрачные и фоновые
-                // фрагменты не вносят в поле ни альбедо, ни свечения.
-                float materialMask = step(_AlphaCutoff, input.color.a) * isForeground;
-                output.material = half4(surfaceAlbedo * materialMask, occupancy);
-                output.emission = half4(
-                    emissionAlbedo * emissionStrength * materialMask * cellCoverage,
-                    emissionStrength * materialMask * cellCoverage);
+                // Фон вносит альбедо и свечение, как любой видимый слой;
+                // массы у него нет (isPhysicalMass — только передний план).
+                output.material = half4(surfaceAlbedo, occupancy);
+                output.glow = half4(
+                    glowAlbedo * glow * cellCoverage,
+                    glow * cellCoverage);
                 return output;
             }
             ENDHLSL
@@ -612,7 +605,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             Blend One One
             BlendOp Max
-            ColorMask A
+            ColorMask R
             ZWrite Off
             ZTest Always
             Cull Off
@@ -621,7 +614,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma target 4.5
             #pragma vertex TerrainLightingFieldVert
             #pragma fragment AmbientOcclusionFieldFrag
-            #pragma multi_compile_local _ KERN_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/PixelArtFiltering.hlsl"
@@ -630,11 +622,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Assets/Shaders/Terrain/TerrainContour.hlsl"
             #include "Assets/Shaders/Terrain/TerrainCellData.hlsl"
             #include "Assets/Shaders/Terrain/TerrainLightingData.hlsl"
-            #include "Assets/Shaders/Terrain/TerrainAtlasSampling.hlsl"
             #include "Assets/Shaders/Terrain/TerrainSampling.hlsl"
-            #include "Assets/Shaders/Terrain/TerrainAnimationProfile.hlsl"
-
-            TEXTURE2D(_BaseMap);
 
             #include "Assets/Shaders/Terrain/TerrainMaterialCBuffer.hlsl"
             #include "Assets/Shaders/Terrain/TerrainPassCommon.hlsl"
@@ -643,7 +631,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 AmbientOcclusionFieldFrag(TerrainLightingFieldVaryings input) : SV_Target
             {
-                uint lightingFlags = KernTerrainLightingFlags(input.glowData.y);
+                // Evaluate coverage and falloff at the native 1/32-cell sample.
+                // No resampling/quantization pass follows this field calculation.
+                input.packedData.yz = QuantizeTerrainPixelCenter(input.packedData.yz);
+                uint lightingFlags = KernTerrainLightingFlags(input.lightContourDecal.y);
                 if (input.isForeground < 0.5 || !KernTerrainIsPhysicalMass(lightingFlags))
                 {
                     clip(-1.0);
@@ -654,7 +645,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.uv,
                     input.geometryCornersX,
                     input.geometryCornersY,
-                    input.glowData,
+                    input.lightContourDecal,
                     input.animData.w);
 
                 float geometryDistance;
@@ -703,43 +694,16 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 // Distances are in cell units. The field stores contact
                 // falloff from the actual displaced polygon, and Max blending
-                // combines neighboring solids without directional probes.
+                // combines neighbouring masses without directional probes.
                 float exteriorDistance = max(-signedDistance, 0.0);
                 if (exteriorDistance >= _TerrainAmbientOcclusionDistance)
                 {
                     clip(-1.0);
                 }
 
-                float2 opacityCellPosition = geometryDistance < 0.0
-                    ? closestGeometryPosition
-                    : surface.cellSample;
-                int atlasSlot = (int)round(input.atlasIndex);
-                float4 atlasTexelSize = TerrainMaterialAtlasTexelSize(atlasSlot);
-                float2 geometryTileUv = TerrainResolveGeometryTileUV(
-                    input.uv,
-                    opacityCellPosition,
-                    input.geometryCornersX,
-                    input.geometryCornersY,
-                    input.uvBits,
-                    input.packedData.x);
-                half4 albedoTexel = SampleTerrainLightingFieldAlbedoTexel(
-                    geometryTileUv,
-                    opacityCellPosition,
-                    input.subAtlasRect,
-                    input.tileSizeUV,
-                    input.worldPos,
-                    input.animData,
-                    input.packedData,
-                    atlasSlot,
-                    atlasTexelSize);
-                if (albedoTexel.a < _AlphaCutoff)
-                {
-                    clip(-1.0);
-                }
-
                 float contact = 1.0 - smoothstep(
                     0.0, _TerrainAmbientOcclusionDistance, exteriorDistance);
-                return half4(0.0, 0.0, 0.0, contact);
+                return half4(contact, 0.0, 0.0, 0.0);
             }
             ENDHLSL
         }

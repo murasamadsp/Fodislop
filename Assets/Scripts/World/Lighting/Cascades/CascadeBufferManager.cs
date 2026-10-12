@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Kern.Core.Diagnostics;
 using UnityEngine;
 
 namespace Kern.World.Lighting;
@@ -19,10 +20,6 @@ internal sealed class CascadeBufferManager
     public ComputeBuffer? DirtyRegions { get; private set; }
     public ComputeBuffer? CascadeChangedMask { get; private set; }
     public ComputeBuffer? DynamicLightBuffer { get; private set; }
-
-    // Дальность каждого фонаря в текселях поля (см. _DynamicReach в
-    // WorldLighting.compute): по элементу на слот буфера фонарей.
-    public ComputeBuffer? DynamicReachBuffer { get; private set; }
     public ComputeBuffer? LightingCounters => _lightingCounterBuffers[_activeLightingCounterBuffer];
     public int AtlasCapacity { get; private set; }
 
@@ -46,6 +43,17 @@ internal sealed class CascadeBufferManager
         }
 
         int requiredCapacity = Mathf.Max(1, atlasEntryCount);
+        int clampedLightCount = Mathf.Max(1, maximumLightCount);
+        long plannedBytes = 0;
+        if (RadianceAtlas == null || AtlasCapacity < requiredCapacity) { plannedBytes += (long)requiredCapacity * 12; }
+        if (CascadeChangedMask == null || CascadeChangedMask.count < requiredCapacity) { plannedBytes += (long)requiredCapacity * 4; }
+        if (DynamicLightBuffer == null || DynamicLightBuffer.count != clampedLightCount) { plannedBytes += (long)clampedLightCount * 32; }
+        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != LightingComputeBinder.LightingCounterCount ||
+            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != LightingComputeBinder.LightingCounterCount)
+        {
+            plannedBytes += (long)LightingComputeBinder.LightingCounterCount * sizeof(uint) * _lightingCounterBuffers.Length;
+        }
+        if (plannedBytes > 0) { MemoryAllocationGuard.Require("Lighting persistent buffers", plannedBytes); }
 
         if (RadianceAtlas == null || AtlasCapacity < requiredCapacity)
         {
@@ -66,8 +74,6 @@ internal sealed class CascadeBufferManager
                 ComputeBufferType.Structured);
         }
 
-        int clampedLightCount = Mathf.Max(1, maximumLightCount);
-
         if (DynamicLightBuffer == null || DynamicLightBuffer.count != clampedLightCount)
         {
             DynamicLightBuffer?.Release();
@@ -77,23 +83,14 @@ internal sealed class CascadeBufferManager
                 ComputeBufferType.Structured);
         }
 
-        if (DynamicReachBuffer == null || DynamicReachBuffer.count != clampedLightCount)
-        {
-            DynamicReachBuffer?.Release();
-            DynamicReachBuffer = new ComputeBuffer(
-                clampedLightCount,
-                sizeof(uint),
-                ComputeBufferType.Structured);
-        }
-
-        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != 3 ||
-            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != 3)
+        if (_lightingCounterBuffers[0] == null || _lightingCounterBuffers[0]!.count != LightingComputeBinder.LightingCounterCount ||
+            _lightingCounterBuffers[1] == null || _lightingCounterBuffers[1]!.count != LightingComputeBinder.LightingCounterCount)
         {
             for (int index = 0; index < _lightingCounterBuffers.Length; index++)
             {
                 _lightingCounterBuffers[index]?.Release();
                 _lightingCounterBuffers[index] = new ComputeBuffer(
-                    3,
+                    LightingComputeBinder.LightingCounterCount,
                     sizeof(uint),
                     ComputeBufferType.Structured);
             }
@@ -108,6 +105,7 @@ internal sealed class CascadeBufferManager
             return;
         }
 
+        MemoryAllocationGuard.Require("Lighting dirty regions", (long)requiredCapacity * 16);
         DirtyRegions?.Release();
         DirtyRegions = new ComputeBuffer(
             requiredCapacity,
@@ -133,6 +131,7 @@ internal sealed class CascadeBufferManager
             return;
         }
 
+        if (AtlasCapacity > 0) { MemoryAllocationGuard.Require("Lighting scratch atlas", (long)AtlasCapacity * 12); }
         RadianceScratchAtlas?.Release();
         RadianceScratchAtlas = AtlasCapacity > 0
             ? new ComputeBuffer(AtlasCapacity, sizeof(uint) * 3, ComputeBufferType.Structured)
@@ -143,8 +142,6 @@ internal sealed class CascadeBufferManager
     {
         DynamicLightBuffer?.Release();
         DynamicLightBuffer = null;
-        DynamicReachBuffer?.Release();
-        DynamicReachBuffer = null;
         for (int index = 0; index < _lightingCounterBuffers.Length; index++)
         {
             _lightingCounterBuffers[index]?.Release();

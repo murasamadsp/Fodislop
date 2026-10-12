@@ -14,17 +14,21 @@
     bottom: 0;
     align-items: center;
     justify-content: center;
-    background-color: var(--surface-scrim);
+    background-color: var(--surface-scrim, rgba(3, 5, 9, 0.95));
+}
+
+.bootstrap-loading-overlay.is-hidden {
+    display: none;
 }
 
 .bootstrap-loading-title {
-    color: var(--text-primary);
-    font-size: var(--size-2xl);
+    color: var(--text-primary, #ffffff);
+    font-size: var(--size-2xl, 28px);
     -unity-font-style: bold;
 }
 
 .bootstrap-loading-phase {
-    margin-top: var(--space-6);
-    color: var(--text-secondary);
-    font-size: var(--size-lg);
+    margin-top: var(--space-6, 24px);
+    color: var(--text-secondary, #94a3b8);
+    font-size: var(--size-lg, 18px);
 }

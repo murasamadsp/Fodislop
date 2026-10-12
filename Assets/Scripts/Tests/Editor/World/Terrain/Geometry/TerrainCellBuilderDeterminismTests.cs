@@ -1,10 +1,11 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Kern.Core;
 using Kern.World.Terrain;
-using Kern.World.Terrain.Background;
 using MinesServer.Data;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace Kern.Tests.World;
 
@@ -22,27 +23,72 @@ public sealed class TerrainCellBuilderDeterminismTests
     private const int OriginX = 96;
     private const int OriginY = 64;
 
+    [TestCase(TerrainDistortionStyle.Classic)]
+    [TestCase(TerrainDistortionStyle.Organic)]
+    public void RoadSurfaceDoesNotInheritNeighborDistortion(TerrainDistortionStyle style)
+    {
+        var world = new TerrainTestWorld();
+        var cache = new TerrainCellCache();
+        var distortion = new TerrainDistortionSettings { DistortionStyle = style };
+        TerrainCellSources sources = world.BuildSources(cache, distortion,
+            OriginX, OriginY, Width, Height);
+        var quad = new TerrainVertex[4];
+        int adjacentRoads = 0;
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                if (cache.GetCellData(x + 1, y + 1).Type != CellType.Road) { continue; }
+                bool movedNeighbor = Node(sources, x, y) != TerrainVertexOffset.Zero ||
+                    Node(sources, x + 1, y) != TerrainVertexOffset.Zero ||
+                    Node(sources, x + 1, y + 1) != TerrainVertexOffset.Zero ||
+                    Node(sources, x, y + 1) != TerrainVertexOffset.Zero;
+                if (!movedNeighbor && style == TerrainDistortionStyle.Classic) { continue; }
+                adjacentRoads++;
+                TerrainQuadBuilder.FillQuad(sources,
+                    new TerrainQuadSite(x, y, OriginX + x, OriginY + y, 1f),
+                    TerrainQuadLayer.Foreground, quad);
+                Vector3[] expected = [new(x, y, 0), new(x + 1, y, 0),
+                    new(x + 1, y + 1, 0), new(x, y + 1, 0)];
+                for (int corner = 0; corner < 4; corner++)
+                {
+                    Assert.That(quad[corner].Position, Is.EqualTo(expected[corner]),
+                        $"Road ({x},{y}) corner {corner} follows the neighboring rock distortion.");
+                    Assert.That(quad[corner].UV5x, Is.Zero);
+                }
+            }
+        }
+        Assert.That(adjacentRoads, Is.GreaterThan(0), "Fixture must contain roads bordering displaced rock.");
+    }
+
+    // Накладка дверей читает вид из буфера клеток: пересобирать её надо,
+    // только когда меняется состав дверей.
+    private static TerrainVertexOffset Node(in TerrainCellSources sources, int x, int y) =>
+        TerrainVertexDistortionCalculator.ComputeNode(
+            sources.CellCache, sources.Distortion, x, y, sources.WorldWidth, sources.WorldHeight);
+
     [Test]
-    public void DoorAtlasChangeInvalidatesOverlayWithoutChangingVertices()
+    public void DoorIndexReportsOnlyCompositionChanges()
     {
         var index = new TerrainDoorOverlayIndex();
         index.EnsureSize(1, 1);
-        var vertices = new TerrainVertex[4];
         index.BeginFullBuild();
-        index.RecordCell(0, 0, 0, true, vertices);
+        index.RecordCell(0, 0, door: true);
         index.CompleteFullBuild();
 
-        Assert.That(index.RecordCell(0, 0, 1, true, vertices), Is.True);
-        Assert.That(index.RecordCell(0, 0, 1, true, vertices), Is.False);
+        Assert.That(index.HasDoors, Is.True);
+        Assert.That(index.RecordCell(0, 0, door: true), Is.False);
+        Assert.That(index.RecordCell(0, 0, door: false), Is.True);
+        Assert.That(index.HasDoors, Is.False);
     }
 
     [Test]
-    public void RoadTextureArrivalUpdatesBackgroundUnderEveryDoor()
+    public void RoadTextureArrivalReachesItsTypeRow()
     {
         var world = new TerrainTestWorld { RoadTextureReady = false };
         var cache = new TerrainCellCache();
         TerrainCellSources sources = world.BuildSources(
-            cache, new TerrainPrecalculator(), new BackgroundFloodFill(),
+            cache, new TerrainDistortionSettings(),
             OriginX, OriginY, Width, Height);
         using var builder = new TerrainCellBuilder();
         builder.EnsureCapacity(Width, Height, 1f);
@@ -55,42 +101,25 @@ public sealed class TerrainCellBuilderDeterminismTests
         builder.BuildTextureCells(
             TerrainCellTypeSet.Capture(changedTypes), sources, OriginX, OriginY);
 
-        for (int x = 0; x < Width; x++)
-        {
-            for (int y = 0; y < Height; y++)
-            {
-                if (cache.GetCellData(x + 1, y + 1).Type != CellType.BuildingDoor)
-                {
-                    continue;
-                }
-
-                TerrainCellTexels background = builder.Textures.GetCell(
-                    TerrainCellDataTextures.Ring(OriginX + x, Width),
-                    TerrainCellDataTextures.Ring(OriginY + y, Height),
-                    TerrainCellDataPacker.BackgroundLayer);
-                Assert.That(background.AtlasRect.B, Is.Not.Zero, $"Road under door ({x},{y})");
-            }
-        }
+        // Строка типа несёт текстуру, приехавшую после первой сборки.
+        Assert.That(builder.Buffers.GetTypeRow(CellType.Road).AtlasWH & 0xFFFu, Is.Not.Zero);
     }
 
+    // Текстура двери приезжает строкой типа: шейдер берёт её во всех
+    // клетках и в накладке сразу, состав дверей не меняется.
     [Test]
-    public void BuildTextureCells_LoadedDoorTexture_InvalidatesOverlayOnce()
+    public void BuildTextureCells_LoadedDoorTexture_UpdatesTypeRowWithoutTouchingOverlay()
     {
         var world = new TerrainTestWorld { DoorTextureReady = false };
         var cache = new TerrainCellCache();
         TerrainCellSources sources = world.BuildSources(
-            cache, new TerrainPrecalculator(), new BackgroundFloodFill(),
+            cache, new TerrainDistortionSettings(),
             OriginX, OriginY, Width, Height);
         using var builder = new TerrainCellBuilder();
         builder.EnsureCapacity(Width, Height, 1f);
         builder.BuildFull(sources, OriginX, OriginY);
         Assert.That(builder.HasDoors, Is.True, "Fixture must include doors.");
-
-        var vertices = new List<TerrainVertex>();
-        List<int>[] indices = [new List<int>()];
-        builder.BuildDoorOverlay(sources, OriginX, OriginY, vertices, indices);
-        Assert.That(vertices, Is.Not.Empty);
-        Assert.That(vertices.TrueForAll(vertex => vertex.UV1z == 0), Is.True);
+        Assert.That(builder.Buffers.GetTypeRow(CellType.BuildingDoor).AtlasWH & 0xFFFFu, Is.Zero);
 
         world.DoorTextureReady = true;
         HashSet<CellType> changedTypes = [CellType.BuildingDoor];
@@ -98,23 +127,17 @@ public sealed class TerrainCellBuilderDeterminismTests
         builder.BuildTextureCells(
             TerrainCellTypeSet.Capture(changedTypes), sources, OriginX, OriginY);
 
-        Assert.That(builder.DoorsTouched, Is.True,
-            "The driver must rebuild the overlay after its missing texture arrives.");
-        builder.BuildDoorOverlay(sources, OriginX, OriginY, vertices, indices);
-        Assert.That(vertices.TrueForAll(vertex => vertex.UV1z != 0), Is.True);
-
-        builder.BuildTextureCells(
-            TerrainCellTypeSet.Capture(changedTypes), sources, OriginX, OriginY);
+        Assert.That(builder.Buffers.GetTypeRow(CellType.BuildingDoor).AtlasWH & 0xFFFFu, Is.Not.Zero);
         Assert.That(builder.DoorsTouched, Is.False,
-            "Unchanged door data must not rebuild the overlay repeatedly.");
+            "A texture arrival does not change which cells are doors.");
     }
 
     [Test]
     public void BuildFull_RepeatedOnSameWindow_ProducesIdenticalTexels()
     {
-        List<TerrainCellTexels> first = BuildAndSnapshot(builder =>
+        List<TerrainCell> first = BuildAndSnapshot(builder =>
             builder.BuildFull(CreateSources(), OriginX, OriginY));
-        List<TerrainCellTexels> second = BuildAndSnapshot(builder =>
+        List<TerrainCell> second = BuildAndSnapshot(builder =>
             builder.BuildFull(CreateSources(), OriginX, OriginY));
 
         AssertTexelsEqual(first, second, "повторная полная сборка");
@@ -125,9 +148,9 @@ public sealed class TerrainCellBuilderDeterminismTests
     [Test]
     public void BuildFull_MatchesSequentialRegionBuild()
     {
-        List<TerrainCellTexels> parallel = BuildAndSnapshot(builder =>
+        List<TerrainCell> parallel = BuildAndSnapshot(builder =>
             builder.BuildFull(CreateSources(), OriginX, OriginY));
-        List<TerrainCellTexels> sequential = BuildAndSnapshot(builder =>
+        List<TerrainCell> sequential = BuildAndSnapshot(builder =>
         {
             TerrainCellSources sources = CreateSources();
             // A one-column range has only one Parallel.For iteration, so
@@ -149,7 +172,7 @@ public sealed class TerrainCellBuilderDeterminismTests
         const int originX = 96;
         const int originY = 64;
 
-        List<TerrainCellTexels> parallel = BuildAndSnapshot(
+        List<TerrainCell> parallel = BuildAndSnapshot(
             width,
             height,
             originX,
@@ -162,7 +185,7 @@ public sealed class TerrainCellBuilderDeterminismTests
                 0,
                 width,
                 height));
-        List<TerrainCellTexels> serial = BuildAndSnapshot(
+        List<TerrainCell> serial = BuildAndSnapshot(
             width,
             height,
             originX,
@@ -189,19 +212,18 @@ public sealed class TerrainCellBuilderDeterminismTests
         var world = new TerrainTestWorld();
         return world.BuildSources(
             new TerrainCellCache(),
-            new TerrainPrecalculator(),
-            new BackgroundFloodFill(),
+            new TerrainDistortionSettings(),
             originX,
             originY,
             width,
             height);
     }
 
-    private static List<TerrainCellTexels> BuildAndSnapshot(
+    private static List<TerrainCell> BuildAndSnapshot(
         System.Action<TerrainCellBuilder> build)
         => BuildAndSnapshot(build, Width, Height, OriginX, OriginY);
 
-    private static List<TerrainCellTexels> BuildAndSnapshot(
+    private static List<TerrainCell> BuildAndSnapshot(
         int width,
         int height,
         int originX,
@@ -209,7 +231,7 @@ public sealed class TerrainCellBuilderDeterminismTests
         System.Action<TerrainCellBuilder> build) =>
         BuildAndSnapshot(build, width, height, originX, originY);
 
-    private static List<TerrainCellTexels> BuildAndSnapshot(
+    private static List<TerrainCell> BuildAndSnapshot(
         System.Action<TerrainCellBuilder> build,
         int width,
         int height,
@@ -220,18 +242,14 @@ public sealed class TerrainCellBuilderDeterminismTests
         builder.EnsureCapacity(width, height, 1f);
         build(builder);
 
-        var snapshot = new List<TerrainCellTexels>(
-            width * height * TerrainCellDataPacker.LayersPerCell);
-        for (int x = 0; x < width; x++)
+        // Окно и кайма: кайму пишет RefreshMargin, и её узлы читают краевые
+        // клетки — она такая же часть результата.
+        var snapshot = new List<TerrainCell>((width + 2) * (height + 2));
+        for (int x = -1; x <= width; x++)
         {
-            for (int y = 0; y < height; y++)
+            for (int y = -1; y <= height; y++)
             {
-                int ringX = TerrainCellDataTextures.Ring(originX + x, width);
-                int ringY = TerrainCellDataTextures.Ring(originY + y, height);
-                snapshot.Add(builder.Textures.GetCell(
-                    ringX, ringY, TerrainCellDataPacker.BackgroundLayer));
-                snapshot.Add(builder.Textures.GetCell(
-                    ringX, ringY, TerrainCellDataPacker.ForegroundLayer));
+                snapshot.Add(builder.Buffers.GetCell(originX + x, originY + y));
             }
         }
 
@@ -239,8 +257,8 @@ public sealed class TerrainCellBuilderDeterminismTests
     }
 
     private static void AssertTexelsEqual(
-        List<TerrainCellTexels> expected,
-        List<TerrainCellTexels> actual,
+        List<TerrainCell> expected,
+        List<TerrainCell> actual,
         string what)
     {
         Assert.That(actual.Count, Is.EqualTo(expected.Count), what);
@@ -249,7 +267,7 @@ public sealed class TerrainCellBuilderDeterminismTests
             Assert.That(
                 actual[index],
                 Is.EqualTo(expected[index]),
-                $"{what}: тексель {index} (клетка {index / 2}, слой {index % 2})");
+                $"{what}: клетка {index}");
         }
     }
 }

@@ -55,6 +55,7 @@ namespace Kern.Core
         [SerializeField] private Volume _postProcessVolume = null!;
         [SerializeField] private PlayerMovementController _playerMovement = null!;
         [SerializeField] private List<ManagerBinding> _managerBindings = new();
+        private bool _isGameUIActive = true;
 
         public Transform ServicesRoot => _servicesRoot;
         public IReadOnlyList<ManagerBinding> ManagerBindings => _managerBindings;
@@ -65,43 +66,6 @@ namespace Kern.Core
             {
                 _ownScene = gameObject.scene;
                 base.Awake();
-                // VContainer injects registered components lazily on first
-                // resolve. Nothing resolves the local player's Robot from the
-                // graph (RobotManager GetComponents it instead), so inject it
-                // explicitly now — before Robot.Start fires this same frame and
-                // dereferences its [Inject] fields (IAssetLoader etc.).
-                if (Container != null && _playerMovement != null)
-                {
-                    if (_playerMovement.TryGetComponent<Robot>(out Robot? playerRobot))
-                    {
-                        Container.Inject(playerRobot);
-                    }
-
-                    // The authored local player is published only by the editor
-                    // preview path today; at runtime nothing ever called
-                    // Publish(this), so ILocalPlayerState.Current stays null and
-                    // GameManager's world-readiness gate never converges. Publish
-                    // it here (after DI, before auth) so PlayerInfoProcessor can
-                    // initialize it from PlayerInfoPacket and GameManager can
-                    // finally release WorldReady.
-                    ILocalPlayerState localPlayer = Container.Resolve<ILocalPlayerState>();
-                    localPlayer.Publish(_playerMovement);
-                }
-
-                // SceneSetup не входит в контракт ManagerBinding, и контейнер сам
-                // его не внедряет. Без этого [Inject] ITextureStorageService пуст,
-                // TryStartSurfaceRendererSetup молча ничего не делает, текстуры
-                // поверхности не назначаются, и готовность мира вечно стоит на
-                // surface=false. SceneSetup.Update повторяет попытку, пока
-                // внедрение не придёт, так что порядок Start/Update не важен.
-                //
-                // Ищется под этим scope, а не по корням сцены: все объекты сцены
-                // лежат под composition root (ValidateSingleRoot).
-                SceneSetup? sceneSetup = GetComponentInChildren<SceneSetup>(includeInactive: true);
-                if (Container != null && sceneSetup != null)
-                {
-                    Container.Inject(sceneSetup);
-                }
             }
             catch (Exception exception)
             {
@@ -181,7 +145,7 @@ namespace Kern.Core
             builder.Register<StatusProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<MapRegionProcessor>(Lifetime.Singleton);
             builder.Register<AudioPacketProcessor>(Lifetime.Singleton);
-            builder.Register<VfxPacketProcessor>(Lifetime.Singleton);
+            builder.Register<VFXPacketProcessor>(Lifetime.Singleton);
             builder.RegisterEntryPoint<ProgrammatorProcessor>().AsSelf();
             builder.Register<PlayerInfoProcessor>(Lifetime.Singleton);
             builder.Register<ChatProcessor>(Lifetime.Singleton);
@@ -190,10 +154,10 @@ namespace Kern.Core
             builder.Register<ConnectionProcessor>(Lifetime.Singleton);
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
+            builder.Register<ClientConfigProcessor>(Lifetime.Singleton);
             builder.RegisterEntryPoint<GameManager>().AsSelf();
-            RegisterManager<VfxPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
+            RegisterManager<VFXPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
             builder.Register<BuildingManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
-            builder.RegisterEntryPoint<PackPlacementPreview>().AsSelf();
             builder.Register<RobotManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldEntityBatchRenderer>(builder, "Rendering");
 
@@ -223,6 +187,15 @@ namespace Kern.Core
                 // and mouse clicks on world cells never reached the server.
                 builder.RegisterComponent(playerInteraction);
             }
+
+            SceneSetup? sceneSetup = GetComponentInChildren<SceneSetup>(includeInactive: true);
+            if (sceneSetup == null)
+            {
+                throw new SceneContractException(
+                    "MainGame scene must contain an authored SceneSetup component.");
+            }
+
+            builder.RegisterComponent(sceneSetup);
 
             if (_playerMovement.TryGetComponent<PlayerInputHandler>(out PlayerInputHandler? playerInput))
             {
@@ -267,7 +240,7 @@ namespace Kern.Core
 
             // Единственный фоновый отчёт о провисе кадра: живёт со сценой игры,
             // а не внутри компонента, который случайно тикает каждый кадр.
-            builder.RegisterEntryPoint<Kern.Tools.Imgui.Profiling.FrameStallMonitor>();
+            builder.RegisterEntryPoint<Kern.Tools.ImGui.Profiling.FrameStallMonitor>();
             builder.Register<GameInfrastructureStartup>(Lifetime.Singleton);
             builder.Register<GamePresentationStartup>(Lifetime.Singleton);
             builder.Register<GameStartupPipeline>(Lifetime.Singleton);
@@ -303,21 +276,18 @@ namespace Kern.Core
                   Keyboard.current.leftCommandKey.isPressed || Keyboard.current.rightCommandKey.isPressed) &&
                  Keyboard.current.uKey.wasPressedThisFrame))
             {
-                SetGameUIActive(!_uiDocument.enabled);
+                SetGameUIActive(!_isGameUIActive);
             }
         }
 
         public void SetGameUIActive(bool active)
         {
-            if (_uiDocument != null)
-            {
-                if (_uiDocument.rootVisualElement != null)
-                {
-                    _uiDocument.rootVisualElement.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
-                    _uiDocument.rootVisualElement.pickingMode = active ? PickingMode.Position : PickingMode.Ignore;
-                }
+            _isGameUIActive = active;
 
-                _uiDocument.enabled = active;
+            if (_uiDocument != null && _uiDocument.rootVisualElement != null)
+            {
+                _uiDocument.rootVisualElement.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+                _uiDocument.rootVisualElement.pickingMode = active ? PickingMode.Position : PickingMode.Ignore;
             }
 
             if (_floatingUIRoot != null)

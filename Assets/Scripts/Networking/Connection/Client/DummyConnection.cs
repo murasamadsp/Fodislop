@@ -61,7 +61,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         IRuntimeDebugSettings debugSettings,
         IOfflineScenarioSettings scenarioSettings,
         DummyWorldMapSource worldMaps,
-        IDummyClock clock)
+        IDummyClock clock,
+        IRuntimeAssetPaths? assetPaths = null)
         : this(
             textureStorage,
             itemCatalog,
@@ -70,7 +71,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             scenarioSettings,
             (IDummyWorldMapSource)worldMaps,
             new DummyTokenStore(),
-            clock)
+            clock,
+            assetPaths)
     {
     }
 
@@ -82,7 +84,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         IOfflineScenarioSettings scenarioSettings,
         IDummyWorldMapSource worldMaps,
         DummyTokenStore tokenStore,
-        IDummyClock clock)
+        IDummyClock clock,
+        IRuntimeAssetPaths? assetPaths = null)
     {
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _textureStorage = textureStorage;
@@ -139,7 +142,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _pathFinder,
             SendPacket,
             () => _debugSettings.IgnoreCollision,
-            _mockBotID);
+            _mockBotId);
         _actionResponder = new DummyGameplayActionResponder(
             _playerState,
             _worldState,
@@ -149,14 +152,26 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _chatSimulator,
             clock,
             SendPacket,
-            _mockBotID);
+            _mockBotId,
+            operations,
+            () => _session.LifecycleVersion,
+            LoopAlive);
+        _blockSpawner = new DummyBlockSpawner(
+            operations,
+            clock,
+            _worldState,
+            _playerState,
+            SendPacket,
+            LoopAlive,
+            type => _textureStorage.HasTexture($"cells/{type}"));
         _windowResponder = new DummyWindowResponder(
             SendPacket,
             _buffManager,
             _inventoryResponder,
             _teleportManager,
             _clanManager,
-            _missionRunner);
+            _missionRunner,
+            _blockSpawner);
         _worldStartup = new DummyWorldStartupResponder(
             operations,
             clock,
@@ -169,14 +184,16 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             _missionRunner,
             _teleportPositions,
             SendPacket,
-            LoopAlive);
+            LoopAlive,
+            _blockSpawner,
+            assetPaths);
     }
 
-    private string _PlayerName => _authSession.PlayerName;
+    private string PlayerName => _authSession.PlayerName;
 
-    private long _Level => 12345;
+    private long Level => 12345;
 
-    private long _Currency => 123456;
+    private long Currency => 123456;
 
     public ConnectionStatus ConnectionStatus => _session.Status;
 
@@ -198,6 +215,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     private readonly DummyChatResponder _chatResponder;
     private readonly DummyAdminCommands _adminCommands;
     private readonly DummyClanManager _clanManager;
+    private readonly DummyBlockSpawner _blockSpawner;
     private readonly DummyPathFinder _pathFinder;
     private readonly DummyMovementResponder _movementResponder;
     private readonly DummyGameplayActionResponder _actionResponder;
@@ -206,7 +224,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     private readonly DummyWorldSimulationState _worldState;
     private readonly DummyWorldStartupResponder _worldStartup;
 
-    private const ushort _mockBotID = 456;
+    private const ushort _mockBotId = 456;
     private readonly List<(ushort X, ushort Y)> _teleportPositions = new();
 
     // Depth warning/damage feature disabled in DummyConnection
@@ -407,7 +425,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             case SendLocalChatMessagePacket localMsg:
                 _chatResponder.SendLocal(
                     localMsg,
-                    _mockBotID,
+                    _mockBotId,
                     _playerState.X,
                     _playerState.Y);
                 break;
@@ -483,10 +501,10 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
         return _worldStartup.InitializeAsync(
             PrebakedWorldCodeName,
             _session.LifecycleVersion,
-            _PlayerName,
-            _Level,
-            _Currency,
-            _mockBotID);
+            PlayerName,
+            Level,
+            Currency,
+            _mockBotId);
     }
 
 }

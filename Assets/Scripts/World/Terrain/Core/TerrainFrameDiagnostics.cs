@@ -20,7 +20,7 @@ public readonly record struct TerrainFrameTimings(
     int ResidencyProbeCalls,
     int ResidencyChunkReads,
     int ResidencyCacheHits,
-    int ResidencyLruTouches);
+    int ResidencyLRUTouches);
 
 /// <summary>
 /// Наблюдение за кадром террейна и разбор отказа сборки.
@@ -55,7 +55,7 @@ public sealed class TerrainFrameDiagnostics : IDisposable
 
         // Счётчики сборщика клеток принадлежат рабочему потоку и здесь не
         // читаются: цена шага берётся из его опубликованного итога.
-        TerrainCellDataTextures textures = pipeline.CellBuilder.Textures;
+        TerrainCellBuffers textures = pipeline.CellBuilder.Buffers;
         _stall.Record(
             stallStart,
             telemetry,
@@ -71,16 +71,14 @@ public sealed class TerrainFrameDiagnostics : IDisposable
                 textures.LastUploadRectCount,
                 textures.LastUploadTexels,
                 textures.LastStageMs,
-                textures.LastStageCopyMs,
-                textures.LastStageApplyMs,
                 textures.LastUploadStrips,
                 timings.PlanMs,
                 timings.DimensionsMs,
                 timings.ResidencyProbeCalls,
                 timings.ResidencyChunkReads,
                 timings.ResidencyCacheHits,
-                timings.ResidencyLruTouches,
-                new TerrainStallBuildState(_window.BuildState, _window.HasCpuBuildInFlight),
+                timings.ResidencyLRUTouches,
+                new TerrainStallBuildState(_window.BuildState, _window.HasCPUBuildInFlight),
                 pipeline.LastWorkerCost));
     }
 

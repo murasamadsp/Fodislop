@@ -20,12 +20,13 @@ public sealed class ServerAudioEvent : IDisposable, IServerWorldEffect
 
     public ServerAudioEvent(
         AudioPacket packet,
-        IVfxSlot? slot,
+        IVFXSlot? slot,
         IRobotService robotService,
+        ILocalPlayerState localPlayer,
         IAudioSystem audioSystem,
         IAssetLoader assetLoader,
         MapManager mapManager,
-        IVfxService vfxPool,
+        IVFXService vfxPool,
         IAsyncOperationSupervisor operations)
         : this(
             packet.EffectType,
@@ -36,6 +37,7 @@ public sealed class ServerAudioEvent : IDisposable, IServerWorldEffect
             packet.Parameters,
             slot,
             robotService,
+            localPlayer,
             audioSystem,
             assetLoader,
             mapManager,
@@ -46,12 +48,13 @@ public sealed class ServerAudioEvent : IDisposable, IServerWorldEffect
 
     public ServerAudioEvent(
         VFXPacket packet,
-        IVfxSlot? slot,
+        IVFXSlot? slot,
         IRobotService robotService,
+        ILocalPlayerState localPlayer,
         IAudioSystem audioSystem,
         IAssetLoader assetLoader,
         MapManager mapManager,
-        IVfxService vfxPool,
+        IVFXService vfxPool,
         IAsyncOperationSupervisor operations)
         : this(
             null,
@@ -62,6 +65,7 @@ public sealed class ServerAudioEvent : IDisposable, IServerWorldEffect
             packet.Parameters,
             slot,
             robotService,
+            localPlayer,
             audioSystem,
             assetLoader,
             mapManager,
@@ -77,12 +81,13 @@ public sealed class ServerAudioEvent : IDisposable, IServerWorldEffect
         ushort sourceX,
         ushort sourceY,
         IReadOnlyList<StringPairPacket> parameters,
-        IVfxSlot? slot,
+        IVFXSlot? slot,
         IRobotService robotService,
+        ILocalPlayerState localPlayer,
         IAudioSystem audioSystem,
         IAssetLoader assetLoader,
         MapManager mapManager,
-        IVfxService vfxPool,
+        IVFXService vfxPool,
         IAsyncOperationSupervisor operations)
     {
         _audioEffectType = audioEffectType;
@@ -96,6 +101,7 @@ public sealed class ServerAudioEvent : IDisposable, IServerWorldEffect
             parsedParams,
             slot,
             robotService,
+            localPlayer,
             assetLoader,
             mapManager,
             vfxPool);

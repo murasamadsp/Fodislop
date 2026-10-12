@@ -15,6 +15,7 @@ namespace Kern.World.Lighting;
 /// </summary>
 internal sealed class LightingFrameExecutor
 {
+    internal static Action<string, AsyncGPUReadbackRequest>? DiagnosticMaterialReadback { get; set; }
     private readonly LightingResourceManager _resources;
     private readonly GeometryLightingSolver _geometrySolver;
     private readonly StaticLightingSolver _staticSolver;
@@ -58,6 +59,24 @@ internal sealed class LightingFrameExecutor
         _dynamicLightManager.EnsureCapacity(capacity);
     }
 
+    public void InvalidateDynamicQuality()
+    {
+        _dynamicSolver.Release();
+        _dynamicLightManager.ResetUploadState();
+        _lastDynamicUnion = null;
+    }
+
+    // Every dynamic ray, horizon and receiver tile is traced again; slots and
+    // their composed rectangles survive, so the next solve refreshes exactly
+    // the area those lights covered and cover.
+    public void InvalidateDynamicTiles()
+    {
+        _dynamicSolver.InvalidateTiles();
+    }
+
+    public bool CanReuseStaticAtlas(Vector2Int regionDelta) =>
+        _staticSolver.CanReuseStaticAtlas(regionDelta);
+
     public int UploadDynamicLights(
         CommandBuffer commandBuffer,
         Vector4 worldRect,
@@ -84,18 +103,20 @@ internal sealed class LightingFrameExecutor
     public void RecordAmbientOcclusionField(
         CommandBuffer commandBuffer,
         Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor terrainGeometry,
-        Vector4 worldRect) =>
+        Vector4 worldRect,
+        IReadOnlyList<RectInt>? rasterRects = null) =>
         _geometrySolver.RecordAmbientOcclusionField(
             commandBuffer,
             terrainGeometry,
             _geometryRegistry,
-            worldRect);
+            worldRect,
+            rasterRects);
 
     public void ConfigureSharedComputeParameters(
         CommandBuffer commandBuffer,
         Vector4 worldRect,
         float cellSize,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         LightingQualityMode quality,
         LightingEngine.DebugView debugView)
     {
@@ -104,11 +125,13 @@ internal sealed class LightingFrameExecutor
             _resources.LightingCompute!,
             _resources.FieldWidth,
             _resources.FieldHeight,
+            _resources.LightWidth,
+            _resources.LightHeight,
             worldRect,
             cellSize,
             debugView,
             _resources.MaterialField!,
-            emissionField,
+            glowField,
             _resources.SolveCascadeKernel,
             _resources.ResolveDirectKernel,
             _resources.CompositeLightingKernel,
@@ -120,7 +143,7 @@ internal sealed class LightingFrameExecutor
         CommandBuffer commandBuffer,
         LightingFrameRequest request,
         Kern.Core.Interfaces.WorldLighting.ILightingGeometryContributor terrainGeometry,
-        RenderTexture emissionField,
+        RenderTexture glowField,
         RenderTexture staticDirectTexture)
     {
         _executedStages.Clear();
@@ -128,28 +151,59 @@ internal sealed class LightingFrameExecutor
 
         if (request.RebuildFields)
         {
+            if (request.ReuseStaticAtlas)
+            {
+                _resources.EnsureReanchorFields();
+                commandBuffer.CopyTexture(_resources.MaterialField!, _resources.ReanchorMaterial!);
+                commandBuffer.CopyTexture(_resources.StaticGlowField!, _resources.ReanchorGlow!);
+            }
+
             _geometrySolver.RecordMaterialField(
                 commandBuffer,
                 terrainGeometry,
                 _geometryRegistry,
                 request.WorldRect);
             _executedStages.Add("MaterialField");
+            RecordMaterialReadback(commandBuffer, "MaterialField");
             _geometrySolver.PrepareCaches(commandBuffer, materialFieldRebuilt: true);
             _executedStages.Add("GeometryCache");
+            RecordMaterialReadback(commandBuffer, "GeometryCache");
+            IReadOnlyList<RectInt>? aoRasterRects = request.AllowPartialAmbientOcclusion
+                ? LightingAmbientOcclusionUpdatePolicy.ResolveRasterRects(
+                    request.DirtyRegions,
+                    new RectInt(
+                        Mathf.RoundToInt(request.WorldRect.x / request.CellSize),
+                        Mathf.RoundToInt(request.WorldRect.y / request.CellSize),
+                        Mathf.RoundToInt(request.WorldRect.z / request.CellSize),
+                        Mathf.RoundToInt(request.WorldRect.w / request.CellSize)),
+                    LightingConfigHolder.AmbientOcclusionPixelsPerCell,
+                    Kern.Core.Interfaces.WorldLighting.LightingFieldOrientation.RowsTopDown)
+                : null;
             RecordAmbientOcclusionField(
                 commandBuffer,
                 terrainGeometry,
-                request.WorldRect);
+                request.WorldRect,
+                aoRasterRects);
             _executedStages.Add("AmbientOcclusionField");
+            RecordMaterialReadback(commandBuffer, "AmbientOcclusionField");
         }
 
         bool staticRadianceChanged = request.StaticRadianceChanged;
+        if (request.DynamicLightCount > 0 &&
+            LightingConfigHolder.EnabledFeatures.HasFlag(LightingFeatureFlags.DynamicLights))
+        {
+            if (_geometrySolver.PrepareDynamicDistanceField(commandBuffer))
+            {
+                _executedStages.Add("DynamicSdfBuild");
+            }
+        }
+
         bool dynamicRadianceNeeded = request.DynamicRadianceChanged &&
             request.DynamicLightCount > 0;
         if (request.ClearDynamicRadiance)
         {
             ClearDynamicDirect(commandBuffer);
-            _dynamicSolver.InvalidateTiles();
+            _dynamicSolver.Release();
         }
 
         if (staticRadianceChanged &&
@@ -157,7 +211,7 @@ internal sealed class LightingFrameExecutor
         {
             _staticSolver.RecordTrace(
                 commandBuffer,
-                emissionField,
+                glowField,
                 request.ReuseStaticAtlas,
                 request.RegionDelta,
                 request.DirtyRegions,
@@ -167,15 +221,17 @@ internal sealed class LightingFrameExecutor
             _staticSolver.RecordResolve(
                 commandBuffer,
                 request.DebugView,
-                emissionField,
+                glowField,
                 staticDirectTexture);
             _executedStages.Add("CascadeMerge");
         }
 
         RectInt dynamicDirtyUnion = default;
+        bool dynamicRecorded = false;
         if (dynamicRadianceNeeded &&
             LightingConfigHolder.EnabledFeatures.HasFlag(LightingFeatureFlags.DynamicLights))
         {
+            dynamicRecorded = true;
             _dynamicSolver.Record(
                 commandBuffer,
                 request.DynamicLightCount,
@@ -184,7 +240,8 @@ internal sealed class LightingFrameExecutor
                 staticRadianceChanged || request.RebuildFields,
                 request.DebugView,
                 _telemetry,
-                out dynamicDirtyUnion);
+                out dynamicDirtyUnion,
+                request.DynamicReceiverRect);
             _executedStages.Add("DynamicLighting");
         }
 
@@ -193,9 +250,9 @@ internal sealed class LightingFrameExecutor
         // the whole field. Any static, geometry or debug-view change keeps
         // the full path, so debug views stay bit-identical.
         //
-        // CompositeDirty is intentionally NOT a full-path trigger: it is set
-        // on every dynamic light move by LightingEngine.SetDynamicLight, which is
-        // exactly the dynamic-only case this path exists for.
+        // Source edits request upload-set evaluation. DynamicLightsChanged
+        // reflects the resulting GPU inputs; culled-only edits never reach
+        // this recorder. CompositeDirty remains an explicit refresh request.
         //
         // Removing the last source also goes partial: its previous union is
         // retained below, and the cleared area is exactly that union. Any
@@ -224,10 +281,28 @@ internal sealed class LightingFrameExecutor
             }
         }
 
-        if (request.DynamicLightsChanged ||
+        // A global refresh must cover pixels outside the dynamic dirty union.
+        // Retain the updated union above for subsequent dynamic-only frames.
+        if (request.CompositeDirty)
+        {
+            partialRect = null;
+        }
+
+        // A dynamic-only solve that changed no DirectTexture pixel (moved
+        // receivers kept every light's rectangle, culled sources changed)
+        // leaves the composite exactly as it is.
+        bool dynamicUnchanged = dynamicRecorded &&
+            _dynamicSolver.LastSolveUnchanged &&
+            !staticRadianceChanged &&
+            !request.RebuildFields &&
+            !request.CompositeDirty &&
+            !request.ClearDynamicRadiance &&
+            request.DebugView == LightingEngine.DebugView.FinalLighting;
+        if (!dynamicUnchanged &&
+            (request.DynamicLightsChanged ||
             request.DynamicRadianceChanged ||
             staticRadianceChanged ||
-            request.CompositeDirty)
+            request.CompositeDirty))
         {
             _indirectSolver.RecordComposite(
                 commandBuffer,
@@ -238,12 +313,27 @@ internal sealed class LightingFrameExecutor
             _executedStages.Add("Composite");
         }
 
+        if (request.RebuildFields)
+        {
+            RecordMaterialReadback(commandBuffer, "FrameComplete");
+        }
+
         return new LightingFrameResult(
             invalidations,
             staticRadianceChanged,
             dynamicRadianceNeeded,
             request.ClearDynamicRadiance,
-            _executedStages.ToArray());
+            _executedStages);
+    }
+
+    private void RecordMaterialReadback(CommandBuffer commandBuffer, string stage)
+    {
+        Action<string, AsyncGPUReadbackRequest>? observer = DiagnosticMaterialReadback;
+        if (observer != null)
+        {
+            commandBuffer.RequestAsyncReadback(_resources.MaterialField!,
+                request => observer(stage, request));
+        }
     }
 
     private static LightingInvalidationFlags BuildInvalidations(

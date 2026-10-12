@@ -1,3 +1,5 @@
+#pragma kernel BuildReanchorChangeRows
+#pragma kernel BuildReanchorChangeColumns
 #pragma kernel SolveCascade
 #pragma kernel ScrollRadianceAtlas
 #pragma kernel ClearCascadeChangedMask
@@ -6,10 +8,17 @@
 #pragma kernel SolveDynamicLighting
 #pragma kernel ComposeDynamicLighting
 #pragma kernel TraceDynamicPolar
+#pragma kernel TraceDynamicPolarBatch
+#pragma kernel SolveDynamicLightingBatch
 #pragma kernel ClearDynamicDirect
 #pragma kernel CompositeLighting
 #pragma kernel BuildCellSolidMask
 #pragma kernel BuildSurfaceAirCache
+#pragma kernel BuildCleanCellRows
+#pragma kernel BuildCleanCellColumns
+#pragma kernel SeedDynamicDistanceField
+#pragma kernel JumpFloodDynamicDistanceField
+#pragma kernel ResolveDynamicDistanceField
 
 #pragma target 5.0
 
@@ -45,8 +54,14 @@
 // Field Textures
 // ============================================================================
 
+Texture2D<float4> _ReanchorMaterial;
+Texture2D<float4> _ReanchorGlow;
+RWStructuredBuffer<uint> _ReanchorChangeRowsOutput;
+StructuredBuffer<uint> _ReanchorChangeRows;
+RWStructuredBuffer<uint> _ReanchorChangesOutput;
+StructuredBuffer<uint> _ReanchorChanges;
 Texture2D<float4> _MaterialField;
-Texture2D<float4> _EmissionField;
+Texture2D<float4> _GlowField;
 RWStructuredBuffer<uint3> _RadianceAtlas;
 StructuredBuffer<uint3> _RadianceAtlasInput;
 RWStructuredBuffer<uint3> _RadianceAtlasOutput;
@@ -56,7 +71,7 @@ Texture2D<float4> _DirectInput;
 // Resolved radiance from the terrain's own emitters, solved separately and kept
 // across frames.
 //
-// Light transport is linear in emission and the medium does not depend on it, so
+// Light transport is linear in glow and the medium does not depend on it, so
 // solve(terrain + dynamic lights) is exactly solve(terrain) + solve(dynamic lights). Splitting the
 // two lets the terrain half survive until geometry actually changes, instead of
 // being recomputed every time a dynamic light moves a fraction of a cell - which is what
@@ -78,14 +93,40 @@ Texture2D<float4> _CellSolidMask;
 RWTexture2D<float4> _CellSolidMaskOutput;
 Texture2D<float4> _SurfaceAirCache;
 RWTexture2D<float4> _SurfaceAirCacheOutput;
+// Summed-area table over the cell grid counting cells that are not clean air.
+// Summed-area counts per cell: x = cells that are not clean air, y = cells
+// that are not clean stone (BuildCleanCellRows / NonCleanCellCount).
+RWStructuredBuffer<uint2> _CleanCellRowsOutput;
+StructuredBuffer<uint2> _CleanCellRows;
+RWStructuredBuffer<uint2> _CleanCellPrefixOutput;
+StructuredBuffer<uint2> _CleanCellPrefix;
+StructuredBuffer<uint> _DynamicSdfSeedInput;
+RWStructuredBuffer<uint> _DynamicSdfSeedOutput;
+Texture2D<float> _DynamicSdfInput;
+RWTexture2D<float> _DynamicSdfOutput;
+int _DynamicSdfJumpStep;
+int _DynamicSdfTransportEnabled;
 
 RWStructuredBuffer<uint> _LightingCounters;
 int _LightingCountersEnabled;
+static const uint DynamicTraversalHistogramBins = 4096u;
+static const uint DynamicTraversalDdaHistogramOffset = 4u;
+static const uint DynamicTraversalSdfHistogramOffset = 4100u;
+static const uint DynamicTraversalTotalHistogramOffset = 8196u;
+int _UniformCellTraversalEnabled;
+// Opt-in experiment until production image and GPU cost gates pass.
+int _UniformSourceTraversalEnabled;
 StructuredBuffer<int4> _DirtyRegions;
 RWStructuredBuffer<uint> _CascadeChangedMask;
 int _CascadeChangedMaskCount;
 int _DirtyRegionCount;
 int _CascadeMaskEnabled;
+// Reanchor state is local to a recorded static solve; zero for ordinary solves.
+int _CascadeReanchorEnabled;
+int _CascadePhaseMatches;
+int2 _ReanchorDeltaTexels;
+int2 _ReanchorFarDeltaProbes;
+int _ReanchorFarPhaseMatches;
 
 // ============================================================================
 // Dynamic Lights
@@ -96,10 +137,12 @@ StructuredBuffer<DynamicLight> _DynamicLights;
 int2 _DynamicDispatchOrigin;
 int2 _DynamicDispatchSize;
 int _DynamicLightIndex;
+StructuredBuffer<DynamicLightWorkItem> _DynamicLightWorkItems;
+int _DynamicBatchOffset;
 int _WriteDynamicDirect;
 int2 _DynamicTileOffset;
-RWTexture2D<float4> _DynamicTiles;
-Texture2D<float4> _DynamicTilesInput;
+RWTexture2DArray<float4> _DynamicTiles;
+Texture2DArray<float4> _DynamicTilesInput;
 
 StructuredBuffer<DynamicTileInfo> _DynamicTileInfos;
 int _DynamicTileCount;
@@ -108,20 +151,38 @@ int2 _ComposeSize;
 
 int2 _DynamicPolarSize;
 int2 _DynamicPolarTextureSize;
-RWTexture2D<float4> _DynamicPolar;
-Texture2D<float4> _DynamicPolarInput;
+int _DynamicPolarScalarExtinction;
+int _NeutralExtinction;
+int _DynamicTilesScalarRadiance;
+RWTexture2DArray<float4> _DynamicPolar;
+Texture2DArray<float4> _DynamicPolarInput;
+int _DynamicPolarLayerOffset;
+// Persistent source slot: tile layer of SolveDynamicLighting.
+int _DynamicReachIndex;
 
-// Дальность фонаря в текселях поля: самый дальний радиус по всем его лучам,
-// до которого свет ещё может быть видимым. TraceDynamicPolar копит максимум,
-// SolveDynamicLighting не считает пиксели дальше — под землёй это большая
-// часть поля.
-RWStructuredBuffer<uint> _DynamicReach;
+// Angular horizon per source slot: one radius (transport texels) per polar
+// direction and emitter point, [base + point * stride + direction]. Each fan
+// thread owns exactly one entry and overwrites it on every trace: no CPU clear,
+// no atomics (a SetBufferData clear + InterlockedMax scheme read back zeros and
+// cut every light at the near zone). Written by TraceDynamicPolar through the RW
+// binding; SolveDynamicLighting reads the read-only binding. `_DynamicHorizonBase`
+// = slot * points * stride, `_DynamicHorizonStride` = direction stride.
+RWStructuredBuffer<uint> _DynamicHorizon;
+StructuredBuffer<uint> _DynamicHorizonInput;
+int _DynamicHorizonBase;
+int _DynamicHorizonStride;
 
 // ============================================================================
 // Shared Parameters
 // ============================================================================
 
+// Transport lattice: material, glow, DDA, cascade probes and polar fans.
 int2 _FieldSize;
+// Receiver lattice: static/dynamic direct, surface cache and the published
+// lightmap. Same world rect; an integer number of field texels per light
+// texel, so every receiver centre maps to one transport position exactly.
+int2 _LightSize;
+int _FieldTexelsPerLightTexel;
 int2 _CompositeDispatchOrigin;
 int2 _CompositeDispatchSize;
 int2 _CellGridSize;
@@ -129,7 +190,10 @@ float4 _WorldRect;
 float4 _AmbientColor;
 float4 _EmptyExtinctionRGB;
 float4 _SolidExtinctionRGB;
-float _EmissionScale;
+float _GlowScale;
+// One dynamic light below this absolute radiance cannot move any display
+// level of the active output (LightingComputeBinder.InvisibleDynamicRadiance).
+float _InvisibleDynamicRadiance;
 float _MaximumLightMultiplier;
 float _CellSize;
 float _TransmittanceDebugDistanceCells;
@@ -146,12 +210,6 @@ int _DynamicAngularSampleCount;
 // Плотность эмиттера по оси: число точек сетки на сторону фонаря. Авторское
 // значение живёт в VisualTuning.cs.
 int _DynamicEmitterPointsPerAxis;
-
-// Запас дальности фонаря до отсечения: в текселях поля и в клетках, плюс
-// маржа входа источника в полярном веере. Авторские значения в VisualTuning.cs.
-float _DynamicReachSlackTexels;
-float _DynamicReachSlackCells;
-float _DynamicPolarMargin;
 
 // Пороги solidity поля материала: авторские значения в VisualTuning.cs.
 float _SolidOccupancyThreshold;
@@ -234,3 +292,56 @@ SamplerState sampler_LinearClamp;
 // ============================================================================
 
 #include "Assets/Resources/Shaders/Lighting/Composite/CompositeLighting.hlsl"
+
+// Exact dependencies of the newly rasterized transport inputs, on the world
+// texel lattice. Two scans form an integral image; each ray-box query is four
+// reads regardless of field size. This runs only on a region reanchor.
+[numthreads(64, 1, 1)]
+void BuildReanchorChangeRows(uint3 id : SV_DispatchThreadID)
+{
+    int y = (int)id.x;
+    if (y >= _FieldSize.y)
+    {
+        return;
+    }
+    uint sum = 0u;
+    for (int x = 0; x < _FieldSize.x; x++)
+    {
+        int2 current = int2(x, y);
+        int2 previous = current + _ReanchorDeltaTexels;
+        bool changed = any(previous < 0) || any(previous >= _FieldSize);
+        if (!changed)
+        {
+            int2 rasterCurrent = current;
+            int2 rasterPrevious = previous;
+            if (_MaterialYFlip != 0)
+            {
+                rasterCurrent.y = _FieldSize.y - 1 - rasterCurrent.y;
+                rasterPrevious.y = _FieldSize.y - 1 - rasterPrevious.y;
+            }
+            changed = any(_MaterialField.Load(int3(rasterCurrent, 0)) !=
+                _ReanchorMaterial.Load(int3(rasterPrevious, 0))) ||
+                any(_GlowField.Load(int3(rasterCurrent, 0)) !=
+                _ReanchorGlow.Load(int3(rasterPrevious, 0)));
+        }
+        sum += changed ? 1u : 0u;
+        _ReanchorChangeRowsOutput[y * _FieldSize.x + x] = sum;
+    }
+}
+
+[numthreads(64, 1, 1)]
+void BuildReanchorChangeColumns(uint3 id : SV_DispatchThreadID)
+{
+    int x = (int)id.x;
+    if (x >= _FieldSize.x)
+    {
+        return;
+    }
+    uint sum = 0u;
+    for (int y = 0; y < _FieldSize.y; y++)
+    {
+        int index = y * _FieldSize.x + x;
+        sum += _ReanchorChangeRows[index];
+        _ReanchorChangesOutput[index] = sum;
+    }
+}

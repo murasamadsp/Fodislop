@@ -53,7 +53,7 @@ public sealed class WorldLabelReusePlayModeTests
         Assert.That(_document, Is.Not.Null, "MainGame has no UIDocument.");
     }
 
-    // Метка отсекается LateTick'ом, если её мировая точка вне кадра, поэтому
+    // Метка отсекается PostLateTick'ом, если её мировая точка вне кадра, поэтому
     // каждый кадр ставим её перед камерой: проверяем показ, а не отсечение.
     private IEnumerator Frames(IWorldLabel label, int count)
     {

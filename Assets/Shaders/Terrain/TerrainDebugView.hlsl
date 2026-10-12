@@ -10,13 +10,13 @@
 int _TerrainDebugView;
 
 static const int KERN_TERRAIN_DEBUG_OFF = 0;
-static const int KERN_TERRAIN_DEBUG_RELIEF_RIM = 1;
+static const int KERN_TERRAIN_DEBUG_RIM = 1;
 static const int KERN_TERRAIN_DEBUG_FOREIGN_SIDES = 2;
 static const int KERN_TERRAIN_DEBUG_COVERAGE = 3;
 static const int KERN_TERRAIN_DEBUG_LAYER = 4;
 static const int KERN_TERRAIN_DEBUG_ANCHORED = 5;
 static const int KERN_TERRAIN_DEBUG_CELL_LOCAL = 6;
-static const int KERN_TERRAIN_DEBUG_RELIEF_GROUP = 7;
+static const int KERN_TERRAIN_DEBUG_RIM_MASS = 7;
 static const int KERN_TERRAIN_DEBUG_CONTINUOUS_SHEET = 8;
 static const int KERN_TERRAIN_DEBUG_AMBIENT_OCCLUSION = 9;
 static const int KERN_TERRAIN_DEBUG_BACKGROUND_TILE_IDENTITY = 10;
@@ -60,8 +60,8 @@ float3 KernTerrainDebugSurfaceColor(
     float3 animatedColor,
     float3 decalColor,
     float facetedGlintSignal,
-    int animationProfile,
-    int animationType,
+    int cellSurfaceEffect,
+    int cellAnimationType,
     float deltaContrast)
 {
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_SOURCE_ALBEDO)
@@ -71,15 +71,15 @@ float3 KernTerrainDebugSurfaceColor(
 
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_SHIMMER_FLOW)
     {
-        bool usesShimmerFlow = animationType == 2 &&
-            animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL &&
-            animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL;
+        bool usesShimmerFlow = cellAnimationType == (int)KERN_TERRAIN_ANIMATION_TYPE_SHIMMER &&
+            cellSurfaceEffect != (int)KERN_TERRAIN_SURFACE_EFFECT_PRISMATIC &&
+            cellSurfaceEffect != (int)KERN_TERRAIN_SURFACE_EFFECT_FACETED;
         return usesShimmerFlow ? flowSample : float3(0.0, 0.0, 0.0);
     }
 
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_PRISMATIC_FLOW)
     {
-        return animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL
+        return cellSurfaceEffect == (int)KERN_TERRAIN_SURFACE_EFFECT_PRISMATIC
             ? flowSample
             : float3(0.0, 0.0, 0.0);
     }
@@ -91,7 +91,7 @@ float3 KernTerrainDebugSurfaceColor(
 
     if (_TerrainDebugView == KERN_TERRAIN_DEBUG_PRISMATIC_TINT)
     {
-        float3 tintDelta = animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL
+        float3 tintDelta = cellSurfaceEffect == (int)KERN_TERRAIN_SURFACE_EFFECT_PRISMATIC
             ? animatedColor - sourceAlbedo
             : float3(0.0, 0.0, 0.0);
         return KernTerrainDebugEncodeSignedDelta(tintDelta, deltaContrast);
@@ -162,13 +162,13 @@ float3 KernTerrainUniqueTileColor(
 // левая — синий, правая — жёлтая примесь в красный и зелёный.
 float3 KernTerrainForeignSideColor(float packedContour)
 {
-    int reliefCode = KernTerrainReliefCode(packedContour);
-    if (reliefCode == 0)
+    int rimCode = KernTerrainRimCode(packedContour);
+    if (rimCode == 0)
     {
         return float3(0.15, 0.15, 0.15);
     }
 
-    int foreignSides = (~(reliefCode - 1)) & 0x0F;
+    int foreignSides = (~(rimCode - 1)) & (int)KERN_TERRAIN_RIM_SIDES_MASK;
     float top = (foreignSides & 1) != 0 ? 1.0 : 0.0;
     float left = (foreignSides & 2) != 0 ? 1.0 : 0.0;
     float bottom = (foreignSides & 4) != 0 ? 1.0 : 0.0;
@@ -193,13 +193,13 @@ float3 KernTerrainDebugColor(
     float2 cellLocal = surface.cellSample;
     float packedContour = surface.packedContour;
     float anchored = surface.anchored;
-    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_RELIEF_RIM)
+    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_RIM)
     {
         // Выключенная кайма красится отдельно. Иначе вид заливает мир
         // зелёным, и «кайма выключена» неотличимо от «кайма посчитана и
         // никого не трогает» — ровно та неоднозначность, из-за которой
         // белый кадр однажды уже нельзя было прочитать.
-        if (_TerrainReliefRimEnabled < 0.5)
+        if (_TerrainRimEnabled < 0.5)
         {
             return float3(0.35, 0.25, 0.55);
         }
@@ -207,7 +207,7 @@ float3 KernTerrainDebugColor(
         // Зелёное — кайма не трогает пиксель, красное — гасит до предела.
         // Та же структура, что у кадра: выбрать «не ту» координату здесь
         // больше нечем.
-        float rim = TerrainReliefRim(surface);
+        float rim = TerrainRim(surface);
         return float3(1.0 - rim, rim, 0.35);
     }
 
@@ -255,10 +255,10 @@ float3 KernTerrainDebugColor(
         return float3(saturate(cellLocal.x), saturate(cellLocal.y), 0.0);
     }
 
-    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_RELIEF_GROUP)
+    if (_TerrainDebugView == KERN_TERRAIN_DEBUG_RIM_MASS)
     {
-        int reliefCode = KernTerrainReliefCode(packedContour);
-        float shade = reliefCode == 0 ? 0.0 : (float)reliefCode / 17.0;
+        int rimCode = KernTerrainRimCode(packedContour);
+        float shade = rimCode == 0 ? 0.0 : (float)rimCode / 17.0;
         return float3(shade, shade * 0.5, 1.0 - shade);
     }
 

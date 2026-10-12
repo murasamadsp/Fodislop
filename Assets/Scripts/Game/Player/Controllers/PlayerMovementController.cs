@@ -29,7 +29,7 @@ namespace Kern.Player.Logic
         [SerializeField]
         private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
 
-        public uint BotID { get; private set; }
+        public uint BotId { get; private set; }
         public Vector2Int Position { get; private set; }
         public bool HasServerPosition { get; private set; }
         public bool IsGameplayVisible { get; private set; }
@@ -82,6 +82,7 @@ namespace Kern.Player.Logic
             _clickPath = path;
             _clickPathIndex = 0;
             OnPathChanged?.Invoke(_clickPath);
+            _clickPathRenderer?.EnsureView(_sceneObjects);
             _clickPathRenderer?.Show(_clickPath, 0, _mapDataProvider, transform.position.z);
             return true;
         }
@@ -137,6 +138,9 @@ namespace Kern.Player.Logic
         [Inject]
         private IRuntimeDebugSettings _debugSettings = null!;
 
+        [Inject]
+        private Kern.Core.Lifecycle.ISceneObjectFactory _sceneObjects = null!;
+
         public void InitializeEditorPreview(IWorldDataStorage storage, IMapDataProvider mapDataProvider)
         {
             // Editor preview has no DI graph: publish only when a state service
@@ -160,7 +164,9 @@ namespace Kern.Player.Logic
         {
             _robot = GetComponent<Robot>();
             _clickPathRenderer = GetComponent<ClickPathRenderer>();
-            if (_clickPathRenderer == null)
+            // ExecuteAlways: в редакторе Awake срабатывает при открытии сцены,
+            // и AddComponent записал бы компонент в сцену. Добавлять только в игре.
+            if (_clickPathRenderer == null && Application.isPlaying)
             {
                 _clickPathRenderer = gameObject.AddComponent<ClickPathRenderer>();
             }
@@ -263,9 +269,9 @@ namespace Kern.Player.Logic
             _actionDispatcher?.DispatchHotkeys();
         }
 
-        public void Initialize(uint botID)
+        public void Initialize(uint botId)
         {
-            BotID = botID;
+            BotId = botId;
             HasServerPosition = false;
             IsGameplayVisible = false;
             _awaitingMoveConfirmation = false;
@@ -280,7 +286,7 @@ namespace Kern.Player.Logic
 
             if (_robot != null)
             {
-                _robot.Initialize(botID);
+                _robot.Initialize(botId);
             }
         }
 
@@ -326,6 +332,13 @@ namespace Kern.Player.Logic
             return PlayerMovementValidator.IsWithinWorldBounds(position, worldWidth, worldHeight);
         }
 
+        public void ResetServerPosition()
+        {
+            HasServerPosition = false;
+            Position = default;
+            _awaitingMoveConfirmation = false;
+        }
+
         public void UpdateServerPosition(Vector2Int position, bool teleport = false)
         {
             if (_mapDataProvider == null)
@@ -342,7 +355,19 @@ namespace Kern.Player.Logic
                     $"world height is {worldHeight}.");
             }
 
+            bool shouldSnap = !HasServerPosition ||
+                Mathf.Abs(Position.x - position.x) > 1 ||
+                Mathf.Abs(Position.y - position.y) > 1;
             Vector2Int oldPos = Position;
+            if (shouldSnap && HasServerPosition)
+            {
+                // Рывок робота (а за ним и камеры): сервер прислал клетку
+                // дальше соседней. Источник ищется по этой строке в логе.
+                Debug.LogWarning(
+                    $"[PlayerMovementController] Server moved the player {oldPos} -> {position} " +
+                    $"(frame {Time.frameCount}).");
+            }
+
             _awaitingMoveConfirmation = false;
             Position = position;
             HasServerPosition = true;
@@ -350,17 +375,28 @@ namespace Kern.Player.Logic
             transform.position = targetWorldPos;
             if (_robot is not null)
             {
-                _robot.TargetPosition = targetWorldPos;
-                if (teleport)
+                if (shouldSnap || teleport)
                 {
-                    // Телепорт: визуал робота (тело + сегменты-щупальца) снапится
-                    // в точку мгновенно, иначе Robot.Update тянет transform назад
-                    // к сглаженной позиции, и камера медленно "плывёт" за ним.
-                    _robot.SnapVisualToTarget();
+                    _robot.SnapTo(targetWorldPos);
+                    if (teleport)
+                    {
+                        // Телепорт: визуал робота (тело + сегменты-щупальца) снапится
+                        // в точку мгновенно, иначе Robot.Update тянет transform назад
+                        // к сглаженной позиции, и камера медленно "плывёт" за ним.
+                        _robot.SnapVisualToTarget();
+                    }
+                }
+                else
+                {
+                    _robot.TargetPosition = targetWorldPos;
                 }
             }
 
-            OnPlayerMoved?.Invoke(oldPos, Position);
+            if (oldPos != Position)
+            {
+                OnPlayerMoved?.Invoke(oldPos, Position);
+            }
+
             if (teleport)
             {
                 // Респаун/ТП: маршрут до старой цели теряет смысл.
@@ -394,6 +430,12 @@ namespace Kern.Player.Logic
         public void ConfirmDigAction(ushort x, ushort y) =>
             _actionDispatcher?.ConfirmDigAction(x, y);
 
+        public bool TryGetDigDirection(ushort x, ushort y, out Direction direction)
+        {
+            direction = default;
+            return _actionDispatcher != null && _actionDispatcher.TryGetDigDirection(x, y, out direction);
+        }
+
         private void ApplyMovement()
         {
             if (_robot is null || _input is null)
@@ -407,7 +449,17 @@ namespace Kern.Player.Logic
             }
 
             Vector2 moveInput = _input.MoveInput;
-            if (_awaitingMoveConfirmation || moveInput == Vector2.zero)
+            if (moveInput != Vector2.zero && _clickPath != null)
+            {
+                CancelClickPath();
+            }
+
+            if (_awaitingMoveConfirmation)
+            {
+                return;
+            }
+
+            if (moveInput == Vector2.zero)
             {
                 // Ручного ввода нет - ведём робота по клик-маршруту (ЛКМ).
                 if (_clickPath != null)
@@ -416,12 +468,6 @@ namespace Kern.Player.Logic
                 }
 
                 return;
-            }
-
-            // Ручной ввод перебивает маршрут.
-            if (_clickPath != null)
-            {
-                CancelClickPath();
             }
 
             Vector2Int direction = PlayerMovementMath.InputToDirection(moveInput);
@@ -512,7 +558,7 @@ namespace Kern.Player.Logic
                         (ushort)targetPosition.x,
                         (ushort)targetPosition.y,
                         out CellType residentTargetCellType) ||
-                        residentTargetCellType == CellType.Unloaded))
+                        residentTargetCellType is CellType.Unloaded or CellType.Pregener))
                 {
                     _lastMoveTime = Time.time;
                     _awaitingMoveConfirmation = true;
@@ -527,13 +573,22 @@ namespace Kern.Player.Logic
 
             if (isPassable || _ignoreCollision)
             {
+                _robot.TargetAngle = PlayerMovementMath.DirectionToAngle(direction);
+                _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(
+                    targetServerX,
+                    targetServerY,
+                    mapDataProvider.WorldHeight,
+                    transform.position.z);
+                Vector2Int oldPos = Position;
+                Position = targetPosition;
+                OnPlayerMoved?.Invoke(oldPos, Position);
                 _lastMoveTime = Time.time;
                 _awaitingMoveConfirmation = true;
                 _networkService?.SendAction(new MovePacket(targetServerX, targetServerY));
             }
             else if (_autoDig)
             {
-                _actionDispatcher?.NotifyDug(targetPosition);
+                _actionDispatcher?.NotifyDug(targetPosition, packetDirection);
                 _networkService?.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
                 _lastMoveTime = Time.time;
             }
@@ -655,7 +710,7 @@ namespace Kern.Player.Logic
                 // от тумблера автокопания.
                 _networkService?.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
                 _lastMoveTime = Time.time;
-                _actionDispatcher?.NotifyDug(targetPosition);
+                _actionDispatcher?.NotifyDug(targetPosition, packetDirection);
             }
         }
 

@@ -28,6 +28,31 @@ public sealed class MapProjectionTests
     }
 
     [Test]
+    public void MipSelection_UsesChunkBufferBudgetBeforeScaleThreshold()
+    {
+        Assert.That(
+            MapViewportChunkBudget.ShouldUseMip(
+                worldWidth: 100_000,
+                worldHeight: 100_000,
+                texWidth: 1024,
+                texHeight: 768,
+                cellsPerPixel: 31f,
+                viewCenterX: 50_000f,
+                viewCenterY: 50_000f),
+            Is.True);
+        Assert.That(
+            MapViewportChunkBudget.ShouldUseMip(
+                worldWidth: 100_000,
+                worldHeight: 100_000,
+                texWidth: 1024,
+                texHeight: 768,
+                cellsPerPixel: 1f,
+                viewCenterX: 50_000f,
+                viewCenterY: 50_000f),
+            Is.False);
+    }
+
+    [Test]
     public void ServerCellToTexturePixel_MapsServerDownToTextureUp()
     {
         Vector2 actual = MapProjection.ServerCellToTexturePixel(
@@ -44,14 +69,16 @@ public sealed class MapProjectionTests
     }
 
     [Test]
-    public void MinimapProjection_CentersPlayerCellAndMapsServerYDownToLowerTextureRows()
+    public void MinimapProjection_MatchesEvenSizedTextureSamplingAndServerYDown()
     {
         Vector2Int centerPixel = MapProjection.ServerCellToMinimapPixel(30, 40, 30, 40, 160);
         Vector2Int belowPlayer = MapProjection.ServerCellToMinimapPixel(30, 41, 30, 40, 160);
-        Vector2Int belowWorldSample = MapProjection.MinimapPixelToServerCell(80, 79, 30, 40, 160);
+        Vector2Int centerCell = MapProjection.MinimapPixelToServerCell(80, 79, 30, 40, 160);
+        Vector2Int belowWorldSample = MapProjection.MinimapPixelToServerCell(80, 78, 30, 40, 160);
 
-        Assert.That(centerPixel, Is.EqualTo(new Vector2Int(80, 80)));
-        Assert.That(belowPlayer, Is.EqualTo(new Vector2Int(80, 79)));
+        Assert.That(centerPixel, Is.EqualTo(new Vector2Int(80, 79)));
+        Assert.That(belowPlayer, Is.EqualTo(new Vector2Int(80, 78)));
+        Assert.That(centerCell, Is.EqualTo(new Vector2Int(30, 40)));
         Assert.That(belowWorldSample, Is.EqualTo(new Vector2Int(30, 41)));
     }
 
@@ -127,5 +154,24 @@ public sealed class MapProjectionTests
 
         Assert.That(smallWorldZoom, Is.GreaterThanOrEqualTo(4f));
         Assert.That(largeWorldZoom, Is.GreaterThanOrEqualTo(4f));
+    }
+
+    [Test]
+    public void ViewportWorldY_RowZeroIsBottomAndTopRowIsSurface()
+    {
+        float cy = 200f;
+        int texH = 540;
+        float cp = 1f;
+
+        float startWorldY = cy + (texH * 0.5f - 0.5f) * cp;
+        float bottomRowY = startWorldY - (0f * cp);
+        float topRowY = startWorldY - ((texH - 1) * cp);
+
+        // In Server Y, larger values are underground (bottom of world).
+        // Row 0 of texture is the bottom of the UI element.
+        Assert.That(bottomRowY, Is.GreaterThan(cy), "Row 0 of texture must be deeper underground (bottom of view)");
+        Assert.That(topRowY, Is.LessThan(cy), "Top row of texture must be towards surface (top of view)");
+        Assert.That(bottomRowY, Is.EqualTo(200f + 269.5f).Within(0.001f));
+        Assert.That(topRowY, Is.EqualTo(200f - 269.5f).Within(0.001f));
     }
 }

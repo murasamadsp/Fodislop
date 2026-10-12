@@ -5,8 +5,8 @@ Shader "Kern/World Surface"
         // Runtime construction validates and injects every required property.
         // Neutral ShaderLab values are sentinels, not rendering fallbacks.
         [MainTexture] _BaseMap ("Surface Texture", 2D) = "black" {}
-        [HDR] _EmissionColor ("Emission Color", Color) = (0,0,0,0)
-        _EmissionStrength ("Emission Strength", Range(0, 8)) = 0
+        [HDR] _GlowColor ("Glow Color", Color) = (0,0,0,0)
+        _GlowStrength ("Glow Strength", Range(0, 8)) = 0
         _Occupancy ("Physical Occupancy", Range(0, 1)) = 0
         _BaseMapTileCount ("Surface Sheet Tile Count", Vector) = (0,0,0,0)
         _WorldSize ("World Size", Vector) = (0,0,0,0)
@@ -53,18 +53,18 @@ Shader "Kern/World Surface"
                 float2 uv : TEXCOORD0;
                 float2 uv2 : TEXCOORD1;
                 float2 worldPosition : TEXCOORD2;
-                float emissionMask : TEXCOORD3;
+                float glowMask : TEXCOORD3;
             };
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
             #include "WorldLightSampling.hlsl"
 
-            float _WorldEmissionScale;
+            float _WorldGlowScale;
 
             CBUFFER_START(UnityPerMaterial)
-                float4 _EmissionColor;
-                float _EmissionStrength;
+                float4 _GlowColor;
+                float _GlowStrength;
                 float _Occupancy;
                 float4 _BaseMapTileCount;
                 float4 _WorldSize;
@@ -79,11 +79,12 @@ Shader "Kern/World Surface"
             Varyings VisibleVert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                float3 worldPosition = KernWorldGridVertex(TransformObjectToWorld(input.positionOS.xyz));
+                output.positionCS = KernWorldGridClipPosition(worldPosition);
                 output.uv = input.uv;
                 output.uv2 = input.customData.xy;
-                output.worldPosition = TransformObjectToWorld(input.positionOS.xyz).xy;
-                output.emissionMask = saturate(input.customData.x);
+                output.worldPosition = worldPosition.xy;
+                output.glowMask = saturate(input.customData.x);
                 return output;
             }
 
@@ -187,11 +188,11 @@ Shader "Kern/World Surface"
                     return half4(SampleWorldLightColorUnclamped(input.worldPosition).rgb, surface.a);
                 }
 
-                float3 emission = surface.rgb * _EmissionColor.rgb *
-                    _EmissionStrength * input.emissionMask * _WorldEmissionScale;
+                float3 glow = surface.rgb * _GlowColor.rgb *
+                    _GlowStrength * input.glowMask * _WorldGlowScale;
                 float3 worldLight = SampleWorldLightColorUnclamped(input.worldPosition).rgb;
                 float3 litSurface = surface.rgb * worldLight;
-                return half4(litSurface + emission, surface.a);
+                return half4(litSurface + glow, surface.a);
 #else
                 clip(-1.0);
                 return 0;
@@ -218,6 +219,7 @@ Shader "Kern/World Surface"
             #pragma multi_compile_local_fragment _ KERN_SURFACE_REDROCK KERN_SURFACE_TRANSIT KERN_SURFACE_PERSPECTIVE KERN_SURFACE_HORIZON
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/Shaders/World/LightingFieldRaster.hlsl"
             #include "WorldSurfaceCommon.hlsl"
 
             struct Attributes
@@ -231,22 +233,22 @@ Shader "Kern/World Surface"
             {
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
-                float emissionMask : TEXCOORD1;
+                float glowMask : TEXCOORD1;
                 float2 worldPosition : TEXCOORD2;
             };
 
             struct LightingFieldOutput
             {
                 half4 material : SV_Target0;
-                half4 emission : SV_Target1;
+                half4 glow : SV_Target1;
             };
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
 
             CBUFFER_START(UnityPerMaterial)
-                float4 _EmissionColor;
-                float _EmissionStrength;
+                float4 _GlowColor;
+                float _GlowStrength;
                 float _Occupancy;
                 float4 _BaseMapTileCount;
                 float4 _WorldSize;
@@ -259,9 +261,9 @@ Shader "Kern/World Surface"
             Varyings LightingFieldVert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.positionCS = KernLightingFieldClipPositionWorld(TransformObjectToWorld(input.positionOS.xyz));
                 output.uv = input.uv;
-                output.emissionMask = saturate(input.lightingData.x);
+                output.glowMask = saturate(input.lightingData.x);
                 output.worldPosition = TransformObjectToWorld(input.positionOS.xyz).xy;
                 return output;
             }
@@ -283,14 +285,14 @@ Shader "Kern/World Surface"
                     0);
                 float coverage = step(_SurfaceFieldThreshold, surface.a);
                 float occupancy = coverage * surface.a * _Occupancy;
-                float emissionStrength = coverage * surface.a *
-                    _EmissionStrength * input.emissionMask;
+                float glowStrength = coverage * surface.a *
+                    _GlowStrength * input.glowMask;
 
                 LightingFieldOutput output;
                 output.material = half4(surface.rgb * coverage, occupancy);
-                output.emission = half4(
-                    surface.rgb * _EmissionColor.rgb * emissionStrength,
-                    emissionStrength);
+                output.glow = half4(
+                    surface.rgb * _GlowColor.rgb * glowStrength,
+                    glowStrength);
                 return output;
             }
             ENDHLSL
@@ -303,7 +305,7 @@ Shader "Kern/World Surface"
 
             Blend One One
             BlendOp Max
-            ColorMask A
+            ColorMask R
             ZWrite Off
             ZTest Always
             Cull Off
@@ -315,6 +317,7 @@ Shader "Kern/World Surface"
             #pragma multi_compile_local_fragment _ KERN_SURFACE_REDROCK KERN_SURFACE_TRANSIT KERN_SURFACE_PERSPECTIVE KERN_SURFACE_HORIZON
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/Shaders/World/LightingFieldRaster.hlsl"
             #include "WorldSurfaceCommon.hlsl"
 
             struct Attributes
@@ -334,8 +337,8 @@ Shader "Kern/World Surface"
             SAMPLER(sampler_BaseMap);
 
             CBUFFER_START(UnityPerMaterial)
-                float4 _EmissionColor;
-                float _EmissionStrength;
+                float4 _GlowColor;
+                float _GlowStrength;
                 float _Occupancy;
                 float4 _BaseMapTileCount;
                 float4 _WorldSize;
@@ -348,7 +351,7 @@ Shader "Kern/World Surface"
             Varyings LightingAmbientOcclusionVert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.positionCS = KernLightingFieldClipPositionWorld(TransformObjectToWorld(input.positionOS.xyz));
                 output.uv = input.uv;
                 output.worldPosition = TransformObjectToWorld(input.positionOS.xyz).xy;
                 return output;
@@ -370,7 +373,7 @@ Shader "Kern/World Surface"
                     baseMapUV,
                     0).a;
                 half occupancy = step(_SurfaceFieldThreshold, alpha) * alpha * _Occupancy;
-                return half4(0.0, 0.0, 0.0, occupancy);
+                return half4(occupancy, 0.0, 0.0, 0.0);
             }
             ENDHLSL
         }

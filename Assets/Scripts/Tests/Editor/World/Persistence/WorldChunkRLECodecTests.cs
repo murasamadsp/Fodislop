@@ -8,7 +8,7 @@ using Kern.Persistence;
 using NUnit.Framework;
 
 [TestFixture]
-public class WorldChunkRleCodecTests
+public class WorldChunkRLECodecTests
 {
     [Test]
     public void EncodeAndDecode_UniformChunk_RestoresIdenticalData()
@@ -20,12 +20,12 @@ public class WorldChunkRleCodecTests
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            WorldChunkRleCodec.EncodeChunk(writer, original, area);
+            WorldChunkRLECodec.EncodeChunk(writer, original, area);
         }
 
         memory.Position = 0;
         using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
-        ushort[] decoded = WorldChunkRleCodec.DecodeChunk<ushort>(reader, area);
+        ushort[] decoded = WorldChunkRLECodec.DecodeChunk<ushort>(reader, area);
 
         Assert.AreEqual(original, decoded);
     }
@@ -43,12 +43,12 @@ public class WorldChunkRleCodecTests
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            WorldChunkRleCodec.EncodeChunk(writer, original, area);
+            WorldChunkRLECodec.EncodeChunk(writer, original, area);
         }
 
         memory.Position = 0;
         using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
-        int[] decoded = WorldChunkRleCodec.DecodeChunk<int>(reader, area);
+        int[] decoded = WorldChunkRLECodec.DecodeChunk<int>(reader, area);
 
         Assert.AreEqual(original, decoded);
     }
@@ -65,14 +65,25 @@ public class WorldChunkRleCodecTests
         using var memory = new MemoryStream();
         using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            WorldChunkRleCodec.EncodeChunk(writer, original, area);
+            WorldChunkRLECodec.EncodeChunk(writer, original, area);
         }
 
         memory.Position = 0;
         using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
-        byte[] decoded = WorldChunkRleCodec.DecodeChunk<byte>(reader, area);
+        byte[] decoded = WorldChunkRLECodec.DecodeChunk<byte>(reader, area);
 
         Assert.AreEqual(original, decoded);
+    }
+
+    [Test]
+    public void Encode_ShortChunkBuffer_ThrowsBeforeWriting()
+    {
+        using var memory = new MemoryStream();
+        using var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        Assert.Throws<ArgumentException>(() =>
+            WorldChunkRLECodec.EncodeChunk(writer, new byte[] { 7 }, chunkArea: 2));
+        Assert.That(memory.Length, Is.Zero);
     }
 
     [Test]
@@ -90,8 +101,41 @@ public class WorldChunkRleCodecTests
         using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
         Assert.Throws<InvalidDataException>(() =>
         {
-            WorldChunkRleCodec.DecodeChunk<ushort>(reader, area);
+            WorldChunkRLECodec.DecodeChunk<ushort>(reader, area);
         });
+    }
+
+    [Test]
+    public void Decode_RunThatExceedsChunkArea_ThrowsInvalidDataException()
+    {
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write((ushort)5);
+            writer.Write((ushort)9);
+        }
+
+        memory.Position = 0;
+        using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+        Assert.Throws<InvalidDataException>(() => WorldChunkRLECodec.DecodeChunk<ushort>(reader, 4));
+    }
+
+    [Test]
+    public void VisitChunkRuns_RunThatExceedsChunkArea_ThrowsBeforeVisitingIt()
+    {
+        using var memory = new MemoryStream();
+        using (var writer = new BinaryWriter(memory, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write((ushort)5);
+            writer.Write((byte)9);
+        }
+
+        memory.Position = 0;
+        using var reader = new BinaryReader(memory, System.Text.Encoding.UTF8, leaveOpen: true);
+        int visitorCalls = 0;
+        Assert.Throws<InvalidDataException>(() =>
+            WorldChunkRLECodec.VisitChunkRuns<byte>(reader, 4, 3, (_, _, _) => visitorCalls++));
+        Assert.That(visitorCalls, Is.Zero);
     }
 
     [Test]
@@ -99,14 +143,14 @@ public class WorldChunkRleCodecTests
     {
         Assert.Throws<ArgumentNullException>(() =>
         {
-            WorldChunkRleCodec.EncodeChunk<int>(null!, new int[10], 10);
+            WorldChunkRLECodec.EncodeChunk<int>(null!, new int[10], 10);
         });
 
         using var memory = new MemoryStream();
         using var writer = new BinaryWriter(memory);
         Assert.Throws<ArgumentNullException>(() =>
         {
-            WorldChunkRleCodec.EncodeChunk<int>(writer, null!, 10);
+            WorldChunkRLECodec.EncodeChunk<int>(writer, null!, 10);
         });
     }
 
@@ -115,7 +159,7 @@ public class WorldChunkRleCodecTests
     {
         Assert.Throws<ArgumentNullException>(() =>
         {
-            WorldChunkRleCodec.DecodeChunk<int>(null!, 10);
+            WorldChunkRLECodec.DecodeChunk<int>(null!, 10);
         });
     }
 
@@ -126,13 +170,13 @@ public class WorldChunkRleCodecTests
         using var writer = new BinaryWriter(memory);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
-            WorldChunkRleCodec.EncodeChunk(writer, new int[10], 0);
+            WorldChunkRLECodec.EncodeChunk(writer, new int[10], 0);
         });
 
         using var reader = new BinaryReader(memory);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
-            WorldChunkRleCodec.DecodeChunk<int>(reader, -1);
+            WorldChunkRLECodec.DecodeChunk<int>(reader, -1);
         });
     }
 }

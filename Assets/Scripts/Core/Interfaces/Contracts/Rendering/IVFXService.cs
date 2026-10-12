@@ -1,10 +1,9 @@
 #nullable enable
 
-using Kern.Game;
 using UnityEngine;
 
 namespace Kern.Core.Interfaces;
-public interface IVfxSlot
+public interface IVFXSlot
 {
     GameObject? GameObject { get; }
 
@@ -15,9 +14,8 @@ public interface IVfxSlot
     void SetEnabled(bool enabled);
 }
 
-public interface IVfxService
+public interface IVFXService
 {
-    IVfxSlot? Acquire(VfxType vfxType);
-    void Release(IVfxSlot slot);
-    void Preload(VfxType vfxType, int count);
+    IVFXSlot? Acquire();
+    void Release(IVFXSlot slot);
 }

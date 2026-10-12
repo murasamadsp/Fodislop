@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Kern.Core.Interfaces;
 using Kern.Networking.Processors;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -32,13 +33,14 @@ public sealed class PacketHandler(
     ChatProcessor chat,
     StatusProcessor status,
     AudioPacketProcessor audio,
-    VfxPacketProcessor vfx,
+    VFXPacketProcessor vfx,
     InventoryProcessor inventory,
     ClanProcessor clan,
     MissionProcessor mission,
     MissionArrowProcessor missionArrow,
     ConnectionProcessor connection,
-    AuthTokenProcessor authToken) : IStartable, IDisposable
+    AuthTokenProcessor authToken,
+    ClientConfigProcessor clientConfig) : IStartable, IDisposable
 {
     private readonly INetworkService _networkService = networkService;
     private readonly WorldInitProcessor _worldInit = worldInit;
@@ -50,14 +52,35 @@ public sealed class PacketHandler(
     private readonly ChatProcessor _chat = chat;
     private readonly StatusProcessor _status = status;
     private readonly AudioPacketProcessor _audio = audio;
-    private readonly VfxPacketProcessor _vfx = vfx;
+    private readonly VFXPacketProcessor _vfx = vfx;
     private readonly InventoryProcessor _inventory = inventory;
     private readonly ClanProcessor _clan = clan;
     private readonly MissionProcessor _mission = mission;
     private readonly MissionArrowProcessor _missionArrow = missionArrow;
     private readonly ConnectionProcessor _connection = connection;
     private readonly AuthTokenProcessor _authToken = authToken;
+    private readonly ClientConfigProcessor _clientConfig = clientConfig;
     private readonly List<Action> _unsubscribers = [];
+    private readonly IBatchAwareProcessor[] _batchAwareProcessors = new object[]
+    {
+        worldInit,
+        playerInfo,
+        windowProcessor,
+        mapRegion,
+        building,
+        playerStats,
+        chat,
+        status,
+        audio,
+        vfx,
+        inventory,
+        clan,
+        mission,
+        missionArrow,
+        connection,
+        authToken,
+        clientConfig,
+    }.OfType<IBatchAwareProcessor>().ToArray();
 
     public bool IsSubscribed { get; private set; }
 
@@ -70,9 +93,21 @@ public sealed class PacketHandler(
 
     public void Dispose() => Unsubscribe();
 
-    private void BeginPacketBatch() => _mapRegion.BeginBatch();
+    private void BeginPacketBatch()
+    {
+        for (int i = 0; i < _batchAwareProcessors.Length; i++)
+        {
+            _batchAwareProcessors[i].BeginBatch();
+        }
+    }
 
-    private void EndPacketBatch() => _mapRegion.EndBatch();
+    private void EndPacketBatch()
+    {
+        for (int i = 0; i < _batchAwareProcessors.Length; i++)
+        {
+            _batchAwareProcessors[i].EndBatch();
+        }
+    }
 
     // Protocol packets may be value types, so this helper must remain unconstrained.
     private void On<T>(Action<T> handler)
@@ -140,8 +175,9 @@ public sealed class PacketHandler(
         On<DisconnectPacket>(_connection.Process);
         On<ReconnectPacket>(_connection.Process);
         On<AuthTokenPacket>(_authToken.Process);
-        On<OpenURLPacket>(packet => Application.OpenURL(packet.URL));
+        On<OpenURLPacket>(packet => ExternalUrlOpener.TryOpen(packet.URL, nameof(PacketHandler)));
         On<MissionArrowPacket>(_missionArrow.Process);
+        On<ClientConfigPacket>(_clientConfig.Process);
 
         IsSubscribed = true;
     }

@@ -13,15 +13,15 @@ public sealed class PostProcessRuntimeContractRule : IRule
     private static readonly MethodContract[] Contracts =
     [
         new(
-            "Kern.Tools.Imgui.ToolWindows",
+            "Kern.Tools.ImGui.ToolWindows",
             "Unregister",
-            [new("Kern.Tools.Imgui.ToolWindows", "ReleaseInputCapture", 1)]),
+            [new("Kern.Tools.ImGui.ToolWindows", "ReleaseInputCapture", 1)]),
         new(
             "Kern.Rendering.PostProcessing.PostProcessController",
             "OnDisable",
             [
                 new("Kern.Rendering.PostProcessing.PostProcessRuntimeState", "set_BypassPostProcessEffects", 1),
-                new("Kern.Rendering.PostProcessing.PostProcessRuntimeState", "SetColorGrade", 1),
+                new("Kern.Rendering.PostProcessing.PostProcessRuntimeState", "SetLUT", 1),
             ]),
         new(
             "Kern.Rendering.PostProcessing.PostProcessRendererFeature",

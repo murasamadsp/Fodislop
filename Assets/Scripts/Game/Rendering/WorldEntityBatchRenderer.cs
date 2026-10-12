@@ -28,25 +28,26 @@ namespace Kern.Game
         private const int BATCH_SORTING_ORDER = -1;
         private const int OVERLAY_BATCH_SORTING_ORDER = 600;
         private const int TENTACLE_SORTING_ORDER = -1;
-        private static readonly float _visibilityPrefetchMargin =
+        private static readonly float s_visibilityPrefetchMargin =
             StreamingPolicy.Default.AllocationQuantumCells;
 
-        private static readonly ProfilerMarker _LateUpdateMarker =
+        private static readonly ProfilerMarker s_lateUpdateMarker =
             new("Kern.WorldEntities.LateUpdate");
 
-        private static readonly AllocationLedger.Entry _AllocationEntry =
+        private static readonly AllocationLedger.Entry s_allocationEntry =
             AllocationLedger.Register("Сущности мира — LateUpdate");
 
-        private static readonly int _SpriteAlphaCullID =
+        private static readonly int s_spriteAlphaCullId =
             Shader.PropertyToID("_SpriteAlphaCull");
 
-        private static readonly int _EmissiveFieldThresholdID =
-            Shader.PropertyToID("_EmissiveFieldThreshold");
+        private static readonly int s_glowFieldThresholdId =
+            Shader.PropertyToID("_GlowFieldThreshold");
 
-        private static bool _tuningGlobalsApplied;
+        private static bool s_tuningGlobalsApplied;
 
         private readonly List<Tentacle> _tentacles = [];
         private readonly List<SpriteHandle> _sprites = [];
+        private readonly Dictionary<string, Sprite> _ownedSpritesByKey = new(StringComparer.Ordinal);
         private readonly SpatialShardGrid<SpriteHandle> _spatialGrid = new();
         private readonly WorldEntityVisibility _visibility;
         private readonly WorldEntityLightingEmitter _lightingEmitter;
@@ -79,7 +80,7 @@ namespace Kern.Game
 
         public WorldEntityBatchRenderer()
         {
-            _visibility = new WorldEntityVisibility(_spatialGrid, _visibilityPrefetchMargin);
+            _visibility = new WorldEntityVisibility(_spatialGrid, s_visibilityPrefetchMargin);
             _lightingEmitter = new WorldEntityLightingEmitter(_sprites, () => _batchMaterial, GetAtlasRect);
         }
 
@@ -117,6 +118,35 @@ namespace Kern.Game
 
             handle.SetSprite(sprite);
             _geometryDirty = true;
+        }
+
+        internal Sprite GetOrCreateOwnedSprite(
+            string key,
+            Func<Texture2D> createTexture,
+            int width,
+            int height)
+        {
+            if (_ownedSpritesByKey.TryGetValue(key, out Sprite? sprite) && sprite != null)
+            {
+                return sprite;
+            }
+
+            Texture2D texture = createTexture();
+            try
+            {
+                sprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, width, height),
+                    new Vector2(0.5f, 0.5f),
+                    RenderingConstants.PIXELS_PER_UNIT);
+                _ownedSpritesByKey[key] = sprite;
+                return sprite;
+            }
+            catch
+            {
+                Destroy(texture);
+                throw;
+            }
         }
 
         public void UnregisterSprite(SpriteHandle? handle)
@@ -177,8 +207,8 @@ namespace Kern.Game
 
         protected void LateUpdate()
         {
-            using var marker = _LateUpdateMarker.Auto();
-            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
+            using var marker = s_lateUpdateMarker.Auto();
+            using var allocationScope = AllocationLedger.Measure(s_allocationEntry);
             for (int i = 0; i < _sprites.Count; i++)
             {
                 SpriteHandle handle = _sprites[i];
@@ -264,16 +294,16 @@ namespace Kern.Game
         // уходят глобальными юниформами, а не в каждый материал по отдельности.
         private static void ApplyTuningGlobals()
         {
-            if (_tuningGlobalsApplied)
+            if (s_tuningGlobalsApplied)
             {
                 return;
             }
 
-            Shader.SetGlobalFloat(_SpriteAlphaCullID, WorldRenderConfigHolder.SpriteAlphaCull);
+            Shader.SetGlobalFloat(s_spriteAlphaCullId, WorldRenderConfigHolder.SpriteAlphaCull);
             Shader.SetGlobalFloat(
-                _EmissiveFieldThresholdID,
-                WorldRenderConfigHolder.EmissiveFieldThreshold);
-            _tuningGlobalsApplied = true;
+                s_glowFieldThresholdId,
+                WorldRenderConfigHolder.GlowFieldThreshold);
+            s_tuningGlobalsApplied = true;
         }
 
         private void EnsureTextureInAtlas(Texture2D texture)
@@ -387,16 +417,16 @@ namespace Kern.Game
             _uploadedSpriteCount = activeSpriteCount;
         }
 
-        public void RenderMaterialEmissionFields(
+        public void RenderMaterialGlowFields(
             CommandBuffer commandBuffer,
-            in Kern.Core.Interfaces.WorldLighting.LightingMaterialEmissionContext context)
+            in Kern.Core.Interfaces.WorldLighting.LightingMaterialGlowContext context)
         {
             if (_atlas == null)
             {
                 return;
             }
 
-            _lightingEmitter.RenderMaterialEmissionFields(commandBuffer, context);
+            _lightingEmitter.RenderMaterialGlowFields(commandBuffer, context);
         }
 
         public void RenderAmbientOcclusionField(
@@ -461,6 +491,21 @@ namespace Kern.Game
             }
 
             _lightingEmitter.Dispose();
+
+            foreach (Sprite sprite in _ownedSpritesByKey.Values)
+            {
+                if (sprite != null)
+                {
+                    Texture2D texture = sprite.texture;
+                    Destroy(sprite);
+                    if (texture != null)
+                    {
+                        Destroy(texture);
+                    }
+                }
+            }
+
+            _ownedSpritesByKey.Clear();
 
             if (_mesh != null)
             {

@@ -40,7 +40,7 @@ public sealed class TailChain
     ///     equivalent over <c>deltaTime</c> is <c>alpha = 1 - inertia^(60 * deltaTime)</c>. This
     ///     is what makes the motion frame-rate independent.
     /// </summary>
-    private const float ReferenceStepsPerSecond = 60f;
+    private const float ReferenceStepsPerSecond = 60f; //TODO убрать нахуй эту функцию.
 
     /// <summary>Weight of the old node position; the remainder is the pull toward the target.</summary>
     private const float BaseInertia = 0.35f;

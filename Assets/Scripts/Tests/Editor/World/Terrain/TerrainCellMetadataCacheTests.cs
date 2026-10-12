@@ -107,7 +107,7 @@ public sealed class TerrainCellMetadataCacheTests
         public Texture2D? FlowMapTexture => null;
 
         public Texture2D? TerrainDecalAtlasTexture => null;
-        public Texture2D? TerrainDecalStoneAtlasTexture => null;
+        public Texture2D? TerrainDecalRockAtlasTexture => null;
 
         public void RequestTexture(CellType cellType)
         {
@@ -123,9 +123,6 @@ public sealed class TerrainCellMetadataCacheTests
 
         public int GetAnimationFrameCount(CellType cellType) => 1;
 
-        public int GetFrameSize(CellType cellType) => 32;
-
-        public float GetAnimationSpeedForCell(CellType cellType) => 0f;
 
         public UniTask<AtlasCoordinate> GetCellTextureCoordinate(
             CellType cellType,
@@ -171,9 +168,12 @@ public sealed class TerrainCellMetadataCacheTests
 
         public float GetMoveCooldown(CellType cellType) => 0f;
 
-        public bool TryGetTileGroup(CellType type, out int groupID)
+
+        public float GetMinMoveCooldown() => 0f;
+
+        public bool TryGetTileGroup(CellType type, out int groupId)
         {
-            groupID = 0;
+            groupId = 0;
             return false;
         }
 

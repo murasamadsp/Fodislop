@@ -10,17 +10,24 @@ namespace Kern.UI;
 /// <summary>Owns WorldMap's UI Toolkit bindings and presentation-only panel state.</summary>
 internal sealed class WorldMapPanel : IDisposable
 {
+    private const float PositionWriteEpsilon = 0.5f;
+
     private UIDocument? _document;
     private VisualElement? _overlay;
+    private VisualElement? _playerMarker;
     private Image? _image;
     private Image? _pathOverlay;
     private Button? _closeButton;
     private Button? _followButton;
     private Label? _status;
     private EventCallback<WheelEvent>? _wheelCallback;
+    private EventCallback<GeometryChangedEvent>? _geometryCallback;
     private Action _closeRequested = null!;
     private Action _followPlayer = null!;
+    private Action? _geometryChanged;
     private bool _bindingFailureReported;
+    private float _lastMarkerLeft = float.MinValue;
+    private float _lastMarkerTop = float.MinValue;
 
     public VisualElement? Overlay => _overlay;
 
@@ -37,7 +44,8 @@ internal sealed class WorldMapPanel : IDisposable
         UIDocument? document,
         Action closeRequested,
         Action followPlayer,
-        EventCallback<WheelEvent> wheelCallback)
+        EventCallback<WheelEvent> wheelCallback,
+        Action? geometryChanged = null)
     {
         if (IsBound)
         {
@@ -76,6 +84,7 @@ internal sealed class WorldMapPanel : IDisposable
         }
 
         _overlay = overlay;
+        _playerMarker = overlay.Q<VisualElement>("WorldMapPlayerMarker");
         _image = image;
         _closeButton = closeButton;
         _followButton = followButton;
@@ -97,6 +106,13 @@ internal sealed class WorldMapPanel : IDisposable
         _closeButton.clicked += _closeRequested;
         _followButton.clicked += _followPlayer;
         _wheelCallback = wheelCallback;
+        _geometryChanged = geometryChanged;
+        if (_geometryChanged != null)
+        {
+            _geometryCallback = _ => _geometryChanged();
+            _image.RegisterCallback(_geometryCallback);
+        }
+
         _bindingFailureReported = false;
         _document.rootVisualElement.RegisterCallback(
             _wheelCallback,
@@ -122,8 +138,7 @@ internal sealed class WorldMapPanel : IDisposable
 
     public void UpdatePreparationStatus(
         bool mipReady,
-        float cellsPerPixel,
-        int chunkSize,
+        bool mipRequired,
         bool failed,
         int progress,
         int total,
@@ -134,7 +149,7 @@ internal sealed class WorldMapPanel : IDisposable
             return;
         }
 
-        bool visible = !mipReady && cellsPerPixel >= chunkSize;
+        bool visible = !mipReady && mipRequired;
         _status.EnableInClassList("is-hidden", !visible);
         if (!visible)
         {
@@ -148,8 +163,80 @@ internal sealed class WorldMapPanel : IDisposable
                 : localization.Get("hud.map_preparing");
     }
 
+    public void UpdatePlayerMarker(
+        float playerX,
+        float playerY,
+        float viewCenterX,
+        float viewCenterY,
+        float cellsPerPixel,
+        int texWidth,
+        int texHeight,
+        bool blinkVisible)
+    {
+        if (_playerMarker == null)
+        {
+            return;
+        }
+
+        if (!blinkVisible || (_image != null && (_image.layout.width <= 0f || _image.layout.height <= 0f)))
+        {
+            UIState.SetHidden(_playerMarker, true);
+            return;
+        }
+
+        float halfW = texWidth * 0.5f * cellsPerPixel;
+        float halfH = texHeight * 0.5f * cellsPerPixel;
+        float leftX = viewCenterX - halfW;
+        float rightX = viewCenterX + halfW;
+        float topServerY = viewCenterY - halfH;
+        float bottomServerY = viewCenterY + halfH;
+
+        if (playerX + 1f < leftX || playerX > rightX ||
+            playerY + 1f < topServerY || playerY > bottomServerY)
+        {
+            UIState.SetHidden(_playerMarker, true);
+            return;
+        }
+
+        UIState.SetHidden(_playerMarker, false);
+
+        // The map RenderTexture is capped (MapViewportBounds) and the Image scales
+        // it to the panel, so texture pixels must be mapped to panel pixels.
+        float texLeft = (playerX + 0.5f - viewCenterX) / cellsPerPixel + texWidth * 0.5f;
+        float texTop = (playerY + 0.5f - viewCenterY) / cellsPerPixel + texHeight * 0.5f;
+
+        Rect imageRect = _image?.layout ?? new Rect(0f, 0f, texWidth, texHeight);
+        float scaleX = imageRect.width > 0f && texWidth > 0 ? imageRect.width / texWidth : 1f;
+        float scaleY = imageRect.height > 0f && texHeight > 0 ? imageRect.height / texHeight : 1f;
+        float screenX = imageRect.x + (texLeft * scaleX);
+        float screenY = imageRect.y + (texTop * scaleY);
+
+        if (Mathf.Abs(screenX - _lastMarkerLeft) > PositionWriteEpsilon ||
+            Mathf.Abs(screenY - _lastMarkerTop) > PositionWriteEpsilon)
+        {
+            _playerMarker.style.left = screenX;
+            _playerMarker.style.top = screenY;
+            _lastMarkerLeft = screenX;
+            _lastMarkerTop = screenY;
+        }
+    }
+
+    public void HidePlayerMarker()
+    {
+        if (_playerMarker != null)
+        {
+            UIState.SetHidden(_playerMarker, true);
+        }
+    }
+
     public void Dispose()
     {
+        if (_image != null && _geometryCallback != null)
+        {
+            _image.UnregisterCallback(_geometryCallback);
+            _geometryCallback = null;
+        }
+
         if (_document?.rootVisualElement != null && _wheelCallback != null)
         {
             _document.rootVisualElement.UnregisterCallback(

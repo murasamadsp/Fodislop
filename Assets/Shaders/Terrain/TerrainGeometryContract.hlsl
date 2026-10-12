@@ -10,7 +10,6 @@ static const int KERN_TERRAIN_ORGANIC_EDGE_BASE = 5;
 static const int KERN_TERRAIN_ORGANIC_EDGE_CENTER = 2;
 static const int KERN_TERRAIN_ORGANIC_EDGE_COUNT = 4;
 static const int KERN_TERRAIN_ORGANIC_EDGE_CODE_OFFSET = 1;
-static const int KERN_TERRAIN_ORGANIC_EDGE_META_OFFSET = 128;
 
 float2 QuantizeTerrainGeometryPoint(float2 geometryPosition)
 {
@@ -24,17 +23,32 @@ float2 QuantizeTerrainPixelCenter(float2 position)
         KERN_TERRAIN_FACE_GRID_SIZE;
 }
 
-// Meta.b contains the low code byte. Meta.a distinguishes regular (0),
-// classic geometry (255), and organic geometry (128 + high code bits).
-float2 DecodeTerrainGeometryMetadata(float4 meta, bool geometryLayer)
+// Cell-data vertex reconstruction and silhouette consumers share this decoder,
+// so its definition lives beside the quantization and packed-shape contract.
+float2 TerrainGeometryRawCorner(float4 cornersX, float4 cornersY, int index)
 {
-    bool anchored = geometryLayer && meta.a > 0.5;
-    bool organic = anchored && meta.a < 0.75;
-    float edgeCode = organic
-        ? round(meta.b * 255.0) + 256.0 *
-            (round(meta.a * 255.0) - KERN_TERRAIN_ORGANIC_EDGE_META_OFFSET)
-        : 0.0;
-    return float2(anchored ? 1.0 : 0.0, edgeCode);
+    if (index == 0)
+    {
+        return float2(cornersX.x, cornersY.x);
+    }
+
+    if (index == 1)
+    {
+        return float2(cornersX.y, cornersY.y);
+    }
+
+    if (index == 2)
+    {
+        return float2(cornersX.z, cornersY.z);
+    }
+
+    return float2(cornersX.w, cornersY.w);
+}
+
+float2 TerrainGeometryCorner(float4 cornersX, float4 cornersY, int index)
+{
+    return QuantizeTerrainGeometryPoint(
+        TerrainGeometryRawCorner(cornersX, cornersY, index));
 }
 
 #endif

@@ -2,7 +2,6 @@
 
 using Kern.Core;
 using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Kern.World.Terrain;
@@ -22,106 +21,70 @@ public readonly record struct TerrainVertexOffset(float XSteps, float YSteps, fl
     }
 }
 
-public sealed class TerrainVertexDistortionCalculator
+/// <summary>Включено ли искажение сетки и каким стилем.</summary>
+public sealed class TerrainDistortionSettings
+{
+    public bool EnableDistortion { get; set; } = true;
+
+    public TerrainDistortionStyle DistortionStyle { get; set; } = TerrainDistortionStyle.Organic;
+
+    public bool OrganicEdges => EnableDistortion && DistortionStyle == TerrainDistortionStyle.Organic;
+}
+
+// Смещение узла сетки — левого нижнего угла клетки — по четырём клеткам
+// вокруг узла и его мировой координате.
+//
+// Узлы не хранятся: шейдер считает их тем же правилом из соседей в буфере
+// клеток (TerrainCellData.hlsl, TerrainNode). Здесь — CPU-сторона того же
+// правила для эталона тестов. Всё целыми числами, поэтому CPU и GPU дают
+// один и тот же узел бит в бит.
+public static class TerrainVertexDistortionCalculator
 {
     // Совместимое имя для существующих проверок. Авторское значение живёт
     // вместе с остальными параметрами дисторшена в TerrainConfigHolder.
     public const int DistortionStrengthSteps = TerrainConfigHolder.ClassicDistortionStrengthSteps;
 
-    private const float OrganicFreeJitterCenterSteps = TerrainConfigHolder.OrganicMaximumOffsetSteps / 2f;
+    // Единица узла — 1/8 шага (1/256 клетки): в ней узел точен на CPU и GPU.
+    public const int UnitsPerStep = TerrainCellData.GeometryUnitsPerCell / TerrainVertexOffset.GridSize;
+
+    // Шум органики: 11-битный хэш, интерполяция в целых, масштаб октавы
+    // HashMax << 1. Период ≤ 10 клеток держит промежуточные значения в 32 битах.
+    public const int OrganicHashBits = 11;
+    public const uint OrganicHashMax = (1u << OrganicHashBits) - 1u;
+    public const uint OrganicOctaveScale = OrganicHashMax << 1;
+
+    private const int OrganicFreeJitterCenterUnits = TerrainConfigHolder.OrganicMaximumOffsetSteps * UnitsPerStep / 2;
 
     // Центрируется по общему диапазону классического хэша.
-    private const float FreeJitterCenterSteps =
-        ((TerrainConfigHolder.ClassicJitterRange - 1) / 2) * DistortionStrengthSteps;
+    private const int FreeJitterCenterUnits =
+        ((TerrainConfigHolder.ClassicJitterRange - 1) / 2) * DistortionStrengthSteps * UnitsPerStep;
 
-    public TerrainRingGrid<TerrainVertexOffset> GridVertexOffsets { get; } = new();
-
-    public bool EnableDistortion { get; set; } = true;
-
-    public TerrainDistortionStyle DistortionStyle { get; set; } = TerrainDistortionStyle.Organic;
-
-    public void EnsureCapacity(int meshWidth, int meshHeight)
+    static TerrainVertexDistortionCalculator()
     {
-        if (GridVertexOffsets.Width != meshWidth + 1 || GridVertexOffsets.Height != meshHeight + 1)
+        if (TerrainConfigHolder.OrganicNoiseBroadPeriodCells > 10 ||
+            TerrainConfigHolder.OrganicNoiseMediumPeriodCells > 10 ||
+            TerrainConfigHolder.OrganicNoiseFinePeriodCells > 10 ||
+            TerrainConfigHolder.OrganicNoiseBroadWeightPercent +
+                TerrainConfigHolder.OrganicNoiseMediumWeightPercent +
+                TerrainConfigHolder.OrganicNoiseFineWeightPercent != 100)
         {
-            GridVertexOffsets.EnsureSize(meshWidth + 1, meshHeight + 1);
+            throw new System.InvalidOperationException(
+                "Organic noise periods must be at most 10 cells and weights must sum to 100%.");
         }
     }
 
-    public void PrecalculateFull(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int worldWidth, int worldHeight)
-    {
-        EnsureCapacity(meshWidth, meshHeight);
-
-        int gw = meshWidth + 1;
-        int gh = meshHeight + 1;
-        System.Threading.Tasks.Parallel.For(0, gw, x =>
-        {
-            for (int y = 0; y < gh; y++)
-            {
-                CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
-            }
-        });
-    }
-
-    public void PrecalculateRegion(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY, int worldWidth, int worldHeight)
-    {
-        int gw = meshWidth + 1;
-        int gh = meshHeight + 1;
-
-        int vxMin = Mathf.Clamp(startX, 0, gw);
-        int vxMax = Mathf.Clamp(startX + countX + 1, 0, gw);
-        int vyMin = Mathf.Clamp(startY, 0, gh);
-        int vyMax = Mathf.Clamp(startY + countY + 1, 0, gh);
-
-        for (int x = vxMin; x < vxMax; x++)
-        {
-            for (int y = vyMin; y < vyMax; y++)
-            {
-                CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
-            }
-        }
-    }
-
-    public void PrecalculateIncremental(ITerrainCellDataSource cellCache, int meshWidth, int meshHeight, int dx, int dy, int worldWidth, int worldHeight)
-    {
-        EnsureCapacity(meshWidth, meshHeight);
-
-        // Сетка узлов на единицу больше сетки клеток: у окна w×h ровно
-        // (w+1)×(h+1) углов.
-        int gw = meshWidth + 1;
-        int gh = meshHeight + 1;
-
-        GridVertexOffsets.Scroll(dx, dy);
-
-        // Кайма в один узел: узел смещается по четырём клеткам вокруг себя, и
-        // у узла на старой границе клетка снаружи только что появилась.
-        TerrainScrollBands bands = TerrainScrollBands.Resolve(
-            gw, gh, dx, dy, neighbourMargin: 1);
-        CalculateBand(cellCache, bands.ColumnBand, worldWidth, worldHeight);
-        CalculateBand(cellCache, bands.RowBand, worldWidth, worldHeight);
-    }
-
-    private void CalculateBand(
+    /// <summary>Узел (x, y) окна: углы клеток кэша x..x+1, y..y+1.</summary>
+    public static TerrainVertexOffset ComputeNode(
         ITerrainCellDataSource cellCache,
-        RectInt band,
+        TerrainDistortionSettings settings,
+        int x,
+        int y,
         int worldWidth,
         int worldHeight)
     {
-        for (int x = band.xMin; x < band.xMax; x++)
+        if (!settings.EnableDistortion)
         {
-            for (int y = band.yMin; y < band.yMax; y++)
-            {
-                CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
-            }
-        }
-    }
-
-    public void CalculateVertexNode(ITerrainCellDataSource cellCache, int x, int y, int worldWidth = int.MaxValue, int worldHeight = int.MaxValue)
-    {
-        if (!EnableDistortion)
-        {
-            GridVertexOffsets[x, y] = TerrainVertexOffset.Zero;
-            return;
+            return TerrainVertexOffset.Zero;
         }
 
         int cx = x + 1;
@@ -130,11 +93,9 @@ public sealed class TerrainVertexDistortionCalculator
         CachedCellData tr = cellCache.GetCellData(cx, cy);
         CachedCellData bl = cellCache.GetCellData(x, y);
         CachedCellData br = cellCache.GetCellData(cx, y);
-
         int worldX = cellCache.CacheMinX + x;
         int worldY = cellCache.CacheMinY + y;
-
-        GridVertexOffsets[x, y] = DistortionStyle == TerrainDistortionStyle.Organic
+        return settings.DistortionStyle == TerrainDistortionStyle.Organic
             ? ComputeOrganicOffset(tl, tr, bl, br, worldX, worldY, worldWidth, worldHeight)
             : ComputeOffset(tl, tr, bl, br, worldX, worldY, worldWidth, worldHeight);
     }
@@ -154,10 +115,9 @@ public sealed class TerrainVertexDistortionCalculator
             return TerrainVertexOffset.Zero;
         }
 
-        int rx = (int)RandXd(worldX, worldY) * DistortionStrengthSteps;
-        int ry = (int)RandYd(worldX, worldY) * DistortionStrengthSteps;
-
-        return ComputeOffsetFromJitter(tl, tr, bl, br, worldY, rx, ry, FreeJitterCenterSteps);
+        int rx = RandXd(worldX, worldY) * DistortionStrengthSteps * UnitsPerStep;
+        int ry = RandYd(worldX, worldY) * DistortionStrengthSteps * UnitsPerStep;
+        return ComputeOffsetFromJitter(tl, tr, bl, br, worldY, rx, ry, FreeJitterCenterUnits);
     }
 
     public static TerrainVertexOffset ComputeOrganicOffset(
@@ -177,130 +137,72 @@ public sealed class TerrainVertexDistortionCalculator
 
         // Узел на внешней границе массива остаётся в своей клеточной сетке.
         // Иначе смещение угла увеличивает силуэт даже при врезанных рёбрах.
-        if (!IsCause(tl) || !IsCause(tr) || !IsCause(bl) || !IsCause(br))
+        if (!IsWavy(tl) || !IsWavy(tr) || !IsWavy(bl) || !IsWavy(br))
         {
             return TerrainVertexOffset.Zero;
         }
 
         // Плавный шум задаёт крупную форму; дополнительные точки на рёбрах
         // задаются отдельно и не превращают весь край в прямую линию.
-        float xNoise = TerrainConfigHolder.OrganicNoiseBroadWeight * ValueNoise(
-                worldX, worldY, TerrainConfigHolder.OrganicNoiseBroadPeriodCells,
-                TerrainConfigHolder.OrganicNoiseBroadXSeed) +
-            TerrainConfigHolder.OrganicNoiseMediumWeight * ValueNoise(
-                worldX, worldY, TerrainConfigHolder.OrganicNoiseMediumPeriodCells,
-                TerrainConfigHolder.OrganicNoiseMediumXSeed) +
-            TerrainConfigHolder.OrganicNoiseFineWeight * ValueNoise(
-                worldX, worldY, TerrainConfigHolder.OrganicNoiseFinePeriodCells,
-                TerrainConfigHolder.OrganicNoiseFineXSeed);
-        float yNoise = TerrainConfigHolder.OrganicNoiseBroadWeight * ValueNoise(
-                worldX, worldY, TerrainConfigHolder.OrganicNoiseBroadPeriodCells,
-                TerrainConfigHolder.OrganicNoiseBroadYSeed) +
-            TerrainConfigHolder.OrganicNoiseMediumWeight * ValueNoise(
-                worldX, worldY, TerrainConfigHolder.OrganicNoiseMediumPeriodCells,
-                TerrainConfigHolder.OrganicNoiseMediumYSeed) +
-            TerrainConfigHolder.OrganicNoiseFineWeight * ValueNoise(
-                worldX, worldY, TerrainConfigHolder.OrganicNoiseFinePeriodCells,
-                TerrainConfigHolder.OrganicNoiseFineYSeed);
-        float rx = Mathf.Clamp01(
-            (xNoise * TerrainConfigHolder.OrganicNoiseContrast) -
-            TerrainConfigHolder.OrganicNoiseCenter) *
-            TerrainConfigHolder.OrganicMaximumOffsetSteps;
-        float ry = Mathf.Clamp01(
-            (yNoise * TerrainConfigHolder.OrganicNoiseContrast) -
-            TerrainConfigHolder.OrganicNoiseCenter) *
-            TerrainConfigHolder.OrganicMaximumOffsetSteps;
-        return ComputeOffsetFromJitter(
-            tl, tr, bl, br, worldY, rx, ry, OrganicFreeJitterCenterSteps);
+        int rx = OrganicOffsetUnits(
+            worldX,
+            worldY,
+            TerrainConfigHolder.OrganicNoiseBroadXSeed,
+            TerrainConfigHolder.OrganicNoiseMediumXSeed,
+            TerrainConfigHolder.OrganicNoiseFineXSeed);
+        int ry = OrganicOffsetUnits(
+            worldX,
+            worldY,
+            TerrainConfigHolder.OrganicNoiseBroadYSeed,
+            TerrainConfigHolder.OrganicNoiseMediumYSeed,
+            TerrainConfigHolder.OrganicNoiseFineYSeed);
+        return ComputeOffsetFromJitter(tl, tr, bl, br, worldY, rx, ry, OrganicFreeJitterCenterUnits);
     }
 
-    private static TerrainVertexOffset ComputeOffsetFromJitter(
-        CachedCellData tl,
-        CachedCellData tr,
-        CachedCellData bl,
-        CachedCellData br,
-        int worldY,
-        float rx,
-        float ry,
-        float freeJitterCenterSteps)
+    // Три октавы с весами в процентах; контраст и центр — в той же шкале.
+    // Результат — смещение 0..OrganicMaximumOffsetSteps в единицах узла,
+    // округлённое до ближайшей.
+    private static int OrganicOffsetUnits(int worldX, int worldY, uint broadSeed, uint mediumSeed, uint fineSeed)
     {
-        // Внутри сплошного массива узел колышется свободно в обе стороны:
-        // здесь нет внешней стороны, к которой нужно привязывать знак.
-        if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
-        {
-            return new TerrainVertexOffset(
-                rx - freeJitterCenterSteps,
-                -(ry - freeJitterCenterSteps),
-                0);
-        }
-
-        if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))
-        {
-            return TerrainVertexOffset.Zero;
-        }
-
-        if (worldY == 0 || (IsCause(tl) && IsCause(br)) || (IsCause(tr) && IsCause(bl)))
-        {
-            return TerrainVertexOffset.Zero;
-        }
-
-        if (IsCause(tl) && IsCause(tr))
-        {
-            return new TerrainVertexOffset(0, -ry, 0);
-        }
-
-        if (IsCause(tl) && IsCause(bl))
-        {
-            return new TerrainVertexOffset(-rx, 0, 0);
-        }
-
-        if (IsCause(tr) && IsCause(br))
-        {
-            return new TerrainVertexOffset(rx, 0, 0);
-        }
-
-        if (IsCause(bl) && IsCause(br))
-        {
-            return new TerrainVertexOffset(0, ry, 0);
-        }
-
-        if (IsCause(tl))
-        {
-            return new TerrainVertexOffset(-rx, -ry, 0);
-        }
-
-        if (IsCause(tr))
-        {
-            return new TerrainVertexOffset(rx, -ry, 0);
-        }
-
-        if (IsCause(bl))
-        {
-            return new TerrainVertexOffset(-rx, ry, 0);
-        }
-
-        if (IsCause(br))
-        {
-            return new TerrainVertexOffset(rx, ry, 0);
-        }
-
-        return TerrainVertexOffset.Zero;
+        long noise =
+            (TerrainConfigHolder.OrganicNoiseBroadWeightPercent *
+                (long)ValueNoise(worldX, worldY, TerrainConfigHolder.OrganicNoiseBroadPeriodCells, broadSeed)) +
+            (TerrainConfigHolder.OrganicNoiseMediumWeightPercent *
+                (long)ValueNoise(worldX, worldY, TerrainConfigHolder.OrganicNoiseMediumPeriodCells, mediumSeed)) +
+            (TerrainConfigHolder.OrganicNoiseFineWeightPercent *
+                (long)ValueNoise(worldX, worldY, TerrainConfigHolder.OrganicNoiseFinePeriodCells, fineSeed));
+        long full = 100L * OrganicOctaveScale;
+        long contrasted = (TerrainConfigHolder.OrganicNoiseContrast * noise) -
+            (TerrainConfigHolder.OrganicNoiseCenterPercent * (long)OrganicOctaveScale);
+        long clamped = System.Math.Clamp(contrasted, 0L, full);
+        long maximumUnits = TerrainConfigHolder.OrganicMaximumOffsetSteps * UnitsPerStep;
+        return (int)(((clamped * maximumUnits) + (full / 2)) / full);
     }
 
-    private static float ValueNoise(int worldX, int worldY, int period, uint seed)
+    // Билинейный шум по узлам решётки периода p со сглаживанием t²(3 − 2t),
+    // в масштабе OrganicOctaveScale. Дроби точные: S = r²(3p − 2r) над p³.
+    private static uint ValueNoise(int worldX, int worldY, int period, uint seed)
     {
         int x0 = worldX / period;
         int y0 = worldY / period;
-        float tx = (worldX % period) / (float)period;
-        float ty = (worldY % period) / (float)period;
-        tx = tx * tx * (3f - (2f * tx));
-        ty = ty * ty * (3f - (2f * ty));
-        float bottom = Mathf.Lerp(Hash01(x0, y0, seed), Hash01(x0 + 1, y0, seed), tx);
-        float top = Mathf.Lerp(Hash01(x0, y0 + 1, seed), Hash01(x0 + 1, y0 + 1, seed), tx);
-        return Mathf.Lerp(bottom, top, ty);
+        uint rx = (uint)(worldX % period);
+        uint ry = (uint)(worldY % period);
+        uint p = (uint)period;
+        uint d = p * p * p;
+        uint sx = rx * rx * ((3u * p) - (2u * rx));
+        uint sy = ry * ry * ((3u * p) - (2u * ry));
+        uint h00 = Hash(x0, y0, seed) >> (24 - OrganicHashBits);
+        uint h10 = Hash(x0 + 1, y0, seed) >> (24 - OrganicHashBits);
+        uint h01 = Hash(x0, y0 + 1, seed) >> (24 - OrganicHashBits);
+        uint h11 = Hash(x0 + 1, y0 + 1, seed) >> (24 - OrganicHashBits);
+        uint bottom = unchecked((h00 * d) + ((h10 - h00) * sx));
+        uint top = unchecked((h01 * d) + ((h11 - h01) * sx));
+        uint value = unchecked((bottom * d) + ((top - bottom) * sy));
+        return unchecked((value << 1) + ((d * d) / 2u)) / (d * d);
     }
 
-    private static float Hash01(int x, int y, uint seed)
+    // 24-битный хэш решётки шума и органических рёбер.
+    public static uint Hash(int x, int y, uint seed)
     {
         uint hash = unchecked(((uint)x * 0x9E3779B9u) ^ ((uint)y * 0x85EBCA6Bu) ^ seed);
         hash ^= hash >> 16;
@@ -308,33 +210,33 @@ public sealed class TerrainVertexDistortionCalculator
         hash ^= hash >> 15;
         hash = unchecked(hash * 0x846CA68Bu);
         hash ^= hash >> 16;
-        return (hash & 0x00FFFFFFu) / 16777216f;
+        return hash & 0x00FFFFFFu;
     }
 
-    // Одинаковый ключ у двух клеток по обе стороны ребра. Значение в шагах
-    // по 2/32 кодируется в двух каналах meta вместе с остальными рёбрами.
+    // Одинаковый ключ у двух клеток по обе стороны ребра: изгиб −2..2.
     public static int ComputeOrganicEdgeBend(int worldX, int unityY, bool vertical)
     {
-        float noise = Hash01(
+        uint hash = Hash(
             worldX, unityY,
             vertical ? TerrainConfigHolder.OrganicEdgeVerticalSeed :
                 TerrainConfigHolder.OrganicEdgeHorizontalSeed);
-        return Mathf.Min((int)(noise * 5f), 4) - 2;
+        return (int)System.Math.Min((hash * 5u) >> 24, 4u) - 2;
     }
 
-    public static bool IsCause(CachedCellData data)
+    public static bool IsWavy(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Cause;
+        return data.Outline == CellOutline.Wavy;
     }
 
-    public static bool IsBlock(CachedCellData data)
+    // Держит узлы всё, кроме гибкого и волнистого контура.
+    public static bool Holds(CachedCellData data)
     {
-        return data.Distortion == CellDistortionType.Block;
+        return data.Outline is not (CellOutline.Pliant or CellOutline.Wavy);
     }
 
-    public static float RandXd(int x, int y)
+    public static int RandXd(int x, int y)
     {
-        int num = (((TerrainConfigHolder.ClassicXHashA * x) +
+        int num = unchecked(((TerrainConfigHolder.ClassicXHashA * x) +
             (TerrainConfigHolder.ClassicXHashB * y)) *
             ((TerrainConfigHolder.ClassicXHashC * x) +
             (TerrainConfigHolder.ClassicXHashD * y))) %
@@ -342,13 +244,87 @@ public sealed class TerrainVertexDistortionCalculator
         return (num * num) % TerrainConfigHolder.ClassicJitterRange;
     }
 
-    public static float RandYd(int x, int y)
+    public static int RandYd(int x, int y)
     {
-        int num = (((TerrainConfigHolder.ClassicYHashA * x) +
+        int num = unchecked(((TerrainConfigHolder.ClassicYHashA * x) +
             (TerrainConfigHolder.ClassicYHashB * y)) *
             ((TerrainConfigHolder.ClassicYHashC * x) +
             (TerrainConfigHolder.ClassicYHashD * y))) %
             TerrainConfigHolder.ClassicYHashModulus;
         return (num * num) % TerrainConfigHolder.ClassicJitterRange;
     }
+
+    // rx, ry и центр — в единицах узла.
+    private static TerrainVertexOffset ComputeOffsetFromJitter(
+        CachedCellData tl,
+        CachedCellData tr,
+        CachedCellData bl,
+        CachedCellData br,
+        int worldY,
+        int rx,
+        int ry,
+        int freeJitterCenter)
+    {
+        // Внутри массы узел колышется свободно в обе стороны:
+        // здесь нет внешней стороны, к которой нужно привязывать знак.
+        if (IsWavy(tl) && IsWavy(tr) && IsWavy(bl) && IsWavy(br))
+        {
+            return Units(rx - freeJitterCenter, -(ry - freeJitterCenter));
+        }
+
+        if (Holds(tl) || Holds(tr) || Holds(bl) || Holds(br))
+        {
+            return TerrainVertexOffset.Zero;
+        }
+
+        if (worldY == 0 || (IsWavy(tl) && IsWavy(br)) || (IsWavy(tr) && IsWavy(bl)))
+        {
+            return TerrainVertexOffset.Zero;
+        }
+
+        if (IsWavy(tl) && IsWavy(tr))
+        {
+            return Units(0, -ry);
+        }
+
+        if (IsWavy(tl) && IsWavy(bl))
+        {
+            return Units(-rx, 0);
+        }
+
+        if (IsWavy(tr) && IsWavy(br))
+        {
+            return Units(rx, 0);
+        }
+
+        if (IsWavy(bl) && IsWavy(br))
+        {
+            return Units(0, ry);
+        }
+
+        if (IsWavy(tl))
+        {
+            return Units(-rx, -ry);
+        }
+
+        if (IsWavy(tr))
+        {
+            return Units(rx, -ry);
+        }
+
+        if (IsWavy(bl))
+        {
+            return Units(-rx, ry);
+        }
+
+        if (IsWavy(br))
+        {
+            return Units(rx, ry);
+        }
+
+        return TerrainVertexOffset.Zero;
+    }
+
+    private static TerrainVertexOffset Units(int x, int y) =>
+        new(x / (float)UnitsPerStep, y / (float)UnitsPerStep, 0f);
 }

@@ -22,11 +22,14 @@ namespace Kern.Game
         private const string TAG = "[Robot]";
 
         [SerializeField]
-        private uint _botID;
+        [UnityEngine.Serialization.FormerlySerializedAs("_botID")]
+        private uint _botId;
         [SerializeField]
-        private int _playerID;
+        [UnityEngine.Serialization.FormerlySerializedAs("_playerID")]
+        private int _playerId;
         [SerializeField]
-        private byte _clanID;
+        [UnityEngine.Serialization.FormerlySerializedAs("_clanID")]
+        private byte _clanId;
         [SerializeField]
         private SpriteRenderer? _spriteRenderer;
         [Inject]
@@ -49,7 +52,7 @@ namespace Kern.Game
         private bool _isMetadataLoaded;
         private bool _visualsLoadCompleted;
         private RobotAssetLoader? _assetLoaderHelper;
-        private RobotAssetLoader _AssetLoader => _assetLoaderHelper ??= new RobotAssetLoader(_assetLoader, _operations, this.GetCancellationTokenOnDestroy());
+        private RobotAssetLoader AssetLoader => _assetLoaderHelper ??= new RobotAssetLoader(_assetLoader, _operations, this.GetCancellationTokenOnDestroy());
         [SerializeField]
         private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
 
@@ -83,9 +86,9 @@ namespace Kern.Game
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
 
-        public uint BotID => _botID;
-        public int PlayerID => _playerID;
-        public byte ClanID => _clanID;
+        public uint BotId => _botId;
+        public int PlayerId => _playerId;
+        public byte ClanId => _clanId;
         public string Nickname => _nickname;
         public bool IsMetadataLoaded => _isMetadataLoaded;
         public bool IsVisualsLoaded => _isMetadataLoaded && _visualsLoadCompleted;
@@ -113,6 +116,17 @@ namespace Kern.Game
 
         public float LogicalFacingAngle => _movement.TargetAngle;
 
+        // Точка, за которой следует камера: уже сглаженная позиция без дрожи.
+        // transform.position для этого не годится — в него подмешан случайный
+        // тремор, и туда же PlayerMovementController ставит сырую клетку.
+        public Vector3 CameraAnchor => _movement.SmoothPosition;
+
+        public bool TryGetServerPosition(out Vector3 position)
+        {
+            position = _movement.ServerPosition;
+            return _movement.HasReceivedInitialPosition;
+        }
+
         public float TargetAngle
         {
             get => _movement.TargetAngle - VISUAL_ROTATION_OFFSET;
@@ -123,6 +137,12 @@ namespace Kern.Game
         {
             get => _movement.TargetPosition;
             set => _movement.TargetPosition = value;
+        }
+
+        public void SnapTo(Vector3 position, float? angle = null)
+        {
+            transform.position = position;
+            _movement.SnapTo(position, angle ?? transform.eulerAngles.z);
         }
 
         public float MoveSpeed
@@ -187,8 +207,8 @@ namespace Kern.Game
             }
 
             _visualElementsInitialized = true;
-            _nameplate.Initialize(transform, _botID, _nickname, IsLocalPlayer, _sceneObjects, _worldLabels);
-            _visuals.EnsureClanIcon(_sceneObjects, _botID);
+            _nameplate.Initialize(transform, _botId, _nickname, IsLocalPlayer, _sceneObjects, _worldLabels);
+            _visuals.EnsureClanIcon(_sceneObjects, _botId);
         }
 
         public void SetBatchedBodyVisible(bool visible) => _visuals.SetBodyVisible(visible);
@@ -263,7 +283,7 @@ namespace Kern.Game
                 // the visual tremor offset. The light source is anchored to
                 // SmoothPosition, so settle the sprite on that same position.
                 transform.position = _movement.SmoothPosition;
-                _visuals.UpdateMotion(transform.position, 0f, Time.deltaTime, true);
+                _visuals.UpdateMotion(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime, true);
                 _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
                 _lighting.Update(_movement.SmoothPosition, _lightingEngine);
                 return;
@@ -279,7 +299,7 @@ namespace Kern.Game
             transform.position = finalPosition;
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
 
-            _visuals.UpdateMotion(finalPosition, movementFactor, Time.deltaTime, false);
+            _visuals.UpdateMotion(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime, false);
             _nameplate.UpdatePosition(finalPosition, _visuals.SkinSprite, transform, _visuals.ClanTransform);
             _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }
@@ -294,10 +314,10 @@ namespace Kern.Game
 
         private void TryInitializeDynamicLightSettings() => _lighting.InitializeSettings(_lightingEngine);
 
-        public void Initialize(uint botID)
+        public void Initialize(uint botId)
         {
             TryInitializeDynamicLightSettings();
-            _botID = botID;
+            _botId = botId;
             _robotManager.RegisterRobot(this);
 
             _isMetadataLoaded = false;
@@ -312,11 +332,11 @@ namespace Kern.Game
             _visuals.SetClanSprite(null);
         }
 
-        public void SetMetadata(int playerID, byte clanID, string nickname, string skinPath, string tailPath)
+        public void SetMetadata(int playerId, byte clanId, string nickname, string skinPath, string tailPath)
         {
             if (_isMetadataLoaded &&
-                _playerID == playerID &&
-                _clanID == clanID &&
+                _playerId == playerId &&
+                _clanId == clanId &&
                 string.Equals(_nickname, nickname, global::System.StringComparison.Ordinal) &&
                 string.Equals(_skinPath, skinPath, global::System.StringComparison.Ordinal) &&
                 string.Equals(_tailPath, tailPath, global::System.StringComparison.Ordinal))
@@ -324,8 +344,8 @@ namespace Kern.Game
                 return;
             }
 
-            _playerID = playerID;
-            _clanID = clanID;
+            _playerId = playerId;
+            _clanId = clanId;
             _nickname = nickname;
             _skinPath = skinPath;
             _tailPath = tailPath;
@@ -355,7 +375,7 @@ namespace Kern.Game
             _movement.TeleportToTarget();
             transform.position = _movement.SmoothPosition;
             _visuals.SnapTentacles(_movement.SmoothPosition);
-            _visuals.UpdateMotion(transform.position, 0f, Time.deltaTime, true);
+            _visuals.UpdateMotion(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime, true);
             _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
             _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }
@@ -390,10 +410,10 @@ namespace Kern.Game
                 return;
             }
 
-            _AssetLoader.LoadMetadataAssets(
+            AssetLoader.LoadMetadataAssets(
                 _skinPath,
                 _tailPath,
-                _clanID,
+                _clanId,
                 IsLocalPlayer,
                 onSkinLoaded: skinSprite =>
                 {
@@ -452,7 +472,7 @@ namespace Kern.Game
 
             RobotGizmos.DrawGizmos(
                 transform,
-                _botID,
+                _botId,
                 IsLocalPlayer,
                 _isMetadataLoaded,
                 _moveSpeed,
@@ -464,7 +484,7 @@ namespace Kern.Game
         protected void OnDestroy()
         {
             _assetLoaderHelper?.Cancel();
-            _robotService?.UnregisterRobot(_botID);
+            _robotService?.UnregisterRobot(_botId);
             _nameplate.Destroy();
             _visuals?.Destroy();
         }

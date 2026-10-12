@@ -16,7 +16,7 @@ public sealed class LightingResources
     public sealed class GeometryResources
     {
         public RenderTexture? Material { get; internal set; }
-        public RenderTexture? StaticEmission { get; internal set; }
+        public RenderTexture? StaticGlow { get; internal set; }
         public RenderTexture? CellSolidMask { get; internal set; }
         public RenderTexture? SurfaceAirCache { get; internal set; }
         public RenderTexture? AmbientOcclusion { get; internal set; }
@@ -57,6 +57,8 @@ public sealed class LightingResources
 
     public int FieldWidth { get; internal set; }
     public int FieldHeight { get; internal set; }
+    public int LightWidth { get; internal set; }
+    public int LightHeight { get; internal set; }
 
     /// <summary>
     /// Clears registry references after the resource manager has released the
@@ -66,7 +68,7 @@ public sealed class LightingResources
     internal void ClearReferences()
     {
         Geometry.Material = null;
-        Geometry.StaticEmission = null;
+        Geometry.StaticGlow = null;
         Geometry.CellSolidMask = null;
         Geometry.SurfaceAirCache = null;
         Geometry.AmbientOcclusion = null;
@@ -91,5 +93,7 @@ public sealed class LightingResources
         CommandBuffer = null;
         FieldWidth = 0;
         FieldHeight = 0;
+        LightWidth = 0;
+        LightHeight = 0;
     }
 }

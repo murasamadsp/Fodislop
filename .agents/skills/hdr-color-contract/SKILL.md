@@ -4,7 +4,7 @@ description: >-
   Kern HDR/color pipeline contract: scene-referred linear working space, paper white units, radiance
   format rules, URP output transform ownership, DisplayFinal perceptual/linear space, UI brightness,
   HDR calibration screen, safe-start HDR switch, and HDROutputController usage. Use when touching
-  lighting shaders, emission, bloom, tonemapping, post-processing, color grading, LUT, display output,
+  lighting shaders, glow, bloom, tonemapping, post-processing, color grading, LUT, display output,
   UI colors, calibration, or any code with DisplaySettings / HDROutput / PaperWhite / Tonemapping /
   CompositeFinal / DisplayFinal / VisualTuning. Triggers on: saturate on radiance, clamp color,
   sRGB in shader, UNorm light buffer, ARGBHalf, paper white, HDROutputReconciler, VisualTuning,
@@ -21,22 +21,24 @@ The working color space of the scene is linear, scene-referred, with no upper bo
 
 ## Prohibitions (each silently kills HDR)
 
-- **FORBIDDEN** to cap radiance from above: `saturate`, `clamp(x, 0, 1)`, `min(x, 1.0)` on scene color, lighting, emission, bloom. `saturate` is permitted only on values that are by definition in 0..1: albedo, alpha, masks, coefficients, coordinates.
+- **FORBIDDEN** to cap radiance from above: `saturate`, `clamp(x, 0, 1)`, `min(x, 1.0)` on scene color, lighting, glow, bloom. `saturate` is permitted only on values that are by definition in 0..1: albedo, alpha, masks, coefficients, coordinates.
 - **FORBIDDEN** to apply gamma or sRGB encoding inside lighting shaders. Textures flagged sRGB are decoded by the GPU once, at sample time, and nowhere else.
-- **FORBIDDEN** to store radiance in UNorm format. Everything carrying light uses `ARGBHalf` or higher (`_RadianceDirect`, `_RadianceBounce`, `_WorldLightTexture`, `_StaticEmissionField`). `ARGB32` is allowed only for masks and coefficients (`_LightingMaterialField`, AO).
+- **FORBIDDEN** to store radiance in UNorm format. Everything carrying light uses `ARGBHalf` or higher (`_RadianceDirect`, `_RadianceBounce`, `_WorldLightTexture`, `_StaticGlowField`). `ARGB32` is allowed only for masks and coefficients (`_LightingMaterialField`, AO).
 - **FORBIDDEN** to treat HDR as a separate artistic render ("take an SDR image and multiply by brightness"). SDR and HDR are one scene-referred master with different output transforms applied at the final step.
 
 ## Output transform
 
-Done by URP, not us: `HDROutputReconciler` holds a runtime Volume with `Tonemapping` in `Neutral` mode, BT.2390 range compression, `detectPaperWhite`/`detectBrightnessLimits` disabled. Therefore `VisualTuning.Grade.Transform` defaults to `None` — adding your own transform on top of URP produces double-mapping. Changing this value at runtime is **FORBIDDEN**.
+Done by URP, not us: `HDROutputReconciler` holds a runtime Volume with `Tonemapping` in `Neutral` mode, BT.2390 range compression, `detectPaperWhite`/`detectBrightnessLimits` disabled. The same Volume carries `ColorAdjustments.postExposure` (`PostProcessLook.Exposure.Stops`), so URP applies it right before its own curve. Adding a custom tone transform on top of URP produces double-mapping and is **FORBIDDEN**.
 
 ## Frame order (`PostProcess.compute`)
 
-scene → bloom → grade (LUT baked) → `CompositeFinal` → `DisplayFinal`: divide by paper white → `ApplyDisplayTransform` → LUT → curves → vignette → eigengrau → temporal smear → multiply by paper white in `ToDisplayOutput` → PQ/scRGB encoding done by URP.
+scene → world-grid bloom (`WorldBloom.compute` + `WorldBloomAdd.shader`) → URP: `ColorAdjustments.postExposure` (+1 stop, `PostProcessLook.Exposure`) and Neutral tonemapping → `DisplayFinal`: divide by paper white → server LUT (`ApplyCubeLut`, HDR-normalized) → vignette → eigengrau → multiply by paper white in `ToDisplayOutput` → PQ/scRGB encoding done by URP.
+
+With the world render grid active, `DisplayFinal` runs per world pixel: eigengrau stays on that lattice, but the vignette is applied by the URP final blit per screen pixel on the scene sample (`WorldGridFinalVignette.hlsl`), before UI composition; `DisplayFinal` only computes its mask for the debug view.
 
 ## Color space inside `DisplayFinal`
 
-After `ApplyDisplayTransform` the frame is linear relative to screen white, **not** sRGB-encoded — URP encodes after us. Therefore:
+After the paper-white division the frame is linear relative to screen white, **not** sRGB-encoded — URP encodes after us. Therefore:
 - Colors/thresholds specified as encoding-level values (e.g. `#16161D`) are converted to linear via `PerceptualToLinear` at the point of application.
 - Frame brightness is compared via `LinearToPerceptual`.
 - Light addition happens in linear space.

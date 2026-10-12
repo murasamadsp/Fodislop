@@ -232,7 +232,7 @@ public class MapCellConfigCatalogTests
     }
 
     [Test]
-    public void AnimationProperties_QueriesCorrectly()
+    public void AnimationFrameHeight_QueriesCorrectly()
     {
         var catalog = new MapCellConfigCatalog();
         var configs = new[]
@@ -243,12 +243,7 @@ public class MapCellConfigCatalogTests
 
         catalog.LoadConfigurations(configs, null);
 
-        Assert.IsFalse(catalog.HasAnimation((CellType)0));
-        Assert.AreEqual(0, catalog.GetAnimationSpeed((CellType)0));
         Assert.AreEqual(0, catalog.GetAnimationFrameHeight((CellType)0));
-
-        Assert.IsTrue(catalog.HasAnimation((CellType)1));
-        Assert.AreEqual(5, catalog.GetAnimationSpeed((CellType)1));
         Assert.AreEqual(3 * RenderingConstants.CELL_SIZE, catalog.GetAnimationFrameHeight((CellType)1));
     }
 
@@ -265,25 +260,5 @@ public class MapCellConfigCatalogTests
         Assert.IsFalse(catalog.TryGetTileGroup((CellType)0, out _));
         Assert.Throws<InvalidOperationException>(() => catalog.GetMoveCooldown((CellType)0));
         Assert.Throws<InvalidOperationException>(() => catalog.GetCellConfig((CellType)0));
-    }
-
-    [Test]
-    public void IsRoundableLoose_CorrectlyIdentifiesCellTypes()
-    {
-        Assert.IsTrue(MapCellConfigCatalog.IsRoundableLoose(CellType.WhiteSand));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoundableLoose(CellType.Lava));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoundableLoose(CellType.Empty));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoundableLoose(CellType.Rock));
-    }
-
-    [Test]
-    public void IsRoad_CorrectlyIdentifiesCellTypes()
-    {
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.Road));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.GoldenRoad));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.BuildingRoad));
-        Assert.IsTrue(MapCellConfigCatalog.IsRoad(CellType.PolymerRoad));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoad(CellType.Empty));
-        Assert.IsFalse(MapCellConfigCatalog.IsRoad(CellType.Rock));
     }
 }

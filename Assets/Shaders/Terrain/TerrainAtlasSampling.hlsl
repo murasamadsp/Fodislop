@@ -1,7 +1,6 @@
 #ifndef KERN_TERRAIN_ATLAS_SAMPLING_INCLUDED
 #define KERN_TERRAIN_ATLAS_SAMPLING_INCLUDED
 
-#if defined(KERN_TERRAIN_CELLS)
 TEXTURE2D(_TerrainAtlas0);
 TEXTURE2D(_TerrainAtlas1);
 TEXTURE2D(_TerrainAtlas2);
@@ -50,6 +49,5 @@ half4 TerrainSampleAtlas(int slot, SamplerState atlasSampler, float2 uv)
         default: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas0, atlasSampler, uv, 0);
     }
 }
-#endif
 
 #endif

@@ -77,6 +77,7 @@ public sealed class ApplicationBootstrap : IStartable
                 },
                 scopeToken);
 
+            await UniTask.Yield(Cysharp.Threading.Tasks.PlayerLoopTiming.Update, scopeToken);
             _loadingScreen.SetPhaseText(_localization.Get("assetload.resources"));
             await UniTask.WhenAll(
                 _runtimeAssetPaths.EnsureReadyAsync(),

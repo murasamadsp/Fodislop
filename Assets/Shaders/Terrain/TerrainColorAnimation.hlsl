@@ -16,14 +16,12 @@
 #include "TerrainAnimationProfile.hlsl"
 #include "TerrainContour.hlsl"
 
-// Анимация цвета клетки террейна — одна на оба пасса.
+// Анимация цвета клетки террейна для видимого пасса.
 //
-// ЗАЧЕМ ОТДЕЛЬНЫМ ФАЙЛОМ. Раньше анимация жила только в видимом пассе, а поле
-// материалов писало упакованный цвет вершины как есть. Из-за этого shimmer
-// не попадал в отскок, и
-// освещение вообще не знало, что текстура анимирована: альбедо получалось
-// статическим при динамической картинке. Копировать код во второй пасс нельзя —
-// две копии разойдутся на первой же правке вида, и разойдутся молча.
+// Освещение намеренно не включает этот файл: его material field хранит
+// фиксированное базовое альбедо и не меняется от shimmer, переливания
+// кристаллов или времени пересборки окна. Эти эффекты остаются презентацией,
+// а не новым входом статического transport.
 //
 // Выборки текстур здесь нет намеренно: карта потока читается снаружи и
 // приезжает готовым цветом. Пассы объявляют разные наборы текстур, и
@@ -81,25 +79,16 @@ TerrainShimmerSignal EvaluateTerrainShimmer(
     return signal;
 }
 
-float3 TerrainUnpackRgb24(float packedColor)
-{
-    uint packed = (uint)round(packedColor);
-    return float3(
-        packed & 0xFFu,
-        (packed >> 8u) & 0xFFu,
-        (packed >> 16u) & 0xFFu) / 255.0;
-}
-
 // Фактическая интенсивность faceted-glint. Один расчёт используется видимым
 // цветом и Terrain Debug View, чтобы диагностический слой не расходился с кадром.
 float EvaluateFacetedGlintStrength(
     float2 localUV,
     float3 luminanceSource,
-    int animationProfile,
+    int cellSurfaceEffect,
     float animationSpeed,
     float animationOffset)
 {
-    if (animationProfile != KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)
+    if (cellSurfaceEffect != (int)KERN_TERRAIN_SURFACE_EFFECT_FACETED)
     {
         return 0.0;
     }
@@ -129,19 +118,19 @@ float3 AnimateTerrainColor(
     float3 baseColor,
     float3 luminanceSource,
     float2 localUV,
-    int animationType,
-    int animationProfile,
+    float2 surfacePosition,
+    int cellAnimationType,
+    int cellSurfaceEffect,
     float animationSpeed,
     float animationOffset,
     float3 flowSample,
-    float packedCellColor,
     float3 shimmerColor,
     float shimmerSpeedScale,
-    float pulseSpeedScale)
+    float blinkingSpeedScale)
 {
     float3 result = baseColor;
 
-    if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_PRISMATIC_CRYSTAL)
+    if (cellSurfaceEffect == (int)KERN_TERRAIN_SURFACE_EFFECT_PRISMATIC)
     {
 #if defined(UNITY_COLORSPACE_GAMMA)
         result = EvaluatePrismaticCrystal(
@@ -151,27 +140,41 @@ float3 AnimateTerrainColor(
             LinearToSRGB(baseColor), flowSample, animationOffset, _Time.y * animationSpeed * _PrismaticPhaseSpeed));
 #endif
     }
-    else if (animationProfile == KERN_TERRAIN_ANIMATION_PROFILE_FACETED_CRYSTAL)
+    else if (cellSurfaceEffect == (int)KERN_TERRAIN_SURFACE_EFFECT_FACETED)
     {
         // Each cell receives a deterministic phase from TerrainQuadBuilder.
         // A diagonal sweep brings out facet glints without long dead pauses.
         float strength = EvaluateFacetedGlintStrength(
             localUV,
             luminanceSource,
-            animationProfile,
+            cellSurfaceEffect,
             animationSpeed,
             animationOffset);
-        float3 cellColor = TerrainUnpackRgb24(packedCellColor);
-        float3 glintColor = lerp(cellColor, 1.0.xxx, _FacetedGlintMix);
+        // Цвет блика — альбедо текселя, высветленное к белому.
+        float3 glintColor = lerp(luminanceSource, 1.0.xxx, _FacetedGlintMix);
         result = baseColor + glintColor * strength;
     }
-    else if (animationType == 1) // Blinking
+    else if (cellSurfaceEffect == (int)KERN_TERRAIN_SURFACE_EFFECT_MOLTEN)
     {
-        float pulse = 0.5 + 0.5 * sin(
-            _Time.y * animationSpeed * pulseSpeedScale + animationOffset);
-        result = baseColor * pulse;
+        // Stable world-anchored heat flow: adjacent Lava cells share one
+        // continuous pattern, while only the visual albedo changes over time.
+        float2 pixelPosition = (floor(surfacePosition * 32.0) + 0.5) / 32.0;
+        float phase = _Time.y * animationSpeed * 0.12;
+        float broadFlow = sin(dot(pixelPosition, float2(1.9, -1.3)) + phase);
+        float crossFlow = sin(dot(pixelPosition, float2(-1.1, 2.1)) - phase * 0.7);
+        float heat = saturate(0.5 + broadFlow * 0.3 + crossFlow * 0.2);
+        float hot = heat * heat;
+        float material = max(baseColor.r, max(baseColor.g, baseColor.b));
+        result = baseColor * (0.35 + 0.8 * heat)
+            + float3(0.6, 0.35, 0.035) * (hot * material);
     }
-    else if (animationType == 2) // Shimmer
+    else if (cellAnimationType == (int)KERN_TERRAIN_ANIMATION_TYPE_BLINKING)
+    {
+        float blinking = 0.5 + 0.5 * sin(
+            _Time.y * animationSpeed * blinkingSpeedScale + animationOffset);
+        result = baseColor * blinking;
+    }
+    else if (cellAnimationType == (int)KERN_TERRAIN_ANIMATION_TYPE_SHIMMER)
     {
         TerrainShimmerSignal signal = EvaluateTerrainShimmer(
             luminanceSource,
@@ -183,7 +186,7 @@ float3 AnimateTerrainColor(
             shimmerColor,
             signal.body * signal.surfaceMask);
     }
-    else if (animationType == 3) // Rainbow
+    else if (cellAnimationType == (int)KERN_TERRAIN_ANIMATION_TYPE_RAINBOW)
     {
         float3 rainbowHSV = TerrainRGBToHSV(baseColor);
         rainbowHSV.x = frac(rainbowHSV.x + _Time.y * (animationSpeed / _RainbowHueDivisor));

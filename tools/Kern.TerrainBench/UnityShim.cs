@@ -119,6 +119,8 @@ namespace UnityEngine
 
         public static Color magenta => new(1, 0, 1, 1);
 
+        public static Color black => new(0, 0, 0, 1);
+
         public static implicit operator Color32(Color c) =>
             new((byte)(c.r * 255), (byte)(c.g * 255), (byte)(c.b * 255), (byte)(c.a * 255));
 
@@ -133,6 +135,16 @@ namespace UnityEngine
         public byte b = b;
         public byte a = a;
 
+        public static Color32 Lerp(Color32 a, Color32 b, float t)
+        {
+            t = Math.Clamp(t, 0f, 1f);
+            return new Color32(
+                (byte)(a.r + (b.r - a.r) * t),
+                (byte)(a.g + (b.g - a.g) * t),
+                (byte)(a.b + (b.b - a.b) * t),
+                (byte)(a.a + (b.a - a.a) * t));
+        }
+
         public bool Equals(Color32 other) => r == other.r && g == other.g && b == other.b && a == other.a;
 
         public override bool Equals(object? obj) => obj is Color32 other && Equals(other);
@@ -141,7 +153,7 @@ namespace UnityEngine
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct RectInt(int x, int y, int width, int height)
+    public struct RectInt(int x, int y, int width, int height) : IEquatable<RectInt>
     {
         public int x = x;
         public int y = y;
@@ -155,6 +167,20 @@ namespace UnityEngine
         public int xMax => x + width;
 
         public int yMax => y + height;
+
+        public bool Contains(Vector2Int point) =>
+            point.x >= xMin && point.x < xMax && point.y >= yMin && point.y < yMax;
+
+        public bool Equals(RectInt other) =>
+            x == other.x && y == other.y && width == other.width && height == other.height;
+
+        public override bool Equals(object? obj) => obj is RectInt other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(x, y, width, height);
+
+        public static bool operator ==(RectInt left, RectInt right) => left.Equals(right);
+
+        public static bool operator !=(RectInt left, RectInt right) => !left.Equals(right);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -207,6 +233,52 @@ namespace UnityEngine
 
         public static int CeilToInt(float value) => (int)MathF.Ceiling(value);
 
+        public static float Log(float value, float baseValue) => MathF.Log(value, baseValue);
+
+        public static float Pow(float value, float power) => MathF.Pow(value, power);
+
+        public static float GammaToLinearSpace(float value) => value <= 0.04045f
+            ? value / 12.92f
+            : MathF.Pow((value + 0.055f) / 1.055f, 2.4f);
+
+        public static float LinearToGammaSpace(float value) => value <= 0.0031308f
+            ? value * 12.92f
+            : (1.055f * MathF.Pow(value, 1f / 2.4f)) - 0.055f;
+
         public static float HalfToFloat(ushort half) => (float)BitConverter.UInt16BitsToHalf(half);
+    }
+
+    public enum RuntimeInitializeLoadType
+    {
+        AfterSceneLoad = 0,
+        BeforeSceneLoad = 1,
+        AfterAssembliesLoaded = 2,
+        BeforeSplashScreen = 3,
+        SubsystemRegistration = 4,
+    }
+
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+    public sealed class RuntimeInitializeOnLoadMethodAttribute : Attribute
+    {
+        public RuntimeInitializeLoadType loadType { get; }
+        public RuntimeInitializeOnLoadMethodAttribute() { }
+        public RuntimeInitializeOnLoadMethodAttribute(RuntimeInitializeLoadType loadType)
+            => this.loadType = loadType;
+    }
+
+    public static class Application
+    {
+        public static string dataPath => System.AppContext.BaseDirectory;
+    }
+
+    public class TextAsset
+    {
+        public string text { get; }
+        public TextAsset(string text) => this.text = text;
+    }
+
+    public static class Resources
+    {
+        public static T? Load<T>(string path) where T : class => null;
     }
 }

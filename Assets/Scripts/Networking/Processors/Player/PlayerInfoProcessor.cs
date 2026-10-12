@@ -21,11 +21,34 @@ public sealed class PlayerInfoProcessor(
     IPacketProcessor<RobotInfoPacket>,
     IPacketProcessor<RobotPositionPacket>,
     IPacketProcessor<AutoMineStatePacket>,
-    IPacketProcessor<AggressionStatePacket>
+    IPacketProcessor<AggressionStatePacket>,
+    IBatchAwareProcessor
 {
+    private int _batchDepth;
+    private bool _hasPendingRobotPrune;
+
+    public void BeginBatch()
+    {
+        _batchDepth++;
+    }
+
+    public void EndBatch()
+    {
+        if (_batchDepth <= 0)
+        {
+            return;
+        }
+
+        _batchDepth--;
+        if (_batchDepth == 0 && _hasPendingRobotPrune)
+        {
+            _hasPendingRobotPrune = false;
+            robotManager.PruneStaleRobots();
+        }
+    }
     public void Process(PlayerInfoPacket packet)
     {
-        robotManager.SetLocalPlayerBotID(packet.BotId);
+        robotManager.SetLocalPlayerBotId(packet.BotId);
         playerStats.SetNickname(packet.Nickname);
 
         var player = localPlayer.Current;
@@ -71,8 +94,16 @@ public sealed class PlayerInfoProcessor(
     public void Process(RobotPositionPacket packet)
     {
         robotManager.UpdateRobotPosition(packet.BotId, packet.X, packet.Y, packet.Rotation);
-        robotManager.PruneStaleRobots();
-        if (packet.BotId != 0 && packet.BotId == robotManager.LocalPlayerBotID)
+        if (_batchDepth > 0)
+        {
+            _hasPendingRobotPrune = true;
+        }
+        else
+        {
+            robotManager.PruneStaleRobots();
+        }
+
+        if (packet.BotId != 0 && packet.BotId == robotManager.LocalPlayerBotId)
         {
             localPlayer.Current?.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));
         }

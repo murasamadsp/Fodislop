@@ -140,6 +140,11 @@ namespace Kern.UI
 
             _nextRefreshTime = Time.unscaledTime + 0.25f;
 
+            if (_document?.rootVisualElement != null && _root != null && !_document.rootVisualElement.Contains(_root))
+            {
+                _document.rootVisualElement.Add(_root);
+            }
+
             if (_topAssetLabel == null && _document?.rootVisualElement != null)
             {
                 _topAssetDot = _document.rootVisualElement.Q<VisualElement>("AssetStatusDot");

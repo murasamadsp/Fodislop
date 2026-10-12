@@ -18,10 +18,7 @@ namespace Kern.Tests.World;
 // причём Execute идёт на настоящем рабочем потоке, а итог сверяется с
 // независимой полной сборкой того же конечного окна.
 //
-// Сверяются кэш с каймой, маски соседства и узлы искажения — чистые функции
-// содержимого окна. Заливка фона и зависящий от неё фоновый слой текселей
-// намеренно не сверяются: инкрементальная заливка сохраняет уже разрешённую
-// внутренность (см. TerrainIncrementalScrollDifferentialTests).
+// Сверяется кэш с каймой — чистая функция содержимого окна.
 [TestFixture]
 public sealed class TerrainBuildPipelineWorkerTests
 {
@@ -30,7 +27,7 @@ public sealed class TerrainBuildPipelineWorkerTests
     private const int StartX = 96;
     private const int StartY = 80;
 
-    private static readonly Vector2Int[] _Walk =
+    private static readonly Vector2Int[] s_walk =
     [
         new(1, 0), new(0, 1), new(1, 1), new(-1, 0), new(0, -1),
         new(3, 2), new(-2, -3), new(5, 0), new(0, 7), new(-4, 6),
@@ -53,9 +50,9 @@ public sealed class TerrainBuildPipelineWorkerTests
             dirty, noTextures, contentRevision: 1, worldGeneration: 0));
 
         ulong revision = 1;
-        for (int index = 0; index < _Walk.Length; index++)
+        for (int index = 0; index < s_walk.Length; index++)
         {
-            origin += _Walk[index];
+            origin += s_walk[index];
             dirty.Clear();
 
             // Каждый третий шаг несёт заплатку: мир детерминирован, поэтому
@@ -78,7 +75,7 @@ public sealed class TerrainBuildPipelineWorkerTests
                 textures = new HashSet<CellType> { CellType.BuildingDoor };
             }
 
-            TerrainCpuBuildRequest request = incremental.Prepare(
+            TerrainCPUBuildRequest request = incremental.Prepare(
                 Context(world, telemetry), world.Atlases, origin,
                 forceFull: false, rebuildAllCells: false,
                 dirty, textures, ++revision, worldGeneration: 0);
@@ -94,7 +91,6 @@ public sealed class TerrainBuildPipelineWorkerTests
             new DirtyRectSet(), noTextures, contentRevision: 1, worldGeneration: 0));
 
         AssertCachesEqual(incremental.CellCache, full.CellCache);
-        AssertPrecalculationEqual(incremental.Precalculator, full.Precalculator);
         Assert.That(
             incremental.CellCache.TryGet(CellType.BuildingDoor, out CellMetadata door) &&
             door.IsTextureReady,
@@ -109,7 +105,7 @@ public sealed class TerrainBuildPipelineWorkerTests
         using var telemetry = new FrameTelemetry();
         using var pipeline = new TerrainBuildPipeline();
         pipeline.EnsureCapacity(Width, Height, 1f);
-        TerrainCpuBuildRequest request = pipeline.Prepare(
+        TerrainCPUBuildRequest request = pipeline.Prepare(
             Context(world, telemetry), world.Atlases, new Vector2Int(StartX, StartY), forceFull: true,
             rebuildAllCells: false, new DirtyRectSet(), new HashSet<CellType>(),
             contentRevision: 1, worldGeneration: 0);
@@ -125,11 +121,11 @@ public sealed class TerrainBuildPipelineWorkerTests
     private static TerrainBuildContext Context(TerrainTestWorld world, IFrameTelemetry telemetry) =>
         new(world.Storage, world.MapData, world.Textures, telemetry, Width, Height);
 
-    private static void RunOnWorker(TerrainBuildPipeline pipeline, TerrainCpuBuildRequest request)
+    private static void RunOnWorker(TerrainBuildPipeline pipeline, TerrainCPUBuildRequest request)
     {
         int mainThread = Environment.CurrentManagedThreadId;
         int workerThread = mainThread;
-        Task<TerrainCpuBuildResult> task = Task.Run(() =>
+        Task<TerrainCPUBuildResult> task = Task.Run(() =>
         {
             workerThread = Environment.CurrentManagedThreadId;
             return pipeline.Execute(request, CancellationToken.None);
@@ -137,45 +133,6 @@ public sealed class TerrainBuildPipelineWorkerTests
         Assert.That(task.Wait(TimeSpan.FromSeconds(10)), Is.True, "шаг не завершился");
         Assert.That(workerThread, Is.Not.EqualTo(mainThread));
         pipeline.RecordPublished(request, task.Result, latencyMs: 0f);
-    }
-
-    private static void AssertPrecalculationEqual(
-        TerrainPrecalculator actual,
-        TerrainPrecalculator expected)
-    {
-        for (int x = 0; x < Width; x++)
-        {
-            for (int y = 0; y < Height; y++)
-            {
-                Assert.That(
-                    actual.CellTilingDescriptors[x, y],
-                    Is.EqualTo(expected.CellTilingDescriptors[x, y]),
-                    $"тайлинг {x},{y}");
-                Assert.That(
-                    actual.CellCornerVariants[x, y],
-                    Is.EqualTo(expected.CellCornerVariants[x, y]),
-                    $"вариант угла {x},{y}");
-                Assert.That(
-                    actual.CellReliefMasks[x, y],
-                    Is.EqualTo(expected.CellReliefMasks[x, y]),
-                    $"рельефная маска {x},{y}");
-                Assert.That(
-                    actual.CellSolidBoundaryMasks[x, y],
-                    Is.EqualTo(expected.CellSolidBoundaryMasks[x, y]),
-                    $"маска твёрдости {x},{y}");
-            }
-        }
-
-        for (int x = 0; x < Width + 1; x++)
-        {
-            for (int y = 0; y < Height + 1; y++)
-            {
-                Assert.That(
-                    actual.GridVertexOffsets[x, y],
-                    Is.EqualTo(expected.GridVertexOffsets[x, y]),
-                    $"смещение узла {x},{y}");
-            }
-        }
     }
 
     private static void AssertCachesEqual(TerrainCellCache actual, TerrainCellCache expected)
