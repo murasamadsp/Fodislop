@@ -64,7 +64,7 @@ public sealed class MultiWorldSwitchPlayModeTests
         // 1. Add a dummy foreign robot and a building in World 1
         uint foreignBotId = 9999;
         robotService.UpdateRobotPosition(foreignBotId, 10, 10, (byte)0);
-        buildingService.AddOrUpdateBuilding(12, 12, PackType.Market, 0, 0);
+        buildingService.AddOrUpdateBuilding(12, 12, BuildingType.Market, 0, 0);
 
         yield return null;
 

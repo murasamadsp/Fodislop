@@ -191,9 +191,9 @@ internal sealed class DummyWorldStartupResponder(
         teleportPositions.Add((27, 50));
         teleportPositions.Add((227, 50));
         sendPacket(new ServerPacket(new HBPacket([
-            new PackPacket(27, 50, PackType.Teleport, 0, 1),
-            new PackPacket(227, 50, PackType.Teleport, 0, 1),
-            new PackPacket(25, 48, PackType.Market, 0, 0),
+            new BuildingPacket(27, 50, BuildingType.Teleport, 0, 1),
+            new BuildingPacket(227, 50, BuildingType.Teleport, 0, 1),
+            new BuildingPacket(25, 48, BuildingType.Market, 0, 0),
         ])));
     }
 

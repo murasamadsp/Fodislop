@@ -6,7 +6,7 @@ using MinesServer.Data;
 namespace Kern.Networking.Buildings;
 public sealed class Teleport : PackBuilding
 {
-    public override PackType Type => PackType.Teleport;
+    public override BuildingType Type => BuildingType.Teleport;
 
     public override IEnumerable<((int X, int Y) Pos, CellType Cell)> CellsToPlace()
     {

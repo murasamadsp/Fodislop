@@ -136,8 +136,8 @@ public sealed class PacketHandler(
         On<CloseWindowPacket>(_windowProcessor.Process);
         On<RobotPositionPacket>(_playerInfo.Process);
         On<MapRegionPacket>(_mapRegion.Process);
-        On<PackPacket>(_building.Process);
-        On<RemovePackPacket>(_building.Process);
+        On<BuildingPacket>(_building.Process);
+        On<RemoveBuildingPacket>(_building.Process);
 
         On<LevelPacket>(_playerStats.Process);
         On<HealthPacket>(_playerStats.Process);

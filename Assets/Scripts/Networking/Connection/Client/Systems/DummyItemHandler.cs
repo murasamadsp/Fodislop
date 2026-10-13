@@ -78,19 +78,19 @@ public static class DummyItemInfo
         _ => false,
     };
 
-    public static PackType ItemTypeToPackType(ItemType type) => type switch
+    public static BuildingType ItemTypeToPackType(ItemType type) => type switch
     {
-        ItemType.Teleport => PackType.Teleport,
-        ItemType.Resp => PackType.Resp,
-        ItemType.Up => PackType.Up,
-        ItemType.Market => PackType.Market,
-        ItemType.Clans => PackType.Clans,
-        ItemType.Craft => PackType.Craft,
-        ItemType.BombShop => PackType.BombShop,
-        ItemType.Gun => PackType.Gun,
-        ItemType.Storage => PackType.Storage,
-        ItemType.ScienceCentre => PackType.Science,
-        _ => PackType.None,
+        ItemType.Teleport => BuildingType.Teleport,
+        ItemType.Resp => BuildingType.Resp,
+        ItemType.Up => BuildingType.Up,
+        ItemType.Market => BuildingType.Market,
+        ItemType.Clans => BuildingType.Clans,
+        ItemType.Craft => BuildingType.Craft,
+        ItemType.BombShop => BuildingType.BombShop,
+        ItemType.Gun => BuildingType.Gun,
+        ItemType.Storage => BuildingType.Storage,
+        ItemType.ScienceCentre => BuildingType.Science,
+        _ => BuildingType.None,
     };
 
     public static void ConsumeItem(Dictionary<ItemType, long> inventory, ItemType type, long count)

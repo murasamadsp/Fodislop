@@ -149,8 +149,8 @@ namespace Kern.Networking.Connection
                         Debug.LogWarning(
                             $"[ManagedTcpConnection] Frame decode failed ({frame.Length}B): {ex}\nHEAD: {hex}" +
                             $"\n[NETDIAG] client sizes: RobotPosition={default(MinesServer.Networking.Server.Packets.World.RobotPositionPacket).Size}" +
-                            $" Pack={default(MinesServer.Networking.Server.Packets.World.PackPacket).Size}" +
-                            $" RemovePack={default(MinesServer.Networking.Server.Packets.World.RemovePackPacket).Size}");
+                            $" Building={default(MinesServer.Networking.Server.Packets.World.BuildingPacket).Size}" +
+                            $" RemoveBuilding={default(MinesServer.Networking.Server.Packets.World.RemoveBuildingPacket).Size}");
                         continue;
                     }
 
