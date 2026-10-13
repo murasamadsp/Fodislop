@@ -6,41 +6,41 @@ using MinesServer.Data;
 namespace Kern.Networking.Buildings;
 public static class BuildingTemplates
 {
-    private static readonly Dictionary<PackType, PackBuilding> s_templates = new()
+    private static readonly Dictionary<BuildingType, PackBuilding> s_templates = new()
     {
-        [PackType.Teleport] = new Teleport(),
-        [PackType.Resp] = new RespawnStation(),
-        [PackType.Up] = new UpgradeStation(),
-        [PackType.Market] = new Market(),
-        [PackType.Clans] = new ClansPack(),
-        [PackType.Craft] = new Crafter(),
-        [PackType.BombShop] = new BuildingShop(),
-        [PackType.Gun] = new Gun(),
-        [PackType.Storage] = new Storage(),
-        [PackType.Science] = new NC(),
+        [BuildingType.Teleport] = new Teleport(),
+        [BuildingType.Resp] = new RespawnStation(),
+        [BuildingType.Up] = new UpgradeStation(),
+        [BuildingType.Market] = new Market(),
+        [BuildingType.Clans] = new ClansPack(),
+        [BuildingType.Craft] = new Crafter(),
+        [BuildingType.BombShop] = new BuildingShop(),
+        [BuildingType.Gun] = new Gun(),
+        [BuildingType.Storage] = new Storage(),
+        [BuildingType.Science] = new NC(),
     };
 
-    public static bool TryGet(PackType type, out PackBuilding? building) =>
+    public static bool TryGet(BuildingType type, out PackBuilding? building) =>
         s_templates.TryGetValue(type, out building);
 
     /// <summary>
     /// Шаблон пака для выбранного предмета инвентаря. Соответствие повторяет
     /// серверный Inventory.typeditems: каждый пак-предмет ставит свой класс
-    /// здания (ScienceCentre ставит NC — на проводе он PackType.Science).
+    /// здания (ScienceCentre ставит NC — на проводе он BuildingType.Science)..
     /// </summary>
     public static bool TryGetByItem(ItemType item, out PackBuilding? building)
     {
-        PackType? type = item switch
+        BuildingType? type = item switch
         {
-            ItemType.Teleport => PackType.Teleport,
-            ItemType.Resp => PackType.Resp,
-            ItemType.Up => PackType.Up,
-            ItemType.Market => PackType.Market,
-            ItemType.Clans => PackType.Clans,
-            ItemType.Craft => PackType.Craft,
-            ItemType.BombShop => PackType.BombShop,
-            ItemType.Storage => PackType.Storage,
-            ItemType.ScienceCentre => PackType.Science,
+            ItemType.Teleport => BuildingType.Teleport,
+            ItemType.Resp => BuildingType.Resp,
+            ItemType.Up => BuildingType.Up,
+            ItemType.Market => BuildingType.Market,
+            ItemType.Clans => BuildingType.Clans,
+            ItemType.Craft => BuildingType.Craft,
+            ItemType.BombShop => BuildingType.BombShop,
+            ItemType.Storage => BuildingType.Storage,
+            ItemType.ScienceCentre => BuildingType.Science,
             _ => null,
         };
 
@@ -50,10 +50,10 @@ public static class BuildingTemplates
         return building != null;
     }
 
-    public static ushort GetAnchorDistance(PackType type) => type switch
+    public static ushort GetAnchorDistance(BuildingType type) => type switch
     {
-        PackType.Up or PackType.Clans => 3,
-        PackType.Science => 6,
+        BuildingType.Up or BuildingType.Clans => 3,
+        BuildingType.Science => 6,
         _ => 2,
     };
 }

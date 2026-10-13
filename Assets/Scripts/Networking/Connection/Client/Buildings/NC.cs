@@ -7,7 +7,7 @@ namespace Kern.Networking.Buildings
 {
     public sealed class NC : PackBuilding
     {
-        public override PackType Type => PackType.Science;
+        public override BuildingType Type => BuildingType.Science;
 
         public override IEnumerable<((int X, int Y) Pos, CellType Cell)> CellsToPlace()
         {
