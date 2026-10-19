@@ -6,7 +6,7 @@ using MinesServer.Data;
 namespace Kern.Networking.Buildings;
 public sealed class UpgradeStation : PackBuilding
 {
-    public override PackType Type => PackType.Up;
+    public override BuildingType Type => BuildingType.Up;
 
     public override IEnumerable<((int X, int Y) Pos, CellType Cell)> CellsToPlace()
     {

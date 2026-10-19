@@ -115,13 +115,13 @@ internal sealed class DummyInventoryResponder
         ushort playerY,
         Direction direction)
     {
-        PackType packType = DummyItemInfo.ItemTypeToPackType(selectedType);
-        if (packType == PackType.None)
+        BuildingType buildingType = DummyItemInfo.ItemTypeToPackType(selectedType);
+        if (buildingType == BuildingType.None)
         {
             return;
         }
 
-        ushort distance = BuildingTemplates.GetAnchorDistance(packType);
+        ushort distance = BuildingTemplates.GetAnchorDistance(buildingType);
         (int offsetX, int offsetY) = direction switch
         {
             Direction.Up => (0, -1),
@@ -141,13 +141,13 @@ internal sealed class DummyInventoryResponder
 
         var anchorX = (ushort)anchorXValue;
         var anchorY = (ushort)anchorYValue;
-        List<IHBPacket> placementPackets = new()
-        {
-            new PackPacket(anchorX, anchorY, packType, 0, 0),
-        };
-        PlaceBuildingCells(placementPackets, anchorX, anchorY, packType);
-        _sendPacket(new ServerPacket(new HBPacket(placementPackets)));
-        if (packType == PackType.Teleport)
+        List<IHBPacket> placementPackets =
+        [
+            new BuildingPacket(anchorX, anchorY, buildingType, 0, 0),
+        ];
+        PlaceBuildingCells(placementPackets, anchorX, anchorY, buildingType);
+        _sendPacket(new ServerPacket(new HBPacket([.. placementPackets])));
+        if (buildingType == BuildingType.Teleport)
         {
             _teleportPositions.Add((anchorX, anchorY));
         }
@@ -159,9 +159,9 @@ internal sealed class DummyInventoryResponder
         List<IHBPacket> packets,
         ushort anchorX,
         ushort anchorY,
-        PackType packType)
+        BuildingType buildingType)
     {
-        if (!BuildingTemplates.TryGet(packType, out PackBuilding? building) || building == null)
+        if (!BuildingTemplates.TryGet(buildingType, out PackBuilding? building) || building == null)
         {
             return;
         }

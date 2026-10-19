@@ -6,10 +6,7 @@ using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
 using Kern.World;
 using UnityEngine;
-// Протокол по-прежнему называет это Pack: PackType живёт во внешней сборке
-// MinesServer.Data, исходников которой в проекте нет. Алиас держит границу —
-// наш домен говорит Building, провод остаётся Pack.
-using BuildingType = MinesServer.Data.PackType;
+using MinesServer.Data;
 
 namespace Kern.Game.Managers;
 

@@ -82,42 +82,12 @@
         <ui:Button name="ProgrammatorButton" class="hud-btn-action hud-programmator-button"  text="" picking-mode="Position" />
         <ui:Button name="ProgramRunButton" class="hud-btn-action hud-program-run-btn" text="▶" tooltip="hud.tooltip.program_start" picking-mode="Position" />
 
-        <!-- ════════════ СЕНСОРНОЕ УПРАВЛЕНИЕ ════════════
-             Блок виден только при сенсорном вводе: класс касания на корне
-             панели ставит UIScreen; раскладка — в Touch.uss. Док навыков живёт здесь и на
-             десктопе: там он остаётся в правом нижнем углу. -->
-        <ui:VisualElement name="MobileControls" class="hud-mobile-controls" picking-mode="Ignore">
-            <ui:VisualElement name="TouchSystemBar" class="hud-touch-system" picking-mode="Ignore">
-                <ui:Button name="TouchSayButton" class="hud-touch-system-btn" text="hud.touch.say" picking-mode="Position" />
-                <ui:Button name="TouchChatButton" class="hud-touch-system-btn" text="hud.touch.chat" picking-mode="Position" />
-                <ui:Button name="TouchMapButton" class="hud-touch-system-btn" text="hud.touch.map" picking-mode="Position" />
-                <ui:Button name="TouchMenuButton" class="hud-touch-system-btn" text="hud.touch.menu" picking-mode="Position" />
-            </ui:VisualElement>
-            <ui:VisualElement name="MobileMovePad" class="hud-mobile-move-pad" picking-mode="Position">
-                <ui:VisualElement class="hud-mobile-move-ring" picking-mode="Ignore" />
-                <ui:VisualElement name="MobileMoveKnob" class="hud-mobile-move-knob" picking-mode="Ignore" />
-            </ui:VisualElement>
-            <ui:VisualElement class="hud-mobile-right-dock" picking-mode="Ignore">
-                <ui:VisualElement class="hud-mobile-build-actions" picking-mode="Ignore">
-                    <ui:Button name="MobileBuildCyanButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--cyan" text="hud.mobile.color_cyan" picking-mode="Position" />
-                    <ui:Button name="MobileBuildGrayButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--gray" text="hud.mobile.color_gray" picking-mode="Position" />
-                    <ui:Button name="MobileBuildGreenButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--green" text="hud.mobile.color_green" picking-mode="Position" />
-                    <ui:Button name="MobileBuildWhiteButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--white" text="hud.mobile.color_white" picking-mode="Position" />
-                </ui:VisualElement>
-                <ui:VisualElement class="hud-mobile-actions" picking-mode="Ignore">
-                    <ui:Button name="TouchFastMoveButton" class="hud-mobile-action hud-touch-toggle" text="hud.touch.fast_move" picking-mode="Position" />
-                    <ui:Button name="MobileGeoButton" class="hud-mobile-action" text="hud.mobile.geo" picking-mode="Position" />
-                    <ui:Button name="MobileHealButton" class="hud-mobile-action" text="hud.mobile.heal" picking-mode="Position" />
-                    <ui:Button name="MobileDigButton" class="hud-mobile-action hud-mobile-action--primary" text="hud.mobile.dig" picking-mode="Position" />
-                </ui:VisualElement>
-            </ui:VisualElement>
-            <ui:VisualElement name="SkillContainer" class="hud-skill-container" />
-        </ui:VisualElement>
-
-        <!-- ════════════ КНОПКИ ВЕРХНЕГО РЯДА: РЕСПАВН / ЗДАНИЯ / FAQ ════════════ -->
-        <ui:Button name="RespawnButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--respawn" text="hud.respawn" picking-mode="Position" />
-        <ui:Button name="BuildingsButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--buildings" text="hud.buildings" picking-mode="Position" />
-        <ui:Button name="FaqButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--faq" text="FAQ" picking-mode="Position" />
+        <!-- ════════════ КНОПКИ ВЕРХНЕГО РЯДА: FAQ / ЗДАНИЯ / РЕСПАУН ════════════ -->
+        <!-- Порядок от правого верхнего угла влево: Помощь, Мои здания, Респаун.
+             Размер 32x32 и спрайты заданы в HUD.uss, классами hud-btn-top-row, текста нет. -->
+        <ui:Button name="FaqButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--faq" picking-mode="Position" />
+        <ui:Button name="BuildingsButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--buildings" picking-mode="Position" />
+        <ui:Button name="RespawnButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--respawn" picking-mode="Position" />
 
         <!-- ════════════ НАВЫКИ И ПРОГРЕСС (справа снизу) ════════════ -->
         <!-- ════════════ ТЕКУЩАЯ МИССИЯ (сверху по центру) ════════════ -->

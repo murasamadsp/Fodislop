@@ -5,19 +5,13 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace Kern.Networking.Processors;
 
-public sealed class BuildingProcessor :
-    IPacketProcessor<PackPacket>,
-    IPacketProcessor<RemovePackPacket>
+public sealed class BuildingProcessor(IBuildingService buildingManager) :
+    IPacketProcessor<BuildingPacket>,
+    IPacketProcessor<RemoveBuildingPacket>
 {
-    private readonly IBuildingService _buildingManager;
-    public BuildingProcessor(IBuildingService buildingManager)
-    {
-        _buildingManager = buildingManager;
-    }
+    public void Process(BuildingPacket packet) =>
+        buildingManager.AddOrUpdateBuilding(packet.X, packet.Y, packet.BuildingCode, packet.Variant, packet.LinkedClan);
 
-    public void Process(PackPacket packet) =>
-        _buildingManager.AddOrUpdateBuilding(packet.X, packet.Y, packet.PackCode, packet.Variant, packet.LinkedClan);
-
-    public void Process(RemovePackPacket packet) =>
-        _buildingManager.RemoveBuilding(packet.X, packet.Y);
+    public void Process(RemoveBuildingPacket packet) =>
+        buildingManager.RemoveBuilding(packet.X, packet.Y);
 }

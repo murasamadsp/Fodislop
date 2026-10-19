@@ -6,7 +6,7 @@ using MinesServer.Data;
 namespace Kern.Networking.Buildings;
 public sealed class Crafter : PackBuilding
 {
-    public override PackType Type => PackType.Craft;
+    public override BuildingType Type => BuildingType.Craft;
 
     public override IEnumerable<((int X, int Y) Pos, CellType Cell)> CellsToPlace()
     {

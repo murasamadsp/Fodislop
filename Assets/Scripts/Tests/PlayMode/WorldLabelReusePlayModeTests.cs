@@ -107,18 +107,24 @@ public sealed class WorldLabelReusePlayModeTests
         Assert.That(style.height, Is.GreaterThan(0f));
     }
 
+    // Высота облака постоянна — это высота спрайта, а вертикальный 9-slice при
+    // ней не растягивается вовсе, поэтому хвост всегда одной формы. Растёт
+    // только ширина: текст обрезается по max-width, а не переносится, и вторая
+    // строка ушла бы под хвост.
     [UnityTest]
-    public IEnumerator ReusedLabel_HeightFollowsTextLengthInBothDirections()
+    public IEnumerator ReusedLabel_HeightIsFixedAndWidthFollowsText()
     {
         IWorldLabel label = _labels.Create(WorldLabelKind.ChatBubble);
         _label = label;
+        VisualElement frame = FindFrame();
         Label element = FindLabel();
 
         label.SetText(LongMessage);
         label.SetVisible(true);
         yield return Frames(label, 3);
-        float longHeight = element.resolvedStyle.height;
-        float longWidth = element.resolvedStyle.width;
+        float longHeight = frame.resolvedStyle.height;
+        float longWidth = frame.resolvedStyle.width;
+        float longTextWidth = element.resolvedStyle.width;
 
         // Гасим и поднимаем заново уже с коротким текстом: переиспользованная
         // метка обязана честно пересчитать бокс под новое содержимое.
@@ -128,21 +134,33 @@ public sealed class WorldLabelReusePlayModeTests
         label.SetVisible(true);
         yield return Frames(label, 3);
 
-        IResolvedStyle style = element.resolvedStyle;
+        IResolvedStyle style = frame.resolvedStyle;
         Debug.Log(
-            $"[LabelReuse] long h={longHeight} w={longWidth} -> short h={style.height} w={style.width}");
+            $"[LabelReuse] long h={longHeight} w={longWidth} textW={longTextWidth} " +
+            $"-> short h={style.height} w={style.width}");
 
         Assert.That(
-            longHeight,
-            Is.GreaterThan(style.height + 1f),
-            "The long message must render taller than the short one.");
+            style.height,
+            Is.EqualTo(longHeight).Within(0.5f),
+            "The bubble height must not depend on the message: the vertical 9-slice is " +
+            "meant never to stretch, so the tail keeps one shape.");
+        Assert.That(
+            longWidth,
+            Is.GreaterThan(style.width + 1f),
+            "The bubble must grow with the text: a reused label did not recompute its width.");
         Assert.That(style.display, Is.Not.EqualTo(DisplayStyle.None));
         Assert.That(style.visibility, Is.EqualTo(Visibility.Visible));
     }
 
+    // Рамка и текст — разные элементы: постоянную высоту задаёт рамка, а текст
+    // лежит в ней вложенным и обрезается по ширине.
+    private VisualElement FindFrame() =>
+        _document.rootVisualElement.Q<VisualElement>(className: "world-label-chat")
+        ?? throw new AssertionException("The chat bubble frame is not in the panel.");
+
     private Label FindLabel() =>
-        _document.rootVisualElement.Q<Label>(className: "world-label-chat")
-        ?? throw new AssertionException("The chat bubble label is not in the panel.");
+        _document.rootVisualElement.Q<Label>(className: "world-label-chat-text")
+        ?? throw new AssertionException("The chat bubble text is not in the panel.");
 
     [UnityTearDown]
     public IEnumerator TearDown()

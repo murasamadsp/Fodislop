@@ -50,12 +50,6 @@ namespace Kern.UI
         private RenderBypassWindow? _bypassWindow;
         private bool _registered;
 
-        // Вход без клавиатуры: долгое нажатие на строку статуса (FPS/пинг)
-        // делает то же, что F1. Статусная строка есть в каждой сборке.
-        private const long StatusLongPressMilliseconds = 800;
-        private VisualElement? _statusPill;
-        private IVisualElementScheduledItem? _statusPressTimer;
-
         public bool IsEnabled
         {
             get => ToolWindows.Enabled;
@@ -134,7 +128,7 @@ namespace Kern.UI
                 return;
             }
 
-            var toolbar = new ToolbarWindow(_lighting);
+            var toolbar = new ToolbarWindow(_lighting, _debugSettings);
             var stats = new FrameStatsWindow(_telemetry, _lighting);
             var world = new WorldInfoWindow(
                 _telemetry,
@@ -186,7 +180,6 @@ namespace Kern.UI
         private void Update()
         {
             EnsureWindows();
-            EnsureStatusPillGesture();
             Keyboard? keyboard = Keyboard.current;
             if (keyboard != null &&
                 !ToolWindows.HasKeyboardCapture &&
@@ -194,6 +187,16 @@ namespace Kern.UI
             {
                 SetToolsEnabled(!ToolWindows.Enabled);
                 UpdateTelemetryState();
+            }
+
+            // Polled before the early return below so the tail modes work with the tool suite
+            // closed, same as F1.
+            if (keyboard != null &&
+                !ToolWindows.HasKeyboardCapture &&
+                keyboard.f2Key.wasPressedThisFrame)
+            {
+                _debugSettings.TailMotionDebugMode = NextTailMotionDebugMode(
+                    _debugSettings.TailMotionDebugMode);
             }
 
             // Включить инструменты может не только F1 (F5 открывает грейдинг
@@ -210,40 +213,17 @@ namespace Kern.UI
             ToolWindows.Tick();
         }
 
-        private void EnsureStatusPillGesture()
+        /// <summary>
+        ///     Cycles the tail motion debug modes. Kept as an explicit successor rather than an
+        ///     unchecked increment so an out-of-range cast can never fall out of the cycle.
+        /// </summary>
+        private static TailMotionDebugMode NextTailMotionDebugMode(TailMotionDebugMode mode) => mode switch
         {
-            if (_statusPill != null && _statusPill.panel != null)
-            {
-                return;
-            }
-
-            _statusPill = _gameUIDocument != null && _gameUIDocument.isActiveAndEnabled
-                ? _gameUIDocument.rootVisualElement.Q<VisualElement>("TopStatusPill")
-                : null;
-            if (_statusPill == null)
-            {
-                return;
-            }
-
-            _statusPill.RegisterCallback<PointerDownEvent>(OnStatusPointerDown);
-            _statusPill.RegisterCallback<PointerUpEvent>(_ => _statusPressTimer?.Pause());
-            _statusPill.RegisterCallback<PointerLeaveEvent>(_ => _statusPressTimer?.Pause());
-        }
-
-        private void OnStatusPointerDown(PointerDownEvent evt)
-        {
-            if (evt.pointerType == UnityEngine.UIElements.PointerType.mouse || _statusPill == null)
-            {
-                return;
-            }
-
-            _statusPressTimer?.Pause();
-            _statusPressTimer = _statusPill.schedule.Execute(() =>
-            {
-                SetToolsEnabled(!ToolWindows.Enabled);
-                UpdateTelemetryState();
-            }).StartingIn(StatusLongPressMilliseconds);
-        }
+            TailMotionDebugMode.Normal => TailMotionDebugMode.Minimal,
+            TailMotionDebugMode.Minimal => TailMotionDebugMode.Medium,
+            TailMotionDebugMode.Medium => TailMotionDebugMode.Maximum,
+            _ => TailMotionDebugMode.Normal,
+        };
 
         private static void ReleaseCaptureOnEscape(Keyboard? keyboard)
         {

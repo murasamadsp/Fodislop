@@ -164,7 +164,7 @@ public class WorldInitProcessorTests
             ClearAllBuildingsCalled = true;
         }
 
-        public void AddOrUpdateBuilding(ushort x, ushort y, PackType buildingType, byte variant, byte linkedClan) { }
+        public void AddOrUpdateBuilding(ushort x, ushort y, BuildingType buildingType, byte variant, byte linkedClan) { }
         public void RemoveBuilding(ushort x, ushort y) { }
     }
 
