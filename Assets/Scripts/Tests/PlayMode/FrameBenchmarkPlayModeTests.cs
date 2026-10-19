@@ -1364,6 +1364,104 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
 
     [UnityTest]
     [Timeout(120_000)]
+    public IEnumerator MainGame_TerrainRimImage()
+    {
+        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
+        yield return Await(_bootstrap.TransitionAsync("MainGame"), WorldTimeoutSeconds);
+        Scene game = SceneManager.GetSceneByName("MainGame");
+        TerrainRenderer terrain = FindComponentInScene<TerrainRenderer>(game)
+            ?? throw new InvalidOperationException("MainGame has no terrain.");
+        yield return WaitUntil(() => terrain.IsReadyForGameplay, WorldTimeoutSeconds, "Terrain not ready.");
+        IClientConfigManager config = _bootstrap.Container.Resolve<IClientConfigManager>();
+        Camera screenCamera = ResolveInScene<IGameplayCamera>(game).Camera;
+        using var diagnosticCamera = new DiagnosticCameraScope(screenCamera, ResolveInScene<ISceneObjectFactory>(game));
+        Camera camera = diagnosticCamera.Camera;
+        var target = new RenderTexture(1024, 1024, 24, RenderTextureFormat.ARGBHalf);
+        Assert.That(target.Create(), Is.True);
+        camera.targetTexture = target;
+        camera.enabled = true;
+        camera.orthographicSize = 8f;
+        camera.aspect = 1f;
+        bool originalRim = config.Config.Terrain.EnableRim;
+        bool originalBypass = PostProcessRuntimeState.BypassPostProcessEffects;
+        Camera? originalDiagnostic = PostProcessRuntimeState.DiagnosticOffscreenCamera;
+        float originalTimeScale = Time.timeScale;
+        string directory = DiagnosticArtifactPaths.CreateDirectory("Rendering", "terrain_rim");
+        var captures = new Color[2][];
+        try
+        {
+            Time.timeScale = 0f;
+            PostProcessRuntimeState.DiagnosticOffscreenCamera = camera;
+            PostProcessRuntimeState.BypassPostProcessEffects = true;
+            diagnosticCamera.ApplyPoseToGameplay();
+            yield return Skip(10);
+            for (int index = 0; index < 2; index++)
+            {
+                config.Config.Terrain.EnableRim = index == 1;
+                terrain.ApplyClientConfig();
+                yield return Skip(3);
+                bool received = false;
+                int captureIndex = index;
+                PostProcessRuntimeState.DiagnosticWorldImage = (commands, texture, rect) =>
+                {
+                    PostProcessRuntimeState.DiagnosticWorldImage = null;
+                    Material[] terrainMaterials = Resources.FindObjectsOfTypeAll<Material>()
+                        .Where(material => material.name == "Terrain Cell Material").ToArray();
+                    Assert.That(terrainMaterials.Length, Is.GreaterThan(0));
+                    foreach (Material material in terrainMaterials)
+                    {
+                        Assert.That(material.GetFloat("_TerrainRimEnabled"), Is.EqualTo(captureIndex),
+                            "The real terrain material must receive the selected rim state.");
+                    }
+
+                    File.WriteAllText(Path.Combine(directory, $"state-{captureIndex}.txt"),
+                        $"materialRim={captureIndex}; materials={terrainMaterials.Length}; rect={rect}; size={texture.width}x{texture.height}");
+                    commands.RequestAsyncReadback(texture, 0, TextureFormat.RGBAFloat, request =>
+                    {
+                        Assert.That(request.hasError, Is.False);
+                        captures[captureIndex] = request.GetData<Color>().ToArray();
+                        File.WriteAllBytes(Path.Combine(directory, $"world-{captureIndex}.rgba32"), request.GetData<byte>().ToArray());
+                        received = true;
+                    });
+                };
+                yield return WaitUntil(() => received, UITimeoutSeconds, "Rim capture did not complete.");
+            }
+
+            Assert.That(captures[1].Length, Is.EqualTo(captures[0].Length));
+            int darkenedPixels = 0;
+            float maximumDarkening = 0f;
+            for (int pixel = 0; pixel < captures[0].Length; pixel++)
+            {
+                float before = captures[0][pixel].maxColorComponent;
+                float after = captures[1][pixel].maxColorComponent;
+                if (before > 0.01f && after < before * 0.9f)
+                {
+                    darkenedPixels++;
+                    maximumDarkening = Mathf.Max(maximumDarkening, 1f - after / before);
+                }
+            }
+
+            File.WriteAllText(Path.Combine(directory, "comparison.txt"),
+                $"darkenedPixels={darkenedPixels}; maximumDarkening={maximumDarkening:R}");
+            Assert.That(darkenedPixels, Is.GreaterThan(32),
+                "Enabled terrain rim must darken real MainGame world pixels before display presentation.");
+        }
+        finally
+        {
+            PostProcessRuntimeState.DiagnosticWorldImage = null;
+            PostProcessRuntimeState.DiagnosticOffscreenCamera = originalDiagnostic;
+            PostProcessRuntimeState.BypassPostProcessEffects = originalBypass;
+            Time.timeScale = originalTimeScale;
+            config.Config.Terrain.EnableRim = originalRim;
+            terrain.ApplyClientConfig();
+            camera.targetTexture = null;
+            target.Release();
+            Object.Destroy(target);
+        }
+    }
+
+    [UnityTest]
+    [Timeout(120_000)]
     public IEnumerator MainGame_WorldGridZoomImage()
     {
         IClientConfigManager config = _bootstrap.Container.Resolve<IClientConfigManager>();
@@ -1427,7 +1525,8 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
             ResolveInScene<GraphicsSettingsController>(game).SelectPreset(GraphicsPreset.Overdrive);
             zoomLighting.SetDynamicLight(ZoomProbeId,
                 new Vector2(originalPosition.x, originalPosition.y), Color.white, 8f);
-            Color[][] images = new Color[3][];
+            const int ZoomCaptureCount = 3; // near, far, then near again
+            Color[][] images = new Color[ZoomCaptureCount][];
             for (int index = 0; index < images.Length; index++)
             {
                 camera.orthographicSize = index == 1 ? 16f : 8f;
@@ -1442,14 +1541,21 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
                 bool observedGameplayTarget = false;
                 int expectedHeight = index == 1 ? 1024 : 512;
                 int expectedGameplayWidth = Mathf.CeilToInt(expectedHeight * screenCamera.aspect / 2f) * 2;
+                float halfWidthPixels = screenCamera.orthographicSize * screenCamera.aspect * 32f;
+                float centerXPixels = screenCamera.transform.position.x * 32f;
+                int expectedGameplayRasterWidth = Mathf.CeilToInt(centerXPixels + halfWidthPixels) -
+                    Mathf.FloorToInt(centerXPixels - halfWidthPixels) + 2;
+                Matrix4x4 originalProjection = camera.projectionMatrix;
+                Rect originalViewport = camera.rect;
+                float originalSize = camera.orthographicSize;
                 PostProcessRuntimeState.DiagnosticWorldRasterTarget = (renderCamera, dimensions) =>
                 {
                     if (renderCamera == screenCamera)
                     {
-                        Assert.That(dimensions, Is.EqualTo(new Vector2Int(expectedGameplayWidth, expectedHeight)),
+                        Assert.That(dimensions, Is.EqualTo(new Vector2Int(expectedGameplayRasterWidth, expectedHeight + 2)),
                             "The real display camera must rasterize geometry directly at 32 pixels per cell.");
                         File.WriteAllText(Path.Combine(directory, $"gameplay_geometry_target_{capturedIndex}.txt"),
-                            $"stage=BeforeRendering; attachment={dimensions.x}x{dimensions.y}; expected={expectedGameplayWidth}x{expectedHeight}");
+                            $"stage=BeforeRendering; attachment={dimensions.x}x{dimensions.y}; expected={expectedGameplayRasterWidth}x{expectedHeight + 2}; guard=1");
                         observedGameplayTarget = true;
                     }
 
@@ -1458,7 +1564,11 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
                         return;
                     }
 
-                    int expectedSize = capturedIndex == 1 ? 1024 : 512;
+                    Assert.That(camera.projectionMatrix, Is.EqualTo(originalProjection));
+                    Assert.That(camera.rect, Is.EqualTo(originalViewport));
+                    Assert.That(camera.orthographicSize, Is.EqualTo(originalSize));
+                    Assert.That(camera.GetComponent<PixelPerfectCamera>(), Is.Null);
+                    int expectedSize = (capturedIndex == 1 ? 1024 : 512) + 2;
                     Assert.That(dimensions, Is.EqualTo(new Vector2Int(expectedSize, expectedSize)),
                         "Renderer2D must rasterize geometry directly at 32 pixels per cell before postprocessing.");
                     File.WriteAllText(Path.Combine(directory, $"geometry_target_{capturedIndex}.txt"),
@@ -1510,6 +1620,10 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
                 }
                 Assert.That(observedGeometryTarget, Is.True,
                     "The production geometry target must be observed before sprite rasterization.");
+                Assert.That(camera.projectionMatrix, Is.EqualTo(originalProjection), "Raster setup must not modify Camera projection.");
+                Assert.That(camera.rect, Is.EqualTo(originalViewport), "Raster setup must not crop the Camera viewport.");
+                Assert.That(camera.orthographicSize, Is.EqualTo(originalSize), "Raster setup must not modify Camera zoom.");
+                Assert.That(camera.GetComponent<PixelPerfectCamera>(), Is.Null, "World raster must not install PixelPerfectCamera.");
                 // Batch mode has no display presentation frame. Explicitly
                 // submit the actual gameplay camera through the same URP renderer.
                 RenderTexture gameplayTarget = RenderTexture.GetTemporary(expectedGameplayWidth * 2,
@@ -1624,15 +1738,14 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
             PostProcessWorkloadSnapshot work = feature.SceneWorkload
                 ?? throw new InvalidOperationException("Production bloom did not publish its workload.");
             Assert.That(work.FrameId, Is.GreaterThanOrEqualTo(Time.frameCount - 2));
-            // Native URP PixelPerfectCamera renders the visible 16-cell span
-            // directly: 16 * 32 = 512, without the old fork's guard border.
-            Assert.That(work.Width, Is.EqualTo(512));
-            Assert.That(work.Height, Is.EqualTo(512));
+            // 16 * 32 visible pixels, plus one guard pixel on each edge.
+            Assert.That(work.Width, Is.EqualTo(514));
+            Assert.That(work.Height, Is.EqualTo(514));
             Assert.That(work.DispatchCount, Is.EqualTo(7));
             Assert.That(work.DrawCount, Is.EqualTo(1));
             Assert.That(work.TextureCount, Is.EqualTo(7));
-            Assert.That(feature.DisplayWorkload!.Value.Width, Is.EqualTo(512));
-            Assert.That(feature.DisplayWorkload!.Value.Height, Is.EqualTo(512));
+            Assert.That(feature.DisplayWorkload!.Value.Width, Is.EqualTo(514));
+            Assert.That(feature.DisplayWorkload!.Value.Height, Is.EqualTo(514));
             File.AppendAllText(Path.Combine(directory, "image-oracle.txt"),
                 $"; bloomDispatches={work.DispatchCount}; bloomDraws={work.DrawCount}; bloomBytes={work.TexturePayloadBytes}; world={work.Width}x{work.Height}");
 
@@ -1683,13 +1796,12 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
         IMapDataProvider map = ResolveInScene<IMapDataProvider>(game);
         PostProcessController post = ResolveInScene<PostProcessController>(game);
         bool oldDistortion = config.Terrain.EnableDistortion;
-        TerrainDistortionStyle oldStyle = config.Terrain.DistortionStyle;
         bool oldFollow = follow.enabled;
         float oldTime = Time.timeScale;
         float oldBloom = post.BloomIntensity;
         bool oldBypass = PostProcessRuntimeState.BypassPostProcessEffects;
         int stageId = Shader.PropertyToID("_KernTerrainBenchmarkStage");
-        int oldStage = Shader.GetGlobalInt(stageId);
+        int oldStage = Shader.GetGlobalInteger(stageId);
         var target = new RenderTexture(1024, 1024, 24, RenderTextureFormat.ARGBHalf);
         Texture2D readback = RuntimeTextureFactory.CreateRGBAHalfNoMip(1024, 1024, "GroundDistortionReadback",
             RuntimeTextureColorSpace.Linear, FilterMode.Point, TextureWrapMode.Clamp);
@@ -1709,12 +1821,11 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
             PostProcessRuntimeState.BypassPostProcessEffects = true;
             // Production surface checkpoint: same mesh, textures, UV resolver
             // and coverage; exclude illumination/animation changes from this oracle.
-            Shader.SetGlobalInt(stageId, 3);
-            Color[][] images = new Color[3][];
-            for (int mode = 0; mode < 3; mode++)
+            Shader.SetGlobalInteger(stageId, 3);
+            Color[][] images = new Color[2][];
+            for (int mode = 0; mode < 2; mode++)
             {
                 config.Terrain.EnableDistortion = mode != 0;
-                config.Terrain.DistortionStyle = mode == 2 ? TerrainDistortionStyle.Organic : TerrainDistortionStyle.Classic;
                 yield return Skip(90);
                 Assert.That(terrain.IsReadyForGameplay, Is.True);
                 Assert.That(screenCamera.targetTexture, Is.Null);
@@ -1748,7 +1859,7 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
                         (type != MinesServer.Data.CellType.Road && type != MinesServer.Data.CellType.Empty)) { continue; }
                     groundPixels++;
                     int pixel = y * 1024 + x;
-                    for (int mode = 1; mode < 3; mode++)
+                    for (int mode = 1; mode < 2; mode++)
                     {
                         for (int channel = 0; channel < 3; channel++)
                         {
@@ -1764,12 +1875,11 @@ ProjectRuntimeContracts.Camera.MinimumOrthographicSize, originalZoom,
         finally
         {
             config.Terrain.EnableDistortion = oldDistortion;
-            config.Terrain.DistortionStyle = oldStyle;
             follow.enabled = oldFollow;
             Time.timeScale = oldTime;
             post.BloomIntensity = oldBloom;
             PostProcessRuntimeState.BypassPostProcessEffects = oldBypass;
-            Shader.SetGlobalInt(stageId, oldStage);
+            Shader.SetGlobalInteger(stageId, oldStage);
             camera.targetTexture = null;
             target.Release();
             Object.Destroy(target);
@@ -2599,11 +2709,11 @@ new(1, 0), new(-1, 0), new(-1, 0), new(-1, 0),
         IFrameTelemetry telemetry = ResolveInScene<IFrameTelemetry>(game);
         var captures = new List<CaptureWindow>();
         int benchmarkStageId = Shader.PropertyToID("_KernTerrainBenchmarkStage");
-        int originalBenchmarkStage = Shader.GetGlobalInt(benchmarkStageId);
+        int originalBenchmarkStage = Shader.GetGlobalInteger(benchmarkStageId);
 
         try
         {
-            Shader.SetGlobalInt(benchmarkStageId, 0);
+            Shader.SetGlobalInteger(benchmarkStageId, 0);
             debug.BypassLightingCompute = false;
             debug.BypassTerrainDraw = false;
             debug.BypassCPUMeshRebuild = false;
@@ -2612,13 +2722,13 @@ new(1, 0), new(-1, 0), new(-1, 0), new(-1, 0),
             yield return MeasurePostProcessing(camera, cameraFollow, telemetry, results, captures);
             for (int stage = 1; stage <= 4; stage++)
             {
-                Shader.SetGlobalInt(benchmarkStageId, stage);
+                Shader.SetGlobalInteger(benchmarkStageId, stage);
                 yield return Skip(30);
                 yield return Measure($"террейн: fragment checkpoint {stage}", results, telemetry,
                     captures, $"diagnostic/terrain-fragment-checkpoint-{stage}");
             }
 
-            Shader.SetGlobalInt(benchmarkStageId, 0);
+            Shader.SetGlobalInteger(benchmarkStageId, 0);
 
             cameraFollow.enabled = false;
 
@@ -2713,7 +2823,7 @@ new(1, 0), new(-1, 0), new(-1, 0), new(-1, 0),
         finally
         {
             PostProcessRuntimeState.DiagnosticOffscreenCamera = originalDiagnosticCamera;
-            Shader.SetGlobalInt(benchmarkStageId, originalBenchmarkStage);
+            Shader.SetGlobalInteger(benchmarkStageId, originalBenchmarkStage);
             nativeResolution?.Dispose();
 
             camera.orthographicSize = originalZoom;
@@ -2909,7 +3019,7 @@ new(1, 0), new(-1, 0), new(-1, 0), new(-1, 0),
                 display = JsonUtility.ToJson(config.Display),
                 unityQuality = QualitySettings.GetQualityLevel(),
                 activePipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline?.name,
-                terrainFragmentCheckpoint = Shader.GetGlobalInt("_KernTerrainBenchmarkStage"),
+                terrainFragmentCheckpoint = Shader.GetGlobalInteger("_KernTerrainBenchmarkStage"),
                 postprocess = new
                 {
                     urp = ResolveInScene<IGameplayCamera>(SceneManager.GetSceneByName("MainGame"))

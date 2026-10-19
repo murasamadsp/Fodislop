@@ -8,7 +8,7 @@ namespace Kern.Core;
 public class ClientConfig
 {
     // 32: TerrainSettings.EnableReliefRim.
-    // 33: TerrainSettings.DistortionStyle.
+    // 33: removed terrain style selector; schema number reserved for existing configs.
     // 34: две ступени качества (Стандарт/Overdrive) вместо шести, без Custom.
     // 35: EffectSettings.BloomVariant.
     // 36: перебиндиваемые клавиши InterfaceSettings.Key* (вкладка «Управление»).

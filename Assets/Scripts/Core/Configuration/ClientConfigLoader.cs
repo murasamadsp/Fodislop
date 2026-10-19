@@ -134,14 +134,8 @@ internal sealed class ClientConfigLoader
         config.SchemaVersion = RimSchemaVersion;
     }
 
-    private static void MigrateSchema32To33(ClientConfig config, string sourceJson)
+    private static void MigrateSchema32To33(ClientConfig config)
     {
-        // Keep an explicitly saved style in early schema-32 configs.
-        if (sourceJson.IndexOf("\"DistortionStyle\"", StringComparison.Ordinal) < 0)
-        {
-            config.Terrain.DistortionStyle = TerrainDistortionStyle.Organic;
-        }
-
         config.SchemaVersion = DistortionStyleSchemaVersion;
     }
 
@@ -228,7 +222,7 @@ internal sealed class ClientConfigLoader
 
         if (schema == RimSchemaVersion)
         {
-            MigrateSchema32To33(config, sourceJson);
+            MigrateSchema32To33(config);
             schema = DistortionStyleSchemaVersion;
         }
 

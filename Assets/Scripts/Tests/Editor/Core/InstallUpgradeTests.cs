@@ -173,17 +173,15 @@ public sealed class InstallUpgradeTests
     }
 
     [Test]
-    public void PreviousConfigVersion_MigratesDistortionStyleAndKeepsBackup()
+    public void PreviousConfigVersion_MigratesAndKeepsBackup()
     {
         string previousJson = OldVersionConfig(
             schemaVersion: ClientConfig.CurrentSchemaVersion - 1,
             PixelSamplingMode.SmoothFiltered);
-        previousJson = Regex.Replace(
-            previousJson,
-            @"^\s*""DistortionStyle""\s*:\s*\d+,?\r?\n",
-            string.Empty,
-            RegexOptions.Multiline);
-        Assert.That(previousJson, Does.Not.Contain("DistortionStyle"));
+        // A saved value of the removed selector must not resurrect the feature.
+        previousJson = previousJson.Replace(
+            "\"EnableDistortion\": true", "\"EnableDistortion\": true, \"DistortionStyle\": 1");
+        Assert.That(previousJson, Does.Contain("\"DistortionStyle\": 1"));
         File.WriteAllText(ConfigPath, previousJson);
 
         ClientConfigLoader.Result result = LoadConfig();
@@ -192,7 +190,8 @@ public sealed class InstallUpgradeTests
         Assert.That(result.SourceSchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion - 1));
         Assert.That(result.Config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
         Assert.That(result.Config.Terrain.EnableRim, Is.True);
-        Assert.That(result.Config.Terrain.DistortionStyle, Is.EqualTo(TerrainDistortionStyle.Organic));
+        Assert.That(result.Config.Terrain.EnableDistortion, Is.True);
+        Assert.That(JsonUtility.ToJson(result.Config.Terrain), Does.Not.Contain("DistortionStyle"));
         Assert.That(result.Config.GraphicsPreset, Is.EqualTo(GraphicsPreset.Overdrive));
         Assert.That(File.ReadAllText(ConfigPath + ".backup"), Is.EqualTo(previousJson));
     }

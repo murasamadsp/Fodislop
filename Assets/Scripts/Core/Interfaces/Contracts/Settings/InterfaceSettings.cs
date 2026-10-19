@@ -46,7 +46,6 @@ public sealed class InterfaceSettings
     // действия на месте использования, поэтому валидатор их не проверяет.
     public const string DefaultKeyDig = "Space";
     public const string DefaultKeyAutoDig = "E";
-    public const string DefaultKeyAggression = "L";
     public const string DefaultKeyGeo = "G";
     public const string DefaultKeyHeal = "V";
     public const string DefaultKeyBuildCyan = "Y";
@@ -61,10 +60,6 @@ public sealed class InterfaceSettings
     [SettingUnbounded("Имя клавиши UnityEngine.InputSystem.Key; неизвестное откатывается к дефолту.")]
     [SettingConsumer(SettingConsumerTarget.Gameplay, "PlayerInputHandler.WantsToToggleAutoDig")]
     public string KeyAutoDig = DefaultKeyAutoDig;
-
-    [SettingUnbounded("Имя клавиши UnityEngine.InputSystem.Key; неизвестное откатывается к дефолту.")]
-    [SettingConsumer(SettingConsumerTarget.Gameplay, "PlayerInputHandler.WantsToToggleAggression")]
-    public string KeyAggression = DefaultKeyAggression;
 
     [SettingUnbounded("Имя клавиши UnityEngine.InputSystem.Key; неизвестное откатывается к дефолту.")]
     [SettingConsumer(SettingConsumerTarget.Gameplay, "PlayerInputHandler.WantsToGeo")]

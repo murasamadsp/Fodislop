@@ -68,9 +68,6 @@
         </ui:VisualElement>
 
         <!-- ════════════ ТУМБЛЕРЫ (снизу слева) ════════════ -->
-        <ui:Button name="AggressionButton" class="hud-button hud-toggle-btn hud-toggle-aggression" tooltip="hud.tooltip.aggression" picking-mode="Position">
-            <ui:Label name="AggressionLabel" class="hud-toggle-btn-label"  text="" picking-mode="Ignore" />
-        </ui:Button>
         <ui:Button name="AutoDigButton" class="hud-button hud-toggle-btn hud-toggle-auto-dig" tooltip="hud.tooltip.autodig" picking-mode="Position">
             <ui:Label name="AutoDigLabel" class="hud-toggle-btn-label"  text="" picking-mode="Ignore" />
         </ui:Button>
@@ -90,6 +87,34 @@
         <ui:Button name="RespawnButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--respawn" picking-mode="Position" />
 
         <!-- ════════════ НАВЫКИ И ПРОГРЕСС (справа снизу) ════════════ -->
+        <ui:VisualElement name="SkillContainer" class="hud-skill-container" picking-mode="Ignore" />
+
+        <ui:VisualElement name="MobileControls" class="hud-mobile-controls" picking-mode="Ignore">
+            <ui:VisualElement name="MobileMovePad" class="hud-mobile-move-pad" picking-mode="Position">
+                <ui:VisualElement class="hud-mobile-move-ring" picking-mode="Ignore" />
+                <ui:VisualElement name="MobileMoveKnob" class="hud-mobile-move-knob" picking-mode="Ignore" />
+            </ui:VisualElement>
+            <ui:VisualElement class="hud-touch-system" picking-mode="Ignore">
+                <ui:Button name="TouchFastMoveButton" class="hud-touch-system-btn" text="⇧" tooltip="settings.controls.key_move" />
+                <ui:Button name="TouchMapButton" class="hud-touch-system-btn" text="hud.world_map" />
+                <ui:Button name="TouchChatButton" class="hud-touch-system-btn" text="chat.channel.global" />
+                <ui:Button name="TouchSayButton" class="hud-touch-system-btn" text="…" />
+                <ui:Button name="TouchMenuButton" class="hud-touch-system-btn" text="☰" tooltip="pause.title" />
+            </ui:VisualElement>
+            <ui:VisualElement class="hud-mobile-right-dock" picking-mode="Ignore">
+                <ui:VisualElement class="hud-mobile-build-actions" picking-mode="Ignore">
+                    <ui:Button name="MobileBuildCyanButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--cyan" text="C" tooltip="settings.controls.key_build_cyan" />
+                    <ui:Button name="MobileBuildGrayButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--gray" text="G" tooltip="settings.controls.key_build_gray" />
+                    <ui:Button name="MobileBuildGreenButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--green" text="Z" tooltip="settings.controls.key_build_green" />
+                    <ui:Button name="MobileBuildWhiteButton" class="hud-mobile-action hud-mobile-build-action hud-mobile-build-action--white" text="W" tooltip="settings.controls.key_build_white" />
+                </ui:VisualElement>
+                <ui:VisualElement class="hud-mobile-actions" picking-mode="Ignore">
+                    <ui:Button name="MobileGeoButton" class="hud-mobile-action" text="settings.controls.key_geo" />
+                    <ui:Button name="MobileHealButton" class="hud-mobile-action" text="settings.controls.key_heal" />
+                    <ui:Button name="MobileDigButton" class="hud-mobile-action hud-mobile-action--primary" text="settings.controls.key_dig" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
         <!-- ════════════ ТЕКУЩАЯ МИССИЯ (сверху по центру) ════════════ -->
         <ui:VisualElement name="MissionPanel" class="sci-fi-panel sci-fi-panel--tech hud-mission-panel is-hidden">
             <ui:VisualElement class="hud-mission-header">

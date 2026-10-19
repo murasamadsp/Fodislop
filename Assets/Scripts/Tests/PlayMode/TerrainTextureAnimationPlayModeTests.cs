@@ -3,6 +3,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using Kern.World;
+using Kern.World.Common.Rendering;
 using Kern.World.Terrain;
 using NUnit.Framework;
 using UnityEngine;
@@ -98,6 +99,30 @@ public sealed class TerrainTextureAnimationPlayModeTests
         yield return null;
     }
 
+    [Test]
+    public void LightingSurfacePublicationPreservesTerrainRimSetting()
+    {
+        int rimId = Shader.PropertyToID("_TerrainRimEnabled");
+        float previousRim = Shader.GetGlobalFloat(rimId);
+        try
+        {
+            foreach (float enabled in new[] { 0f, 1f })
+            {
+                Shader.SetGlobalFloat(rimId, enabled);
+                for (int frame = 0; frame < 3; frame++)
+                {
+                    TerrainSurfaceShaderGlobals.ApplyShaderGlobals();
+                    Assert.That(Shader.GetGlobalFloat(rimId), Is.EqualTo(enabled),
+                        "Publishing lighting surface constants must preserve the terrain rim setting.");
+                }
+            }
+        }
+        finally
+        {
+            Shader.SetGlobalFloat(rimId, previousRim);
+        }
+    }
+
     [UnityTest]
     public IEnumerator ProductionTerrainRim_FollowsWorldNeighborsAndHonorsFalloff()
     {
@@ -116,6 +141,7 @@ public sealed class TerrainTextureAnimationPlayModeTests
         int rimId = Shader.PropertyToID("_TerrainRimEnabled");
         int previousStage = Shader.GetGlobalInteger(stageId);
         float previousRim = Shader.GetGlobalFloat(rimId);
+        material.SetFloat(rimId, 1f);
         Mesh mesh = Own(CreateTerrainAnimationQuad());
         mesh.SetVertexBufferParams(4, TerrainCellIdMesh.VertexLayout);
         mesh.SetVertexBufferData(new[]
@@ -151,7 +177,8 @@ public sealed class TerrainTextureAnimationPlayModeTests
         try
         {
             Shader.SetGlobalInteger(stageId, 4);
-            Shader.SetGlobalFloat(rimId, 1f);
+            // A conflicting global must not disable the material-owned switch.
+            Shader.SetGlobalFloat(rimId, 0f);
             // Four directed connections, a cross with four concave corners,
             // and an isolated rounded cell.
             for (int side = 0; side < 6; side++)
@@ -208,14 +235,19 @@ public sealed class TerrainTextureAnimationPlayModeTests
                     }
                 }
 
+                float darkestSurface = 1f;
                 foreach (Color pixel in pixels.GetPixels())
                 {
                     if (pixel.a > 0.9f)
                     {
+                        darkestSurface = Mathf.Min(darkestSurface, pixel.r);
                         Assert.That(pixel.r, Is.GreaterThanOrEqualTo(0.49f),
                             "A 50% bevel must not compound into a darker corner.");
                     }
                 }
+
+                Assert.That(darkestSurface, Is.LessThan(0.85f),
+                    $"The production rim must actually darken an exposed edge: pattern={side}.");
 
             }
         }

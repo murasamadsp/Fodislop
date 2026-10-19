@@ -15,7 +15,7 @@ public class TerrainVertexDistortionCalculatorTests
     // Узел считается целыми числами и лежит на сетке 1/256 клетки:
     // шейдер считает его тем же правилом и получает ту же точку.
     [Test]
-    public void OrganicNodeLiesOnTheGeometryUnitGrid()
+    public void ClassicNodeLiesOnTheGeometryUnitGrid()
     {
         var cause = new CachedCellData { Outline = CellOutline.Wavy };
         int moved = 0;
@@ -23,11 +23,11 @@ public class TerrainVertexDistortionCalculatorTests
         {
             for (int y = 1; y < 200; y += 7)
             {
-                TerrainVertexOffset node = TerrainVertexDistortionCalculator.ComputeOrganicOffset(
+                TerrainVertexOffset node = TerrainVertexDistortionCalculator.ComputeOffset(
                     cause, cause, cause, cause, x, y);
                 Assert.That(node.XSteps * TerrainVertexDistortionCalculator.UnitsPerStep % 1f, Is.Zero);
                 Assert.That(node.YSteps * TerrainVertexDistortionCalculator.UnitsPerStep % 1f, Is.Zero);
-                Assert.That(Mathf.Abs(node.XSteps), Is.LessThanOrEqualTo(TerrainConfigHolder.OrganicMaximumOffsetSteps / 2f));
+                Assert.That(Mathf.Abs(node.XSteps), Is.LessThanOrEqualTo(3.75f));
                 moved += node != TerrainVertexOffset.Zero ? 1 : 0;
             }
         }
@@ -115,7 +115,7 @@ public class TerrainVertexDistortionCalculatorTests
     public void ComputeOffset_AllFourAreCause_JittersFreely()
     {
         var cause = new CachedCellData { Outline = CellOutline.Wavy };
-        int limit = 3 * TerrainVertexDistortionCalculator.DistortionStrengthSteps;
+        float limit = 3f * TerrainVertexDistortionCalculator.DistortionStrengthSteps;
         int moved = 0;
         bool negativeX = false;
         bool positiveX = false;

@@ -27,7 +27,6 @@ public sealed class PlayerHUDUxmlContractTests
         "HUDDragHandle",
         "BonusButton",
         "BonusPanel",
-        "AggressionButton",
         "AutoDigButton",
         "MobileControls",
         "MobileMovePad",

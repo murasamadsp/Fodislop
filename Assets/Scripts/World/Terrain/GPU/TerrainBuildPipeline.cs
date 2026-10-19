@@ -47,12 +47,6 @@ public sealed class TerrainBuildPipeline : IDisposable
         set => _distortion.EnableDistortion = value;
     }
 
-    public TerrainDistortionStyle DistortionStyle
-    {
-        get => _distortion.DistortionStyle;
-        set => _distortion.DistortionStyle = value;
-    }
-
     /// <summary>Последний опубликованный шаг перенёс перекрытие вместо полной сборки.</summary>
     public bool LastBuildScrolled { get; private set; }
 

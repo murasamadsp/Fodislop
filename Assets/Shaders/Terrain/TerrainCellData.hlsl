@@ -294,25 +294,6 @@ float TerrainAnimationPhase(TerrainTypeRow row, bool hasAtlasRect, int gridX, in
     return palette;
 }
 
-// 24-битный хэш решётки — как TerrainVertexDistortionCalculator.Hash.
-uint TerrainHash24(int x, int y, uint seed)
-{
-    uint hash = (asuint(x) * 0x9E3779B9u) ^ (asuint(y) * 0x85EBCA6Bu) ^ seed;
-    hash ^= hash >> 16;
-    hash *= 0x7FEB352Du;
-    hash ^= hash >> 15;
-    hash *= 0x846CA68Bu;
-    hash ^= hash >> 16;
-    return hash & 0x00FFFFFFu;
-}
-
-// Как TerrainVertexDistortionCalculator.ComputeOrganicEdgeBend: −2..2.
-int TerrainOrganicEdgeBend(int edgeX, int edgeY, bool vertical)
-{
-    uint seed = asuint(vertical ? _TerrainOrganicVerticalSeed : _TerrainOrganicHorizontalSeed);
-    return (int)min((TerrainHash24(edgeX, edgeY, seed) * 5u) >> 24, 4u) - 2;
-}
-
 // Классический джиттер — как RandXd (row 1) и RandYd (row 2). Произведение
 // переполняется так же, как int в C#: умножение в uint.
 int TerrainClassicJitter(int x, int y, int row)
@@ -323,47 +304,6 @@ int TerrainClassicJitter(int x, int y, int row)
     int product = asint(asuint(a) * asuint(b));
     int number = product % (int)_TerrainDistortion[3][row - 1];
     return (number * number) % (int)_TerrainDistortion[0].y;
-}
-
-// Билинейный шум периода p со сглаживанием t²(3 − 2t) в целых — как
-// TerrainVertexDistortionCalculator.ValueNoise. Переполнение uint в
-// промежуточных разностях взаимно гасится: итог укладывается в 32 бита.
-uint TerrainValueNoise(int worldX, int worldY, uint period, uint seed, uint shift)
-{
-    int x0 = worldX / (int)period;
-    int y0 = worldY / (int)period;
-    uint rx = (uint)(worldX % (int)period);
-    uint ry = (uint)(worldY % (int)period);
-    uint d = period * period * period;
-    uint sx = rx * rx * (3u * period - 2u * rx);
-    uint sy = ry * ry * (3u * period - 2u * ry);
-    uint h00 = TerrainHash24(x0, y0, seed) >> shift;
-    uint h10 = TerrainHash24(x0 + 1, y0, seed) >> shift;
-    uint h01 = TerrainHash24(x0, y0 + 1, seed) >> shift;
-    uint h11 = TerrainHash24(x0 + 1, y0 + 1, seed) >> shift;
-    uint bottom = h00 * d + (h10 - h00) * sx;
-    uint top = h01 * d + (h11 - h01) * sx;
-    uint value = bottom * d + (top - bottom) * sy;
-    return ((value << 1) + (d * d) / 2u) / (d * d);
-}
-
-// Смещение органики в единицах узла — как OrganicOffsetUnits.
-int TerrainOrganicUnits(int worldX, int worldY, float4 seeds)
-{
-    float4 periods = _TerrainDistortion[4];
-    float4 weights = _TerrainDistortion[5];
-    uint hashBits = (uint)_TerrainDistortion[6].w;
-    uint shift = 24u - hashBits;
-    int scale = (int)(((1u << hashBits) - 1u) << 1);
-    int noise =
-        (int)weights.x * (int)TerrainValueNoise(worldX, worldY, (uint)periods.x, (uint)seeds.x, shift) +
-        (int)weights.y * (int)TerrainValueNoise(worldX, worldY, (uint)periods.y, (uint)seeds.y, shift) +
-        (int)weights.z * (int)TerrainValueNoise(worldX, worldY, (uint)periods.z, (uint)seeds.z, shift);
-    int full = 100 * scale;
-    int contrasted = (int)periods.w * noise - (int)weights.w * scale;
-    int clamped = clamp(contrasted, 0, full);
-    int maximum = (int)_TerrainDistortion[3].z;
-    return (clamped * maximum + full / 2) / full;
 }
 
 // Узел в долях клетки.
@@ -392,27 +332,10 @@ int2 TerrainNode(int nodeX, int nodeY, TerrainTypeRow ftl, TerrainTypeRow ftr, T
     bool cbl = TerrainTypeWavy(fbl);
     bool cbr = TerrainTypeWavy(fbr);
     bool allCause = ctl && ctr && cbl && cbr;
-    int rx;
-    int ry;
-    int center;
-    if (_TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_ORGANIC)
-    {
-        if (!allCause)
-        {
-            return int2(0, 0);
-        }
-
-        rx = TerrainOrganicUnits(worldX, worldY, _TerrainDistortion[6]);
-        ry = TerrainOrganicUnits(worldX, worldY, _TerrainDistortion[7]);
-        center = (int)_TerrainDistortion[3].w;
-    }
-    else
-    {
-        int step = (int)_TerrainDistortion[0].x;
-        rx = TerrainClassicJitter(worldX, worldY, 1) * step;
-        ry = TerrainClassicJitter(worldX, worldY, 2) * step;
-        center = (int)_TerrainDistortion[0].z;
-    }
+    int step = (int)_TerrainDistortion[0].x;
+    int rx = TerrainClassicJitter(worldX, worldY, 1) * step;
+    int ry = TerrainClassicJitter(worldX, worldY, 2) * step;
+    int center = (int)_TerrainDistortion[0].z;
 
     // Как ComputeOffsetFromJitter.
     if (allCause)
@@ -435,22 +358,6 @@ int2 TerrainNode(int nodeX, int nodeY, TerrainTypeRow ftl, TerrainTypeRow ftr, T
     if (cbl) return int2(-rx, ry);
     if (cbr) return int2(rx, ry);
     return int2(0, 0);
-}
-
-// Как TerrainQuadBuilder.OrganicEdgeBend: сосед по ребру — по флагам его
-// типа (у незагруженного они нулевые, и ребро не гнётся).
-int TerrainOrganicNeighbourBend(TerrainTypeRow row, int edgeX, int edgeY, bool vertical, int inwardSign)
-{
-    bool cause = TerrainTypeWavy(row);
-    bool block = TerrainTypeHolds(row);
-    bool backgroundEdge = TerrainTypeIsBackground(row) && !block && !cause;
-    if (block || (!cause && !backgroundEdge))
-    {
-        return 0;
-    }
-
-    int bend = TerrainOrganicEdgeBend(edgeX, edgeY, vertical);
-    return cause ? bend : min(abs(bend), 1) * inwardSign;
 }
 
 // Номер угла квада из меша идентификаторов (0..3, против часовой стрелки
@@ -506,10 +413,6 @@ TerrainCellVertex LoadTerrainCellVertex(
     TerrainTypeRow foregroundRow = TerrainTypeRowOf(foregroundType);
     bool foregroundIsBackground = TerrainTypeIsBackground(foregroundRow);
     bool foregroundCause = TerrainTypeWavy(foregroundRow);
-    // Органика — у искажающей клетки при стиле Organic
-    // (TerrainQuadBuilder.organicTerrain).
-    bool organicTerrain = _TerrainDistortionStyle == KERN_TERRAIN_DISTORTION_STYLE_ORGANIC && foregroundCause;
-
     // Какой тип рисует слой — как TerrainQuadBuilder. Фон лежит сам на себе
     // и рисуется только фоном; под передним планом фоном рисуется подложка.
     uint layerType = foreground
@@ -524,8 +427,7 @@ TerrainCellVertex LoadTerrainCellVertex(
     TerrainTypeRow row = TerrainTypeRowOf(layerType);
 
     // Геометрия — только у искажающего (Cause) переднего плана. Углы — узлы
-    // клетки и её соседей справа, сверху и справа-сверху; органические рёбра
-    // — от типов четырёх соседей и хэша ребра.
+    // клетки и её соседей справа, сверху и справа-сверху.
     float4 geometryX = float4(0.0, 1.0, 1.0, 0.0);
     float4 geometryY = float4(0.0, 0.0, 1.0, 1.0);
     if (foregroundCause)
@@ -547,7 +449,7 @@ TerrainCellVertex LoadTerrainCellVertex(
         geometryY += float4(node00.y, node10.y, node11.y, node01.y);
     }
 
-    bool foregroundAnchored = organicTerrain ||
+    bool foregroundAnchored =
         any(geometryX != float4(0.0, 1.0, 1.0, 0.0)) ||
         any(geometryY != float4(0.0, 0.0, 1.0, 1.0));
 
@@ -685,17 +587,6 @@ TerrainCellVertex LoadTerrainCellVertex(
         (float)contour,
         TerrainDecalPlacement(decalRule, gridX, serverY));
 
-    uint organicCode = 0u;
-    if (foreground && organicTerrain)
-    {
-        int bottomBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_BOTTOM], gridX, unityY, false, 1);
-        int rightBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_RIGHT], gridX + 1, unityY, true, -1);
-        int topBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_TOP], gridX, unityY + 1, false, -1);
-        int leftBend = TerrainOrganicNeighbourBend(neighbourRows[KERN_TERRAIN_LEFT], gridX, unityY, true, 1);
-        organicCode = (uint)(1 + (bottomBend + 2) + (rightBend + 2) * 5 +
-            (topBend + 2) * 25 + (leftBend + 2) * 125);
-    }
-
     if (!foreground)
     {
         geometryX = float4(0.0, 1.0, 1.0, 0.0);
@@ -703,8 +594,6 @@ TerrainCellVertex LoadTerrainCellVertex(
     }
 
     bool anchored = foreground && foregroundAnchored;
-    float organicEdges = (float)organicCode;
-    bool organic = organicCode != 0u;
     // Rasterize a carrier enclosing the ENTIRE pixel silhouette. Rasterizing
     // the displaced polygon first loses fragments on the outward half of every
     // staircase; fragment clipping cannot bring those fragments back.
@@ -717,31 +606,13 @@ TerrainCellVertex LoadTerrainCellVertex(
         float2 boundsMin = firstCorner;
         float2 boundsMax = firstCorner;
         [unroll]
-        for (int corner = 1; corner < KERN_TERRAIN_ORGANIC_EDGE_COUNT; corner++)
+        for (int corner = 1; corner < KERN_TERRAIN_SIDE_COUNT; corner++)
         {
             float2 finalCorner = TerrainGeometryCorner(geometryX, geometryY, corner);
             boundsMin = min(boundsMin, finalCorner);
             boundsMax = max(boundsMax, finalCorner);
         }
 
-        // The carrier bounds use the exact same corner and bend points as the
-        // fragment geometry predicate. It encloses the silhouette without a
-        // second bend/pivot/rounding implementation.
-        if (organic)
-        {
-            float4 bends = TerrainOrganicGeometryBends(organicEdges);
-            [unroll]
-            for (int side = 0; side < 4; side++)
-            {
-                float2 bend = TerrainOrganicGeometryPoint(
-                    geometryX,
-                    geometryY,
-                    bends,
-                    side * 2 + 1);
-                boundsMin = min(boundsMin, bend);
-                boundsMax = max(boundsMax, bend);
-            }
-        }
         carrierMin = boundsMin;
         carrierMax = boundsMax;
     }
@@ -755,7 +626,7 @@ TerrainCellVertex LoadTerrainCellVertex(
     carrierMin -= carrierPadding;
     carrierMax += carrierPadding;
     float2 carrierCorner = lerp(carrierMin, carrierMax, cornerBase);
-    v.packedData = float4(anchored ? 1.0 : 0.0, carrierCorner, organicEdges);
+    v.packedData = float4(anchored ? 1.0 : 0.0, carrierCorner, 0.0);
     v.geometryCornersX = anchored
         ? geometryX
         : float4(0.0, 1.0, 1.0, 0.0);

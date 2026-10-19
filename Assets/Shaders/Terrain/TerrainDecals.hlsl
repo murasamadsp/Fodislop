@@ -71,7 +71,9 @@ float3 ApplyTerrainDecal(float3 baseColor, float2 localUV, float packedPlacement
 
     float2 transformedUV = TerrainTransformDecalUV(localUV, rotation, mirror);
     float2 placementOffset = float2(offsetX, offsetY) / 3.0 - 0.5;
-    transformedUV += placementOffset * _DecalPlacementOffset;
+    // Rock artwork fits the rounded cell only while centred. Ground artwork
+    // has enough padding for the material's bounded two-pixel translation.
+    transformedUV += placementOffset * (useRock ? 0.0 : _DecalPlacementOffset);
 
     // Sixteen horizontal 32x32 slots in a 512x32 atlas. Sampling texel centres
     // prevents a transformed edge from crossing into the neighbouring slot.

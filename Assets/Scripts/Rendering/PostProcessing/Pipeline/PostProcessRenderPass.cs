@@ -151,12 +151,12 @@ namespace Kern.Rendering.PostProcessing
                 // the graphics API's preferred origin (imported camera targets
                 // and compute outputs can have different origins).
                 passData.ScalesWorldGrid = false;
-                Vector3 rasterCenter = cameraData.camera.worldToCameraMatrix.inverse.GetColumn(3);
+                WorldRenderGrid grid = WorldRenderGridCamera.Capture(cameraData.camera).Grid;
                 passData.WorldGridRect = new Vector4(
-                    rasterCenter.x - width / (2f * WorldRenderGrid.PixelsPerCell),
-                    rasterCenter.y - height / (2f * WorldRenderGrid.PixelsPerCell),
-                    width / (float)WorldRenderGrid.PixelsPerCell,
-                    height / (float)WorldRenderGrid.PixelsPerCell);
+                    (float)grid.WorldMinX,
+                    (float)grid.WorldMinY,
+                    (float)grid.WorldWidth,
+                    (float)grid.WorldHeight);
                 passData.DisplayViewportAspect = cameraData.camera.aspect;
 
                 passData.DisplayLinearFilter = false;

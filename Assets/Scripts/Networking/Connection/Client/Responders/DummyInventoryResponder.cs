@@ -141,12 +141,12 @@ internal sealed class DummyInventoryResponder
 
         var anchorX = (ushort)anchorXValue;
         var anchorY = (ushort)anchorYValue;
-        List<IHBPacket> placementPackets =
-        [
+        List<IHBPacket> placementPackets = new()
+        {
             new BuildingPacket(anchorX, anchorY, buildingType, 0, 0),
-        ];
+        };
         PlaceBuildingCells(placementPackets, anchorX, anchorY, buildingType);
-        _sendPacket(new ServerPacket(new HBPacket([.. placementPackets])));
+        _sendPacket(new ServerPacket(new HBPacket(placementPackets)));
         if (buildingType == BuildingType.Teleport)
         {
             _teleportPositions.Add((anchorX, anchorY));

@@ -44,11 +44,6 @@ internal sealed class PauseMenuControlsTabBuilder
             (settings, key) => settings.KeyAutoDig = key,
             InterfaceSettings.DefaultKeyAutoDig),
         new(
-            "settings.controls.key_aggression",
-            settings => settings.KeyAggression,
-            (settings, key) => settings.KeyAggression = key,
-            InterfaceSettings.DefaultKeyAggression),
-        new(
             "settings.controls.key_geo",
             settings => settings.KeyGeo,
             (settings, key) => settings.KeyGeo = key,

@@ -32,6 +32,9 @@ namespace Kern.Rendering.PostProcessing
         private PostProcessRenderPass? _displayPass;
         private ScopesRenderPass? _scopesPass;
         private Camera? _mainCamera;
+        private WorldRasterGridPass? _worldRasterPass;
+        private readonly WorldRasterDepthPass _worldDepthPass = new();
+        private readonly WorldRasterPresentationPass _worldPresentationPass = new();
         private readonly WorldRasterTargetObservation _rasterObservation = new();
 
         private sealed class WorldRasterTargetObservation : ScriptableRenderPass2D
@@ -45,13 +48,16 @@ namespace Kern.Rendering.PostProcessing
             {
                 UniversalCameraData camera = frameData.Get<UniversalCameraData>();
                 TextureHandle color = frameData.Get<UniversalResourceData>().activeColorTexture;
-                TextureDesc descriptor = color.GetDescriptor(renderGraph);
+                RenderTargetInfo descriptor = renderGraph.GetRenderTargetInfo(color);
                 TextureHandle depth = frameData.Get<UniversalResourceData>().activeDepthTexture;
-                TextureDesc depthDescriptor = depth.GetDescriptor(renderGraph);
-                if (descriptor.width != depthDescriptor.width || descriptor.height != depthDescriptor.height ||
-                    descriptor.slices != depthDescriptor.slices || descriptor.msaaSamples != depthDescriptor.msaaSamples)
+                if (depth.IsValid())
                 {
-                    throw new InvalidOperationException("World raster color and depth attachments differ before Renderer2D.");
+                    RenderTargetInfo depthDescriptor = renderGraph.GetRenderTargetInfo(depth);
+                    if (descriptor.width != depthDescriptor.width || descriptor.height != depthDescriptor.height ||
+                        descriptor.volumeDepth != depthDescriptor.volumeDepth || descriptor.msaaSamples != depthDescriptor.msaaSamples)
+                    {
+                        throw new InvalidOperationException("World raster color and depth attachments differ before Renderer2D.");
+                    }
                 }
                 PostProcessRuntimeState.DiagnosticWorldRasterTarget?.Invoke(camera.camera,
                     new Vector2Int(descriptor.width, descriptor.height));
@@ -76,6 +82,7 @@ namespace Kern.Rendering.PostProcessing
             }
 
             _mainCamera = null;
+            _worldRasterPass = null;
         }
 
         private void EnsurePassCreated(Camera gameplayCamera)
@@ -167,6 +174,16 @@ namespace Kern.Rendering.PostProcessing
             }
 
             EnsurePassCreated(targetCamera ?? cameraData.camera);
+            if (_worldRasterPass == null)
+            {
+                SortingLayer[] layers = SortingLayer.layers;
+                _worldRasterPass = new WorldRasterGridPass(layers[0].id);
+            }
+
+            _worldRasterPass.Prepare(ref cameraData);
+            renderer.EnqueuePass(_worldDepthPass);
+            renderer.EnqueuePass(_worldRasterPass);
+            renderer.EnqueuePass(_worldPresentationPass);
             if (PostProcessRuntimeState.DiagnosticWorldRasterTarget != null)
             {
                 renderer.EnqueuePass(_rasterObservation);

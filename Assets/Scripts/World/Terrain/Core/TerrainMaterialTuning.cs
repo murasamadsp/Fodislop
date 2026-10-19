@@ -9,10 +9,7 @@ namespace Kern.World.Terrain;
 // в двух местах TerrainMaterialManager — теперь он один и лежит рядом.
 internal static class TerrainMaterialTuning
 {
-    private static readonly int s_organicBendStrengthPropertyId =
-        Shader.PropertyToID("_OrganicBendStrength");
-    private static readonly int s_organicBendPivotPropertyId =
-        Shader.PropertyToID("_OrganicBendPivot");
+    private static readonly int s_rimEnabledPropertyId = Shader.PropertyToID("_TerrainRimEnabled");
     private static readonly int s_roundableCornerRadiusPropertyId =
         Shader.PropertyToID("_RoundableCornerRadius");
     private static readonly int s_rimDistanceScalePropertyId =
@@ -76,12 +73,9 @@ internal static class TerrainMaterialTuning
     private static readonly int s_alphaCutoffPropertyId =
         Shader.PropertyToID("_AlphaCutoff");
 
-    // Форму органического искажения задаёт авторский файл, а не настройка
-    // игрока: ручки лежат в TerrainConfigHolder.
-    public static void Apply(Material material)
+    public static void Apply(Material material, bool enableRim)
     {
-        material.SetFloat(s_organicBendStrengthPropertyId, TerrainConfigHolder.OrganicBendStrength);
-        material.SetFloat(s_organicBendPivotPropertyId, TerrainConfigHolder.OrganicBendPivot);
+        material.SetFloat(s_rimEnabledPropertyId, enableRim ? 1f : 0f);
         material.SetFloat(
             s_roundableCornerRadiusPropertyId,
             TerrainConfigHolder.RoundableCornerRadiusCells);

@@ -13,11 +13,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         _FlowScale ("Flow Scale", Vector) = (0,0,0,0)
         _ShimmerSpeedScale ("Shimmer Speed Scale", Float) = 0
         _BlinkingSpeedScale ("Blinking Speed Scale", Float) = 0
-        _OrganicBendStrength ("Organic Bend Strength", Float) = 1
-        _OrganicBendPivot ("Organic Bend Pivot", Float) = 0.35
         _RoundableCornerRadius ("Roundable Corner Radius", Float) = 0.51
         [HideInInspector] _RimDistanceScale ("Rim Distance Scale", Float) = 0
         [HideInInspector] _RimFalloff ("Rim Falloff", Float) = 0
+        [HideInInspector] _TerrainRimEnabled ("Terrain Rim Enabled", Float) = 0
         [HideInInspector] _RimQuantizationEnabled ("Rim Quantization Enabled", Float) = 0
         // Авторский вид поверхности: значения приезжают из TerrainConfigHolder
         // свойствами материала, дефолт здесь — те же числа.
@@ -661,12 +660,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 }
                 else
                 {
-                    bool isOrganic = surface.packedOrganicEdges > 0.5;
                     if (TerrainGeometryIsDeepInterior(
                         surface.cellSample,
                         surface.cornersX,
-                        surface.cornersY,
-                        isOrganic))
+                        surface.cornersY))
                     {
                         // Contact is maximal throughout the proven interior;
                         // avoid projecting onto every polygon segment there.
@@ -679,8 +676,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                             surface.cellSample,
                             surface.cornersX,
                             surface.cornersY,
-                            surface.packedOrganicEdges,
-                            isOrganic,
                             closestGeometryPosition);
                     }
                 }

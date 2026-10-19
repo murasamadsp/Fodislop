@@ -224,11 +224,12 @@ internal sealed class DummyWorldStartupResponder
         _teleportPositions.Clear();
         _teleportPositions.Add((27, 50));
         _teleportPositions.Add((227, 50));
-        _sendPacket(new ServerPacket(new HBPacket([
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
             new BuildingPacket(27, 50, BuildingType.Teleport, 0, 1),
             new BuildingPacket(227, 50, BuildingType.Teleport, 0, 1),
             new BuildingPacket(25, 48, BuildingType.Market, 0, 0),
-        ])));
+        })));
     }
 
     private async UniTask SendPingLoopAsync(int lifecycleVersion, CancellationToken cancellationToken)

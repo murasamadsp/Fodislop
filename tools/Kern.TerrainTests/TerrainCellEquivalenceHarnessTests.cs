@@ -36,19 +36,14 @@ public sealed class TerrainCellEquivalenceHarnessTests
         CellType.AliveCyan, CellType.GrayAcid, CellType.Boulder1,
     ];
 
-    private static readonly (TerrainDistortionStyle Style, int Seed)[] s_worlds =
-    [
-        (TerrainDistortionStyle.Organic, 11),
-        (TerrainDistortionStyle.Organic, 12),
-        (TerrainDistortionStyle.Classic, 13),
-    ];
+    private static readonly int[] s_worlds = [11, 12, 13];
 
-    [TestCase(TerrainDistortionStyle.Organic, 11)]
-    [TestCase(TerrainDistortionStyle.Organic, 12)]
-    [TestCase(TerrainDistortionStyle.Classic, 13)]
-    public void CellAndTypeRowReproduceQuadVertices(TerrainDistortionStyle style, int seed)
+    [TestCase(11)]
+    [TestCase(12)]
+    [TestCase(13)]
+    public void CellAndTypeRowReproduceQuadVertices(int seed)
     {
-        World world = BuildWorld(style, seed);
+        World world = BuildWorld(seed);
         var oracle = new TerrainCellOracle(
             (gx, uy) => world.Cells[(gx, uy)],
             (gx, uy) => TerrainVertexDistortionCalculator.ComputeNode(
@@ -59,22 +54,17 @@ public sealed class TerrainCellEquivalenceHarnessTests
             (uint)BlockRegistry.UnderlayType,
             TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule),
             TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule),
-            WorldHeight,
-            style == TerrainDistortionStyle.Organic,
-            TerrainConfigHolder.OrganicEdgeHorizontalSeed,
-            TerrainConfigHolder.OrganicEdgeVerticalSeed);
+            WorldHeight);
         int anchored = 0;
-        int organic = 0;
         int decals = 0;
         foreach (Quad quad in world.Quads)
         {
             oracle.AssertMatchesQuad(
                 quad.Vertices, quad.Result, OriginX + quad.X, OriginY + quad.Y, quad.Layer,
-                $"({quad.X},{quad.Y}) слой {quad.Layer} {style} клетка {(CellType)world.Cells[(OriginX + quad.X, OriginY + quad.Y)].Bits}");
+                $"({quad.X},{quad.Y}) слой {quad.Layer} клетка {(CellType)world.Cells[(OriginX + quad.X, OriginY + quad.Y)].Bits}");
             if (quad.Result.HasAtlas)
             {
                 anchored += quad.Layer == 1 && quad.Vertices[0].UV5x != 0 ? 1 : 0;
-                organic += quad.Layer == 1 && quad.Vertices[0].UV5w != 0 ? 1 : 0;
                 decals += quad.Vertices[0].UV6.w != 0f ? 1 : 0;
             }
         }
@@ -82,10 +72,6 @@ public sealed class TerrainCellEquivalenceHarnessTests
         Assert.That(anchored, Is.GreaterThan(0), "мир без смещённых клеток не проверяет геометрию");
         Assert.That(world.Occluded, Is.GreaterThan(0), "мир без закрытого фона не проверяет перекрытие");
         Assert.That(decals, Is.GreaterThan(0), "мир без декалей не проверяет их хэш");
-        if (style == TerrainDistortionStyle.Organic)
-        {
-            Assert.That(organic, Is.GreaterThan(0), "органический мир без органических рёбер");
-        }
     }
 
     // Те же миры для растрового шима: он прогоняет настоящий
@@ -102,10 +88,10 @@ public sealed class TerrainCellEquivalenceHarnessTests
         }
 
         Directory.CreateDirectory(directory);
-        foreach ((TerrainDistortionStyle style, int seed) in s_worlds)
+        foreach (int seed in s_worlds)
         {
-            World world = BuildWorld(style, seed);
-            using var writer = new BinaryWriter(File.Create(Path.Combine(directory, $"world-{style}-{seed}.bin")));
+            World world = BuildWorld(seed);
+            using var writer = new BinaryWriter(File.Create(Path.Combine(directory, $"world-{seed}.bin")));
             WriteWorld(writer, world);
         }
     }
@@ -128,8 +114,6 @@ public sealed class TerrainCellEquivalenceHarnessTests
             writer.Write(vector.w);
         }
 
-        writer.Write(TerrainConfigHolder.OrganicEdgeHorizontalSeed);
-        writer.Write(TerrainConfigHolder.OrganicEdgeVerticalSeed);
         writer.Write(TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule));
         writer.Write(TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule));
         writer.Write(OriginX);
@@ -207,11 +191,11 @@ public sealed class TerrainCellEquivalenceHarnessTests
         public TerrainCellSources Sources;
     }
 
-    private static World BuildWorld(TerrainDistortionStyle style, int seed)
+    private static World BuildWorld(int seed)
     {
         var lookup = new VariedMetadata(seed);
         var grid = new Grid(lookup, seed);
-        var distortion = new TerrainDistortionSettings { DistortionStyle = style };
+        var distortion = new TerrainDistortionSettings();
         IAtlasDescriptor[] atlases = [new TestAtlas(1024), new TestAtlas(512)];
         var sources = new TerrainCellSources(
             grid, distortion, WorldWidth, WorldHeight, atlases, lookup);

@@ -16,8 +16,6 @@ internal sealed class PlayerHUDModeController : IDisposable
 
     private Button? _autoDigButton;
     private Label? _autoDigLabel;
-    private Button? _aggressionButton;
-    private Label? _aggressionLabel;
 
     public PlayerHUDModeController(ILocalPlayerState localPlayer, ILocalizationService loc, INetworkService? networkService = null)
     {
@@ -37,23 +35,12 @@ internal sealed class PlayerHUDModeController : IDisposable
 
         Tooltip.AttachTo(_autoDigButton, () => _loc.Get("hud.tooltip.autodig"), tooltip);
 
-        _aggressionButton = root.Q<Button>("AggressionButton") ??
-            throw new InvalidOperationException("[PlayerHUD] AggressionButton is missing from PlayerHUD.uxml.");
-        _aggressionButton.clicked += ToggleAggression;
-
-        _aggressionLabel = root.Q<Label>("AggressionLabel") ??
-            throw new InvalidOperationException("[PlayerHUD] AggressionLabel is missing from PlayerHUD.uxml.");
-
-        Tooltip.AttachTo(_aggressionButton, () => _loc.Get("hud.tooltip.aggression"), tooltip);
-
         var player = _localPlayer.Current;
         if (player != null)
         {
             player.OnAutoDigChanged += UpdateAutoDigButton;
             UpdateAutoDigButton(player.AutoDig);
 
-            player.OnAggressionChanged += UpdateAggressionButton;
-            UpdateAggressionButton(player.Aggression);
         }
     }
 
@@ -69,18 +56,6 @@ internal sealed class PlayerHUDModeController : IDisposable
         }
     }
 
-    public void ToggleAggression()
-    {
-        var player = _localPlayer.Current;
-        if (player != null)
-        {
-            // Оптимистично переключаем локально для мгновенного отклика;
-            // сервер подтверждает пакетом AggressionStatePacket.
-            player.Aggression = !player.Aggression;
-            _networkService?.SendAction(new ToggleAgressionPacket());
-        }
-    }
-
     public void UpdateAutoDigButton(bool enabled)
     {
         _autoDigButton?.EnableInClassList("enabled", enabled);
@@ -90,22 +65,12 @@ internal sealed class PlayerHUDModeController : IDisposable
         }
     }
 
-    public void UpdateAggressionButton(bool enabled)
-    {
-        _aggressionButton?.EnableInClassList("enabled", enabled);
-        if (_aggressionLabel != null)
-        {
-            _aggressionLabel.text = enabled ? _loc.Get("hud.aggression.on") : _loc.Get("hud.aggression.off");
-        }
-    }
-
     public void Dispose()
     {
         var player = _localPlayer.Current;
         if (player != null)
         {
             player.OnAutoDigChanged -= UpdateAutoDigButton;
-            player.OnAggressionChanged -= UpdateAggressionButton;
         }
     }
 }

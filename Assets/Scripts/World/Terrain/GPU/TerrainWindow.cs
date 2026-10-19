@@ -186,11 +186,6 @@ public sealed class TerrainWindow
         _changes.RequestDistortion(enabled);
     }
 
-    public void RequestDistortionStyle(TerrainDistortionStyle style)
-    {
-        _changes.RequestDistortionStyle(style);
-    }
-
     public void TakePublishedChangedRegions(List<RectInt> destination)
     {
         _changes.TakePublishedChangedRegions(destination);

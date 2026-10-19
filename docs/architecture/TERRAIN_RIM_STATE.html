@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><title>Состояние каймы terrain</title>
+<style>body{max-width:900px;margin:40px auto;padding:0 20px;font:16px/1.5 system-ui;background:#181a20;color:#ddd}table{border-collapse:collapse}td,th{border:1px solid #555;padding:8px;text-align:left}.pending{color:#ffd080}</style>
+<h1>Состояние каймы terrain</h1>
+<p>19 октября 2026. Первое исправление убрало перезапись глобального переключателя
+из LightingPresentation.Publish, но не устранило сообщённое отсутствие каймы в игровом кадре.
+Текущий контракт передаёт _TerrainRimEnabled как свойство terrain-материала в
+UnityPerMaterial, вместе с _RimFalloff и _RimDistanceScale. Глобальные публикации больше
+не участвуют в выборе каймы. Нулевое значение свойства шейдера не подменяет отсутствующую
+инъекцию; TerrainMaterialManager обязан записать выбранное значение при создании материала.</p>
+<h2>Контракт — TL-OWN, TL-LIFE, TL-REV, TL-STAGE</h2>
+<table><tr><th>Событие</th><th>Владелец и действие</th></tr>
+<tr><td>Создание материала</td><td>TerrainMaterialTuning.Apply получает EnableRim явно и записывает 0 или 1 в материал.</td></tr>
+<tr><td>Применение ClientConfig</td><td>TerrainClientConfigApplier передаёт конфиг в TerrainMaterialManager; обновляются все активные материалы.</td></tr>
+<tr><td>Каждая публикация освещения</td><td>ApplyShaderGlobals публикует AO-параметры. Переключателя каймы в этом API больше нет.</td></tr>
+<tr><td>Растеризация terrain</td><td>TerrainRimBevel читает UnityPerMaterial. Раскладка cbuffer общая для всех проходов; маски, геометрия, координаты и форматы не менялись.</td></tr></table>
+<p>Новых ресурсов, подписок, invalidation paths, проходов и dispatch нет.
+На публикацию освещения стало на один Shader.SetGlobalFloat меньше; производительность
+не измерялась, ускорение не заявляется. Новых связей между Terrain и Lighting нет.</p>
+<h2>Проверки — TL-VERIFY, TL-CHANGE</h2>
+<p>LightingSurfacePublicationPreservesTerrainRimSetting сохраняет проверку отсутствия глобальной
+перезаписи. ProductionTerrainRim_FollowsWorldNeighborsAndHonorsFalloff
+дополнен независимым порогом: на белой поверхности каждый из шести шаблонов должен иметь
+непрозрачный пиксель темнее 0.85. Прежняя нижняя граница 0.49 сама по себе пропускала
+полностью отсутствующую кайму. GPU-проверка включает флаг материала при выключенном
+глобальном флаге и обязана видеть затемнение.</p>
+<p>Основной проект занят Editor, PID 8453. Проверки выполнены headless в отдельной
+временной копии текущего проекта с теми же Assets, Packages, ProjectSettings и FMOD banks.
+Четыре теста TerrainTextureAnimationPlayModeTests прошли, включая реальный terrain shader,
+GPU-меш адресов клеток, material bindings и шесть соседских шаблонов.</p>
+<p>MainGame_TerrainRimImage прошёл на полном Bootstrap → MainGame → Renderer2D пути:
+фиксированный мир, production shaders, обычная ветка фрагментного шейдера,
+диагностическая камера и рабочий граф рендера. Проверка читает _TerrainRimEnabled
+не из глобального состояния, а из реально созданного Terrain Cell Material; состояния
+0 и 1 сохраняются после трёх кадров публикации света. При включении каймы 45 608 пикселей
+мирового изображения стали темнее более чем на 10%. Снимок разницы визуально
+подтверждает локализацию эффекта на границах породы.</p>
+<p>Артефакты текущего материального контракта:
+<a href="../../Logs/Diagnostics/terrain-rim-material-proof/state-0.txt">флаг материала выключен</a>,
+<a href="../../Logs/Diagnostics/terrain-rim-material-proof/state-1.txt">включён</a>,
+<a href="../../Logs/Diagnostics/terrain-rim-material-proof/comparison.txt">измерение разницы</a>,
+<a href="../../Logs/Diagnostics/terrain-rim-material-proof/depth-and-shader-results.xml">GPU и Renderer2D depth regression</a>.
+Значения пикселей для просмотра переведены из linear в sRGB; сама проверка сравнивает
+исходные scene-linear readbacks до display presentation.</p>
+<p>Оба нормативных скана зависимости Terrain ↔ Lighting не дали совпадений;
+scoped git diff --check проходит. Геометрия, occupancy, формат и транспорт света не менялись.
+Производительность не измерялась; изменение не добавляет проходов или GPU-ресурсов.</p>
+<h2>Усиление каймы</h2>
+<p>После подтверждения видимости эффекта увеличена максимальная доля затемнения
+с 0.5 до 0.8, масштаб расстояния уменьшен с 4 до 3.2: область влияния теперь
+10 пикселей вместо 8 при 32 пикселях на клетку. Квадратичная форма спада сохранена.
+Владелец — TerrainMaterialTuning, стадия — затенение поверхности terrain;
+значения применяются при создании и обновлении материала. Геометрия и invalidation
+освещения не меняются. Число операций, чтений текстур и проходов неизменно.</p>
+<p>TL-VERIFY: MainGame_TerrainRimImage повторно прошёл с новыми параметрами
+в headless-копии проекта; отчёт — Logs/Diagnostics/terrain-rim-material-proof/stronger-rim-results.xml.
+TL-CHANGE: оба скана запрещённых междоменных зависимостей без совпадений,
+проверка пробелов изменённых файлов проходит. Субъективная выразительность
+новой каймы этим тестом не оценивается.</p>
+<h2>Линейный спад на восьми пикселях</h2>
+<p>Текущие параметры: RimFalloff = 1, RimDistanceScale = 4. Квадрат influence
+заменён на линейный influence во всех трёх ветках: стороны, округлый силуэт,
+вогнутые углы. На ровном крае центры восьми пикселей дают затемнение
+93.75%, 81.25%, 68.75%, 56.25%, 43.75%, 31.25%, 18.75%, 6.25%.
+Таким образом последний пиксель больше не исчезает после округления до 32 уровней.</p>
+<p>TL-OWN, TL-STAGE: изменение принадлежит затенению поверхности terrain.
+TL-REV, TL-LIFE: обновление данных и время жизни ресурсов прежние.
+TL-PERF: убрано одно умножение на каждое вычисление спада; новых чтений,
+ресурсов, проходов или междоменных зависимостей нет. Ускорение не измерялось.</p>
+<p>TL-VERIFY: MainGame_TerrainRimImage прошёл с линейным спадом на production
+пути в headless-копии проекта; отчёт:
+Logs/Diagnostics/terrain-rim-material-proof/linear-rim-results.xml.
+TL-CHANGE: scoped diff --check без ошибок.</p>
+<p>Радиус дополнительно уменьшен по запросу до 7 пикселей:
+RimDistanceScale = 32 / 7. Максимальная доля затемнения остаётся 1,
+линейная форма спада сохранена.</p>
+<p>Следующее уменьшение радиуса по запросу: 6 пикселей,
+RimDistanceScale = 32 / 6. Сила и линейный спад прежние.</p>
+</html>

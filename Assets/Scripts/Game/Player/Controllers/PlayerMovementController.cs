@@ -15,6 +15,7 @@ using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.Movement;
 using MinesServer.Networking.Server.Packets.Connection;
+using MinesServer.Networking.Server.Packets.Programmator;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;
@@ -117,6 +118,7 @@ namespace Kern.Player.Logic
         private Direction? _lastSentDirection;
         private bool _movementValidationFailed;
         private bool _awaitingMoveConfirmation;
+        private bool _isMovementAllowed = true;
         [Inject]
         private IWorldDataStorage _storage = null!;
 
@@ -192,6 +194,7 @@ namespace Kern.Player.Logic
 
         protected void OnDestroy()
         {
+            _networkService?.Unsubscribe<ProgramStatePacket>(OnProgramStateChanged);
             if (_localPlayerState != null)
             {
                 _localPlayerState.Clear(this);
@@ -210,6 +213,8 @@ namespace Kern.Player.Logic
             {
                 _actionDispatcher = new PlayerActionDispatcher(_input, _networkService);
             }
+
+            _networkService?.Subscribe<ProgramStatePacket>(OnProgramStateChanged);
         }
 
         protected void Update()
@@ -438,6 +443,12 @@ namespace Kern.Player.Logic
 
         private void ApplyMovement()
         {
+            if (!_isMovementAllowed)
+            {
+                CancelClickPath();
+                return;
+            }
+
             if (_robot is null || _input is null)
             {
                 return;
@@ -591,6 +602,15 @@ namespace Kern.Player.Logic
                 _actionDispatcher?.NotifyDug(targetPosition, packetDirection);
                 _networkService?.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
                 _lastMoveTime = Time.time;
+            }
+        }
+
+        private void OnProgramStateChanged(ProgramStatePacket packet)
+        {
+            _isMovementAllowed = packet.IsMovementAllowed;
+            if (!_isMovementAllowed)
+            {
+                CancelClickPath();
             }
         }
 

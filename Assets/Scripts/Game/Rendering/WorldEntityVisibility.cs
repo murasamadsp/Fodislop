@@ -157,8 +157,7 @@ namespace Kern.Game
 public static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect) =>
         !hasCamera
         ||
-        // Both ends, not just the root: the claw reaches past the last chain point, so a strand
-        // whose robot is off screen can still have its claw and tail tip on screen.
+        // Both ends, not just the root: the tail tip can remain on screen while its robot is not.
         visibleRect.Contains((Vector2)tentacle.RootPosition)
         || visibleRect.Contains((Vector2)tentacle.TipPosition);
 

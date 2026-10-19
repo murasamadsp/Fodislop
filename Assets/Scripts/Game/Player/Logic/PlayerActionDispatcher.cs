@@ -113,11 +113,6 @@ internal sealed class PlayerActionDispatcher
             _networkService?.SendAction(new ToggleAutoDigPacket());
         }
 
-        if (_input.WantsToToggleAggression)
-        {
-            _networkService?.SendAction(new ToggleAgressionPacket());
-        }
-
         if (_input.WantsToGeo)
         {
             _networkService?.SendAction(new GeoPacket());

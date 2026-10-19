@@ -57,7 +57,6 @@ public static class TerrainCellFormat
     // Стиль искажения.
     public const int DistortionStyleOff = 0;
     public const int DistortionStyleClassic = 1;
-    public const int DistortionStyleOrganic = 2;
 
     // Флаги света.
     public const float GlowFractionScale = 0.25f;

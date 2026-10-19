@@ -41,6 +41,10 @@ namespace Kern.Player
         [SerializeField] private float _zoomSmoothness = 8f;
 
         private const float ZoomSettleEpsilon = 0.001f;
+        private const float InteractiveMinimumZoom = 7f;
+        private const float InteractiveMaximumZoom = 22f;
+        private const float ZoomInputSensitivity = 0.8f;
+        private const float MaximumZoomTargetRatio = 1.25f;
 
         // Мягкий упор: в последней доле диапазона (в логарифмической шкале)
         // шаг зума плавно уменьшается к границе. За границы зум не выходит —
@@ -53,9 +57,11 @@ namespace Kern.Player
 
         // Сериализованные пределы не выходят за контракт: освещение рассчитано
         // на кадр ProjectRuntimeContracts.Camera.MaximumOrthographicSize.
-        private float MinimumZoom => Mathf.Max(_minZoom, ProjectRuntimeContracts.Camera.MinimumOrthographicSize);
+        private float MinimumZoom => Mathf.Max(InteractiveMinimumZoom,
+            Mathf.Max(_minZoom, ProjectRuntimeContracts.Camera.MinimumOrthographicSize));
 
-        private float MaximumZoom => Mathf.Clamp(_maxZoom, MinimumZoom, ProjectRuntimeContracts.Camera.MaximumOrthographicSize);
+        private float MaximumZoom => Mathf.Clamp(_maxZoom, MinimumZoom,
+            Mathf.Min(InteractiveMaximumZoom, ProjectRuntimeContracts.Camera.MaximumOrthographicSize));
         private const float FollowSettleEpsilonSquared = 0.000001f;
 
         private float _originalZ;
@@ -345,23 +351,18 @@ namespace Kern.Player
                 !(_inputBlocker != null && _inputBlocker.IsInputBlocked);
             float scrollInput = acceptsInput ? ReadScroll() : 0f;
 
-            if (Mathf.Abs(scrollInput) > 0.001f)
-            {
-                _targetZoom = Aligner.QuantizesZoom
-                    ? StepPixelPerfectZoom(_targetZoom, scrollInput)
-                    : StepSmoothZoom(_targetZoom, scrollInput);
-            }
-
             // Пинч двумя пальцами: пальцы разошлись — приближение. Отношение
             // расстояний переводится в щелчки колёсика, и дальше зум идёт тем
             // же путём — с теми же границами, упором и квантованием.
             float pinch = _touchGestures?.ConsumePinchScale() ?? 1f;
             if (acceptsInput && Mathf.Abs(pinch - 1f) > 0.0001f)
             {
-                float notches = Mathf.Log(pinch) / Mathf.Log(1f + _zoomStepPerNotch);
-                _targetZoom = Aligner.QuantizesZoom
-                    ? StepPixelPerfectZoom(_targetZoom, notches)
-                    : StepSmoothZoom(_targetZoom, notches);
+                scrollInput += Mathf.Log(pinch) / Mathf.Log(1f + _zoomStepPerNotch);
+            }
+
+            if (Mathf.Abs(scrollInput) > 0.001f)
+            {
+                ApplyZoomInput(scrollInput * ZoomInputSensitivity);
             }
 
             // Режим выборки могли переключить в настройках на ходу: цель
@@ -412,6 +413,33 @@ namespace Kern.Player
             }
 
             return 0f;
+        }
+
+        private void ApplyZoomInput(float notches)
+        {
+            // Reverse from the visible scale, rather than first consuming the
+            // previous gesture's queued movement towards the opposite limit.
+            if (notches * (_targetZoom - _currentZoom) > 0f)
+            {
+                _targetZoom = _currentZoom;
+            }
+
+            if (notches * _pixelZoomNotches < 0f)
+            {
+                _pixelZoomNotches = 0f;
+            }
+
+            if (Aligner.QuantizesZoom)
+            {
+                _targetZoom = StepPixelPerfectZoom(_targetZoom, notches);
+                return;
+            }
+
+            float next = StepSmoothZoom(_targetZoom, notches);
+            // A long scroll burst must not queue an entire trip to an edge.
+            _targetZoom = Mathf.Clamp(next,
+                Mathf.Max(MinimumZoom, _currentZoom / MaximumZoomTargetRatio),
+                Mathf.Min(MaximumZoom, _currentZoom * MaximumZoomTargetRatio));
         }
 
         private float StepSmoothZoom(float size, float notches)

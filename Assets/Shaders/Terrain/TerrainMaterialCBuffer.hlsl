@@ -19,11 +19,10 @@ CBUFFER_START(UnityPerMaterial)
     float4 _FlowScale;
     float _ShimmerSpeedScale;
     float _BlinkingSpeedScale;
-    float _OrganicBendStrength;
-    float _OrganicBendPivot;
     float _RoundableCornerRadius;
     float _RimDistanceScale;
     float _RimFalloff;
+    float _TerrainRimEnabled;
     float _RimQuantizationEnabled;
 
     // Авторский вид поверхности: числа лежат в TerrainConfigHolder и приезжают

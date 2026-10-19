@@ -67,7 +67,7 @@ public static class TerrainCellData
     // числами на CPU и GPU одинаково (TerrainVertexDistortionCalculator).
     public const int GeometryUnitsPerCell = 256;
 
-    public const int DistortionVectorCount = 8;
+    public const int DistortionVectorCount = 4;
 
 
     public static TerrainCell PackCell(CellType type) => new((byte)type);
@@ -170,14 +170,11 @@ public static class TerrainCellData
     // Стиль искажения для шейдера: выключенное искажение — свой стиль Off.
     public static int DistortionStyleOf(TerrainDistortionSettings settings) =>
         !settings.EnableDistortion ? TerrainCellFormat.DistortionStyleOff :
-        settings.DistortionStyle == TerrainDistortionStyle.Organic ? TerrainCellFormat.DistortionStyleOrganic :
         TerrainCellFormat.DistortionStyleClassic;
 
     public static Vector4[] PackDistortion()
     {
-        const int units = TerrainVertexDistortionCalculator.UnitsPerStep;
-        const int classicStep = TerrainConfigHolder.ClassicDistortionStrengthSteps * units;
-        const int organicMaximum = TerrainConfigHolder.OrganicMaximumOffsetSteps * units;
+        const int classicStep = TerrainVertexDistortionCalculator.DistortionStrengthUnits;
         return new Vector4[]
         {
             new Vector4(classicStep, TerrainConfigHolder.ClassicJitterRange,
@@ -187,15 +184,7 @@ public static class TerrainCellData
             new Vector4(TerrainConfigHolder.ClassicYHashA, TerrainConfigHolder.ClassicYHashB,
                 TerrainConfigHolder.ClassicYHashC, TerrainConfigHolder.ClassicYHashD),
             new Vector4(TerrainConfigHolder.ClassicXHashModulus, TerrainConfigHolder.ClassicYHashModulus,
-                organicMaximum, organicMaximum / 2),
-            new(TerrainConfigHolder.OrganicNoiseBroadPeriodCells, TerrainConfigHolder.OrganicNoiseMediumPeriodCells,
-                TerrainConfigHolder.OrganicNoiseFinePeriodCells, TerrainConfigHolder.OrganicNoiseContrast),
-            new(TerrainConfigHolder.OrganicNoiseBroadWeightPercent, TerrainConfigHolder.OrganicNoiseMediumWeightPercent,
-                TerrainConfigHolder.OrganicNoiseFineWeightPercent, TerrainConfigHolder.OrganicNoiseCenterPercent),
-            new(TerrainConfigHolder.OrganicNoiseBroadXSeed, TerrainConfigHolder.OrganicNoiseMediumXSeed,
-                TerrainConfigHolder.OrganicNoiseFineXSeed, TerrainVertexDistortionCalculator.OrganicHashBits),
-            new(TerrainConfigHolder.OrganicNoiseBroadYSeed, TerrainConfigHolder.OrganicNoiseMediumYSeed,
-                TerrainConfigHolder.OrganicNoiseFineYSeed, 0f),
+                0f, 0f),
         };
     }
 

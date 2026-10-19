@@ -80,19 +80,7 @@ internal static class TerrainQuadBuilder
         CachedCellData top = cellCache.GetCellData(cx, cy + 1);
         CachedCellData topLeft = cellCache.GetCellData(cx - 1, cy + 1);
 
-        bool organicTerrain = distortion.EnableDistortion &&
-            distortion.DistortionStyle == TerrainDistortionStyle.Organic &&
-            TerrainVertexDistortionCalculator.IsWavy(ccd);
-        bool organicCause = !isBackground && organicTerrain;
-        int organicEdges = 0;
-        if (organicCause)
-        {
-            organicEdges = TerrainCellGeometry.EncodeOrganicEdges(
-                OrganicEdgeBend(bottom, gridX, unityY, false, 1),
-                OrganicEdgeBend(right, gridX + 1, unityY, true, -1),
-                OrganicEdgeBend(top, gridX, unityY + 1, false, -1),
-                OrganicEdgeBend(left, gridX, unityY, true, 1));
-        }
+
 
         // Какой тип рисует слой. Фон (drawLayer Background или Underlay) лежит сам на себе и
         // рисуется только фоном; у остального передний план — сама клетка,
@@ -128,11 +116,11 @@ internal static class TerrainQuadBuilder
             off10,
             off11,
             off01);
-        bool anchored = geometry.IsAnchored || organicCause;
+        bool anchored = geometry.IsAnchored;
 
         // Backgrounds have their own adjacency. Reusing the
         // foreground descriptor (or zero when the types differ) assigns the
-        // wrong autotile variant under exposed edges and organic underlays.
+        // wrong autotile variant under exposed edges and distorted underlays.
         int descriptor = isBackground
             ? TerrainBackgroundTileResolver.ResolveDescriptor(
                 sources,
@@ -259,7 +247,7 @@ internal static class TerrainQuadBuilder
             ref TerrainVertex vertex = ref quad[i];
             vertex.CopySurfaceFrom(in surface);
             Vector2 anchor = geometry.GetCorner(i);
-            vertex.UV5 = new Vector4(anchored ? 1f : 0f, anchor.x, anchor.y, organicEdges);
+            vertex.UV5 = new Vector4(anchored ? 1f : 0f, anchor.x, anchor.y, 0f);
         }
 
         return new TerrainQuadResult(atlasIndex, isDoor);
@@ -269,31 +257,6 @@ internal static class TerrainQuadBuilder
         TerrainVertexDistortionCalculator.ComputeNode(
             sources.CellCache, sources.Distortion, x, y, sources.WorldWidth, sources.WorldHeight).ToVector3();
 
-    private static int OrganicEdgeBend(
-        CachedCellData neighbor,
-        int edgeX,
-        int edgeY,
-        bool vertical,
-        int inwardSign)
-    {
-        if (neighbor.State != TerrainCellState.Loaded ||
-            TerrainVertexDistortionCalculator.Holds(neighbor) ||
-            (!TerrainVertexDistortionCalculator.IsWavy(neighbor) && !IsOrganicEmptyEdge(neighbor)))
-        {
-            return 0;
-        }
-
-        int bend = TerrainVertexDistortionCalculator.ComputeOrganicEdgeBend(edgeX, edgeY, vertical);
-        return TerrainVertexDistortionCalculator.IsWavy(neighbor)
-            ? bend
-            : Math.Min(Math.Abs(bend), 1) * inwardSign;
-    }
-
-    private static bool IsOrganicEmptyEdge(CachedCellData neighbor) =>
-        neighbor.State == TerrainCellState.Loaded &&
-        UnderOf(neighbor.Type) == neighbor.Type &&
-        !TerrainVertexDistortionCalculator.Holds(neighbor) &&
-        !TerrainVertexDistortionCalculator.IsWavy(neighbor);
 
     /// <summary>
     /// Вариант стены здания по соседним углам.

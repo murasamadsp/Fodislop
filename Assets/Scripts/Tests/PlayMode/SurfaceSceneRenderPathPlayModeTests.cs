@@ -11,6 +11,7 @@ using Kern.World;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.TestTools;
 using VContainer;
@@ -99,6 +100,8 @@ public sealed class SurfaceSceneRenderPathPlayModeTests
                 complete = true;
             });
         };
+        RTHandle? importedDepth = null;
+        bool? originalDepthStencil = null;
         try
         {
             Debug.Log("[SurfaceSceneProof] Awaiting production frames.");
@@ -136,20 +139,47 @@ public sealed class SurfaceSceneRenderPathPlayModeTests
             Assert.That(target.Create(), Is.True);
             camera.orthographicSize = 17.5f;
             camera.aspect = 1786f / 1120f;
+            int depthlessFrames = 0;
+            originalDepthStencil = SetRendererDepthStencil(false);
+            PostProcessRuntimeState.DiagnosticWorldRasterDepthSetup = (graph, frame) =>
+            {
+                Assert.That(frame.Get<UniversalResourceData>().cameraDepth.IsValid(), Is.False,
+                    "Renderer2D must exercise its actual depthless resource allocation path.");
+                depthlessFrames++;
+            };
+            for (int frame = 0; frame < 3; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(depthlessFrames, Is.GreaterThan(0));
+            PostProcessRuntimeState.DiagnosticWorldRasterDepthSetup = null;
+            SetRendererDepthStencil(originalDepthStencil.Value);
+            originalDepthStencil = null;
             int repairedFrames = 0;
+            importedDepth = RTHandles.Alloc(BuiltinRenderTextureType.Depth,
+                name: "ReportedDepthWithoutCreationDescriptor");
             PostProcessRuntimeState.DiagnosticWorldRasterDepthSetup = (graph, frame) =>
             {
                 var resources = frame.Get<UniversalResourceData>();
-                var depthDescriptor = resources.activeDepthTexture.GetDescriptor(graph);
-                depthDescriptor.width = 3420;
-                depthDescriptor.height = 1890;
-                depthDescriptor.name = "ReportedFullDisplayDepth";
-                resources.cameraDepth = graph.CreateTexture(depthDescriptor);
+                // ImportResourceInfo deliberately provides attachment facts only:
+                // GetDescriptor throws for this valid handle, just as reported.
+                resources.cameraDepth = graph.ImportTexture(importedDepth, new RenderTargetInfo
+                {
+                    width = 3420,
+                    height = 1890,
+                    volumeDepth = 1,
+                    msaaSamples = 1,
+                    format = CoreUtils.GetDefaultDepthStencilFormat(),
+                }, new ImportResourceParams());
             };
             PostProcessRuntimeState.DiagnosticWorldRasterTarget = (renderedCamera, dimensions) =>
             {
                 Assert.That(renderedCamera, Is.SameAs(camera));
-                Assert.That(dimensions, Is.EqualTo(new Vector2Int(1786, 1120)));
+                // The float aspect 1786f/1120f is slightly greater than the
+                // exact ratio. Outward rounding adds a pixel on both X edges,
+                // followed by the explicit guard on both edges.
+                Assert.That(dimensions, Is.EqualTo(new Vector2Int(1790, 1122)));
                 repairedFrames++;
             };
             for (int frame = 0; frame < 3; frame++)
@@ -158,10 +188,41 @@ public sealed class SurfaceSceneRenderPathPlayModeTests
                 yield return null;
             }
             Assert.That(repairedFrames, Is.GreaterThan(0));
+            // Exercise the other selector state: a valid display depth with a
+            // small camera color. The previous cameraDepth-only repair missed it.
+            PostProcessRuntimeState.DiagnosticWorldRasterDepthSetup = (graph, frame) =>
+            {
+                var resources = frame.Get<UniversalResourceData>();
+                TextureHandle displayDepth = graph.ImportTexture(importedDepth, new RenderTargetInfo
+                {
+                    width = 3420,
+                    height = 1890,
+                    volumeDepth = 1,
+                    msaaSamples = 1,
+                    format = CoreUtils.GetDefaultDepthStencilFormat(),
+                }, new ImportResourceParams());
+                const System.Reflection.BindingFlags Flags = System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+                var backbuffer = typeof(UniversalResourceData).GetProperty("backBufferDepth", Flags);
+                var selector = typeof(UniversalResourceData).GetProperty("activeDepthID", Flags);
+                Assert.That(backbuffer, Is.Not.Null);
+                Assert.That(selector, Is.Not.Null);
+                backbuffer!.SetValue(resources, displayDepth);
+                selector!.SetValue(resources, Enum.Parse(selector.PropertyType, "BackBuffer"));
+                Assert.That(resources.activeDepthTexture, Is.EqualTo(displayDepth));
+            };
+            int cameraDepthFrames = repairedFrames;
+            for (int frame = 0; frame < 3; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(repairedFrames, Is.GreaterThan(cameraDepthFrames),
+                "The actual Renderer2D graph must also render with initially selected display depth.");
             Debug.Log("[WorldDepthProof] Capturing matched attachments.");
             Save("display-world-depth-regression");
             File.WriteAllText(Path.Combine(directory, "depth-attachments.txt"),
-                $"display=3420x1890; geometry=1786x1120; injectedDepth=3420x1890; matchedFrames={repairedFrames}");
+                $"display=3420x1890; geometry=1790x1122; guard=1; injectedDepth=3420x1890; depthlessFrames={depthlessFrames}; matchedFrames={repairedFrames}");
             PostProcessRuntimeState.DiagnosticWorldRasterDepthSetup = null;
             PostProcessRuntimeState.DiagnosticWorldRasterTarget = null;
             target.Release();
@@ -384,6 +445,12 @@ public sealed class SurfaceSceneRenderPathPlayModeTests
         }
         finally
         {
+            if (originalDepthStencil.HasValue)
+            {
+                SetRendererDepthStencil(originalDepthStencil.Value);
+            }
+
+            importedDepth?.Release();
             Time.timeScale = previousTimeScale;
             PostProcessRuntimeState.DiagnosticWorldRasterDepthSetup = null;
             PostProcessRuntimeState.DiagnosticWorldRasterTarget = null;
@@ -403,6 +470,24 @@ public sealed class SurfaceSceneRenderPathPlayModeTests
             Object.Destroy(volumeProfile);
             Object.Destroy(cameraObject);
         }
+    }
+
+    private static bool SetRendererDepthStencil(bool enabled)
+    {
+#if UNITY_EDITOR
+        var pipeline = (UniversalRenderPipelineAsset)GraphicsSettings.currentRenderPipeline;
+        ScriptableRendererData data = pipeline.rendererDataList[0];
+        using var serialized = new UnityEditor.SerializedObject(data);
+        UnityEditor.SerializedProperty property = serialized.FindProperty("m_UseDepthStencilBuffer");
+        Assert.That(property, Is.Not.Null, "The production fixture requires Renderer2D depth settings.");
+        bool previous = property.boolValue;
+        property.boolValue = enabled;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
+        data.SetDirty();
+        return previous;
+#else
+        throw new InvalidOperationException("Renderer2D allocation regression requires the headless Editor.");
+#endif
     }
 
     private sealed class FixtureCamera : IGameplayCamera

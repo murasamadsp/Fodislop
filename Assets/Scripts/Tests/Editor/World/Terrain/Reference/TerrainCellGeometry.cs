@@ -13,13 +13,6 @@ public readonly struct TerrainCellGeometry
 {
     public const int GridSize = TerrainVertexOffset.GridSize;
 
-    // Organic edge data is part of the cell shape contract. The base-5 digits
-    // store bottom, right, top, left bends in [-2, 2]; zero is reserved for a
-    // non-organic cell, so encoded organic values are [1, 625].
-    public const int OrganicEdgeBase = 5;
-    public const int OrganicEdgeCenter = 2;
-    public const int MaximumOrganicEdgeCode = 625;
-
     public TerrainCellGeometry(Vector2 corner00, Vector2 corner10, Vector2 corner11, Vector2 corner01)
     {
         Corner00 = corner00;
@@ -53,30 +46,6 @@ public readonly struct TerrainCellGeometry
             new Vector2(1f + offset10.x, offset10.y),
             new Vector2(1f + offset11.x, 1f + offset11.y),
             new Vector2(offset01.x, 1f + offset01.y));
-    }
-
-    public static int EncodeOrganicEdges(int bottom, int right, int top, int left)
-    {
-        int code = 1;
-        int multiplier = 1;
-        code += EncodeOrganicBend(bottom) * multiplier;
-        multiplier *= OrganicEdgeBase;
-        code += EncodeOrganicBend(right) * multiplier;
-        multiplier *= OrganicEdgeBase;
-        code += EncodeOrganicBend(top) * multiplier;
-        multiplier *= OrganicEdgeBase;
-        code += EncodeOrganicBend(left) * multiplier;
-        return code;
-    }
-
-    private static int EncodeOrganicBend(int bend)
-    {
-        if (bend < -2 || bend > 2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(bend));
-        }
-
-        return bend + OrganicEdgeCenter;
     }
 
     public Vector2 GetCorner(int corner)

@@ -160,11 +160,6 @@ internal sealed class TerrainWindowBuildRequestScheduler : IDisposable
             _driver.Pipeline.EnableDistortion = distortion;
         }
 
-        if (_changes.TryTakeRequestedDistortionStyle(out TerrainDistortionStyle distortionStyle))
-        {
-            _driver.Pipeline.DistortionStyle = distortionStyle;
-        }
-
         // Во время перехода конвейер мог уйти вперёд неопубликованным шагом:
         // приращение к нему не с чем сверить, поэтому шаг перехода — целиком.
         bool forceFull = intent.HoldPublication || intent.HasHeldCompletion ||

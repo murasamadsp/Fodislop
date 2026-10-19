@@ -29,9 +29,6 @@ internal sealed class TerrainCellOracle
     private readonly uint _groundDecalRule;
     private readonly uint _rockDecalRule;
     private readonly int _worldHeight;
-    private readonly bool _organicEdges;
-    private readonly uint _horizontalSeed;
-    private readonly uint _verticalSeed;
 
     public TerrainCellOracle(
         Func<int, int, TerrainCell> cellAt,
@@ -42,10 +39,7 @@ internal sealed class TerrainCellOracle
         uint groundType,
         uint groundDecalRule,
         uint rockDecalRule,
-        int worldHeight,
-        bool organicEdges,
-        uint horizontalSeed,
-        uint verticalSeed)
+        int worldHeight)
     {
         _cellAt = cellAt;
         _nodeAt = nodeAt;
@@ -56,9 +50,6 @@ internal sealed class TerrainCellOracle
         _groundDecalRule = groundDecalRule;
         _rockDecalRule = rockDecalRule;
         _worldHeight = worldHeight;
-        _organicEdges = organicEdges;
-        _horizontalSeed = horizontalSeed;
-        _verticalSeed = verticalSeed;
     }
 
     // L, BL, B, BR, R, TR, T, TL — порядок битов маски автотайла.
@@ -92,7 +83,6 @@ internal sealed class TerrainCellOracle
         uint fgLook = _typeOf(fgType).Look;
         bool fgEmpty = Bit(fgLook, 3);
         bool fgCause = Outline(fgLook) == 1;
-        bool organicTerrain = _organicEdges && fgCause;
 
         uint typeIndex = 0;
         if (fgType != 0)
@@ -126,7 +116,7 @@ internal sealed class TerrainCellOracle
             }
         }
 
-        bool fgAnchored = organicTerrain ||
+        bool fgAnchored =
             cornersX[0] != 0f || cornersX[1] != 1f || cornersX[2] != 1f || cornersX[3] != 0f ||
             cornersY[0] != 0f || cornersY[1] != 0f || cornersY[2] != 1f || cornersY[3] != 1f;
 
@@ -231,16 +221,6 @@ internal sealed class TerrainCellOracle
             : decal == 2 ? _rockDecalRule
             : 0u;
 
-        uint organic = 0;
-        if (foreground && organicTerrain)
-        {
-            int bottom = Bend(nbType[Bottom], gridX, unityY, false, 1);
-            int right = Bend(nbType[Right], gridX + 1, unityY, true, -1);
-            int top = Bend(nbType[Top], gridX, unityY + 1, false, -1);
-            int left = Bend(nbType[Left], gridX, unityY, true, 1);
-            organic = (uint)(1 + (bottom + 2) + ((right + 2) * 5) + ((top + 2) * 25) + ((left + 2) * 125));
-        }
-
         bool anchored = foreground && fgAnchored;
         if (!foreground)
         {
@@ -284,7 +264,7 @@ internal sealed class TerrainCellOracle
             Assert.That(v.UV5x, Is.EqualTo(TerrainVertex.H(anchored ? 1f : 0f)), $"{at}: якорь");
             Assert.That(Mathf.HalfToFloat(v.UV5y), Is.EqualTo(cornersX[corner]), $"{at}: угол x");
             Assert.That(Mathf.HalfToFloat(v.UV5z), Is.EqualTo(cornersY[corner]), $"{at}: угол y");
-            Assert.That(v.UV5w, Is.EqualTo(TerrainVertex.H(organic)), $"{at}: органика");
+            Assert.That(v.UV5w, Is.EqualTo(TerrainVertex.H(0f)), $"{at}: резерв");
 
             AssertFloat(v.UV6.x, 0f, $"{at}: свободно");
             AssertFloat(v.UV6.y, packedFlags, $"{at}: флаги света");
@@ -349,34 +329,6 @@ internal sealed class TerrainCellOracle
         }
 
         return transforms | ((8u + Math.Min(count, 2u)) & 0x1Fu);
-    }
-
-    // Сосед по ребру — по типу его переднего плана: 0 — не загружен.
-    private int Bend(uint type, int edgeX, int edgeY, bool vertical, int inwardSign)
-    {
-        if (type == 0)
-        {
-            return 0;
-        }
-
-        uint look = _typeOf(type).Look;
-        bool cause = Outline(look) == 1;
-        bool block = Outline(look) >= 2;
-        bool emptyEdge = Bit(look, 3) && !block && !cause;
-        if (block || (!cause && !emptyEdge))
-        {
-            return 0;
-        }
-
-        uint hash = unchecked(((uint)edgeX * 0x9E3779B9u) ^ ((uint)edgeY * 0x85EBCA6Bu) ^ (vertical ? _verticalSeed : _horizontalSeed));
-        hash ^= hash >> 16;
-        hash = unchecked(hash * 0x7FEB352Du);
-        hash ^= hash >> 15;
-        hash = unchecked(hash * 0x846CA68Bu);
-        hash ^= hash >> 16;
-        float noise = (hash & 0x00FFFFFFu) / 16777216f;
-        int bend = Math.Min((int)(noise * 5f), 4) - 2;
-        return cause ? bend : Math.Min(Math.Abs(bend), 1) * inwardSign;
     }
 
     private static float Phase(uint palette, bool hasRect, bool blinking, bool faceted, int gridX, int serverY)

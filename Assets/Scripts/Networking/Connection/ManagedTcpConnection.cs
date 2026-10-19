@@ -36,6 +36,7 @@ namespace Kern.Networking.Connection
         private NetworkStream? _stream;
         private Thread? _worker;
         private volatile bool _disposing;
+        private int _decodeErrorCount;
         private ConnectionStatus _status = ConnectionStatus.Disconnected;
         private SynchronizationContext? _mainContext;
 
@@ -49,6 +50,9 @@ namespace Kern.Networking.Connection
         public event Action? OnDisconnected;
         public event Action? OnDisconnecting;
         public event Action? OnConnecting;
+        public event Action<Exception>? OnError;
+
+        public int DecodeErrorCount => Volatile.Read(ref _decodeErrorCount);
 
         public ManagedTcpConnection(IPAddress address, int port)
         {
@@ -188,6 +192,8 @@ namespace Kern.Networking.Connection
                             $"\n[NETDIAG] client sizes: RobotPosition={default(MinesServer.Networking.Server.Packets.World.RobotPositionPacket).Size}" +
                             $" Building={default(MinesServer.Networking.Server.Packets.World.BuildingPacket).Size}" +
                             $" RemoveBuilding={default(MinesServer.Networking.Server.Packets.World.RemoveBuildingPacket).Size}");
+                        Interlocked.Increment(ref _decodeErrorCount);
+                        OnError?.Invoke(ex);
                         continue;
                     }
 

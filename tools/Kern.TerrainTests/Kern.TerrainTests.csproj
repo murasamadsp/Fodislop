@@ -105,7 +105,7 @@
     <!-- Эти тесты требуют полного Unity/GPU production builder и гоняются в Unity EditMode:
          фоновая сборка террейна (TerrainBuildPipelineWorkerTests) держит GPU-текстуры каналов. -->
     <Compile Include="$(Game)/Tests/Editor/World/Terrain/Geometry/*.cs"
-             Exclude="$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainCellBuilderDeterminismTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainIncrementalScrollDifferentialTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainBuildPipelineWorkerTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainCellIdMeshTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainCellEquivalenceTests.cs"
+             Exclude="$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainDecalAtlasBoundsTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainCellBuilderDeterminismTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainIncrementalScrollDifferentialTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainBuildPipelineWorkerTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainCellIdMeshTests.cs;$(Game)/Tests/Editor/World/Terrain/Geometry/TerrainCellEquivalenceTests.cs"
              LinkBase="Tests/Geometry" />
     <Compile Include="$(Game)/Tests/Shared/TerrainQuantizationOracle.cs" Link="Tests/Shared/TerrainQuantizationOracle.cs" />
     <Compile Include="$(Game)/Tests/Editor/World/Lighting/LightingRegionCalculator*.cs" LinkBase="Tests/Lighting" />

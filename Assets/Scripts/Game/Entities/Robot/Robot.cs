@@ -102,7 +102,6 @@ namespace Kern.Game
         {
             _lighting ??= new RobotLighting();
             _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
-            _visuals.SetDebugSettings(_debugSettings);
             _entityBatchRenderer = entityBatchRenderer;
             InitializeVisualElements();
             _visuals.Initialize(entityBatchRenderer, _visuals.ClanTransform);
@@ -143,6 +142,7 @@ namespace Kern.Game
         {
             transform.position = position;
             _movement.SnapTo(position, angle ?? transform.eulerAngles.z);
+            _visuals.SnapTentacles(position);
         }
 
         public float MoveSpeed
@@ -283,7 +283,12 @@ namespace Kern.Game
                 // the visual tremor offset. The light source is anchored to
                 // SmoothPosition, so settle the sprite on that same position.
                 transform.position = _movement.SmoothPosition;
-                _visuals.UpdateMotion(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime, true);
+                _visuals.UpdateMotion(
+                    transform.position,
+                    0f,
+                    Time.deltaTime,
+                    true,
+                    _debugSettings.TailMotionDebugMode);
                 _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
                 _lighting.Update(_movement.SmoothPosition, _lightingEngine);
                 return;
@@ -299,7 +304,12 @@ namespace Kern.Game
             transform.position = finalPosition;
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
 
-            _visuals.UpdateMotion(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime, false);
+            _visuals.UpdateMotion(
+                finalPosition,
+                movementFactor,
+                Time.deltaTime,
+                false,
+                _debugSettings.TailMotionDebugMode);
             _nameplate.UpdatePosition(finalPosition, _visuals.SkinSprite, transform, _visuals.ClanTransform);
             _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }
@@ -375,7 +385,12 @@ namespace Kern.Game
             _movement.TeleportToTarget();
             transform.position = _movement.SmoothPosition;
             _visuals.SnapTentacles(_movement.SmoothPosition);
-            _visuals.UpdateMotion(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime, true);
+            _visuals.UpdateMotion(
+                transform.position,
+                0f,
+                Time.deltaTime,
+                true,
+                _debugSettings.TailMotionDebugMode);
             _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
             _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }

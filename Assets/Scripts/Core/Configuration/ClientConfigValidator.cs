@@ -48,12 +48,6 @@ internal sealed class ClientConfigValidator
         InterfaceSettings interfaceSettings = config.Interface;
         DisplaySettings display = config.Display;
         ConnectionSettings connection = config.Connection;
-        if (!Enum.IsDefined(typeof(TerrainDistortionStyle), config.Terrain.DistortionStyle))
-        {
-            throw new InvalidDataException(
-                $"Unknown terrain distortion style '{config.Terrain.DistortionStyle}'.");
-        }
-
         if (interfaceSettings.Language is not ("ru" or "en" or "zh" or "zh-hant"))
         {
             throw new InvalidDataException(

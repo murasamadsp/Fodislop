@@ -54,7 +54,6 @@
 //     слой               фон — фоном, остальное — передним планом
 //     закрытие фона      фон под непрозрачным передним планом не рисуется
 //     узлы сетки         4 угла клетки: outline клеток вокруг узла + хэш
-//     органические рёбра изгиб по соседу и хэшу ребра
 //     дескриптор         маска соседей той же тайлгруппы → колонка, отражения
 //     вариант стены      по соседним углам пака
 //     UV углов           из дескриптора
@@ -220,7 +219,7 @@ struct TerrainCellVertex
     float4 tileSizeUV;        // tileSize, tileSize, frameCount, frameHeight
     float4 worldPos;          // gridX, serverY, PackedColumn, autotiling
     float4 animData;          // animationType, animationSpeed, phase, surfaceEffect
-    float4 packedData;        // anchored, carrierCorner.xy, organicEdges
+    float4 packedData;        // anchored, carrierCorner.xy, reserved
     float4 lightContourDecal; // 0, LightingFlags + glow, Contour, DecalCode
     float4 geometryCornersX;
     float4 geometryCornersY;
@@ -255,16 +254,10 @@ float4 _TerrainCellGridSize;
 // в клетках. Клетки лежат по кольцевому адресу: координата по модулю кольца.
 float4 _TerrainCellOrigin;
 
-// Стиль искажения — KERN_TERRAIN_DISTORTION_STYLE_*; константы —
-// TerrainCellData.PackDistortion (раскладка там же). Зёрна органических
-// рёбер — TerrainConfigHolder.OrganicEdge*Seed.
 static const int KERN_TERRAIN_DISTORTION_STYLE_OFF = 0;
 static const int KERN_TERRAIN_DISTORTION_STYLE_CLASSIC = 1;
-static const int KERN_TERRAIN_DISTORTION_STYLE_ORGANIC = 2;
 int _TerrainDistortionStyle;
-float4 _TerrainDistortion[8];
-int _TerrainOrganicHorizontalSeed;
-int _TerrainOrganicVerticalSeed;
+float4 _TerrainDistortion[4];
 
 // Подложка — тип с drawLayer: Underlay в cells.json; лежит под каждым
 // передним планом.

@@ -153,19 +153,18 @@ public sealed class TerrainQuantizationContractTests
         Assert.That(CountOccurrences(terrain, "clip(cellCoverage - 0.5);"), Is.EqualTo(6));
         Assert.That(CountOccurrences(contour, "TerrainGeometryCoverage("), Is.EqualTo(1));
         // Geometry owns the polygon and distance rules; the shared contract
-        // owns the cell grid quantization used by its corner and bend points.
+        // owns the cell grid quantization used by its corners.
         Assert.That(
             CountOccurrences(geometry, "QuantizeTerrainGeometryPoint(") +
             CountOccurrences(geometryContract, "QuantizeTerrainGeometryPoint("),
-            Is.EqualTo(3));
-        Assert.That(geometry, Does.Contain("float TerrainOrganicGeometryCoverage("));
+            Is.EqualTo(2));
         Assert.That(geometryContract, Does.Contain("KERN_TERRAIN_FACE_GRID_SIZE = 32.0"));
         Assert.That(geometry, Does.Contain("KERN_TERRAIN_GEOMETRY_EPSILON"));
         Assert.That(contour, Does.Contain("TerrainGeometryCoverage("));
         Assert.That(contour, Does.Not.Contain("edgeMargins"));
         Assert.That(cellData, Does.Contain("float2 node00 = TerrainNodeCells(TerrainNode(gridX, unityY,"));
         Assert.That(cellGeometry, Does.Not.Contain("Quantize("));
-        Assert.That(geometry, Does.Contain("TerrainGeometryRawCorner"));
+        Assert.That(geometryContract, Does.Contain("TerrainGeometryRawCorner"));
         Assert.That(cellData, Does.Contain("occluded = occluded && TerrainOpaqueMassCell(neighbourRows[m]);"));
         Assert.That(cellData, Does.Contain("bool anchored = foreground && foregroundAnchored;"));
         Assert.That(terrain, Does.Contain("applyGeometry = input.isForeground"));

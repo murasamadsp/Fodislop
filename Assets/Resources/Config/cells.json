@@ -935,19 +935,6 @@
     "glow": 1.0,
     "mapColor": "#EEFEFF"
   },
-  "IridescentBackground": {
-    "drawLayer": "Foreground",
-    "outline": "Pliant",
-    "textureAnchor": "Cell",
-    "animationType": "None",
-    "animationSpeed": 6,
-    "surfaceEffect": "Plain",
-    "surfaceEffectPalette": 0,
-    "decalAtlas": "None",
-    "rimMass": 0,
-    "glow": 0.0,
-    "mapColor": "#000000"
-  },
   "AliveBlue": {
     "drawLayer": "Foreground",
     "outline": "Rigid",
@@ -1142,18 +1129,5 @@
     "rimMass": 0,
     "glow": 0.0,
     "mapColor": "#00000080"
-  },
-  "CorruptedHypnoRock": {
-    "drawLayer": "Foreground",
-    "outline": "Wavy",
-    "textureAnchor": "World",
-    "animationType": "None",
-    "animationSpeed": 6,
-    "surfaceEffect": "Plain",
-    "surfaceEffectPalette": 0,
-    "decalAtlas": "None",
-    "rimMass": 3,
-    "glow": 1.0,
-    "mapColor": "#AAFFFF"
   }
 }

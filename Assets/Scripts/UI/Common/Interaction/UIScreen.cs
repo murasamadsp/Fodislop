@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Kern.Core;
 using Kern.Core.Interfaces;
+using Kern.Tools.ImGui;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
@@ -102,6 +103,9 @@ public static class UIScreen
         {
             s_safeAreaRoots.Add(root);
             UISafeArea.Attach(root);
+            root.RegisterCallback<PointerDownEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
+            root.RegisterCallback<PointerUpEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
+            root.RegisterCallback<ClickEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
         }
 
         IPanel? panel = root.panel;
@@ -143,6 +147,9 @@ public static class UIScreen
         IPanel? panel = s_documentPanels.Remove(document, out IPanel boundPanel) ? boundPanel : null;
         s_safeAreaRoots.Remove(root);
         UISafeArea.Detach(root);
+        root.UnregisterCallback<PointerDownEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
+        root.UnregisterCallback<PointerUpEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
+        root.UnregisterCallback<ClickEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
 
         if (panel != null && !HasBoundDocument(panel))
         {
@@ -166,6 +173,16 @@ public static class UIScreen
             {
                 settings.scaleMode = authored;
             }
+        }
+    }
+
+    private static void BlockPointerBehindTools(EventBase evt)
+    {
+        Pointer? pointer = Pointer.current;
+        if (ToolWindows.HasPointerCapture ||
+            (pointer != null && ToolWindows.ContainsScreenPoint(pointer.position.ReadValue())))
+        {
+            evt.StopImmediatePropagation();
         }
     }
 
@@ -267,7 +284,7 @@ public static class UIScreen
         }
 
         s_visualTrees.RemoveAll(tree => tree.panel == null);
-        foreach (VisualElement tree in s_visualTrees)
+        foreach (VisualElement tree in s_safeAreaRoots)
         {
             UILayoutTier.Apply(tree, shape);
         }
@@ -284,6 +301,13 @@ public static class UIScreen
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
     {
+        foreach (VisualElement tree in s_visualTrees)
+        {
+            tree.UnregisterCallback<PointerDownEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
+            tree.UnregisterCallback<PointerUpEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
+            tree.UnregisterCallback<ClickEvent>(BlockPointerBehindTools, TrickleDown.TrickleDown);
+        }
+
         s_userScale.Clear();
         s_authoredScaleMode.Clear();
         s_safeAreaRoots.Clear();

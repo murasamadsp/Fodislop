@@ -63,7 +63,7 @@ public sealed class TerrainMaterialManager
             material.SetColor(s_shimmerColorPropertyId, config.Terrain.ShimmerColor);
             // Вид поверхности авторский: декали, кайма, глинт и
             // призматик берут числа из TerrainConfigHolder.
-            TerrainMaterialTuning.Apply(material);
+            TerrainMaterialTuning.Apply(material, config.Terrain.EnableRim);
         }
     }
 
@@ -186,7 +186,7 @@ public sealed class TerrainMaterialManager
         material.SetColor(s_shimmerColorPropertyId, clientConfig.Terrain.ShimmerColor);
         // Вид поверхности авторский: декали, кайма, глинт и
         // призматик берут числа из TerrainConfigHolder.
-        TerrainMaterialTuning.Apply(material);
+        TerrainMaterialTuning.Apply(material, clientConfig.Terrain.EnableRim);
         RequireLightingPasses(material);
         return material;
     }
@@ -331,6 +331,9 @@ public sealed class TerrainMaterialManager
             "_ShimmerSpeedScale",
             "_BlinkingSpeedScale",
             "_ShimmerColor",
+            "_TerrainRimEnabled",
+            "_RimFalloff",
+            "_RimDistanceScale",
         };
         foreach (string propertyName in requiredProperties)
         {

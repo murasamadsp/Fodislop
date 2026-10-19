@@ -47,6 +47,13 @@ bool triangle(float2 p, float2 a, float2 b, float2 c, float3& weights)
     weights.x = 1-weights.y-weights.z;
     return weights.x >= -1e-6f && weights.y >= -1e-6f && weights.z >= -1e-6f;
 }
+// Independent final-grid oracle: round integer half-steps to the even pixel.
+static float4 expectedPixelCorners(float4 corners)
+{
+    for (int i = 0; i < 4; ++i)
+        corners[i] = std::nearbyint(corners[i] * 32.0f) / 32.0f;
+    return corners;
+}
 bool oracle(float2 p, float4 xs, float4 ys)
 {
     // All generated quadrilaterals are convex and counter-clockwise.
@@ -285,7 +292,7 @@ static void checkRim()
         auto sideFalloff=[](float distance)
         {
             float s=std::clamp(1.0f-2.0f*distance,0.0f,1.0f);
-            float fall=1.0f-0.5f*s*s;
+            float fall=1.0f-0.5f*s;
             return fall;
         };
         if(std::fabs(flat - sideFalloff(.25f)) > 1e-4f ||
@@ -434,7 +441,7 @@ void checkAo()
             {
                 float2 p={(x+.5f)/density,(y+.5f)/density};
                 float signedDistance = TerrainGeometrySignedDistance(
-                    p-float2{3,3},xs,ys,0,false);
+                    p-float2{3,3},xs,ys);
                 float contact = 1.0f-smoothstep(0.0f,0.5f,max(-signedDistance,0.0f));
                 float expectedDistance = oracleSignedDistance(p-float2{3,3},xs,ys);
                 float expectedContact = 1.0f-smoothstep(
@@ -468,7 +475,7 @@ void checkContinuousFieldSilhouette()
         {
             float signedOffset=sampleRange*(1.0f-i/8.0f);
             float2 p=midpoint-outwardNormal*signedOffset;
-            float actualDistance=TerrainGeometrySignedDistance(p,xs,ys,0.0f,false);
+            float actualDistance=TerrainGeometrySignedDistance(p,xs,ys);
             float expectedDistance=oracleSignedDistance(p,xs,ys);
             if(std::fabs(actualDistance-expectedDistance)>1e-4f)
                 throw std::runtime_error(
@@ -505,101 +512,6 @@ void checkContinuousFieldSilhouette()
         "diagonal");
 }
 
-void checkOrganicVerticesUseGeometryGrid()
-{
-    float4 xs={0,1,1,0};
-    float4 ys={0,0,1,1};
-    float4 bends={.03125f,-.0625f,.0625f,-.03125f};
-    for(int index=0;index<8;++index)
-    {
-        float2 point=TerrainOrganicGeometryPoint(xs,ys,bends,index);
-        if(std::fabs(point.x*32.0f-std::round(point.x*32.0f))>1e-5f ||
-            std::fabs(point.y*32.0f-std::round(point.y*32.0f))>1e-5f)
-            throw std::runtime_error("Organic bend vertex was not quantized before rasterization");
-    }
-}
-
-static bool organicCoverageOracle(float2 sample)
-{
-    const float2 vertices[8] = {
-        {0,0}, {.34375f,.0625f}, {1,0}, {.96875f,.65625f},
-        {1,1}, {.34375f,1.0625f}, {0,1}, {-.0625f,.65625f}
-    };
-    bool inside=false;
-    for(int side=0;side<8;++side)
-    {
-        float2 start=vertices[side];
-        float2 end=vertices[(side+1)&7];
-        if((start.y>sample.y)!=(end.y>sample.y) &&
-            sample.x<start.x+(sample.y-start.y)*(end.x-start.x)/(end.y-start.y))
-            inside=!inside;
-    }
-    return inside;
-}
-
-void checkOrganicGeometryCoverage()
-{
-    float4 xs={0,1,1,0};
-    float4 ys={0,0,1,1};
-    for(int y=-16;y<80;++y)
-    for(int x=-16;x<80;++x)
-    {
-        float2 sample={(x+.37f)/64.0f-.25f,(y+.19f)/64.0f-.25f};
-        bool expected=organicCoverageOracle(sample);
-        bool actual=TerrainOrganicGeometryCoverage(sample,xs,ys,110.0f)>0.5f;
-        if(actual!=expected)
-            throw std::runtime_error(
-                "Organic raster coverage differs from independent octagon at "+
-                std::to_string(sample.x)+","+std::to_string(sample.y));
-    }
-}
-
-void checkOrganicSignedDistance()
-{
-    // Independent eight-vertex contour for packed bends (+2,-1,+2,-2).
-    // Midpoints are snapped once to the 1/32-cell geometry grid.
-    float2 vertices[8] = {
-        {0,0}, {.34375f,.0625f}, {1,0}, {.96875f,.65625f},
-        {1,1}, {.34375f,1.0625f}, {0,1}, {-.0625f,.65625f}
-    };
-    float4 xs={0,1,1,0};
-    float4 ys={0,0,1,1};
-    for (int y=0; y<96; ++y)
-    for (int x=0; x<96; ++x)
-    {
-        float2 sample{(x+.37f)/64.0f-.25f,(y+.19f)/64.0f-.25f};
-        bool inside=false;
-        float nearestSquared=1.0e20f;
-        float2 expectedNearest=sample;
-        for (int side=0; side<8; ++side)
-        {
-            float2 start=vertices[side];
-            float2 end=vertices[(side+1)&7];
-            float2 edge=end-start;
-            if ((start.y>sample.y)!=(end.y>sample.y) &&
-                sample.x<start.x+(sample.y-start.y)*edge.x/edge.y)
-                inside=!inside;
-            float projection=std::clamp(
-                ((sample.x-start.x)*edge.x+(sample.y-start.y)*edge.y)/
-                    (edge.x*edge.x+edge.y*edge.y),0.0f,1.0f);
-            float2 delta=sample-(start+edge*projection);
-            float distanceSquared=delta.x*delta.x+delta.y*delta.y;
-            if (distanceSquared<nearestSquared)
-            {
-                nearestSquared=distanceSquared;
-                expectedNearest=start+edge*projection;
-            }
-        }
-        float expected=std::sqrt(nearestSquared)*(inside?1.0f:-1.0f);
-        float2 actualNearest;
-        float actual=TerrainGeometrySignedDistance(
-            sample,xs,ys,110.0f,true,actualNearest);
-        if (std::fabs(actual-expected)>1e-4f ||
-            length(actualNearest-expectedNearest)>1e-4f)
-            throw std::runtime_error("Organic AO distance differs from independent contour");
-    }
-}
-
 void checkFlatCellDistance()
 {
     float4 xs={0,1,1,0};
@@ -608,7 +520,7 @@ void checkFlatCellDistance()
     for (int x=-32; x<=96; ++x)
     {
         float2 sample{(x+.37f)/64.0f,(y+.19f)/64.0f};
-        float polygonDistance=TerrainGeometrySignedDistance(sample,xs,ys,0.0f,false);
+        float polygonDistance=TerrainGeometrySignedDistance(sample,xs,ys);
         float boxDistance=-TerrainSignedDistanceToBox(
             sample,float2{.5f,.5f},float2{.5f,.5f});
         if (std::fabs(polygonDistance-boxDistance)>1e-4f)
@@ -727,8 +639,6 @@ static long checkWorld(const std::string& path)
     _TerrainDistortionStyle = readValue<int>(in);
     for (float4& vector : _TerrainDistortion)
         vector = float4{readValue<float>(in), readValue<float>(in), readValue<float>(in), readValue<float>(in)};
-    _TerrainOrganicHorizontalSeed = (int)readValue<uint>(in);
-    _TerrainOrganicVerticalSeed = (int)readValue<uint>(in);
     _TerrainGroundDecalRule = (int)readValue<uint>(in);
     _TerrainRockDecalRule = (int)readValue<uint>(in);
     int originX = readValue<int>(in);
@@ -788,7 +698,7 @@ static long checkWorld(const std::string& path)
             static const char* names[26] = {
                 "u", "v", "rect x", "rect y", "rect z", "rect w", "tile x", "tile y", "frames", "frame height",
                 "world x", "server y", "column", "autotile", "animation", "speed", "phase", "profile",
-                "anchored", "corner x", "corner y", "organic", "light colour", "light flags", "contour", "decalAtlas",
+                "anchored", "corner x", "corner y", "distorted", "light colour", "light flags", "contour", "decalAtlas",
             };
             for (int i = 0; i < 26; ++i) expectAttribute(actual[i], e[i], at + ": " + names[i]);
             ++compared;
@@ -864,7 +774,8 @@ static void checkWorldShapes(const std::string& path)
             canonicalChecked = true;
         }
         if (!straight) continue;
-        float4 xs = v[0].geometryCornersX, ys = v[0].geometryCornersY;
+        float4 xs = expectedPixelCorners(v[0].geometryCornersX);
+        float4 ys = expectedPixelCorners(v[0].geometryCornersY);
         // Предпосылка oracle(): четырёхугольник выпуклый.
         for (int i = 0; i < 4; ++i)
         {
@@ -917,7 +828,8 @@ static void checkWorldShapes(const std::string& path)
             TerrainCellVertex n[4];
             if (!drawn(other.x, other.y) || !loadQuad(other, n)) continue;
             float2 offset = side == 0 ? float2{1, 0} : float2{0, 1};
-            float4 nx = n[0].geometryCornersX, ny = n[0].geometryCornersY;
+            float4 nx = expectedPixelCorners(n[0].geometryCornersX);
+            float4 ny = expectedPixelCorners(n[0].geometryCornersY);
             int ownA = side == 0 ? 1 : 3, ownB = 2;
             int theirA = 0, theirB = side == 0 ? 3 : 1;
             float2 a = float2{xs[ownA], ys[ownA]}, b = float2{xs[ownB], ys[ownB]};
@@ -986,16 +898,16 @@ static void checkBufferReads()
     LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
     long flat = bufferReads;
     _TerrainTypes.data[1].look = wavyOnUnderlay;
-    _TerrainDistortionStyle = KERN_TERRAIN_DISTORTION_STYLE_ORGANIC;
+    _TerrainDistortionStyle = KERN_TERRAIN_DISTORTION_STYLE_CLASSIC;
     bufferReads = 0;
     LoadTerrainCellVertex(float3{0,0,1},float2{0,0});
-    long organic = bufferReads;
+    long distorted = bufferReads;
     bufferReads = 0;
     LoadTerrainCellVertex(float3{0,0,0},float2{0,0});
     long background = bufferReads;
     std::cout << "Terrain cell reads per vertex: flat foreground=" << flat
-        << " organic foreground=" << organic << " background=" << background << '\n';
-    if (flat > 28 || organic > 28 || background > 28)
+        << " distorted foreground=" << distorted << " background=" << background << '\n';
+    if (flat > 28 || distorted > 28 || background > 28)
         throw std::runtime_error("Terrain cell vertex reads exceed 28");
     resetCells();
 }
@@ -1011,9 +923,6 @@ int runChecks(const char* worldDirectory)
     checkCornerBase();
     checkAo();
     checkContinuousFieldSilhouette();
-    checkOrganicVerticesUseGeometryGrid();
-    checkOrganicGeometryCoverage();
-    checkOrganicSignedDistance();
     checkFlatCellDistance();
     checkRim();
     checkRoundRim();

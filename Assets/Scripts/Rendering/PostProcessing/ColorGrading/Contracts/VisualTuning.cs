@@ -103,11 +103,7 @@ namespace Kern.World.Terrain
     // в постобработке.
     public static class TerrainConfigHolder
     {
-        // 1. Смещение узлов сетки (шаг = 1/32 клетки). Classic умножает
-        // детерминированный джиттер 0..6; Organic центрирует шум в диапазоне
-        // -OrganicMaximumOffsetSteps/2 .. +OrganicMaximumOffsetSteps/2.
-        public const int ClassicDistortionStrengthSteps = 1;
-        public const int OrganicMaximumOffsetSteps = 4;
+        public const float ClassicDistortionStrengthSteps = 1.25f;
 
 
         // Ключи классического джиттера задают пространственный рисунок.
@@ -123,41 +119,6 @@ namespace Kern.World.Terrain
         public const int ClassicYHashC = 23;
         public const int ClassicYHashD = 37;
         public const int ClassicYHashModulus = 3469;
-
-        // Три пространственных масштаба органического смещения и их веса.
-        // Оба направления используют одинаковые масштабы и веса, но разные
-        // ключи шума, чтобы не двигаться по диагонали синхронно.
-        //
-        // Шум считается целыми числами (TerrainVertexDistortionCalculator и
-        // шейдер одинаково), поэтому веса — проценты (в сумме 100), контраст —
-        // целый множитель, центр — процент. Период не больше 10 клеток:
-        // иначе билинейная интерполяция выходит за 32 бита.
-        public const int OrganicNoiseBroadPeriodCells = 9;
-        public const int OrganicNoiseMediumPeriodCells = 4;
-        public const int OrganicNoiseFinePeriodCells = 2;
-        public const int OrganicNoiseBroadWeightPercent = 50;
-        public const int OrganicNoiseMediumWeightPercent = 35;
-        public const int OrganicNoiseFineWeightPercent = 15;
-        public const int OrganicNoiseContrast = 2;
-        public const int OrganicNoiseCenterPercent = 50;
-        public const uint OrganicNoiseBroadXSeed = 0xA53u;
-        public const uint OrganicNoiseMediumXSeed = 0xB71u;
-        public const uint OrganicNoiseFineXSeed = 0xC25u;
-        public const uint OrganicNoiseBroadYSeed = 0xD49u;
-        public const uint OrganicNoiseMediumYSeed = 0xE83u;
-        public const uint OrganicNoiseFineYSeed = 0xF17u;
-        public const uint OrganicEdgeVerticalSeed = 0x6D21u;
-        public const uint OrganicEdgeHorizontalSeed = 0x39B7u;
-
-        // Органическое искажение грани: сдвиг вершины на один шаг изгиба, в
-        // долях сетки грани. Код изгиба лежит в {-2..2}, поэтому вершина
-        // уходит не дальше произведения этого размаха на силу; ту же величину
-        // берёт внутренний отступ в TerrainContour, так что менять их надо вместе.
-        public const float OrganicBendStrength = 1f;
-
-        // Где по ребру стоит излом изогнутой грани, в долях длины ребра;
-        // изгиб противоположного знака берёт дополнение до единицы.
-        public const float OrganicBendPivot = 0.35f;
 
         // 2. Приём геометрии пиксельным проходом: ранний discard.
         public const float AlphaCutoff = 0.05f;
@@ -197,7 +158,9 @@ namespace Kern.World.Terrain
         // 4. Декали подмешиваются после базовой цветовой анимации.
         public const float GroundDecalStrength = 0.35f;
         public const float RockDecalStrength = 0.7f;
-        public const float DecalPlacementOffset = 0.5f;
+        // Packed offsets are -0.5..0.5: 0.125 limits translation to two
+        // texels on the 32-pixel face, within the authored atlas padding.
+        public const float DecalPlacementOffset = 0.125f;
         public const uint GroundDecalPlacementPercent = 24u;
 
         // Усиление signed-разницы в диагностике вклада декали и призматического
@@ -231,8 +194,8 @@ namespace Kern.World.Terrain
         // Фаска открытых сторон клетки: масштаб расстояния от геометрического
         // ребра и максимальная доля затемнения у самого ребра.
         public const bool RimQuantizationEnabled = true;
-        public const float RimDistanceScale = 4f;
-        public const float RimFalloff = 0.5f;
+        public const float RimDistanceScale = 32f / 6f;
+        public const float RimFalloff = 1f;
 
         // 7. Выход: premultiplied alpha корректируется после умножения света.
         public const float PremultiplyAlphaFloor = 0.15f;

@@ -11,14 +11,11 @@ namespace Kern.World.Terrain;
 /// </summary>
 ///
 /// Настройки приходят одним ClientConfig, а расходятся по трём адресатам:
-/// тумблер искажения живёт в конвейере, кайма — глобалью шейдера,
-/// остальное уходит в материалы. Renderer здесь только повод: он держит
+/// тумблер искажения живёт в конвейере, кайма и вид поверхности — в материалах.
+/// Renderer здесь только повод: он держит
 /// конфиг, а раскладку по адресатам делает этот тип.
 public sealed class TerrainClientConfigApplier
 {
-    private static readonly int s_rimEnabledId =
-        Shader.PropertyToID("_TerrainRimEnabled");
-
     private readonly TerrainWindow _window;
 
     public TerrainClientConfigApplier(TerrainWindow window) => _window = window;
@@ -33,21 +30,12 @@ public sealed class TerrainClientConfigApplier
             _window.RequestDistortion(enableDistortion);
         }
 
-        TerrainDistortionStyle distortionStyle = config.Terrain.DistortionStyle;
-        if (_window.Driver.Pipeline.DistortionStyle != distortionStyle)
-        {
-            _window.RequestDistortionStyle(distortionStyle);
-        }
-
-        // Кайма живёт глобалью шейдера: маска и транспорт от тумблера не
-        // зависят, выключенная кайма просто перестаёт умножать кадр.
+        // The selected rim state is bound with the other material parameters.
         bool enableRim = config.Terrain.EnableRim;
-        Shader.SetGlobalFloat(s_rimEnabledId, enableRim ? 1f : 0f);
 
         _window.Driver.Presentation.ApplyClientConfig(config);
         Debug.Log(
             $"[TerrainRenderer] ApplyClientConfig: distortion={enableDistortion}, " +
-            $"distortionStyle={distortionStyle}, " +
             $"rim={enableRim}");
     }
 }

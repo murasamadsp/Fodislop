@@ -25,8 +25,8 @@ public sealed class TailChainLegacyParityTests
     private const float DeltaTime = 1f / 60f;
     private const int Sectors = TentacleGeometry.SectorCount;
 
-    /// <summary>Matches RobotVisuals.StrandCount, twice the legacy client's four.</summary>
-    private const int Strands = 8;
+    /// <summary>Matches the four LineRenderer strands in the legacy robot prefab.</summary>
+    private const int Strands = 4;
 
     private const float ParityTolerance = 1e-4f;
 
@@ -166,6 +166,51 @@ public sealed class TailChainLegacyParityTests
         }
     }
 
+    [TestCase(2)]
+    [TestCase(6)]
+    [TestCase(12)]
+    public void Step_LongFrameMatchesShortSteps_WithMovingRootAndWobble(int ticks)
+    {
+        var stalledRandom = new System.Random(718);
+        var regularRandom = new System.Random(718);
+        var stalled = new TailChain(0, Vector3.zero, () => (float)stalledRandom.NextDouble());
+        var regular = new TailChain(0, Vector3.zero, () => (float)regularRandom.NextDouble());
+        Vector3 destination = new(3f, 1f, 0f);
+        float durationSeconds = DeltaTime * ticks;
+        stalled.Step(destination, 1f, durationSeconds, 1f);
+        for (int tick = 0; tick < ticks; tick++)
+        {
+            regular.Step(destination * ((tick + 1f) / ticks), 1f, DeltaTime, 1f);
+        }
+
+        for (int point = 0; point < TailChain.PointCount; point++)
+        {
+            Assert.That(Vector3.Distance(stalled[point], regular[point]), Is.LessThan(1e-4f),
+                $"point {point}: a long frame must preserve the short-step chain and noise sequence");
+        }
+    }
+
+    [Test]
+    public void Step_HighFrameRatePreservesNoiseSequenceAndChain()
+    {
+        var regularRandom = new System.Random(941);
+        var fastRandom = new System.Random(941);
+        var regular = new TailChain(0, Vector3.zero, () => (float)regularRandom.NextDouble());
+        var fast = new TailChain(0, Vector3.zero, () => (float)fastRandom.NextDouble());
+        for (int tick = 0; tick < 120; tick++)
+        {
+            Vector3 midpoint = new((tick + 0.5f) * 0.25f, 0f, 0f);
+            Vector3 root = new((tick + 1f) * 0.25f, 0f, 0f);
+            regular.Step(root, 1f, DeltaTime, 1f);
+            fast.Step(midpoint, 1f, DeltaTime / 2f, 1f);
+            fast.Step(root, 1f, DeltaTime / 2f, 1f);
+            for (int point = 0; point < TailChain.PointCount; point++)
+            {
+                Assert.That(Vector3.Distance(fast[point], regular[point]), Is.LessThan(1e-4f));
+            }
+        }
+    }
+
     [Test]
     public void TentacleGeometry_WritesTwoSharedVerticesPerPointAtAConstantWidth()
     {
@@ -181,8 +226,8 @@ public sealed class TailChainLegacyParityTests
 
         TentacleGeometry.WriteVertices(points, atlasRect, verts, uvs, vertBase: 0);
 
-        Assert.That(verts.Length, Is.EqualTo(24), "ribbon points plus the claw");
-        Assert.That(uvs.Length, Is.EqualTo(24));
+        Assert.That(verts.Length, Is.EqualTo(10), "two vertices per line point");
+        Assert.That(uvs.Length, Is.EqualTo(10));
 
         float width = 2f / TentacleGeometry.HalfWidthDivisor;
 
@@ -204,8 +249,8 @@ public sealed class TailChainLegacyParityTests
             // what shades the ribbon.
             float expectedU = atlasRect.xMin +
                 (atlasRect.width * ((float)point / (TentacleGeometry.PointCount - 1)));
-            Assert.That(uvs[v], Is.EqualTo(new Vector2(expectedU, atlasRect.yMin)), $"point {point} u");
-            Assert.That(uvs[v + 1], Is.EqualTo(new Vector2(expectedU, atlasRect.yMax)), $"point {point} v");
+            Assert.That(uvs[v], Is.EqualTo(new Vector2(expectedU, atlasRect.yMax)), $"point {point} upper vertex");
+            Assert.That(uvs[v + 1], Is.EqualTo(new Vector2(expectedU, atlasRect.yMin)), $"point {point} lower vertex");
         }
     }
 
@@ -426,7 +471,7 @@ public sealed class TailChainLegacyParityTests
 
         TentacleGeometry.WriteIndices(tris, indexBase: 0, vertexBase: 0);
 
-        Assert.That(tris.Length, Is.EqualTo(60), "ribbon triangles plus claw triangles");
+        Assert.That(tris.Length, Is.EqualTo(24), "four quads form the five-point ribbon");
 
         for (int segment = 0; segment < TentacleGeometry.SectorCount; segment++)
         {
@@ -442,214 +487,6 @@ public sealed class TailChainLegacyParityTests
             Assert.That(CountTrianglesCoveringQuad(tris, segment, 0), Is.EqualTo(2),
                 $"segment {segment} must be a closed quad, not a lone triangle");
         }
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawIsAClosedStrip()
-    {
-        var tris = new int[TentacleGeometry.IndicesPerTentacle];
-
-        TentacleGeometry.WriteIndices(tris, indexBase: 0, vertexBase: 0);
-
-        int clawBase = TentacleGeometry.RibbonVertexCount;
-        for (int segment = 0; segment < TentacleGeometry.ClawPoints - 1; segment++)
-        {
-            int v = clawBase + (segment * TentacleGeometry.VerticesPerPoint);
-            int t = TentacleGeometry.RibbonIndexCount + (segment * 6);
-
-            Assert.That(tris[t], Is.EqualTo(v), $"claw segment {segment} a");
-            Assert.That(tris[t + 1], Is.EqualTo(v + 1), $"claw segment {segment} b");
-            Assert.That(tris[t + 2], Is.EqualTo(v + 2), $"claw segment {segment} c");
-            Assert.That(tris[t + 3], Is.EqualTo(v + 2), $"claw segment {segment} c again");
-            Assert.That(tris[t + 4], Is.EqualTo(v + 1), $"claw segment {segment} b again");
-            Assert.That(tris[t + 5], Is.EqualTo(v + 3), $"claw segment {segment} d");
-
-            Assert.That(
-                CountTrianglesCoveringQuad(tris, segment, TentacleGeometry.RibbonIndexCount, clawBase),
-                Is.EqualTo(2),
-                $"claw segment {segment} must be a closed quad");
-        }
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawStrokeIsWiderThanTheRibbon_SoTheCutCannotShow()
-    {
-        // The whole point of the claw is to hide the flat end of the ribbon. If its stroke is
-        // narrower than the ribbon, the cut peeks past the stroke on both sides and the tail
-        // reads as severed again.
-        Assert.That(TentacleGeometry.ClawStrokeWidth,
-            Is.GreaterThanOrEqualTo(2f / TentacleGeometry.HalfWidthDivisor),
-            "the claw stroke must be at least the ribbon width, or the cut shows past it");
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawApexSitsOnTheTip_AndProngsSplayForward()
-    {
-        var points = new Vector3[TentacleGeometry.PointCount];
-        for (int i = 0; i < points.Length; i++)
-        {
-            points[i] = new Vector3(i * 0.5f, 0f, 0f);
-        }
-
-        Vector3 tip = points[TentacleGeometry.PointCount - 1];
-        var verts = new Vector3[TentacleGeometry.VerticesPerTentacle];
-        var uvs = new Vector2[TentacleGeometry.VerticesPerTentacle];
-
-        TentacleGeometry.WriteVertices(points, new Rect(0f, 0f, 1f, 1f), verts, uvs, vertBase: 0);
-
-        int clawBase = TentacleGeometry.RibbonVertexCount;
-        int apex = clawBase + ((TentacleGeometry.ClawPoints / 2) * TentacleGeometry.VerticesPerPoint);
-
-        // The rear apex of the arc is centred on the tip, so the stroke crosses the flat end.
-        Assert.That((verts[apex] + verts[apex + 1]) * 0.5f, Is.EqualTo(tip).Within(ParityTolerance),
-            "the claw's rear apex must land exactly on the tip to cover the cut");
-
-        // Prongs open away from the robot: the tail runs along +X, so both prong tips are
-        // further along +X than the apex and offset to either side.
-        int firstProng = clawBase;
-        int lastProng = clawBase + ((TentacleGeometry.ClawPoints - 1) * TentacleGeometry.VerticesPerPoint);
-
-        Assert.That(verts[firstProng].x, Is.GreaterThan(tip.x), "first prong must point outward");
-        Assert.That(verts[lastProng].x, Is.GreaterThan(tip.x), "second prong must point outward");
-        Assert.That(verts[firstProng].y, Is.GreaterThan(0f), "first prong sits on one side");
-        Assert.That(verts[lastProng].y, Is.LessThan(0f), "second prong sits on the other side");
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawProngsTaperToPoints()
-    {
-        var points = new Vector3[TentacleGeometry.PointCount];
-        for (int i = 0; i < points.Length; i++)
-        {
-            points[i] = new Vector3(i * 0.5f, 0f, 0f);
-        }
-
-        var verts = new Vector3[TentacleGeometry.VerticesPerTentacle];
-        var uvs = new Vector2[TentacleGeometry.VerticesPerTentacle];
-
-        TentacleGeometry.WriteVertices(points, new Rect(0f, 0f, 1f, 1f), verts, uvs, vertBase: 0);
-
-        int clawBase = TentacleGeometry.RibbonVertexCount;
-        int firstProng = clawBase;
-        int lastProng = clawBase + ((TentacleGeometry.ClawPoints - 1) * TentacleGeometry.VerticesPerPoint);
-        int middle = clawBase + ((TentacleGeometry.ClawPoints / 2) * TentacleGeometry.VerticesPerPoint);
-
-        float prongWidth = Vector3.Distance(verts[firstProng], verts[firstProng + 1]);
-        float bodyWidth = Vector3.Distance(verts[middle], verts[middle + 1]);
-
-        Assert.That(prongWidth,
-            Is.EqualTo(TentacleGeometry.ClawStrokeWidth * TentacleGeometry.ClawTipTaper)
-                .Within(ParityTolerance),
-            "the prongs must taper so they end in points");
-        Assert.That(bodyWidth, Is.GreaterThan(prongWidth), "the claw body must be wider than its prongs");
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawKeepsItsDirection_WhenTheChainIsFullyCollapsed()
-    {
-        // Right after a snap every chain point sits on the robot, so the last segment has no
-        // direction. Falling through to a fixed fallback stood the claw on end; it must instead
-        // keep pointing the way the tail is laid out, or at least never pick an arbitrary axis.
-        var points = new Vector3[TentacleGeometry.PointCount];
-        for (int i = 0; i < points.Length; i++)
-        {
-            points[i] = new Vector3(1f, 2f, 0f);
-        }
-
-        var verts = new Vector3[TentacleGeometry.VerticesPerTentacle];
-        var uvs = new Vector2[TentacleGeometry.VerticesPerTentacle];
-
-        TentacleGeometry.WriteVertices(points, new Rect(0f, 0f, 1f, 1f), verts, uvs, vertBase: 0);
-
-        int apex = TentacleGeometry.RibbonVertexCount +
-            ((TentacleGeometry.ClawPoints / 2) * TentacleGeometry.VerticesPerPoint);
-
-        for (int i = 0; i < TentacleGeometry.VerticesPerTentacle; i++)
-        {
-            Assert.That(IsFinite(verts[i].x) && IsFinite(verts[i].y),
-                $"vertex {i} must stay finite with a collapsed chain");
-            Assert.That(IsFinite(uvs[i].x) && IsFinite(uvs[i].y),
-                $"vertex {i} uv must stay finite");
-        }
-
-        // The apex still lands on the tip, whatever direction the claw had to fall back to.
-        Assert.That((verts[apex] + verts[apex + 1]) * 0.5f,
-            Is.EqualTo(points[TentacleGeometry.PointCount - 1]).Within(ParityTolerance));
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawFollowsTheTailLayout_WhenOnlyTheLastSegmentCollapses()
-    {
-        var points = new Vector3[TentacleGeometry.PointCount];
-        for (int i = 0; i < TentacleGeometry.PointCount - 1; i++)
-        {
-            points[i] = new Vector3(i * 0.5f, 0f, 0f);
-        }
-
-        // Tip coincides with the node before it: only the last segment is degenerate.
-        points[TentacleGeometry.PointCount - 1] = points[TentacleGeometry.PointCount - 2];
-
-        var verts = new Vector3[TentacleGeometry.VerticesPerTentacle];
-        var uvs = new Vector2[TentacleGeometry.VerticesPerTentacle];
-
-        TentacleGeometry.WriteVertices(points, new Rect(0f, 0f, 1f, 1f), verts, uvs, vertBase: 0);
-
-        int firstProng = TentacleGeometry.RibbonVertexCount;
-        int lastProng = TentacleGeometry.RibbonVertexCount +
-            ((TentacleGeometry.ClawPoints - 1) * TentacleGeometry.VerticesPerPoint);
-
-        // The tail runs along +X, so the fallback has to recover that direction rather than
-        // dropping the claw onto an arbitrary axis such as straight down.
-        Assert.That(verts[firstProng].x, Is.GreaterThan(points[TentacleGeometry.PointCount - 1].x),
-            "the claw must open along the tail, not fall to a fixed axis");
-        Assert.That(verts[lastProng].x, Is.GreaterThan(points[TentacleGeometry.PointCount - 1].x),
-            "the claw must open along the tail, not fall to a fixed axis");
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawArcHasEnoughPointsForAFiniteMiter()
-    {
-        // The claw's mitre is derived from the arc's step angle: with two points the step is a
-        // full turn, its half cosine is zero, and the mitre divides by zero and puts the vertices
-        // in the mesh as NaN. The clamps cap the result, and this pins the point count that keeps
-        // the divisor comfortably away from zero.
-        float stepAngle = Mathf.PI / (TentacleGeometry.ClawPoints - 1);
-        float cosHalfStep = Mathf.Cos(stepAngle * 0.5f);
-
-        Assert.That(TentacleGeometry.ClawPoints, Is.GreaterThanOrEqualTo(4),
-            "fewer than four points drives the mitre towards a division by zero");
-        Assert.That(cosHalfStep, Is.GreaterThan(0.9f),
-            "the arc step must stay far enough from a right half turn for a finite mitre");
-    }
-
-    [Test]
-    public void TentacleGeometry_ClawSubtractsTheSimulationOffset()
-    {
-        // The claw is anchored on the tip, which lives in the simulation frame, so it has to
-        // come back by the offset exactly like the ribbon or it flies off in the debug modes.
-        Vector3 robotTip = new(4f, -2f, 0f);
-        Vector3 originOffset = new(-30f, 12f, 0f);
-
-        // Laid out backwards from the tip so the last point is exactly the tip in robot space.
-        var points = new Vector3[TentacleGeometry.PointCount];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float back = (TentacleGeometry.PointCount - 1 - i) * 0.5f;
-            points[i] = robotTip + originOffset + new Vector3(-back, 0f, 0f);
-        }
-
-        var verts = new Vector3[TentacleGeometry.VerticesPerTentacle];
-        var uvs = new Vector2[TentacleGeometry.VerticesPerTentacle];
-
-        TentacleGeometry.WriteVertices(
-            points, new Rect(0f, 0f, 1f, 1f), verts, uvs, vertBase: 0, originOffset);
-
-        int apex = TentacleGeometry.RibbonVertexCount +
-            ((TentacleGeometry.ClawPoints / 2) * TentacleGeometry.VerticesPerPoint);
-
-        Assert.That((verts[apex] + verts[apex + 1]) * 0.5f,
-            Is.EqualTo(robotTip).Within(ParityTolerance),
-            "the claw must sit on the robot, not in the simulation frame");
     }
 
     [Test]
@@ -673,8 +510,6 @@ public sealed class TailChainLegacyParityTests
         }
     }
 
-    private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-
     private static int CountTrianglesCoveringQuad(
         int[] tris,
         int segment,
@@ -689,7 +524,7 @@ public sealed class TailChainLegacyParityTests
             for (int k = 0; k < 3; k++)
             {
                 int vertex = tris[t + k] - baseVertex;
-                if (vertex < 0 || vertex >= TentacleGeometry.VerticesPerPoint)
+                if (vertex < 0 || vertex >= (TentacleGeometry.VerticesPerPoint * 2))
                 {
                     usesOnlyThisQuad = false;
                     break;
@@ -771,6 +606,8 @@ public sealed class TailChainLegacyParityTests
 
             for (int strand = 0; strand < Strands; strand++)
             {
+                _chain[strand] = new Vector2[Sectors];
+                _smoothed[strand] = new Vector2[Sectors];
                 for (int sector = 0; sector < Sectors; sector++)
                 {
                     _chain[strand][sector] = start;

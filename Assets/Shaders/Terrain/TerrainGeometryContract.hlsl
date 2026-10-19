@@ -2,14 +2,11 @@
 #define KERN_TERRAIN_GEOMETRY_CONTRACT_INCLUDED
 
 // Canonical shader-side representation of a terrain cell silhouette.
-// Coordinates are cell-local; corners and derived bend vertices snap to the
+// Coordinates are cell-local; corners snap to the
 // same 1/32 geometry grid. Surface-map lookups may address its pixel centers;
 // silhouette coverage always tests the continuous raster sample.
 static const float KERN_TERRAIN_FACE_GRID_SIZE = 32.0;
-static const int KERN_TERRAIN_ORGANIC_EDGE_BASE = 5;
-static const int KERN_TERRAIN_ORGANIC_EDGE_CENTER = 2;
-static const int KERN_TERRAIN_ORGANIC_EDGE_COUNT = 4;
-static const int KERN_TERRAIN_ORGANIC_EDGE_CODE_OFFSET = 1;
+static const int KERN_TERRAIN_SIDE_COUNT = 4;
 
 float2 QuantizeTerrainGeometryPoint(float2 geometryPosition)
 {

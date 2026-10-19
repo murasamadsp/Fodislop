@@ -8,18 +8,16 @@ namespace Kern.Tests.World;
 [TestFixture]
 public sealed class TerrainGeometryWireContractTests
 {
-    [TestCase(-2, -2, -2, -2, 1)]
-    [TestCase(0, 0, 0, 0, 313)]
-    [TestCase(2, 2, 2, 2, 625)]
-    public void OrganicEdgeCodeUsesStableBaseFiveOrder(
-        int bottom,
-        int right,
-        int top,
-        int left,
-        int expected)
+    [Test]
+    public void CornerOrderIsCounterClockwiseFromBottomLeft()
     {
-        Assert.That(
-            TerrainCellGeometry.EncodeOrganicEdges(bottom, right, top, left),
-            Is.EqualTo(expected));
+        var geometry = TerrainCellGeometry.FromOffsets(
+            UnityEngine.Vector3.zero, UnityEngine.Vector3.zero,
+            UnityEngine.Vector3.zero, UnityEngine.Vector3.zero);
+        Assert.That(geometry.GetCorner(0), Is.EqualTo(new UnityEngine.Vector2(0f, 0f)));
+        Assert.That(geometry.GetCorner(1), Is.EqualTo(new UnityEngine.Vector2(1f, 0f)));
+        Assert.That(geometry.GetCorner(2), Is.EqualTo(new UnityEngine.Vector2(1f, 1f)));
+        Assert.That(geometry.GetCorner(3), Is.EqualTo(new UnityEngine.Vector2(0f, 1f)));
+        Assert.That(geometry.IsAnchored, Is.False);
     }
 }

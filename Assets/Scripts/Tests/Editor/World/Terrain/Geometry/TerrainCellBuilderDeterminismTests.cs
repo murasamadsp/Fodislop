@@ -23,13 +23,12 @@ public sealed class TerrainCellBuilderDeterminismTests
     private const int OriginX = 96;
     private const int OriginY = 64;
 
-    [TestCase(TerrainDistortionStyle.Classic)]
-    [TestCase(TerrainDistortionStyle.Organic)]
-    public void RoadSurfaceDoesNotInheritNeighborDistortion(TerrainDistortionStyle style)
+    [Test]
+    public void RoadSurfaceDoesNotInheritNeighborDistortion()
     {
         var world = new TerrainTestWorld();
         var cache = new TerrainCellCache();
-        var distortion = new TerrainDistortionSettings { DistortionStyle = style };
+        var distortion = new TerrainDistortionSettings();
         TerrainCellSources sources = world.BuildSources(cache, distortion,
             OriginX, OriginY, Width, Height);
         var quad = new TerrainVertex[4];
@@ -43,7 +42,7 @@ public sealed class TerrainCellBuilderDeterminismTests
                     Node(sources, x + 1, y) != TerrainVertexOffset.Zero ||
                     Node(sources, x + 1, y + 1) != TerrainVertexOffset.Zero ||
                     Node(sources, x, y + 1) != TerrainVertexOffset.Zero;
-                if (!movedNeighbor && style == TerrainDistortionStyle.Classic) { continue; }
+                if (!movedNeighbor) { continue; }
                 adjacentRoads++;
                 TerrainQuadBuilder.FillQuad(sources,
                     new TerrainQuadSite(x, y, OriginX + x, OriginY + y, 1f),

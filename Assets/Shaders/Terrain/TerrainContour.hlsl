@@ -4,11 +4,6 @@
 #include "TerrainLightingData.hlsl"
 #include "TerrainGeometryContract.hlsl"
 
-// Форма органического искажения приходит свойствами материала, а вершинный
-// проход Universal2D cbuffer сам не подключает — иначе _OrganicBendStrength и
-// _OrganicBendPivot оказываются необъявленными. Объявлять их вне
-// UnityPerMaterial нельзя, поэтому подключаем блок целиком.
-//
 // Порядок обязателен: cbuffer-файл содержит ещё и TerrainMaterialAtlasTexelSize,
 // который зовёт TerrainAtlasTexelSize, — сначала идёт выборка атласа. Guard'ы
 // внутри обоих файлов делают повторное включение безопасным.
@@ -103,8 +98,7 @@ float EvaluateRoundableBlockAlpha(
     return lerp(alpha, 1.0, cornerExclude);
 }
 
-// Выключатель каймы. Настройка игрока, публикуется TerrainRenderer.
-float _TerrainRimEnabled;
+// The rim switch is bound by the terrain material in UnityPerMaterial.
 
 float TerrainQuantizeRimBevel(float bevel)
 {
@@ -139,7 +133,6 @@ struct TerrainSurfaceInputs
     float4 cornersX;
     float4 cornersY;
     float anchored;
-    float packedOrganicEdges;
     float packedContour;
     float packedLightingFlags;
     int cellSurfaceEffect;
@@ -159,7 +152,6 @@ TerrainSurfaceInputs BuildTerrainSurfaceInputs(
     surface.cornersX = cornersX;
     surface.cornersY = cornersY;
     surface.anchored = packedData.x;
-    surface.packedOrganicEdges = packedData.w;
     surface.packedContour = lightContourDecal.z;
     surface.packedLightingFlags = lightContourDecal.y;
     surface.cellSurfaceEffect = (int)(packedCellSurfaceEffect + 0.5);
@@ -167,16 +159,12 @@ TerrainSurfaceInputs BuildTerrainSurfaceInputs(
 }
 
 // Shade each exposed side independently. Distances use the rendered polygon,
-// including the quantized organic bend points, so the bevel follows distortion.
+// so the bevel follows the displaced corners.
 float TerrainRimSideBevel(TerrainSurfaceInputs surface, int foreignSides)
 {
-    bool isOrganic = surface.packedOrganicEdges > 0.5;
-    float4 organicBends = isOrganic
-        ? TerrainOrganicGeometryBends(surface.packedOrganicEdges)
-        : float4(0.0, 0.0, 0.0, 0.0);
     float bevel = 1.0;
     [unroll]
-    for (int side = 0; side < KERN_TERRAIN_ORGANIC_EDGE_COUNT; side++)
+    for (int side = 0; side < KERN_TERRAIN_SIDE_COUNT; side++)
     {
         int sideBit = side == 0 ? 4 : side == 1 ? 8 : side == 2 ? 1 : 2;
         if ((foreignSides & sideBit) == 0)
@@ -188,11 +176,9 @@ float TerrainRimSideBevel(TerrainSurfaceInputs surface, int foreignSides)
             surface.cellSample,
             surface.cornersX,
             surface.cornersY,
-            organicBends,
-            isOrganic,
             side);
         float influence = saturate(1.0 - distanceToSide * _RimDistanceScale);
-        float sideShade = 1.0 - _RimFalloff * influence * influence;
+        float sideShade = 1.0 - _RimFalloff * influence;
         bevel = min(bevel, sideShade);
     }
 
@@ -243,7 +229,7 @@ float TerrainRimBevel(TerrainSurfaceInputs surface)
         if ((sameSides & 4) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.0, -0.75), float2(0.5, 0.75)));
         if ((sameSides & 8) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.75, 0.0), float2(0.75, 0.5)));
         float influence = saturate(1.0 + edge * _RimDistanceScale);
-        float shade = 1.0 - _RimFalloff * influence * influence;
+        float shade = 1.0 - _RimFalloff * influence;
         bevel = shade;
     }
     else
@@ -255,7 +241,7 @@ float TerrainRimBevel(TerrainSurfaceInputs surface)
     if (concaveCorners != 0)
     {
         [unroll]
-        for (int corner = 0; corner < KERN_TERRAIN_ORGANIC_EDGE_COUNT; corner++)
+        for (int corner = 0; corner < KERN_TERRAIN_SIDE_COUNT; corner++)
         {
             if ((concaveCorners & (1 << corner)) == 0)
             {
@@ -266,7 +252,7 @@ float TerrainRimBevel(TerrainSurfaceInputs surface)
                 surface.cellSample,
                 TerrainGeometryCorner(surface.cornersX, surface.cornersY, corner));
             float influence = saturate(1.0 - distanceToCorner * _RimDistanceScale);
-            float cornerShade = 1.0 - _RimFalloff * influence * influence;
+            float cornerShade = 1.0 - _RimFalloff * influence;
             bevel = min(bevel, cornerShade);
         }
     }
@@ -301,23 +287,17 @@ float EvaluateTerrainCellCoverage(
     float antialiasScale,
     float applyGeometry)
 {
-    // Corners and bends are quantized once in the shared polygon contract.
+    // Corners are quantized once in the shared polygon contract.
     // Classify the real raster sample: snapping each cell's fragment position
     // independently moves shared edges apart and opens subpixel gaps.
     float geometryCoverage = 1.0;
     if (applyGeometry > 0.5)
     {
-        geometryCoverage = surface.packedOrganicEdges > 0.5
-            ? TerrainOrganicGeometryCoverage(
-                surface.cellSample,
-                surface.cornersX,
-                surface.cornersY,
-                surface.packedOrganicEdges)
-            : TerrainGeometryCoverage(
-                surface.cellSample,
-                surface.cornersX,
-                surface.cornersY,
-                surface.anchored);
+        geometryCoverage = TerrainGeometryCoverage(
+            surface.cellSample,
+            surface.cornersX,
+            surface.cornersY,
+            surface.anchored);
     }
     float contourCoverage = EvaluateTerrainCellContourCoverage(surface, antialiasScale);
     return geometryCoverage * contourCoverage;

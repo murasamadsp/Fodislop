@@ -6,12 +6,6 @@ using UnityEngine;
 
 namespace Kern.Core;
 
-public enum TerrainDistortionStyle
-{
-    Classic = 0,
-    Organic = 1,
-}
-
 [Serializable]
 public sealed class TerrainSettings
 {
@@ -46,11 +40,6 @@ public sealed class TerrainSettings
     [SettingLabel("settings.world.block_edge_distortion")]
     [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainBuildPipeline.EnableDistortion")]
     public bool EnableDistortion = true;
-
-    [SettingUnbounded("Стиль смещения узлов; серверный тип Distortion не меняется.")]
-    [SettingLabel("settings.world.distortion_style")]
-    [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainBuildPipeline.DistortionStyle")]
-    public TerrainDistortionStyle DistortionStyle = TerrainDistortionStyle.Organic;
 
     // Тумблер каймы: затемнения к границам чужой семьи каймы.
     // Выключенная кайма не убирает ни маску, ни транспорт — шейдер просто

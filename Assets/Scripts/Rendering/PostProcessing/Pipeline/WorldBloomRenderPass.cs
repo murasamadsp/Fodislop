@@ -156,8 +156,8 @@ namespace Kern.Rendering.PostProcessing
             var binding = WorldRenderGridCamera.Capture(camera.camera);
             WorldRenderGrid worldGrid = binding.Grid;
             TextureDesc descriptor = sceneColor.GetDescriptor(graph);
-            int minX = Mathf.FloorToInt((float)(worldGrid.ViewportMinX * WorldRenderGrid.PixelsPerCell));
-            int minY = Mathf.FloorToInt((float)(worldGrid.ViewportMinY * WorldRenderGrid.PixelsPerCell));
+            int minX = worldGrid.MinPixelX;
+            int minY = worldGrid.MinPixelY;
             var scene = new WorldBloomLevel(minX, minY, descriptor.width, descriptor.height, 1);
             int count = 1;
             _levels[0] = WorldBloomLevel.Cover(minX, minY, descriptor.width, descriptor.height, 4);

@@ -16,11 +16,10 @@ namespace Kern.Game;
 ///         inertia against the root's speed.
 ///     </para>
 ///     <para>
-///         Four deliberate departures from the legacy client, none of which should be "fixed":
-///         a continuous alpha instead of a 60 Hz gated step, so the tail does not depend on frame
-///         rate; a wobble that is not gated by movement, so a standing tail keeps shivering; eight
-///         strands instead of four; and the geometry in <see cref="TentacleGeometry" />, which
-///         shares vertices where the legacy layout did not. Consequences and measurements are in
+    ///         Simulation uses elapsed-time accumulation at 60 Hz, a wobble that continues
+    ///         while standing, and batched shared-vertex ribbon
+///         geometry. The source prefab uses four line renderers; the same four
+///         strands are kept here. Consequences and measurements are in
 ///         docs/architecture/TAIL_RENDERING.md.
 ///     </para>
 /// </remarks>
@@ -37,10 +36,11 @@ public sealed class TailChain
 
     /// <summary>
     ///     The old step was exponential smoothing applied once per 1/60 s, so the continuous
-    ///     equivalent over <c>deltaTime</c> is <c>alpha = 1 - inertia^(60 * deltaTime)</c>. This
-    ///     is what makes the motion frame-rate independent.
+    ///     equivalent for an individual node is alpha = 1 - inertia^(60 * deltaTime).
+    ///     Coupled nodes still require bounded steps when a frame stalls.
     /// </summary>
-    private const float ReferenceStepsPerSecond = 60f; //TODO убрать нахуй эту функцию.
+    private const float ReferenceStepsPerSecond = 60f;
+    private const float MaximumStepSeconds = 1f / ReferenceStepsPerSecond;
 
     /// <summary>Weight of the old node position; the remainder is the pull toward the target.</summary>
     private const float BaseInertia = 0.35f;
@@ -84,6 +84,7 @@ public sealed class TailChain
     private readonly Vector3[] _chain = new Vector3[NodeCount];
     private readonly Vector3[] _smoothed = new Vector3[NodeCount];
     private Vector3 _rootPosition;
+    private double _remainingSeconds;
     private bool _settled;
 
     public TailChain(int strandIndex, Vector3 startPosition, Func<float>? unitRandom = null)
@@ -113,6 +114,7 @@ public sealed class TailChain
 
     public void Snap(Vector3 position)
     {
+        _remainingSeconds = 0;
         _rootPosition = position;
         for (int i = 0; i < NodeCount; i++)
         {
@@ -125,6 +127,33 @@ public sealed class TailChain
 
     /// <param name="stretch">Anti-stretch distance shared by every strand.</param>
     public void Step(Vector3 rootPosition, float movementFactor, float deltaTime, float stretch)
+    {
+        if (deltaTime <= 0f)
+        {
+            return;
+        }
+
+        Vector3 previousRoot = _rootPosition;
+        double frameSeconds = deltaTime;
+        double elapsedSeconds = 0;
+        // Consume complete reference ticks, including those missed during a
+        // stall. Keep the remainder so high FPS does not resample random noise
+        // more often or change the coupled chain's integration order.
+        while (_remainingSeconds + frameSeconds >= MaximumStepSeconds)
+        {
+            double untilTick = MaximumStepSeconds - _remainingSeconds;
+            elapsedSeconds += untilTick;
+            frameSeconds -= untilTick;
+            _remainingSeconds = 0;
+            Vector3 stepRoot = Vector3.Lerp(previousRoot, rootPosition, (float)(elapsedSeconds / deltaTime));
+            IntegrateStep(stepRoot, movementFactor, MaximumStepSeconds, stretch);
+        }
+
+        _remainingSeconds += frameSeconds;
+        _rootPosition = rootPosition;
+    }
+
+    private void IntegrateStep(Vector3 rootPosition, float movementFactor, float deltaTime, float stretch)
     {
         _rootPosition = rootPosition;
 

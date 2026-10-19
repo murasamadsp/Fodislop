@@ -266,38 +266,6 @@ internal sealed class ProgrammatorProgramStore
             nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
             row.Add(nameLabel);
 
-            var delBtn = new Button(() => DeleteProgram(idx));
-            delBtn.text = "\u00d7";
-            delBtn.AddToClassList("prog-del-btn");
-            delBtn.style.width = 22;
-            delBtn.style.height = 22;
-            delBtn.style.backgroundColor = new Color(0.3f, 0f, 0f, 0.3f);
-            delBtn.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
-            delBtn.style.fontSize = 14;
-            delBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            delBtn.style.borderTopWidth = 0;
-            delBtn.style.borderBottomWidth = 0;
-            delBtn.style.borderLeftWidth = 0;
-            delBtn.style.borderRightWidth = 0;
-            delBtn.style.paddingTop = 0;
-            delBtn.style.paddingBottom = 0;
-            delBtn.style.paddingLeft = 0;
-            delBtn.style.paddingRight = 0;
-            delBtn.style.marginLeft = 8;
-            row.Add(delBtn);
-
-            var renameBtn = new Button(_protocol.RenameProgram);
-            renameBtn.text = "✎";
-            renameBtn.AddToClassList("prog-rename-btn");
-            renameBtn.style.width = 22;
-            renameBtn.style.height = 22;
-            renameBtn.style.marginLeft = 4;
-            renameBtn.style.paddingTop = 0;
-            renameBtn.style.paddingBottom = 0;
-            renameBtn.style.paddingLeft = 0;
-            renameBtn.style.paddingRight = 0;
-            row.Add(renameBtn);
-
             row.RegisterCallback<ClickEvent>(_ => OpenProgram(idx));
             row.RegisterCallback<MouseEnterEvent>(_ =>
                 row.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f));

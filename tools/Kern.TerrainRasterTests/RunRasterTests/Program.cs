@@ -14,14 +14,16 @@ internal static class Program
         "background-ignores-occlusion",
         "wall-variant-ignores-bottom",
         "node-edge-jitter-sign",
-        "organic-noise-truncates",
         "round-rim-follows-cell-sides",
     ];
 
     public static int Main()
     {
         string root = FindProjectRoot();
-        string shim = Read(root, "tools/Kern.LightingTests/NativeTransportShim.cpp");
+        // HLSL round uses nearest-even; std::round rounds ties away from zero.
+        string shim = Read(root, "tools/Kern.LightingTests/NativeTransportShim.cpp")
+            .Replace("std::round(a.x)", "std::nearbyint(a.x)", StringComparison.Ordinal)
+            .Replace("std::round(a.y)", "std::nearbyint(a.y)", StringComparison.Ordinal);
         string format = Read(root, "Assets/Shaders/Terrain/TerrainCellFormat.hlsl");
         string loader = Read(root, "Assets/Shaders/Terrain/TerrainCellData.hlsl");
         string terrainContour = Read(root, "Assets/Shaders/Terrain/TerrainContour.hlsl");
@@ -109,7 +111,7 @@ internal static class Program
             return Fail("The raw AO debug output must use the displaced foreground silhouette");
         }
 
-        string rim = SliceBetween(terrainContour, "// Выключатель каймы.", "// The visible terrain");
+        string rim = SliceBetween(terrainContour, "// The rim switch is bound", "// The visible terrain");
         string contour = terrainContour[..terrainContour.IndexOf("float2 QuantizeTerrainFaceUV(", StringComparison.Ordinal)];
         const string quantizeUv = """
             float2 QuantizeTerrainFaceUV(float2 uv)
@@ -122,7 +124,7 @@ internal static class Program
             float distance(float2 a, float2 b) { return length(a - b); }
             float lerp(float a, float b, float t) { return a + (b-a)*t; }
             float2 lerp(float2 a, float2 b, float2 t) { return a + (b-a)*t; }
-            float4 round(float4 a) { return {std::round(a.x),std::round(a.y),std::round(a.z),std::round(a.w)}; }
+            float4 round(float4 a) { return {std::nearbyint(a.x),std::nearbyint(a.y),std::nearbyint(a.z),std::nearbyint(a.w)}; }
             float4 make_float4(float a, float2 b, float c) { return {a,b.x,b.y,c}; }
             float _TestFwidth = 0.0f;
             float fwidth(float) { return _TestFwidth; }
@@ -147,13 +149,12 @@ internal static class Program
             };
             """;
         const string terrainUniforms = """
-            float _OrganicBendStrength = 1.0;
-            float _OrganicBendPivot = 0.35;
             float _RoundableCornerRadius = 0.51;
             float _RimQuantizationEnabled = 0.0;
             float _TerrainAmbientOcclusionDistance = 0.25;
             float _RimDistanceScale = 2.0;
             float _RimFalloff = 0.5;
+            float _TerrainRimEnabled = 1.0;
             float4 _ShimAtlasTexelSize[8] = {};
             float4 TerrainMaterialAtlasTexelSize(int slot) { return _ShimAtlasTexelSize[slot]; }
             """;
@@ -187,29 +188,14 @@ internal static class Program
 
                 if (mutation == "double-quantize-fragments")
                 {
-                    string before = """
-                            return TerrainPolygonContains(
-                                samplePosition,
-                                cornersX,
-                                cornersY,
-                                packedEdges,
-                                true) ? 1.0 : 0.0;
-                        """;
-                    string after = """
-                            float2 fragmentGridSample = (floor(samplePosition * 32.0) + 0.5) / 32.0;
-                            return TerrainPolygonContains(
-                                fragmentGridSample,
-                                cornersX,
-                                cornersY,
-                                packedEdges,
-                                true) ? 1.0 : 0.0;
-                        """;
+                    string before = "float2 samplePosition,\n    float4 cornersX,\n    float4 cornersY,\n    float anchored)\n{";
+                    string after = before + "\n    samplePosition = (floor(samplePosition * 32.0) + 0.5) / 32.0;";
                     candidateGeometry = candidateGeometry.Replace(before, after, StringComparison.Ordinal);
                     if (candidateGeometry == terrainGeometry) return Fail("double-quantize-fragments mutation is stale");
                 }
 
                 if (mutation is "rim-merges-any-masses" or "background-ignores-occlusion" or "wall-variant-ignores-bottom"
-                    or "node-edge-jitter-sign" or "organic-noise-truncates")
+                    or "node-edge-jitter-sign")
                 {
                     (string before, string after) = mutation switch
                     {
@@ -225,9 +211,7 @@ internal static class Program
                         "node-edge-jitter-sign" => (
                             "if (ctl && ctr) return int2(0, -ry);",
                             "if (ctl && ctr) return int2(0, ry);"),
-                        _ => (
-                            "return ((value << 1) + (d * d) / 2u) / (d * d);",
-                            "return (value << 1) / (d * d);"),
+                        _ => throw new InvalidOperationException(mutation),
                     };
                     candidateLoader = candidateLoader.Replace(before, after, StringComparison.Ordinal);
                     if (candidateLoader == loader) return Fail($"{mutation} mutation is stale");

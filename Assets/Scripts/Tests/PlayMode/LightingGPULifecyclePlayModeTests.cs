@@ -934,14 +934,14 @@ new(1f, 0.25f, 0.125f), new(0f, 0.5f, 1f), new(0.3f, 1f, 0f)
         lighting.ClearDynamicLights();
         yield return SelectAndSettle(GraphicsPreset.Overdrive);
 
-        // One solid cell in the upper quarter of the lighting region. The field
+        // One solid cell in the upper half and right quarter of the region. The field
         // is cleared to air first, so the oracle is the cell's world position
         // alone: a mirrored field shows air there and solid at the mirror row.
         Vector4 initialRect = lighting.WorldRect;
         float cellSize = lighting.CellSize;
         var wallCell = new Vector2Int(
-            Mathf.FloorToInt((initialRect.x + initialRect.z * 0.5f) / cellSize) + 2,
-            Mathf.FloorToInt((initialRect.y + initialRect.w * 0.75f) / cellSize));
+            Mathf.FloorToInt((initialRect.x + initialRect.z * 0.75f) / cellSize),
+            Mathf.FloorToInt((initialRect.y + initialRect.w * 0.6f) / cellSize));
         LightingGeometryRegistry registry = PlayModeHarness.RequireInGame<LightingGeometryRegistry>();
         GameObject fixture = PlayModeHarness.RequireInGame<ISceneObjectFactory>().Create("AsymmetricSolidCell");
         Texture2D white = RuntimeTextureFactory.CreateRGBA32NoMip(1, 1, "AsymmetricSolidAlbedo",
@@ -980,16 +980,17 @@ Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero
             yield return PlayModeHarness.Frames(10);
             yield return AssertSolidCellAtWorldTexels(lighting, wallCell, "initial region");
 
-            // Reanchor along X, then along Y (camera down keeps the cell in the
-            // upper half). Each shift must move the cell's texels by exactly the
+            // Reanchor along X, then upward along Y while retaining the cell
+            // in the overlapping region. Each shift must move its texels by exactly the
             // region delta; a mirrored raster moves them the opposite way in Y.
-            foreach (Vector3 step in new[] { new Vector3(cellSize, 0f, 0f), new Vector3(0f, -cellSize, 0f) })
+            foreach (Vector3 step in new[] { new Vector3(cellSize, 0f, 0f), new Vector3(0f, cellSize, 0f) })
             {
                 Vector4 before = lighting.WorldRect;
+                int maximumSteps = Mathf.CeilToInt(Mathf.Max(before.z, before.w) / cellSize) + 1;
                 int moved = 0;
                 while (lighting.WorldRect == before)
                 {
-                    Assert.That(moved, Is.LessThan(48), $"Lighting region never reanchored for camera step {step}.");
+                    Assert.That(moved, Is.LessThan(maximumSteps), $"Lighting region never reanchored for camera step {step}.");
                     _walkingProbeCamera.transform.position += step;
                     moved++;
                     yield return PlayModeHarness.Frames(3);
@@ -1024,20 +1025,23 @@ Vector2.zero, Vector2.zero, Vector2.zero, Vector2.zero
             int y = Mathf.FloorToInt(((wallCell.y + 0.5f) * cellSize - rect.y) / rect.w * field.height);
             int mirroredY = field.height - 1 - y;
             Assert.That(x, Is.InRange(0, field.width - 1), $"{stage}: cell left the {name} field horizontally.");
-            Assert.That(y, Is.InRange(field.height / 2 + 1, field.height - 1),
-                $"{stage}: cell must stay in the upper half of the {name} field to be asymmetric.");
+            Assert.That(y, Is.InRange(0, field.height - 1), $"{stage}: cell left the {name} field vertically.");
+            Assert.That(Mathf.Abs(y - mirroredY), Is.GreaterThan(1),
+                $"{stage}: cell must stay away from the mirror axis of the {name} field.");
             Color32[]? wall = null;
             Color32[]? mirror = null;
-            AsyncGPUReadback.Request(field, 0, x, 1, Kern.Core.Interfaces.WorldLighting.LightingFieldOrientation.MemoryRow(y, field.height), 1, 0, 1,
+            AsyncGPUReadback.Request(field, 0, x, 1, Kern.Core.Interfaces.WorldLighting.LightingFieldOrientation.MemoryRow(y, field.height), 1, 0, 1, TextureFormat.RGBA32,
                 request => { Assert.That(request.hasError, Is.False); wall = request.GetData<Color32>().ToArray(); });
-            AsyncGPUReadback.Request(field, 0, x, 1, Kern.Core.Interfaces.WorldLighting.LightingFieldOrientation.MemoryRow(mirroredY, field.height), 1, 0, 1,
+            AsyncGPUReadback.Request(field, 0, x, 1, Kern.Core.Interfaces.WorldLighting.LightingFieldOrientation.MemoryRow(mirroredY, field.height), 1, 0, 1, TextureFormat.RGBA32,
                 request => { Assert.That(request.hasError, Is.False); mirror = request.GetData<Color32>().ToArray(); });
             yield return PlayModeHarness.WaitUntil(() => wall != null && mirror != null, 10f,
                 $"{stage}: {name} field readback did not finish.");
-            Assert.That(wall![0].a, Is.EqualTo(255), $"{stage}: the solid cell is missing at its world texel in the {name} field.");
-            Assert.That(mirror![0].a, Is.Zero, $"{stage}: the {name} field holds the solid cell at its Y-mirrored texel.");
+            byte wallOccupancy = name == "material" ? wall![0].a : wall![0].r;
+            byte mirrorOccupancy = name == "material" ? mirror![0].a : mirror![0].r;
+            Assert.That(wallOccupancy, Is.EqualTo(255), $"{stage}: the solid cell is missing at its world texel in the {name} field.");
+            Assert.That(mirrorOccupancy, Is.Zero, $"{stage}: the {name} field holds the solid cell at its Y-mirrored texel.");
             TestContext.WriteLine($"fieldOrientation: stage={stage}; field={name}; rect={rect}; texel=({x},{y}); " +
-                $"wall={wall[0].a}; mirror={mirror[0].a}");
+                $"wall={wallOccupancy}; mirror={mirrorOccupancy}");
         }
     }
 

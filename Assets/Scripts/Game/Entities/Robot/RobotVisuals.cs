@@ -2,6 +2,7 @@
 
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Kern.Core;
 using Kern.Core.Interfaces;
 using Kern.Core.Lifecycle;
 using UnityEngine;
@@ -10,6 +11,9 @@ namespace Kern.Game;
 
 public sealed class RobotVisuals
 {
+    private const int StrandCount = 4;
+    private const float FacingEpsilonSquared = 1e-6f;
+
     private readonly Transform _transform;
     private readonly bool _isLocalPlayer;
     private WorldEntityBatchRenderer _entityBatchRenderer = null!;
@@ -22,7 +26,8 @@ public sealed class RobotVisuals
     private Tentacle[]? _tentacles;
     private bool _tentaclesSettled;
     private Vector3 _lastTentacleRootPosition;
-    private float _lastTentacleRotation;
+    private Vector3 _forcedTailOffset;
+    private TailMotionDebugMode _tailMotionDebugMode;
 
     public Sprite? SkinSprite => _skinSprite;
     public Transform? ClanTransform => _clanTransform;
@@ -32,6 +37,35 @@ public sealed class RobotVisuals
     {
         _transform = transform;
         _isLocalPlayer = isLocalPlayer;
+    }
+
+    internal static float ForcedTailSpeed(TailMotionDebugMode mode) => mode switch
+    {
+        TailMotionDebugMode.Minimal => ProjectRuntimeContracts.Movement.RobotMoveSpeed * 0.5f,
+        TailMotionDebugMode.Medium => ProjectRuntimeContracts.Movement.RobotMoveSpeed,
+        TailMotionDebugMode.Maximum => ProjectRuntimeContracts.Movement.RobotMoveSpeed * 4f,
+        _ => 0f,
+    };
+
+    internal static Vector3 AdvanceForcedOffset(
+        Vector3 offset,
+        Transform facingSource,
+        float speed,
+        float deltaTime)
+    {
+        if (speed <= 0f)
+        {
+            return offset;
+        }
+
+        Vector3 facing = facingSource.up;
+        facing.z = 0f;
+        if (facing.sqrMagnitude <= FacingEpsilonSquared)
+        {
+            return offset;
+        }
+
+        return offset + (facing.normalized * (speed * deltaTime));
     }
 
     public void Initialize(WorldEntityBatchRenderer entityBatchRenderer, Transform? clanTransform)
@@ -108,18 +142,15 @@ public sealed class RobotVisuals
             return;
         }
 
-        _tentacles = new Tentacle[4];
+        _tentacles = new Tentacle[StrandCount];
         _tentaclesSettled = false;
-        float[] offsets = { -45f, -15f, 15f, 45f };
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < StrandCount; i++)
         {
             _tentacles[i] = new Tentacle(
                 _entityBatchRenderer,
                 tailTexture,
                 position,
-                offsets[i],
-                i,
-                4);
+                i);
         }
     }
 
@@ -134,6 +165,9 @@ public sealed class RobotVisuals
 
             _tentacles = null;
         }
+
+        _forcedTailOffset = Vector3.zero;
+        _tentaclesSettled = true;
     }
 
     public void SetTentaclesActive(bool active)
@@ -151,6 +185,7 @@ public sealed class RobotVisuals
 
     public void SnapTentacles(Vector3 position)
     {
+        _forcedTailOffset = Vector3.zero;
         if (_tentacles != null)
         {
             _tentaclesSettled = false;
@@ -179,20 +214,31 @@ public sealed class RobotVisuals
         return true;
     }
 
-    public void UpdateTentacles(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
+    public void UpdateTentacles(Vector3 rootPosition, float movementFactor, float deltaTime)
     {
-        if (_tentacles == null)
+        if (_tentacles == null || _tentacles.Length == 0)
         {
             return;
         }
 
+        float sharedStretch = _tentacles[0].TipDistanceTo(rootPosition);
         foreach (var tentacle in _tentacles)
         {
-            tentacle?.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
+            tentacle.Update(
+                rootPosition,
+                movementFactor,
+                deltaTime,
+                sharedStretch,
+                _forcedTailOffset);
         }
     }
 
-    public void UpdateMotion(Vector3 position, float rotationAngle, float movementFactor, float deltaTime, bool bodySettled)
+    public void UpdateMotion(
+        Vector3 position,
+        float movementFactor,
+        float deltaTime,
+        bool bodySettled,
+        TailMotionDebugMode tailMotionDebugMode)
     {
         if (_tentacles == null)
         {
@@ -200,14 +246,37 @@ public sealed class RobotVisuals
             return;
         }
 
-        if (bodySettled && _tentaclesSettled)
+        bool returningToNormal =
+            tailMotionDebugMode == TailMotionDebugMode.Normal &&
+            _tailMotionDebugMode != TailMotionDebugMode.Normal;
+        if (returningToNormal)
+        {
+            SnapTentacles(position);
+        }
+
+        _tailMotionDebugMode = tailMotionDebugMode;
+        float forcedSpeed = ForcedTailSpeed(tailMotionDebugMode);
+        if (forcedSpeed > 0f)
+        {
+            _forcedTailOffset = AdvanceForcedOffset(
+                _forcedTailOffset,
+                _transform,
+                forcedSpeed,
+                deltaTime);
+        }
+
+        if (bodySettled && _tentaclesSettled && forcedSpeed <= 0f)
         {
             return;
         }
 
+        float effectiveMovementFactor = forcedSpeed > 0f
+            ? Mathf.Max(movementFactor, 1f)
+            : movementFactor;
+
         if (bodySettled)
         {
-            UpdateTentacles(position, rotationAngle, 0f, deltaTime);
+            UpdateTentacles(position, effectiveMovementFactor, deltaTime);
             _tentaclesSettled = AreTentaclesSettled();
             return;
         }
@@ -215,15 +284,14 @@ public sealed class RobotVisuals
         bool tentacleStateChanged =
             !_tentaclesSettled ||
             (position - _lastTentacleRootPosition).sqrMagnitude > 1e-8f ||
-            Mathf.Abs(Mathf.DeltaAngle(_lastTentacleRotation, rotationAngle)) > 0.001f ||
-            movementFactor > 0.0001f;
+            movementFactor > 0.0001f ||
+            forcedSpeed > 0f;
 
         if (tentacleStateChanged)
         {
-            UpdateTentacles(position, rotationAngle, movementFactor, deltaTime);
+            UpdateTentacles(position, effectiveMovementFactor, deltaTime);
             _tentaclesSettled = AreTentaclesSettled();
             _lastTentacleRootPosition = position;
-            _lastTentacleRotation = rotationAngle;
         }
     }
 

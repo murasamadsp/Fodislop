@@ -32,8 +32,6 @@ public sealed class TerrainCellBuffers : IDisposable
     public static readonly int GridSizeId = Shader.PropertyToID("_TerrainCellGridSize");
     public static readonly int OriginId = Shader.PropertyToID("_TerrainCellOrigin");
     public static readonly int ViewOffsetId = Shader.PropertyToID("_TerrainCellViewOffset");
-    public static readonly int OrganicHorizontalSeedId = Shader.PropertyToID("_TerrainOrganicHorizontalSeed");
-    public static readonly int OrganicVerticalSeedId = Shader.PropertyToID("_TerrainOrganicVerticalSeed");
     public static readonly int GroundDecalRuleId = Shader.PropertyToID("_TerrainGroundDecalRule");
     public static readonly int RockDecalRuleId = Shader.PropertyToID("_TerrainRockDecalRule");
     public static readonly int UnderlayTypeId = Shader.PropertyToID("_TerrainUnderlayType");
@@ -288,8 +286,6 @@ public sealed class TerrainCellBuffers : IDisposable
         Shader.SetGlobalInteger(DistortionStyleId, distortionStyle);
         Shader.SetGlobalInteger(UnderlayTypeId, (int)BlockRegistry.UnderlayType);
         Shader.SetGlobalVectorArray(DistortionId, s_distortion);
-        Shader.SetGlobalInteger(OrganicHorizontalSeedId, (int)TerrainConfigHolder.OrganicEdgeHorizontalSeed);
-        Shader.SetGlobalInteger(OrganicVerticalSeedId, (int)TerrainConfigHolder.OrganicEdgeVerticalSeed);
         Shader.SetGlobalInteger(GroundDecalRuleId, (int)TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule));
         Shader.SetGlobalInteger(RockDecalRuleId, (int)TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule));
     }

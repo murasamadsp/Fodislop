@@ -202,6 +202,11 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     public event Action? OnDisconnected;
     public event Action? OnDisconnecting;
     public event Action? OnConnecting;
+    public event Action<Exception>? OnError;
+
+    private int _decodeErrorCount;
+
+    public int DecodeErrorCount => _decodeErrorCount;
 
     // Всё, что клиент отправил офлайн-серверу; для тестов и отладочных инструментов.
     internal event Action<ClientPacket>? ClientPacketSent;
@@ -341,6 +346,17 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
     public void TriggerReconnect(string reason)
     {
         OnReceived?.Invoke(new ServerPacket(new MinesServer.Networking.Server.Packets.Connection.ReconnectPacket(reason)));
+    }
+
+    internal void ReportDecodeError(Exception exception)
+    {
+        if (exception == null)
+        {
+            throw new ArgumentNullException(nameof(exception));
+        }
+
+        _decodeErrorCount++;
+        OnError?.Invoke(exception);
     }
 
     private void SendPacket(ServerPacket packet)

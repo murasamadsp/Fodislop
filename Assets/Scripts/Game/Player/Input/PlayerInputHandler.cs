@@ -23,7 +23,6 @@ namespace Kern.Player.Input
         private bool _touchHealHeld;
         private bool _touchFastMove;
         private bool _touchAutoDig;
-        private bool _touchAggression;
         private bool _touchGeo;
         private bool _touchHeal;
         private bool _touchBuildCyan;
@@ -40,13 +39,6 @@ namespace Kern.Player.Input
             (ConsumeTouchAction(ref _touchAutoDig) || WasPressedThisFrame(ConfiguredKey(
                 _clientConfig?.Config.Interface.KeyAutoDig, Key.E)) ||
              (Gamepad.current != null && Gamepad.current.buttonNorth.wasPressedThisFrame));
-
-        // Агрессия - в старом клиенте физическая клавиша L (на русской
-        // раскладке на ней "Д"): "Врубите агрессию [L]".
-        public bool WantsToToggleAggression =>
-            !InputIntercepted &&
-            (ConsumeTouchAction(ref _touchAggression) || WasPressedThisFrame(ConfiguredKey(
-                _clientConfig?.Config.Interface.KeyAggression, Key.L)));
 
         public bool WantsToGeo =>
             !InputIntercepted &&
@@ -199,7 +191,6 @@ namespace Kern.Player.Input
             switch (action)
             {
                 case TouchPlayerAction.ToggleAutoDig: _touchAutoDig = true; break;
-                case TouchPlayerAction.ToggleAggression: _touchAggression = true; break;
                 case TouchPlayerAction.Geo: _touchGeo = true; break;
                 case TouchPlayerAction.Heal: _touchHeal = true; break;
                 case TouchPlayerAction.BuildCyan: _touchBuildCyan = true; break;
@@ -212,7 +203,6 @@ namespace Kern.Player.Input
         public void ClearQueuedTouchActions()
         {
             _touchAutoDig = false;
-            _touchAggression = false;
             _touchGeo = false;
             _touchHeal = false;
             _touchBuildCyan = false;

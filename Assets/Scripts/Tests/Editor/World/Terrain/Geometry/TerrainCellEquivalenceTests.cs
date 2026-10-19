@@ -11,8 +11,8 @@ using UnityEngine;
 namespace Kern.Tests.World;
 
 // Клетка, её соседи и строка типа дают шейдеру ровно те атрибуты, что вершины
-// того же квада: рабочий FillQuad по всему окну тестового мира, оба слоя, оба
-// стиля искажения. Расшифровка — TerrainCellOracle.
+// того же квада: рабочий FillQuad по всему окну тестового мира, оба слоя, классическое
+// искажение. Расшифровка — TerrainCellOracle.
 [TestFixture]
 public sealed class TerrainCellEquivalenceTests
 {
@@ -21,12 +21,11 @@ public sealed class TerrainCellEquivalenceTests
     private const int OriginX = 96;
     private const int OriginY = 64;
 
-    [TestCase(TerrainDistortionStyle.Organic)]
-    [TestCase(TerrainDistortionStyle.Classic)]
-    public void CellAndTypeRowReproduceQuadVertices(TerrainDistortionStyle style)
+    [Test]
+    public void CellAndTypeRowReproduceQuadVertices()
     {
         var world = new TerrainTestWorld();
-        var distortion = new TerrainDistortionSettings { DistortionStyle = style };
+        var distortion = new TerrainDistortionSettings();
         TerrainCellSources sources = world.BuildSources(
             new TerrainCellCache(), distortion,
             OriginX, OriginY, Width, Height);
@@ -89,15 +88,12 @@ public sealed class TerrainCellEquivalenceTests
             (uint)BlockRegistry.UnderlayType,
             TerrainCellData.PackDecal(TerrainDecalCatalog.GroundRule),
             TerrainCellData.PackDecal(TerrainDecalCatalog.RockRule),
-            TerrainTestWorld.WorldHeight,
-            style == TerrainDistortionStyle.Organic,
-            TerrainConfigHolder.OrganicEdgeHorizontalSeed,
-            TerrainConfigHolder.OrganicEdgeVerticalSeed);
+            TerrainTestWorld.WorldHeight);
         int anchored = 0;
         foreach ((int x, int y, int layer, TerrainVertex[] vertices, TerrainQuadResult result) in quads)
         {
             oracle.AssertMatchesQuad(
-                vertices, result, OriginX + x, OriginY + y, layer, $"({x},{y}) слой {layer} {style}");
+                vertices, result, OriginX + x, OriginY + y, layer, $"({x},{y}) слой {layer}");
             anchored += result.HasAtlas && layer == TerrainCellData.ForegroundLayer && vertices[0].UV5x != 0 ? 1 : 0;
         }
 

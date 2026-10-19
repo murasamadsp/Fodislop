@@ -51,6 +51,11 @@ third-party code belongs under `Assets/Plugins/` or `Packages/`, according to
 how that dependency is integrated. Folder names do not grant assembly ownership;
 check the nearest `.asmdef` or `.asmref` before moving C# files.
 
+`Assets/Scripts/Rendering/UrpIntegration` contains an explicit asmref into
+`Unity.RenderPipelines.Universal.Runtime`. Its attachment adapter owns only the
+frame-local active depth selector that URP does not expose publicly. It must not
+reference game assemblies, use reflection, or modify camera components or assets.
+
 ## Asset placement rules
 
 - `Assets/Resources/` is reserved for assets that production code intentionally

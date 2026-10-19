@@ -28,7 +28,6 @@ internal sealed class TerrainWindowChangeJournal
     private List<RectInt> _buildChangedRegions = new();
     private long _oldestChangeTimestamp;
     private bool? _requestedDistortion;
-    private TerrainDistortionStyle? _requestedDistortionStyle;
 
     public TerrainDirtyTracker Dirty => _dirty;
 
@@ -229,12 +228,6 @@ internal sealed class TerrainWindowChangeJournal
         NeedsRefresh = true;
     }
 
-    public void RequestDistortionStyle(TerrainDistortionStyle style)
-    {
-        _requestedDistortionStyle = style;
-        NeedsRefresh = true;
-    }
-
     public bool TryTakeRequestedDistortion(out bool enabled)
     {
         if (_requestedDistortion is not { } requested)
@@ -245,19 +238,6 @@ internal sealed class TerrainWindowChangeJournal
 
         enabled = requested;
         _requestedDistortion = null;
-        return true;
-    }
-
-    public bool TryTakeRequestedDistortionStyle(out TerrainDistortionStyle style)
-    {
-        if (_requestedDistortionStyle is not { } requested)
-        {
-            style = default;
-            return false;
-        }
-
-        style = requested;
-        _requestedDistortionStyle = null;
         return true;
     }
 
