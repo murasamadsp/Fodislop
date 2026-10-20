@@ -97,6 +97,12 @@ internal sealed class DummyGameplayActionResponder
                 break;
             case HealPacket:
                 _sendPacket(new ServerPacket(new HealthPacket(_playerState.Heal(50), 500)));
+                _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+                {
+                    new VFXPacket(VFX.Heal, _playerBotId, _playerState.X, _playerState.Y,
+                        Array.Empty<StringPairPacket>()),
+                    CreateAudioPacket(SFX.Heal, _playerState.X, _playerState.Y),
+                })));
                 break;
             case BuildCyanPacket:
                 HandleMilitaryBlockBuild();
@@ -134,6 +140,29 @@ internal sealed class DummyGameplayActionResponder
         }
     }
 
+    internal void HandleGunHit()
+    {
+        SendAudio(SFX.Hurt, _playerState.X, _playerState.Y);
+        _playerState.SetHealth(_playerState.Health - 10);
+        if (_playerState.Health == 0)
+        {
+            _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+            {
+                new VFXPacket(VFX.Death, _playerBotId, _playerState.X, _playerState.Y,
+                    Array.Empty<StringPairPacket>()),
+            })));
+            HandleSuicide();
+            return;
+        }
+
+        _sendPacket(new ServerPacket(new HealthPacket(_playerState.Health, 500)));
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
+            new VFXPacket(VFX.Hurt, _playerBotId, _playerState.X, _playerState.Y,
+                Array.Empty<StringPairPacket>()),
+        })));
+    }
+
     private void HandleDig(ushort cellX, ushort cellY)
     {
         SendAudio(SFX.Bz, cellX, cellY);
@@ -164,7 +193,7 @@ internal sealed class DummyGameplayActionResponder
                 return;
             }
 
-            AddCrystalToBasket(cellType);
+            AddCrystalToBasket(cellType, cellX, cellY);
             SendCellUpdate(cellX, cellY, CellType.Empty, SFX.Destroy);
         }
 
@@ -172,7 +201,7 @@ internal sealed class DummyGameplayActionResponder
         _chatSimulator.SendMiningReaction();
     }
 
-    private void AddCrystalToBasket(CellType cellType)
+    private void AddCrystalToBasket(CellType cellType, ushort cellX, ushort cellY)
     {
         CrystalType crystal = DummyCellConfigurationUtilities.GetMinedCrystal(cellType);
         if (crystal == CrystalType.Unknown)
@@ -180,12 +209,28 @@ internal sealed class DummyGameplayActionResponder
             return;
         }
 
-        long[]? contents = _playerState.AddToBasket(
-            (int)crystal,
-            _clock.Random.Next(1, 101));
+        int count = _clock.Random.Next(1, 101);
+        long[]? contents = _playerState.AddToBasket((int)crystal, count);
         if (contents != null)
         {
             _sendPacket(new ServerPacket(new BasketPacket(50000, contents)));
+            string color = crystal switch
+            {
+                CrystalType.Blue => "b",
+                CrystalType.Red => "r",
+                CrystalType.Violet => "v",
+                CrystalType.White => "w",
+                CrystalType.Cyan => "c",
+                _ => "g",
+            };
+            _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+            {
+                new VFXPacket(VFX.Crystal, _playerBotId, cellX, cellY, new[]
+                {
+                    new StringPairPacket("color", color),
+                    new StringPairPacket("count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                }),
+            })));
         }
     }
 

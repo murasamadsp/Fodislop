@@ -7,7 +7,7 @@ namespace Kern.Game;
 
 public sealed class RobotMovement
 {
-    // ***REMOVED*** RobotController constructor (0x1A926D8), Update (0x1A8F6A4).
+    // Original RobotController constructor (0x1A926D8), Update (0x1A8F6A4).
     // These are visual response coefficients in 1/seconds, not step speed
     // or an angular velocity limit. Logical movement remains server-owned.
     private const float PositionResponsePerSecond = 5f;
@@ -39,6 +39,12 @@ public sealed class RobotMovement
     public void SnapTo(Vector3 position, float angle)
     {
         _hasReceivedInitialPosition = true;
+        InitializePose(position, angle);
+    }
+
+    // A scene/factory pose is not a position received from the server.
+    public void InitializePose(Vector3 position, float angle)
+    {
         _targetPosition = position;
         _serverPosition = position;
         _smoothPosition = position;

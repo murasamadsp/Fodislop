@@ -34,6 +34,14 @@
     text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
 }
 
+.world-label-nickname {
+    margin: 0;
+    padding: 0;
+    white-space: nowrap;
+    -unity-text-align: upper-left;
+    transform-origin: 0% 0%;
+}
+
 /* Облако локального чата.
  *
  * Рамка рисуется спрайтом LocalChatBubble с 9-slice, а не стилями. Спрайт

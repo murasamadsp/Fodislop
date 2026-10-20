@@ -219,11 +219,10 @@ namespace Kern.Player.Logic
 
         protected void Update()
         {
-            // Аура считается до всех досрочных выходов ниже и гасится сама.
-            // Иначе она осталась бы гореть на роботе, застывшем в кадре, где
-            // открыли меню или потеряли позицию с сервера: выход из Update
-            // не снимает того, что уже нарисовано.
-            _actionDispatcher?.UpdateAura(
+            // Удержание хила считается до всех досрочных выходов ниже.
+            // При открытии меню или потере серверной позиции эффект должен
+            // выключаться, даже если дальнейшая обработка ввода не выполняется.
+            _actionDispatcher?.UpdateHealEffect(
                 _robot,
                 HasServerPosition && (!Application.isPlaying || IsGameplayVisible),
                 _inputBlocker != null && _inputBlocker.IsInputBlockedExcludingMapMode);

@@ -3,6 +3,7 @@ Shader "Kern/Cell Destruction"
     Properties
     {
         [PerRendererData] _MainTex ("Linear premultiplied emission", 2D) = "black" {}
+        _EffectColor ("Effect color", Color) = (1, 1, 1, 1)
         [HideInInspector] _SourceTextureSize ("Source texture dimensions", Vector) = (256, 32, 0, 0)
     }
     SubShader
@@ -34,6 +35,7 @@ Shader "Kern/Cell Destruction"
             SAMPLER(sampler_MainTex);
             CBUFFER_START(UnityPerMaterial)
                 float4 _SourceTextureSize;
+                float4 _EffectColor;
             CBUFFER_END
 
             struct Attributes
@@ -63,8 +65,9 @@ Shader "Kern/Cell Destruction"
                 // Alpha is coverage; never multiply RGB by it a second time.
                 half4 emission = PixelArtSample(TEXTURE2D_ARGS(_MainTex, sampler_MainTex),
                     input.uv, _SourceTextureSize.xy);
-                emission.rgb *= input.color.rgb * input.color.a;
-                emission.a *= input.color.a;
+                half4 tint = input.color * _EffectColor;
+                emission.rgb *= tint.rgb * tint.a;
+                emission.a *= tint.a;
                 return emission;
             }
             ENDHLSL

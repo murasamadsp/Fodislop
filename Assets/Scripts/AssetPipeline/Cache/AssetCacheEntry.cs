@@ -290,7 +290,8 @@ internal sealed class AssetCacheEntry
                 Sprite[] cachedSprites = AssetCacheDecoder.SliceAnimationFromTexture(
                     cachedAnimationTexture,
                     cachedFrameHeight,
-                    cachedFrameCount);
+                    cachedFrameCount,
+                    _filename);
                 lock (_lock)
                 {
                     _sprites = cachedSprites;

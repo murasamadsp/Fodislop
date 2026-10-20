@@ -81,6 +81,7 @@ namespace Kern.Game
             _active.Add(slot);
             if (slot.GameObject != null)
             {
+                slot.GameObject.transform.localScale = Vector3.one;
                 slot.GameObject.SetActive(true);
             }
 
@@ -104,6 +105,7 @@ namespace Kern.Game
             if (pooled.GameObject != null)
             {
                 pooled.GameObject.transform.rotation = Quaternion.identity;
+                pooled.GameObject.transform.localScale = Vector3.one;
                 pooled.GameObject.SetActive(false);
             }
 

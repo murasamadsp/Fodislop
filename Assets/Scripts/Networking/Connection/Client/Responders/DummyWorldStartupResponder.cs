@@ -38,6 +38,7 @@ internal sealed class DummyWorldStartupResponder
     private readonly Func<int, bool> _loopAlive;
     private readonly DummyBlockSpawner _blockSpawner;
     private readonly IRuntimeAssetPaths? _assetPaths;
+    private readonly DummyGameplayActionResponder _actionResponder;
     internal DummyWorldStartupResponder(
     IAsyncOperationSupervisor operations,
     IDummyClock clock,
@@ -52,6 +53,7 @@ internal sealed class DummyWorldStartupResponder
     Action<ServerPacket> sendPacket,
     Func<int, bool> loopAlive,
     DummyBlockSpawner blockSpawner,
+    DummyGameplayActionResponder actionResponder,
     IRuntimeAssetPaths? assetPaths = null)
     {
         _operations = operations;
@@ -68,6 +70,7 @@ internal sealed class DummyWorldStartupResponder
         _loopAlive = loopAlive;
         _blockSpawner = blockSpawner;
         _assetPaths = assetPaths;
+        _actionResponder = actionResponder;
     }
 
 
@@ -123,6 +126,9 @@ internal sealed class DummyWorldStartupResponder
         _sendPacket(new ServerPacket(new ChatListPacket(
             new[] { (ProjectRuntimeContracts.Chat.GlobalChannelTag, "Global", placeholder) })));
         SendTestPacks();
+        _operations.Run(
+            "dummy_gun_loop",
+            cancellationToken => RunGunAsync(lifecycleVersion, playerBotId, cancellationToken));
         _missionRunner.StartPersistentMission(_playerState.X, _playerState.Y);
         SendWorldMusic();
     }
@@ -219,6 +225,41 @@ internal sealed class DummyWorldStartupResponder
         }
     }
 
+    private const ushort GunX = 34;
+    private const ushort GunY = 50;
+    private const int GunRadiusCells = 20;
+    private const int GunShotIntervalMilliseconds = 500;
+
+    private async UniTask RunGunAsync(
+        int lifecycleVersion,
+        ushort playerBotId,
+        CancellationToken cancellationToken)
+    {
+        while (_loopAlive(lifecycleVersion))
+        {
+            await _clock.Delay(GunShotIntervalMilliseconds, cancellationToken);
+            if (!_loopAlive(lifecycleVersion))
+            {
+                return;
+            }
+
+            int deltaX = _playerState.X - GunX;
+            int deltaY = _playerState.Y - GunY;
+            if ((deltaX * deltaX) + (deltaY * deltaY) > GunRadiusCells * GunRadiusCells)
+            {
+                continue;
+            }
+
+            // Match PlayerEntity.SendEffects: the position is the gun, the bot is its target.
+            _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+            {
+                new VFXPacket(VFX.GunShot, playerBotId, GunX, GunY, Array.Empty<StringPairPacket>()),
+                new AudioPacket(SFX.GunShot, playerBotId, GunX, GunY, Array.Empty<StringPairPacket>()),
+            })));
+            _actionResponder.HandleGunHit();
+        }
+    }
+
     private void SendTestPacks()
     {
         _teleportPositions.Clear();
@@ -229,6 +270,7 @@ internal sealed class DummyWorldStartupResponder
             new BuildingPacket(27, 50, BuildingType.Teleport, 0, 1),
             new BuildingPacket(227, 50, BuildingType.Teleport, 0, 1),
             new BuildingPacket(25, 48, BuildingType.Market, 0, 0),
+            new BuildingPacket(GunX, GunY, BuildingType.Gun, 0, 0),
         })));
     }
 

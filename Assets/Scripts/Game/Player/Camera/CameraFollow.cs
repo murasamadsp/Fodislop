@@ -62,6 +62,44 @@ namespace Kern.Player
 
         private float MaximumZoom => Mathf.Clamp(_maxZoom, MinimumZoom,
             Mathf.Min(InteractiveMaximumZoom, ProjectRuntimeContracts.Camera.MaximumOrthographicSize));
+        // Original Effects.Create(Hurt), RVA 0x198FD48: assign, do not add.
+        private int _hurtShakeFrames;
+        private float _hurtShakeClock;
+        private const float HurtShakeStepSeconds = 1f / 30f;
+
+        public void TriggerHurtShake() => _hurtShakeFrames = 16;
+
+        public void ClearHurtShake()
+        {
+            _hurtShakeFrames = 0;
+            _hurtShakeClock = 0f;
+        }
+
+        // TpCamera.Update/Update30, RVA 0x1A97420 / 0x1A975D4.
+        // The original advances at most one effect step per rendered frame.
+        private void UpdateHurtShake()
+        {
+            _hurtShakeClock += Time.deltaTime;
+            if (_hurtShakeClock < HurtShakeStepSeconds)
+            {
+                return;
+            }
+
+            _hurtShakeClock -= HurtShakeStepSeconds;
+            if (_hurtShakeFrames < 1)
+            {
+                return;
+            }
+
+            Vector3 position = _camera.transform.position;
+            float randomX = UnityEngine.Random.Range(0f, 1f);
+            float randomY = UnityEngine.Random.Range(0f, 1f);
+            position.x += (randomX * 5f - 2f) * 0.0625f;
+            position.y += (randomY * 5f - 2f) * 0.0625f;
+            _camera.transform.position = position;
+            _hurtShakeFrames--;
+        }
+
         private const float FollowSettleEpsilonSquared = 0.000001f;
 
         private float _originalZ;
@@ -312,6 +350,7 @@ namespace Kern.Player
             Vector3 before = _camera.transform.position;
             Vector3 velocityBefore = _followVelocity;
             HandleFollow(out bool usedViewTransition);
+            UpdateHurtShake();
             ReportCameraJump(before, velocityBefore, usedViewTransition);
         }
 

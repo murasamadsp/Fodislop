@@ -3,12 +3,14 @@
 using System;
 using System.Globalization;
 using Kern.Core;
+using Kern.Core.Interfaces;
 using Kern.Persistence;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.World;
+using MinesServer.Networking.Shared.Packets;
 
 namespace MinesServer.Networking.Connection.Client;
 
@@ -18,16 +20,19 @@ internal sealed class DummyAdminCommands
     private readonly DummyPlayerSimulationState _playerState;
     private readonly DummyWorldSimulationState _worldState;
     private readonly IDummyClock _clock;
+    private readonly ushort _playerBotId;
     internal DummyAdminCommands(
     Action<ServerPacket> sendPacket,
     DummyPlayerSimulationState playerState,
     DummyWorldSimulationState worldState,
-    IDummyClock clock)
+    IDummyClock clock,
+    ushort playerBotId)
     {
         _sendPacket = sendPacket;
         _playerState = playerState;
         _worldState = worldState;
         _clock = clock;
+        _playerBotId = playerBotId;
     }
 
     private const string CommandPrefix = "/";
@@ -68,6 +73,9 @@ internal sealed class DummyAdminCommands
             case "tp":
                 Teleport(parts);
                 return true;
+            case "vfx":
+                PlayVfx(parts);
+                return true;
             case "set":
                 ApplySetCommand(parts);
                 return true;
@@ -85,10 +93,57 @@ internal sealed class DummyAdminCommands
         Reply("Команды:");
         Reply("/help — этот список");
         Reply("/tp <x> <y> — телепорт в указанную клетку");
+        Reply("/vfx list — список игровых VFX; /vfx <тип> [тип бомбы] — вызвать через обычный VFX-пакет");
         Reply($"/set [тип] — поставить блок перед роботом (без аргумента — {DefaultPlacedCell})");
         Reply(
             $"/fill [тип] — заполнить область {FillWidth}x{FillHeight} вокруг робота " +
             $"(без аргумента — {DefaultFillCell})");
+    }
+
+    private void PlayVfx(string[] parts)
+    {
+        if (parts.Length == 2 && parts[1].Equals("list", StringComparison.OrdinalIgnoreCase))
+        {
+            Reply("VFX: " + string.Join(", ", Enum.GetNames(typeof(VFX))));
+            Reply("BombTick/Boom: необязательный тип 0 Plasma, 1 Proton, 2 Discharge.");
+            return;
+        }
+
+        if (parts.Length is < 2 or > 3 || !Enum.TryParse(parts[1], true, out VFX effect) ||
+            !Enum.IsDefined(typeof(VFX), effect))
+        {
+            Reply("Формат: /vfx <VFX> [тип бомбы] или /vfx list.");
+            return;
+        }
+
+        int bombType = 0;
+        if (parts.Length == 3)
+        {
+            if (effect is not (VFX.BombTick or VFX.Boom) ||
+                !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out bombType) ||
+                bombType is < 0 or > 2)
+            {
+                Reply("Тип 0–2 доступен только для BombTick и Boom.");
+                return;
+            }
+        }
+
+        StringPairPacket[] parameters = effect is VFX.BombTick or VFX.Boom
+            ? new[] { new StringPairPacket("bombType", bombType.ToString(CultureInfo.InvariantCulture)) }
+            : Array.Empty<StringPairPacket>();
+
+        ushort x = _playerState.X;
+        ushort y = _playerState.Y;
+        if (effect is VFX.Pull or VFX.Push or VFX.GunShot)
+        {
+            x = x == ushort.MaxValue ? (ushort)(x - 1) : (ushort)(x + 1);
+        }
+
+        _sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
+            new VFXPacket(effect, _playerBotId, x, y, parameters),
+        })));
+        Reply($"VFX-пакет {effect} отправлен в локальный обработчик.");
     }
 
     private void Teleport(string[] parts)

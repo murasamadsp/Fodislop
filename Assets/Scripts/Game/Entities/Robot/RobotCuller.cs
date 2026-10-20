@@ -49,7 +49,7 @@ public sealed class RobotCuller
                 visuals.SetTentaclesActive(false);
             }
 
-            var (_, angle, _, _) = movement.Step(Time.deltaTime);
+            var (_, angle, _) = movement.Step(Time.deltaTime);
             transform.position = movement.SmoothPosition;
             transform.rotation = Quaternion.Euler(0, 0, angle);
             // Visibility culling owns visuals. Transport owns source reach;

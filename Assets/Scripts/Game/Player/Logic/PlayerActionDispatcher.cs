@@ -37,9 +37,9 @@ internal sealed class PlayerActionDispatcher
     /// <param name="robot">Робот игрока; до его появления делать нечего.</param>
     /// <param name="playable">Позиция с сервера получена и робот в кадре.</param>
     /// <param name="inputBlocked">Ввод перехвачен меню или полем ввода.</param>
-    public void UpdateAura(Robot? robot, bool playable, bool inputBlocked)
+    public void UpdateHealEffect(Robot? robot, bool playable, bool inputBlocked)
     {
-        robot?.SetAuraWanted(playable && !inputBlocked && _input.IsHealHeld);
+        robot?.SetHealHeld(playable && !inputBlocked && _input.IsHealHeld);
     }
 
     public bool IsDigOnCooldown => PlayerMovementController.IsDigCooldownActive(

@@ -114,6 +114,11 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             operations,
             async (destX, destY) =>
             {
+                SendPacket(new ServerPacket(new HBPacket(new IHBPacket[]
+                {
+                    new VFXPacket(VFX.TpOut, 0, _playerState.X, _playerState.Y,
+                        Array.Empty<StringPairPacket>()),
+                })));
                 await _worldState.SendChunksAroundAsync(
                     destX,
                     destY,
@@ -130,7 +135,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             operations,
             clock);
         _chatResponder = new DummyChatResponder(SendPacket, clock);
-        _adminCommands = new DummyAdminCommands(SendPacket, _playerState, _worldState, clock);
+        _adminCommands = new DummyAdminCommands(SendPacket, _playerState, _worldState, clock, _mockBotId);
         _clanManager = new DummyClanManager(SendPacket);
         _pathFinder = new DummyPathFinder(SendPacket, _worldState.GetCellConfig);
         _movementResponder = new DummyMovementResponder(
@@ -186,6 +191,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection, IWorldRegi
             SendPacket,
             LoopAlive,
             _blockSpawner,
+            _actionResponder,
             assetPaths);
     }
 

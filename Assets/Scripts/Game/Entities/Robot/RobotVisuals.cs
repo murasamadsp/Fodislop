@@ -12,6 +12,9 @@ namespace Kern.Game;
 public sealed class RobotVisuals
 {
     private const int StrandCount = 4;
+    private const float BodySwayDegrees = 2f;
+    private const float BodySwayCyclesPerCell = 0.75f;
+    private const float BodySwayResponse = 12f;
     private const float FacingEpsilonSquared = 1e-6f;
 
     private readonly Transform _transform;
@@ -20,9 +23,13 @@ public sealed class RobotVisuals
     private WorldEntityBatchRenderer.SpriteHandle? _bodyBatchHandle;
     private WorldEntityBatchRenderer.SpriteHandle? _clanBatchHandle;
     private Transform? _clanTransform;
+    private Transform? _bodyTransform;
+    private Vector3 _lastBodyPosition;
+    private bool _hasBodyPosition;
+    private float _bodySwayPhase;
+    private float _bodySwayAngle;
     private Sprite? _skinSprite;
     private Sprite? _clanSprite;
-    private RobotAura? _aura;
     private Tentacle[]? _tentacles;
     private bool _tentaclesSettled;
     private Vector3 _lastTentacleRootPosition;
@@ -68,9 +75,18 @@ public sealed class RobotVisuals
         return offset + (facing.normalized * (speed * deltaTime));
     }
 
-    public void Initialize(WorldEntityBatchRenderer entityBatchRenderer, Transform? clanTransform)
+    public void Initialize(WorldEntityBatchRenderer entityBatchRenderer, Transform? clanTransform, ISceneObjectFactory sceneObjects)
     {
         _entityBatchRenderer = entityBatchRenderer;
+        if (_bodyTransform == null)
+        {
+            _bodyTransform = sceneObjects.Create("RobotSkinMotion", RuntimeOwner.Robots).transform;
+            _bodyTransform.SetParent(_transform, worldPositionStays: false);
+            _bodyTransform.localPosition = Vector3.zero;
+            _bodyTransform.localRotation = Quaternion.identity;
+            _bodyTransform.localScale = Vector3.one;
+        }
+
         _clanTransform = clanTransform;
         EnsureBatchHandles();
     }
@@ -82,7 +98,7 @@ public sealed class RobotVisuals
             return;
         }
 
-        _bodyBatchHandle ??= _entityBatchRenderer.RegisterSprite(_transform, 0);
+        _bodyBatchHandle ??= _entityBatchRenderer.RegisterSprite(_bodyTransform!, 0);
         if (_clanTransform != null)
         {
             _clanBatchHandle ??= _entityBatchRenderer.RegisterSprite(_clanTransform, 100);
@@ -93,6 +109,10 @@ public sealed class RobotVisuals
     {
         EnsureBatchHandles();
         _bodyBatchHandle?.SetEnabled(visible);
+        if (!visible)
+        {
+            ResetBodySway();
+        }
     }
     public void SetColor(Color color)
     {
@@ -185,6 +205,7 @@ public sealed class RobotVisuals
 
     public void SnapTentacles(Vector3 position)
     {
+        ResetBodySway();
         _forcedTailOffset = Vector3.zero;
         if (_tentacles != null)
         {
@@ -240,6 +261,7 @@ public sealed class RobotVisuals
         bool bodySettled,
         TailMotionDebugMode tailMotionDebugMode)
     {
+        UpdateBodySway(position, movementFactor, deltaTime);
         if (_tentacles == null)
         {
             _tentaclesSettled = true;
@@ -295,18 +317,32 @@ public sealed class RobotVisuals
         }
     }
 
-    public void SetAuraWanted(bool wanted, ISceneObjectFactory? sceneObjects)
+    private void UpdateBodySway(Vector3 position, float movementFactor, float deltaTime)
     {
-        if (!wanted && _aura == null)
+        float distance = _hasBodyPosition ? Vector2.Distance(position, _lastBodyPosition) : 0f;
+        _lastBodyPosition = position;
+        _hasBodyPosition = true;
+        _bodySwayPhase = Mathf.Repeat(
+            _bodySwayPhase + distance * BodySwayCyclesPerCell * Mathf.PI * 2f,
+            Mathf.PI * 2f);
+        float targetAngle = Mathf.Sin(_bodySwayPhase) * BodySwayDegrees * Mathf.Clamp01(movementFactor);
+        _bodySwayAngle = Mathf.Lerp(_bodySwayAngle, targetAngle, 1f - Mathf.Exp(-BodySwayResponse * deltaTime));
+        if (_bodyTransform != null)
         {
-            return;
+            _bodyTransform.localRotation = Quaternion.Euler(0f, 0f, _bodySwayAngle);
         }
-
-        _aura ??= new RobotAura(_transform);
-        _aura.SetWanted(wanted, _entityBatchRenderer, sceneObjects);
     }
 
-    public void TickAura(float deltaTime) => _aura?.Tick(deltaTime);
+    private void ResetBodySway()
+    {
+        _hasBodyPosition = false;
+        _bodySwayPhase = 0f;
+        _bodySwayAngle = 0f;
+        if (_bodyTransform != null)
+        {
+            _bodyTransform.localRotation = Quaternion.identity;
+        }
+    }
 
     public Transform EnsureClanIcon(ISceneObjectFactory sceneObjects, uint botId)
     {
@@ -329,10 +365,14 @@ public sealed class RobotVisuals
 
     public void Destroy()
     {
-        _aura?.Destroy();
-        _aura = null;
         _entityBatchRenderer?.UnregisterSprite(_bodyBatchHandle);
         _entityBatchRenderer?.UnregisterSprite(_clanBatchHandle);
+        if (_bodyTransform != null)
+        {
+            Object.Destroy(_bodyTransform.gameObject);
+            _bodyTransform = null;
+        }
+
         _bodyBatchHandle = null;
         _clanBatchHandle = null;
 

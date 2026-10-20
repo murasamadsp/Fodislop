@@ -102,13 +102,16 @@ internal static class AssetCacheDecoder
         }
 
         Sprite[] sprites = AnimationContainerDecoder.Decode(
-            atlas, frameWidth, frameHeight, frameCount);
+            atlas, frameWidth, frameHeight, frameCount,
+            AnimationContainerDecoder.ResolvePixelsPerUnit(filename, frameWidth));
         return new DecodedAnimationResult(sprites, atlas, fps, frameHeight, frameCount);
     }
 
-    public static Sprite[] SliceAnimationFromTexture(Texture2D texture, int frameHeight, int frameCount)
+    public static Sprite[] SliceAnimationFromTexture(Texture2D texture, int frameHeight, int frameCount,
+        string filename = "")
     {
         int count = frameCount > 0 ? frameCount : Mathf.Max(1, texture.height / frameHeight);
-        return AnimationContainerDecoder.Decode(texture, texture.width, frameHeight, count);
+        return AnimationContainerDecoder.Decode(texture, texture.width, frameHeight, count,
+            AnimationContainerDecoder.ResolvePixelsPerUnit(filename, texture.width));
     }
 }

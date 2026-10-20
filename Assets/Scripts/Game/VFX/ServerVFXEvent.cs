@@ -23,18 +23,12 @@ namespace Kern.Game;
 /// без звука). Визуал ищется как кадры анимации, статичная текстура или
 /// Effekseer-ассет "VFX/{имя эффекта}" (тот же конвейер, что у аудио-событий).
 ///
-/// Вылетающий при добыче кристалл (VFX.Crystal) — особый режим: ОДИН кристаллик
-/// летит от вскопанной клетки к роботу (TargetBotId) с лёгкой дугой, а над ним
-/// висит цифра количества в цвете кристалла (параметры "color"/"count"). Спрайт
-/// кристаллика: ассет "VFX/crystal" → иконка "Crys/{цвет}.png" → процедурный
-/// ромбик (гарантированно виден даже без ассетов).
+/// VFX.Crystal: значок и количество проходят два этапа CrystallPlus.Update:
+/// подъём к исходной точке +0.25 по Y, затем движение к сохранённой точке робота.
 /// </summary>
 [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any dynamic asset load/play errors.")]
 public sealed class ServerVFXEvent : IServerWorldEffect
 {
-    private const float FlightDurationSeconds = 0.4f;
-    private const float FlightArcHeightUnits = 0.75f;
-    private const float LabelLingerSeconds = 0.7f;
     private const int ProceduralCrystalSize = 8;
 
     // Размер кристаллика в полёте: масштаб transform'а относительно «сырой»
@@ -44,13 +38,9 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     // Лист со спрайтами кристаллов и цифр из старого клиента
     // (192×12: ячейки 0-5 - кристаллы, 6-14 - цифры 1-9, 15 - ноль).
-    private const string CrystalDigitsSheet = "Crys/cryfont-sharedassets0.assets-67.png";
-    private const int CrystalSheetCells = 16;
-    private const int CrystalSheetIconCells = 6;
 
     // Цифры масштабируются под высоту кристаллика: текстура кристалла (24px)
     // вдвое выше ячейки листа (12px), поэтому множитель 2.
-    private const float CrystalDigitScaleMultiplier = 2f;
 
     // VFX.PlaceDeny — маркер «клетку занять нельзя» при неудачной установке
     // пака. В клиентском пакете MinesServer.Data член не объявлен, сервер
@@ -62,10 +52,8 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     // Плотность строки: шаг между центрами цифр = ширина цифры × этот множитель
     // (меньше 1 - цифры сидят плотнее).
-    private const float CrystalDigitSpacingFactor = 0.75f;
 
     // Зазор между кристалликом и первой цифрой количества.
-    private const float CrystalDigitGap = 0.08f;
 
     private readonly VFX _effectType;
     private readonly ushort _sourceX;
@@ -85,6 +73,8 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     private Sprite[]? _animationFrames;
     private Sprite? _ownedStaticSprite;
+    private IWorldLabel? _collectionLabel;
+    private readonly IWorldLabels? _worldLabels;
     private Sprite? _flightSprite;
     private bool _ownedStaticSpriteShared;
     private bool _flightSpriteShared;
@@ -109,7 +99,8 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     private bool _flightMode;
     private bool _flightActive;
-    private float _flightElapsed;
+    private bool _flightReturning;
+    private Vector3 _flightDestination;
     private Vector3 _flightOrigin;
 
     // Спрайтовые цифры количества: отдельные объекты в мировом бач-рендерере,
@@ -120,9 +111,7 @@ public sealed class ServerVFXEvent : IServerWorldEffect
     private readonly List<WorldEntityBatchRenderer.SpriteHandle> _digitHandles = new();
     private readonly List<Sprite> _digitSprites = new();
     private float _digitRowOffset;
-    private float _digitStep;
-    private bool _digitsLingering;
-    private float _lingerElapsed;
+    private float _digitStep = 0f;
 
     private CancellationTokenSource? _cts;
 
@@ -135,7 +124,8 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         IVFXService vfxPool,
         IAsyncOperationSupervisor operations,
         WorldEntityBatchRenderer batchRenderer,
-        ISceneObjectFactory sceneObjects)
+        ISceneObjectFactory sceneObjects,
+        IWorldLabels? worldLabels = null)
     {
         _effectType = packet.EffectType;
         _sourceX = packet.X;
@@ -148,6 +138,7 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         _vfxPool = vfxPool;
         _batchRenderer = batchRenderer;
         _sceneObjects = sceneObjects;
+        _worldLabels = worldLabels;
 
         if (slot != null)
         {
@@ -226,10 +217,6 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         {
             UpdateFlight();
         }
-        else if (_digitsLingering)
-        {
-            UpdateDigitsLinger();
-        }
         else if (!_hasEffekseerEffect && !_isAnimated && _lifeTimer >= _maxLifetime)
         {
             _visualCompleted = true;
@@ -249,6 +236,8 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     public void Dispose()
     {
+        _collectionLabel?.Dispose();
+        _collectionLabel = null;
         if (_isDisposed)
         {
             return;
@@ -318,10 +307,10 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         {
             // Task canceled cleanly
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            // A missing optional visual must not turn a valid server event into
-            // a blocking error or a noisy gameplay log.
+            Debug.LogError($"[ServerVFXEvent] Failed to create {_effectType} at " +
+                $"({_sourceX}, {_sourceY}), target {_targetBotId}: {exception}");
             MarkVisualCompleted();
         }
     }
@@ -347,6 +336,11 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         }
         catch (Exception)
         {
+            if (_effectType == VFX.Bz)
+            {
+                throw;
+            }
+
             frames = null;
         }
 
@@ -366,6 +360,11 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
             _maxLifetime = (_animationFrames.Length * _frameDuration) + 0.5f;
             return true;
+        }
+
+        if (_effectType == VFX.Bz)
+        {
+            throw new InvalidOperationException("Spark animation did not provide its frames.");
         }
 
         Texture2D? texture = null;
@@ -430,20 +429,12 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     private async UniTask<bool> TryStartCrystalFlightAsync(CancellationToken token)
     {
-        // Приоритет спрайта полёта: ассет "VFX/crystal" (задел на будущее), затем
-        // цветная иконка кристалла с сервера "Crys/{цвет}.png".
-        Sprite? sprite = await TryLoadCrystalSpriteAsync("vfx/crystal", token);
-        if (token.IsCancellationRequested)
+        string mineral = _parsedParams.CrystalColorLetter switch
         {
-            if (sprite != null)
-            {
-                UnityEngine.Object.Destroy(sprite);
-            }
-
-            return false;
-        }
-
-        sprite ??= await TryLoadCrystalSpriteAsync($"Crys/{_parsedParams.CrystalColorLetter}.png", token);
+            "b" => "blue", "r" => "red", "v" => "violet",
+            "w" => "white", "c" => "cyan", _ => "green",
+        };
+        Sprite? sprite = await TryLoadCrystalSpriteAsync($"Crystals/{mineral}.png", token);
         if (token.IsCancellationRequested)
         {
             if (sprite != null)
@@ -501,71 +492,31 @@ public sealed class ServerVFXEvent : IServerWorldEffect
     {
         _flightSprite = sprite;
         _flightMode = true;
-        _maxLifetime = FlightDurationSeconds + LabelLingerSeconds + 1f;
+        _maxLifetime = float.PositiveInfinity;
 
         StartFlight();
         await CreateCrystalDigitsAsync(token);
     }
 
-    // Один кристаллик летит к роботу, а количество летит следом цифрами из
-    // спрайт-листа старого клиента (cryfont): белые цифры с тёмной обводкой,
-    // тонированные в цвет кристалла. Цифры стоят строго справа от кристаллика,
-    // на той же высоте, масштаб - под высоту кристаллика.
-    private async UniTask CreateCrystalDigitsAsync(CancellationToken token)
+    // Original CrystallPlus uses a mineral sprite and a text count.
+    // World labels provide text without a nonexistent legacy cryfont asset.
+    private UniTask CreateCrystalDigitsAsync(CancellationToken token)
     {
-        Texture2D? sheet = await _assetLoader.GetTextureAsync(CrystalDigitsSheet, token);
-        if (token.IsCancellationRequested || sheet == null)
+        token.ThrowIfCancellationRequested();
+        if (_worldLabels == null)
         {
-            return;
+            throw new InvalidOperationException("Crystal collection requires world labels.");
         }
 
-        float cell = (float)sheet.width / CrystalSheetCells;
-        float digitScale = CrystalScale * CrystalDigitScaleMultiplier;
-        float digitWidth = cell / RenderingConstants.PIXELS_PER_UNIT * digitScale;
-        _digitStep = digitWidth * CrystalDigitSpacingFactor;
-
-        float crystalHalf = _flightSprite != null
-            ? _flightSprite.rect.width / _flightSprite.pixelsPerUnit * CrystalScale * 0.5f
-            : 0f;
-        float digitHalf = digitWidth * 0.5f;
-        _digitRowOffset = crystalHalf + digitHalf + CrystalDigitGap;
-
-        string digits = Mathf.Clamp(_parsedParams.CrystalCount, 0, 999)
-            .ToString(CultureInfo.InvariantCulture);
-
-        Color tint = CrystalNumberColor(_parsedParams.CrystalColorLetter);
-        Vector3 basePosition = _intendedWorldPosition;
-
-        for (int i = 0; i < digits.Length; i++)
-        {
-            int digit = digits[i] - '0';
-            int cellIndex = digit == 0
-                ? CrystalSheetCells - 1
-                : CrystalSheetIconCells + digit - 1;
-
-            var digitSprite = Sprite.Create(
-                sheet,
-                new Rect(cellIndex * cell, 0f, cell, sheet.height),
-                new Vector2(0.5f, 0.5f),
-                RenderingConstants.PIXELS_PER_UNIT);
-            _digitSprites.Add(digitSprite);
-
-            GameObject go = _sceneObjects.Create($"CrystalDigit_{i}", RuntimeOwner.VFX);
-            go.transform.position = basePosition + (Vector3.right * (_digitStep * i));
-            go.transform.localScale = Vector3.one * digitScale;
-
-            WorldEntityBatchRenderer.SpriteHandle handle =
-                _batchRenderer.RegisterSprite(go.transform, -500);
-
-            // ВАЖНО: спрайт ставится через батч-рендерер, а не через хэндл -
-            // только этот путь регистрирует текстуру листа в мировом атласе.
-            _batchRenderer.SetSprite(handle, digitSprite);
-            handle.SetColor(tint);
-            handle.SetEnabled(true);
-
-            _digitObjects.Add(go);
-            _digitHandles.Add(handle);
-        }
+        _digitRowOffset = 0.25f;
+        _collectionLabel = _worldLabels.Create(WorldLabelKind.Collection);
+        // CrystallPlus.Start, RVA 0x19B5418: counts below two have no text.
+        _collectionLabel.SetText(_parsedParams.CrystalCount < 2
+            ? string.Empty
+            : _parsedParams.CrystalCount.ToString(CultureInfo.InvariantCulture));
+        _collectionLabel.SetPosition(_intendedWorldPosition + Vector3.right * _digitRowOffset);
+        _collectionLabel.SetVisible(true);
+        return UniTask.CompletedTask;
     }
 
     private static Color CrystalNumberColor(string letter) => letter switch
@@ -693,7 +644,13 @@ public sealed class ServerVFXEvent : IServerWorldEffect
     private void StartFlight()
     {
         _flightActive = true;
-        _flightElapsed = 0f;
+        _flightReturning = false;
+        if (_targetBot == null)
+        {
+            throw new InvalidOperationException("Crystal collection requires its target robot.");
+        }
+
+        _flightDestination = _targetBot.transform.position;
         _flightOrigin = _intendedWorldPosition;
         if (_gameObject != null)
         {
@@ -714,13 +671,15 @@ public sealed class ServerVFXEvent : IServerWorldEffect
             return;
         }
 
-        _flightElapsed += Time.deltaTime;
-        float progress = Mathf.Clamp01(_flightElapsed / FlightDurationSeconds);
-        Vector3 destination = _targetBot != null
-            ? _targetBot.transform.position
-            : _intendedWorldPosition;
-        Vector3 position = Vector3.Lerp(_flightOrigin, destination, progress);
-        position.y += FlightArcHeightUnits * Mathf.Sin(Mathf.PI * progress);
+        // CrystallPlus.Update, RVA 0x19B5710: two successive Lerp phases.
+        Vector3 destination = _flightReturning
+            ? _flightDestination
+            : _flightOrigin + Vector3.up * 0.25f;
+        Vector3 current = _gameObject != null
+            ? _gameObject.transform.position
+            : _flightOrigin;
+        Vector3 position = Vector3.Lerp(current, destination,
+            Time.deltaTime * (_flightReturning ? 12f : 8f));
 
         if (_gameObject != null)
         {
@@ -728,6 +687,7 @@ public sealed class ServerVFXEvent : IServerWorldEffect
         }
 
         Vector3 digitBase = position + new Vector3(_digitRowOffset, 0f, 0f);
+        _collectionLabel?.SetPosition(digitBase);
         for (int i = 0; i < _digitObjects.Count; i++)
         {
             if (_digitObjects[i] != null)
@@ -737,56 +697,20 @@ public sealed class ServerVFXEvent : IServerWorldEffect
             }
         }
 
-        if (progress < 1f)
+        if (Vector2.Distance(position, destination) >= 0.05f)
         {
             return;
         }
 
-        // Кристаллик долетел и исчез, цифры ещё немного висят и гаснут.
+        if (!_flightReturning)
+        {
+            _flightReturning = true;
+            return;
+        }
+
         _flightActive = false;
         _flightMode = false;
-        _digitsLingering = true;
-        _lingerElapsed = 0f;
-        _slot?.SetEnabled(false);
-        SetDigitsOpacity(1f);
-    }
-
-    private void UpdateDigitsLinger()
-    {
-        _lingerElapsed += Time.deltaTime;
-        float progress = Mathf.Clamp01(_lingerElapsed / LabelLingerSeconds);
-        Vector3 anchor = _targetBot != null
-            ? _targetBot.transform.position
-            : _intendedWorldPosition;
-        Vector3 digitBase = anchor
-            + new Vector3(_digitRowOffset, 0f, 0f)
-            + (Vector3.up * (0.3f * progress));
-
-        for (int i = 0; i < _digitObjects.Count; i++)
-        {
-            if (_digitObjects[i] != null)
-            {
-                _digitObjects[i].transform.position =
-                    digitBase + (Vector3.right * (_digitStep * i));
-            }
-        }
-
-        SetDigitsOpacity(1f - progress);
-
-        if (progress >= 1f)
-        {
-            _visualCompleted = true;
-        }
-    }
-
-    private void SetDigitsOpacity(float opacity)
-    {
-        Color tint = CrystalNumberColor(_parsedParams.CrystalColorLetter);
-        tint.a = Mathf.Clamp01(opacity);
-        for (int i = 0; i < _digitHandles.Count; i++)
-        {
-            _digitHandles[i]?.SetColor(tint);
-        }
+        _visualCompleted = true;
     }
 
     private async UniTask<bool> TryLoadEffekseerAsync(string filename, byte[] bytes, CancellationToken token)
@@ -938,6 +862,8 @@ public sealed class ServerVFXEvent : IServerWorldEffect
 
     private void ReleaseSlot()
     {
+        _collectionLabel?.Dispose();
+        _collectionLabel = null;
         if (_slotReleased)
         {
             return;

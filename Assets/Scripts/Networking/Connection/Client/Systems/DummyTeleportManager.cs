@@ -5,12 +5,14 @@ using System.Collections.Generic;
 using System.Linq;
 using Cysharp.Threading.Tasks;
 using Kern;
+using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 using MinesServer.Networking.Server.Packets.Movement;
+using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 
@@ -212,6 +214,10 @@ internal sealed class DummyTeleportManager
         }
 
         _onReceived.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
+        _onReceived.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+        {
+            new VFXPacket(VFX.TpIn, 0, destX, destY, Array.Empty<StringPairPacket>()),
+        })));
         _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
     }
 }

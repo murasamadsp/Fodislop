@@ -18,7 +18,7 @@ public static class AnimationContainerDecoder
     private static readonly Dictionary<string, (int frameWidth, int frameHeight, int frameCount, float fps)> s_knownAnimations =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            { "vfx/bz", (16, 32, 15, 15f) },
+            { "vfx/bz", (32, 64, 15, 15f) },
             { "vfx/death", (64, 64, 39, 40f) },
             { "vfx/destroy", (1, 1, 1, 0f) },
             { "cells/GrayAcid", (32, 32, 5, 10f) },
@@ -62,6 +62,22 @@ public static class AnimationContainerDecoder
         }
 
         string normalized = NormalizeAnimationName(filename);
+        if (normalized.Equals("vfx/bz", StringComparison.OrdinalIgnoreCase))
+        {
+            const int SparkFrameCount = 15;
+            if (height != width * 2 * SparkFrameCount)
+            {
+                throw new InvalidDataException(
+                    $"Spark atlas {width}x{height} must contain 15 vertical frames with a 1:2 aspect ratio.");
+            }
+
+            frameWidth = width;
+            frameHeight = height / SparkFrameCount;
+            frameCount = SparkFrameCount;
+            fps = 15f;
+            return true;
+        }
+
         if (s_knownAnimations.TryGetValue(normalized, out var config))
         {
             frameWidth = config.frameWidth;
@@ -104,7 +120,13 @@ public static class AnimationContainerDecoder
         return normalized;
     }
 
-    public static Sprite[] Decode(Texture2D atlas, int width, int height, int frameCount)
+    public static float ResolvePixelsPerUnit(string filename, int frameWidth) =>
+        NormalizeAnimationName(filename).Equals("vfx/bz", StringComparison.OrdinalIgnoreCase)
+            ? frameWidth
+            : RenderingConstants.PIXELS_PER_UNIT;
+
+    public static Sprite[] Decode(Texture2D atlas, int width, int height, int frameCount,
+        float pixelsPerUnit = RenderingConstants.PIXELS_PER_UNIT)
     {
         if (atlas == null)
         {
@@ -150,7 +172,7 @@ public static class AnimationContainerDecoder
                 atlas,
                 new Rect(x, y, width, height),
                 new Vector2(0.5f, 0.5f),
-                RenderingConstants.PIXELS_PER_UNIT);
+                pixelsPerUnit);
         }
 
         return frames;

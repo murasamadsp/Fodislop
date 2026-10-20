@@ -137,6 +137,7 @@ namespace Kern.Core
             RegisterManager<WorldBackgroundSetup>(builder, "World");
             RegisterManager<WorldTextureManager>(builder, "World").AsImplementedInterfaces().AsSelf();
             builder.Register<CellDestructionClip>(Lifetime.Singleton);
+            builder.Register<SpriteAnimationLibrary>(Lifetime.Singleton);
             RegisterManager<ServerAudioEventManager>(builder, "Audio").AsImplementedInterfaces().AsSelf();
             builder.RegisterEntryPoint<PacketHandler>().AsSelf();
 

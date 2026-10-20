@@ -17,12 +17,12 @@ internal static class DummyCellConfigurationUtilities
     // его в корзину, слот — номер CrystalType в BasketPacket.
     public static CrystalType GetMinedCrystal(CellType cell) => cell switch
     {
-        CellType.Green => CrystalType.Green,
-        CellType.Blue => CrystalType.Blue,
-        CellType.Red => CrystalType.Red,
-        CellType.Violet => CrystalType.Violet,
+        CellType.Green or CellType.XGreen => CrystalType.Green,
+        CellType.Blue or CellType.XBlue => CrystalType.Blue,
+        CellType.Red or CellType.XRed => CrystalType.Red,
+        CellType.Violet or CellType.XViolet => CrystalType.Violet,
         CellType.White => CrystalType.White,
-        CellType.Cyan => CrystalType.Cyan,
+        CellType.Cyan or CellType.XCyan => CrystalType.Cyan,
         _ => CrystalType.Unknown,
     };
 

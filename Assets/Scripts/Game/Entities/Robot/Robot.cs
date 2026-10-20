@@ -35,6 +35,8 @@ namespace Kern.Game
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
         [Inject]
+        private ServerAudioEventManager _serverEffects = null!;
+        [Inject]
         private ILocalPlayerState _localPlayer = null!;
         [Inject]
         private IGameplayCamera _gameplayCamera = null!;
@@ -102,7 +104,7 @@ namespace Kern.Game
             _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
             _entityBatchRenderer = entityBatchRenderer;
             InitializeVisualElements();
-            _visuals.Initialize(entityBatchRenderer, _visuals.ClanTransform);
+            _visuals.Initialize(entityBatchRenderer, _visuals.ClanTransform, _sceneObjects);
         }
 
         private void EnsureVisuals()
@@ -167,7 +169,7 @@ namespace Kern.Game
             }
 
             transform.localScale = Vector3.one;
-            _movement.SnapTo(transform.position, transform.eulerAngles.z);
+            _movement.InitializePose(transform.position, transform.eulerAngles.z);
         }
 
         protected void OnEnable()
@@ -189,6 +191,11 @@ namespace Kern.Game
 
         protected void OnDisable()
         {
+            if (IsLocalPlayer && _serverEffects != null)
+            {
+                _serverEffects.SetLocalHealHeld(false);
+            }
+
             _nameplate.SetEnabled(false);
             _lighting.Remove(_lightingEngine);
             _visuals.SetTentaclesActive(false);
@@ -208,19 +215,24 @@ namespace Kern.Game
 
         public void SetBatchedBodyVisible(bool visible) => _visuals.SetBodyVisible(visible);
 
-        public void SetAuraWanted(bool wanted) => _visuals?.SetAuraWanted(wanted, _sceneObjects);
+        public void SetHealHeld(bool held) => _serverEffects.SetLocalHealHeld(held);
 
 
         protected void Start()
         {
             TryInitializeDynamicLightSettings();
 
-            Vector3 snappedPos = new Vector3(
-                Mathf.Floor(transform.position.x) + 0.5f,
-                Mathf.Floor(transform.position.y) + 0.5f,
-                transform.position.z);
-            transform.position = snappedPos;
-            _movement.SnapTo(snappedPos, transform.eulerAngles.z);
+            // A packet may arrive before Start. Never replace its position or
+            // mark a scene pose as an already received server coordinate.
+            if (!_movement.HasReceivedInitialPosition)
+            {
+                Vector3 snappedPos = new Vector3(
+                    Mathf.Floor(transform.position.x) + 0.5f,
+                    Mathf.Floor(transform.position.y) + 0.5f,
+                    transform.position.z);
+                transform.position = snappedPos;
+                _movement.InitializePose(snappedPos, transform.eulerAngles.z);
+            }
 
             if (string.IsNullOrEmpty(_skinPath) && IsLocalPlayer && !Application.isPlaying)
             {
@@ -258,7 +270,6 @@ namespace Kern.Game
 
             TryInitializeDynamicLightSettings();
             ApplyPendingServerPosition();
-            _visuals.TickAura(Time.deltaTime);
 
             if (!IsLocalPlayer && _culler.CheckAndApply(
                 transform,
