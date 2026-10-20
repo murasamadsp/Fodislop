@@ -49,6 +49,10 @@ public sealed class WorldLabels : IWorldLabels, IPostLateTickable, IDisposable
         label.AddToClassList(kind == WorldLabelKind.ChatBubble
             ? "world-label-chat"
             : "world-label-name");
+        if (kind == WorldLabelKind.Nickname)
+        {
+            label.AddToClassList("world-label-nickname");
+        }
         _container!.Add(label);
         var entry = new Entry(this, label, kind);
         _entries.Add(entry);
@@ -194,6 +198,18 @@ public sealed class WorldLabels : IWorldLabels, IPostLateTickable, IDisposable
         // полей. Нику, у которого рамки нет, достаточно кегля и тени.
         public void ApplyScale(float scale)
         {
+            if (_kind == WorldLabelKind.Nickname)
+            {
+                if (_lastScale <= 0f || !Mathf.Approximately(scale, _lastScale))
+                {
+                    Label.style.scale = new Scale(new Vector3(scale, scale, 1f));
+                    _lastScale = scale;
+                    _sizeDirty = true;
+                }
+
+                return;
+            }
+
             if (_baseFontSize <= 0f && !TryCaptureBase())
             {
                 return;
@@ -290,7 +306,7 @@ public sealed class WorldLabels : IWorldLabels, IPostLateTickable, IDisposable
             bool positionChanged = !_hasApplied ||
                 (position - _lastAppliedPosition).sqrMagnitude >
                     PositionApplyEpsilonPx * PositionApplyEpsilonPx;
-            if (!visibilityChanged && !positionChanged)
+            if (!visibilityChanged && !positionChanged && !_sizeDirty)
             {
                 return;
             }
@@ -315,10 +331,12 @@ public sealed class WorldLabels : IWorldLabels, IPostLateTickable, IDisposable
 
             // translate двигает бокс целиком, поэтому угол привязки вычитается
             // из его размера: облако висит нижним центром над роботом,
-            // никнейм — левым верхним углом от точки как есть.
+            // никнейм — нижним левым углом у правого верхнего угла робота.
             Vector3 offset = _kind == WorldLabelKind.ChatBubble
                 ? new Vector3(position.x - (size.x * 0.5f), position.y - size.y)
-                : position;
+                : _kind == WorldLabelKind.Nickname
+                    ? new Vector3(position.x, position.y - size.y * _lastScale)
+                    : position;
             Label.style.translate = new Translate(offset.x, offset.y);
             if (_sizeDirty)
             {
@@ -361,7 +379,7 @@ public sealed class WorldLabels : IWorldLabels, IPostLateTickable, IDisposable
 
         private bool TryResolveSize(out Vector2 size)
         {
-            if (_kind != WorldLabelKind.ChatBubble)
+            if (_kind != WorldLabelKind.ChatBubble && _kind != WorldLabelKind.Nickname)
             {
                 size = Vector2.zero;
                 return true;
