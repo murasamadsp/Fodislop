@@ -123,7 +123,16 @@ public sealed class ServerAudioEvent : IDisposable, IServerWorldEffect
     {
         string eventName = SfxEventNames.Get(effectType);
         long audioStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        _audioSystem.PlayAt(eventName, worldPosition);
+        if (CellDestructionEffect.IsCellDestruction(effectType))
+        {
+            var layer = Kern.Audio.Core.AudioLayer.SFXDefault();
+            layer.IsSpatial = false; // Original SoundManager call: spatialBlend=0, pitch=1.
+            _audioSystem.Play2D(eventName, layer);
+        }
+        else
+        {
+            _audioSystem.PlayAt(eventName, worldPosition);
+        }
         ServerAudioVisualPlayback.RecordIfSlow(eventName, audioStart);
     }
 

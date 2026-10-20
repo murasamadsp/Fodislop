@@ -1,6 +1,5 @@
 #nullable enable
 
-using Kern.Core;
 using Kern.World;
 using UnityEngine;
 
@@ -8,19 +7,18 @@ namespace Kern.Game;
 
 public sealed class RobotMovement
 {
-    private const float MinimumSmoothTime = 0.05f;
-    private const float MaximumSmoothTime = 0.15f;
+    // ***REMOVED*** RobotController constructor (0x1A926D8), Update (0x1A8F6A4).
+    // These are visual response coefficients in 1/seconds, not step speed
+    // or an angular velocity limit. Logical movement remains server-owned.
+    private const float PositionResponsePerSecond = 5f;
+    private const float RotationResponsePerSecond = 10f;
 
     private Vector3 _targetPosition;
     private Vector3 _serverPosition;
     private Vector3 _smoothPosition;
     private Vector3 _currentVelocity;
     private float _targetAngle;
-    private float _smoothAngle;
-    private float _currentAngularVelocity;
-    private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
-    private float _rotationSpeed = ProjectRuntimeContracts.Movement.RobotRotationSpeed;
-    private float _tremor;
+    private Quaternion _smoothRotation = Quaternion.identity;
     private bool _hasReceivedInitialPosition;
 
     public Vector3 TargetPosition
@@ -36,18 +34,6 @@ public sealed class RobotMovement
         get => _targetAngle;
         set => _targetAngle = value;
     }
-    public float MoveSpeed
-    {
-        get => _moveSpeed;
-        set => _moveSpeed = value;
-    }
-
-    public float RotationSpeed
-    {
-        get => _rotationSpeed;
-        set => _rotationSpeed = value;
-    }
-
     public bool HasReceivedInitialPosition => _hasReceivedInitialPosition;
 
     public void SnapTo(Vector3 position, float angle)
@@ -57,9 +43,8 @@ public sealed class RobotMovement
         _serverPosition = position;
         _smoothPosition = position;
         _targetAngle = angle;
-        _smoothAngle = angle;
+        _smoothRotation = Quaternion.Euler(0f, 0f, angle);
         _currentVelocity = Vector3.zero;
-        _currentAngularVelocity = 0f;
     }
 
     public bool ApplyServerPosition(ushort x, ushort y, int worldHeight, bool isLocalPlayer, out bool isInitial)
@@ -90,66 +75,35 @@ public sealed class RobotMovement
     {
         return (_smoothPosition - _targetPosition).sqrMagnitude <= 1e-8f &&
                _currentVelocity.sqrMagnitude <= 1e-8f &&
-               Mathf.Abs(Mathf.DeltaAngle(_smoothAngle, _targetAngle)) <= 0.001f &&
-               Mathf.Abs(_currentAngularVelocity) <= 0.001f &&
-               _tremor <= 0.01f &&
+               Quaternion.Angle(_smoothRotation, Quaternion.Euler(0f, 0f, _targetAngle)) <= 0.001f &&
                tentaclesSettled;
     }
 
     public void TeleportToTarget()
     {
         _smoothPosition = _targetPosition;
-        _smoothAngle = _targetAngle;
+        _smoothRotation = Quaternion.Euler(0f, 0f, _targetAngle);
         _currentVelocity = Vector3.zero;
-        _currentAngularVelocity = 0f;
     }
 
-    public (Vector3 position, float angle, float movementFactor, bool snapped) Step(float deltaTime)
+    public (Vector3 position, float angle, float movementFactor) Step(float deltaTime)
     {
-        float renderDistance = (_smoothPosition - _targetPosition).magnitude;
-        float speedRatio = Mathf.Clamp01(_moveSpeed / ProjectRuntimeContracts.Movement.ReferenceMoveSpeed);
-        float targetSmoothTime = Mathf.Lerp(MinimumSmoothTime, MaximumSmoothTime, speedRatio);
-        float distanceRatio = Mathf.Clamp01(renderDistance / 2f);
-        float smoothTime = Mathf.Lerp(MinimumSmoothTime, targetSmoothTime, distanceRatio);
+        Vector3 previousPosition = _smoothPosition;
+        // Match the reference's per-frame clamped Lerp, including its response
+        // to a long frame. There is no spring velocity or distance-based gain.
+        _smoothPosition = Vector3.Lerp(
+            _smoothPosition, _targetPosition, PositionResponsePerSecond * deltaTime);
+        _smoothRotation = Quaternion.Slerp(
+            _smoothRotation,
+            Quaternion.Euler(0f, 0f, _targetAngle),
+            RotationResponsePerSecond * deltaTime);
 
-        bool snapped = false;
-        if (renderDistance > 28f)
-        {
-            _smoothPosition = _targetPosition;
-            _smoothAngle = _targetAngle;
-            _currentVelocity = Vector3.zero;
-            _currentAngularVelocity = 0f;
-            snapped = true;
-        }
-        else
-        {
-            // No visual speed ceiling. The legacy client had none either: it drove the render
-            // position straight at the server position with a proportional correction and no
-            // limit, so a large sub-snap correction snapped the body forward and whipped the
-            // tail out until the anti-stretch clamps in TailChain yanked it back. Capping the
-            // speed made that whip impossible. It only ever bound on big corrections — with
-            // smoothTime 0.11 the spring peaks near 13 units/s for a 2-unit local step and
-            // near 10 units/s for a 1.5-unit remote packet, both far below the old 18.75.
-            _smoothPosition = Vector3.SmoothDamp(
-                _smoothPosition,
-                _targetPosition,
-                ref _currentVelocity,
-                smoothTime,
-                Mathf.Infinity,
-                deltaTime);
-        }
-
-        Vector3 finalPosition = _smoothPosition;
-        if (_tremor > 0.01f)
-        {
-            _tremor *= Mathf.Pow(0.8f, deltaTime / 0.016f);
-            finalPosition.x += _tremor * (Random.value - 0.5f);
-            finalPosition.y += _tremor * (Random.value - 0.5f);
-        }
-
-        _smoothAngle = Mathf.SmoothDampAngle(_smoothAngle, _targetAngle, ref _currentAngularVelocity, smoothTime, _rotationSpeed, deltaTime);
-
+        // The existing tail simulation consumes actual visual root velocity.
+        // Never feed logical step cadence into the body's visual response.
+        _currentVelocity = deltaTime > 0f
+            ? (_smoothPosition - previousPosition) / deltaTime
+            : Vector3.zero;
         float movementFactor = Mathf.Clamp01(_currentVelocity.magnitude / 5f);
-        return (finalPosition, _smoothAngle, movementFactor, snapped);
+        return (_smoothPosition, _smoothRotation.eulerAngles.z, movementFactor);
     }
 }

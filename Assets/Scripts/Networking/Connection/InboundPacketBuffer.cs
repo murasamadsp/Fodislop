@@ -13,7 +13,7 @@ namespace Kern.Networking.Connection;
 /// <summary>Owns ordered packet admission, teardown generations, and queue accounting.</summary>
 internal sealed class InboundPacketBuffer
 {
-    private readonly ConcurrentQueue<ServerPacket> _queue = new();
+    private readonly ConcurrentQueue<(ServerPacket Packet, int ReservedBytes)> _queue = new();
     private readonly object _admissionGate = new();
     private readonly PacketAdmissionBudget _admission = new(
         ProjectRuntimeContracts.RuntimeLimits.MaximumQueuedPacketCount,
@@ -62,14 +62,16 @@ internal sealed class InboundPacketBuffer
     {
         lock (_admissionGate)
         {
-            if (!_queue.TryDequeue(out ServerPacket queuedPacket))
+            if (!_queue.TryDequeue(out var entry))
             {
                 packet = default;
                 return false;
             }
 
-            packet = queuedPacket;
-            _admission.Release(packet.Size);
+            packet = entry.Packet;
+            // Release exactly the reservation made at admission. Payload Size
+            // is computed from referenced data and is not an accounting token.
+            _admission.Release(entry.ReservedBytes);
             Monitor.PulseAll(_admissionGate);
             return true;
         }
@@ -140,7 +142,7 @@ internal sealed class InboundPacketBuffer
                 Monitor.Wait(_admissionGate, 100);
             }
 
-            _queue.Enqueue(packet);
+            _queue.Enqueue((packet, packetBytes));
         }
 
         if (waitStart != 0)

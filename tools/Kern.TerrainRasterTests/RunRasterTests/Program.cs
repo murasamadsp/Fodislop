@@ -220,8 +220,8 @@ internal static class Program
                 if (mutation == "round-rim-follows-cell-sides")
                 {
                     candidateRim = candidateRim.Replace(
-                        "    if (KernTerrainIsRoundable(surface.packedContour))\n    {\n        // У круглого блока",
-                        "    if (false)\n    {\n        // У круглого блока",
+                        "    if (KernTerrainIsRoundable(surface.packedContour))",
+                        "    if (false)",
                         StringComparison.Ordinal);
                     if (candidateRim == rim) return Fail("round-rim-follows-cell-sides mutation is stale");
                 }

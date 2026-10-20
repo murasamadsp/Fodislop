@@ -207,34 +207,25 @@ float TerrainRimBevel(TerrainSurfaceInputs surface)
         return 1.0;
     }
 
-    float bevel = 1.0;
+    float bevel = TerrainRimSideBevel(surface, foreignSides);
     if (KernTerrainIsRoundable(surface.packedContour))
     {
-        // У круглого блока край — дуга, а не стороны клетки: кайма идёт
-        // вдоль силуэта. За стороной той же поверхности силуэт продолжается
-        // соседом, поэтому там края нет.
+        // Filled quadrants continue into matching neighbors. They have no
+        // circular boundary. A min-union of continuation boxes is not the
+        // distance to the union boundary: shared box corners still yield
+        // zero and create dark spots inside the connected surface.
         float2 uv = QuantizeTerrainFaceUV(surface.contourUV);
         float2 p = uv - 0.5;
-        // Силуэт обрезан клеткой: диск радиуса _RoundableCornerRadius
-        // выходит за её стороны.
-        float edge = max(
-            -TerrainRoundableSignedDistance(uv, surface.packedLightingFlags),
-            TerrainSignedDistanceToBox(p, float2(0.0, 0.0), float2(0.5, 0.5)));
-        // Продолжение — полоса шириной в клетку от её середины до соседа:
-        // перекрытие с силуэтом не даёт объединению занизить расстояние до
-        // края внутри клетки, а ширина не скрывает чужую боковую сторону.
-        int sameSides = (~foreignSides) & (int)KERN_TERRAIN_RIM_SIDES_MASK;
-        if ((sameSides & 1) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.0, 0.75), float2(0.5, 0.75)));
-        if ((sameSides & 2) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(-0.75, 0.0), float2(0.75, 0.5)));
-        if ((sameSides & 4) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.0, -0.75), float2(0.5, 0.75)));
-        if ((sameSides & 8) != 0) edge = min(edge, TerrainSignedDistanceToBox(p, float2(0.75, 0.0), float2(0.75, 0.5)));
-        float influence = saturate(1.0 + edge * _RimDistanceScale);
-        float shade = 1.0 - _RimFalloff * influence;
-        bevel = shade;
-    }
-    else
-    {
-        bevel = TerrainRimSideBevel(surface, foreignSides);
+        int verticalSide = p.y >= 0.0 ? 1 : 4;
+        int horizontalSide = p.x >= 0.0 ? 8 : 2;
+        bool exposedArc = (foreignSides & verticalSide) != 0 &&
+            (foreignSides & horizontalSide) != 0;
+        if (exposedArc)
+        {
+            float distanceToArc = max(_RoundableCornerRadius - length(p), 0.0);
+            float influence = saturate(1.0 - distanceToArc * _RimDistanceScale);
+            bevel = min(bevel, 1.0 - _RimFalloff * influence);
+        }
     }
 
     [branch]

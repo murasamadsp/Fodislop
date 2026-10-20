@@ -101,7 +101,8 @@ internal static class DummyBotRunner
 
             if (positions.Count > 0)
             {
-                sendPacket(new ServerPacket(new HBPacket(positions)));
+                // The loop reuses positions; queued packets must own a snapshot.
+                sendPacket(new ServerPacket(new HBPacket(positions.ToArray())));
             }
 
             await clock.Delay(100, cancellationToken);

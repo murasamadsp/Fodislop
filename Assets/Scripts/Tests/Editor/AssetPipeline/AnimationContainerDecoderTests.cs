@@ -31,8 +31,10 @@ public sealed class AnimationContainerDecoderTests
     [TestCase("vfx/bz", 16, 480, 16, 32, 15, 15f)]
     [TestCase("VFX/death.png", 64, 2496, 64, 64, 39, 40f)]
     [TestCase("VFX/destroy", 1, 1, 1, 1, 1, 0f)]
-    [TestCase("cells/GrayAcid.png", 32, 192, 32, 32, 6, 5f)]
-    [TestCase("cells/PurpleAcid", 32, 192, 32, 32, 6, 5f)]
+    [TestCase("cells/GrayAcid.png", 32, 160, 32, 32, 5, 10f)]
+    [TestCase("cells/PurpleAcid", 32, 160, 32, 32, 5, 10f)]
+    [TestCase("cells/PassiveAcid", 32, 160, 32, 32, 5, 10f)]
+    [TestCase("cells/DeepLazuriteSand.png", 32, 160, 32, 32, 5, 2f)]
     [TestCase("cells/Box.png", 32, 128, 32, 32, 4, 4f)]
     public void TryGetAnimationConfig_KnownAnimations_ReturnsExpectedValues(
         string filename,

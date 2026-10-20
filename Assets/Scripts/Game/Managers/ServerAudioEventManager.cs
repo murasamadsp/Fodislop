@@ -37,6 +37,11 @@ namespace Kern.Game.Managers
         private IAudioSystem _audioSystem = null!;
 
         [Inject]
+        private CellDestructionClip _cellDestructionClip = null!;
+        [Inject]
+        private Kern.World.Lighting.LightingEngine _lighting = null!;
+
+        [Inject]
         private IAssetLoader _assetLoader = null!;
 
         [Inject]
@@ -68,7 +73,8 @@ namespace Kern.Game.Managers
             }
 
             var sfxKey = (packet.EffectType, packet.TargetBotId, packet.X, packet.Y);
-            if (_lastSfxTimes.TryGetValue(sfxKey, out float lastTime) && Time.time - lastTime < 0.04f)
+            bool isCellDestruction = CellDestructionEffect.IsCellDestruction(packet.EffectType);
+            if (!isCellDestruction && _lastSfxTimes.TryGetValue(sfxKey, out float lastTime) && Time.time - lastTime < 0.04f)
             {
                 return;
             }
@@ -79,10 +85,16 @@ namespace Kern.Game.Managers
                 _lastSfxTimes.Clear();
             }
 
-            // Звуковой пакет — только звук. Визуал приходит своим VFXPacket:
-            // перечисления SFX и VFX в протоколе разные. Раньше звук сам брал
-            // слот и грузил визуал с тем же именем, и копание, на которое
-            // приходят оба пакета, рисовалось двумя наложенными эффектами.
+            // Destroy and Geology correspond to legacy CellDestructionD/G.
+            // Their protocol has no separate VFX identifier: play exactly one
+            // shared animation at the packet cell, ignoring robot facing.
+            if (isCellDestruction)
+            {
+                _activeEffects.Add(new CellDestructionEffect(packet.EffectType,
+                    CoordinateUtils.ServerToUnityPos(packet.X, packet.Y, _mapManager.WorldHeight),
+                    _cellDestructionClip, _sceneObjects, _lighting));
+            }
+
             var effect = new ServerAudioEvent(
                 packet,
                 slot: null,

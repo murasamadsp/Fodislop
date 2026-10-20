@@ -85,7 +85,9 @@ public sealed class LightingGPULifecyclePlayModeTests
         _originalPreset = _config.Config.GraphicsPreset;
         _originalTuning = LightingQualityTuningController.Current;
         _originalVectorPolarReference = LightingComputeBinder.DiagnosticVectorPolarReference;
-        if (TestContext.CurrentContext.Test.Name is nameof(SubcellSource_IntegratesContinuousEmitterBounds)
+        if (TestContext.CurrentContext.Test.Name is nameof(CellDestruction_EmissionUsesDynamicSourceUnits)
+            or nameof(CellDestruction_EmitsAndRemovesDynamicWorldLight)
+            or nameof(SubcellSource_IntegratesContinuousEmitterBounds)
             or nameof(StationaryRobotSprite_KeepsReceivingDynamicWorldLighting)
             or nameof(CyclingPresets_RecreatesTargetsWithoutLeakingThem)
             or nameof(VisualTuning_RebuildsFieldsAndRetainsStationarySources)
@@ -197,6 +199,215 @@ public sealed class LightingGPULifecyclePlayModeTests
         _subcellResolution?.Dispose();
         _subcellResolution = null;
         _authentication.Restore();
+    }
+
+    [UnityTest]
+    [Timeout(120_000)]
+    public IEnumerator CellDestruction_EmissionUsesDynamicSourceUnits()
+    {
+        _walkingProbeLighting = PlayModeHarness.RequireInGame<LightingEngine>();
+        _walkingProbeDebugView = _walkingProbeLighting.ActiveDebugView;
+        _walkingProbeCamera = PlayModeHarness.RequireInGame<IGameplayCamera>().Camera;
+        _walkingProbeCameraPosition = _walkingProbeCamera.transform.position;
+        _walkingProbeOrthographicSize = _walkingProbeCamera.orthographicSize;
+        _walkingProbeAspect = _walkingProbeCamera.aspect;
+        _walkingProbeFollow = PlayModeHarness.RequireInGame<CameraFollow>();
+        _walkingProbeFollowWasEnabled = _walkingProbeFollow.enabled;
+        _walkingProbeFollow.enabled = false;
+        _walkingProbeCamera.aspect = 1f;
+        _walkingProbeCamera.orthographicSize = 2f;
+        _subcellRobots = Object.FindObjectsByType<Robot>();
+        _subcellRobotEnabled = _subcellRobots.Select(robot => robot.enabled).ToArray();
+        foreach (Robot robot in _subcellRobots) { robot.enabled = false; }
+        LightingEngine lighting = _walkingProbeLighting;
+        lighting.ClearDynamicLights();
+        yield return SelectAndSettle(GraphicsPreset.Overdrive);
+        float previousTimeScale = Time.timeScale;
+        Time.timeScale = 0;
+        var clip = new CellDestructionClip();
+        Vector3 source = _walkingProbeCamera.transform.position;
+        source.z = 0;
+        var effect = new CellDestructionEffect(SFX.Destroy, source, clip,
+            PlayModeHarness.RequireInGame<ISceneObjectFactory>(), lighting);
+        effect.Advance(0.16666667f); // The pale cloud in the reported screenshot.
+        // Independent original-source integral for frame 5. World illumination
+        // uses normal dynamic-source gain, independently of sprite compositing.
+        Color sceneEnergy = new(0.437741313f, 0.274530282f, 0.246966589f);
+        try
+        {
+            yield return PlayModeHarness.Frames(3);
+            RenderTexture dynamic = lighting.GPUResources.Direct.Dynamic!;
+            Vector4 rect = lighting.WorldRect;
+            int x = Mathf.FloorToInt((source.x - rect.x) / rect.z * dynamic.width) - 32;
+            int y = Mathf.FloorToInt((source.y - rect.y) / rect.w * dynamic.height) - 32;
+            ushort[] actual = System.Array.Empty<ushort>();
+            ushort[] reference = System.Array.Empty<ushort>();
+            yield return ReadHalfRegion(dynamic, x, y, 64, 64, pixels => actual = pixels);
+            Color[] litPixels = System.Array.Empty<Color>();
+            Color[] unlitPixels = System.Array.Empty<Color>();
+            yield return SaveCellDestructionFrame(_walkingProbeCamera, "actual", pixels => litPixels = pixels);
+            lighting.ClearDynamicLights();
+            yield return PlayModeHarness.Frames(3);
+            yield return SaveCellDestructionFrame(_walkingProbeCamera, "without-effect-light", pixels => unlitPixels = pixels);
+            float receiverGain = 0;
+            int receiverCount = 0;
+            for (int py = 0; py < 512; py++)
+            {
+                for (int px = 0; px < 512; px++)
+                {
+                    // Outside the full two-cell sprite slot: only scenery can change.
+                    if (Mathf.Abs(px - 255.5f) <= 136 && Mathf.Abs(py - 255.5f) <= 136) { continue; }
+                    int pixel = py * 512 + px;
+                    float gain = litPixels[pixel].r - unlitPixels[pixel].r;
+                    if (gain > 1f / 255f) { receiverCount++; receiverGain += gain; }
+                }
+            }
+
+            TestContext.WriteLine($"finalSceneryLitPixels={receiverCount}; redGainSum={receiverGain:R}; spriteExcluded=true");
+            Assert.That(receiverCount, Is.GreaterThan(100), "The effect must visibly illuminate scenery outside its sprite in the production final image.");
+            _walkingProbeLightRegistered = true;
+            lighting.SetDynamicLight(WalkingProbeLightId, source, sceneEnergy, 1f);
+            yield return PlayModeHarness.Frames(3);
+            yield return ReadHalfRegion(dynamic, x, y, 64, 64, pixels => reference = pixels);
+            yield return SaveCellDestructionFrame(_walkingProbeCamera, "scene-unit-reference");
+            float peak = 0;
+            float referencePeak = 0;
+            float error = 0;
+            for (int pixel = 0; pixel < actual.Length; pixel += 4)
+            {
+                float value = Mathf.HalfToFloat(actual[pixel]);
+                float expected = Mathf.HalfToFloat(reference[pixel]);
+                peak = Mathf.Max(peak, value);
+                referencePeak = Mathf.Max(referencePeak, expected);
+                error = Mathf.Max(error, Mathf.Abs(value - expected));
+            }
+
+            TestContext.WriteLine($"sceneUnitActualPeak={peak:R}; independentReferencePeak={referencePeak:R}; ratio={peak / referencePeak:R}; maximumError={error:R}; receiverPixels=4096");
+            Assert.That(referencePeak, Is.GreaterThan(0));
+            Assert.That(error, Is.LessThan(0.001f), "Effect lighting must use the normal dynamic-source gain independently of sprite compositing.");
+        }
+        finally
+        {
+            effect.Dispose();
+            clip.Dispose();
+            Time.timeScale = previousTimeScale;
+        }
+    }
+
+    private static IEnumerator SaveCellDestructionFrame(Camera gameplayCamera, string name, System.Action<Color[]>? readback = null)
+    {
+        using var diagnostic = new FrameBenchmarkPlayModeTests.DiagnosticCameraScope(
+            gameplayCamera, PlayModeHarness.RequireInGame<ISceneObjectFactory>());
+        Camera camera = diagnostic.Camera;
+        var target = new RenderTexture(512, 512, 24, RenderTextureFormat.ARGBHalf);
+        Assert.That(target.Create(), Is.True);
+        Texture2D image = RuntimeTextureFactory.CreateRGBA32NoMip(512, 512, "Cell destruction final image",
+            RuntimeTextureColorSpace.Linear, FilterMode.Point, TextureWrapMode.Clamp);
+        try
+        {
+            camera.targetTexture = target;
+            camera.enabled = true;
+            yield return PlayModeHarness.Frames(3);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                RenderTexture.active = target;
+                image.ReadPixels(new Rect(0, 0, 512, 512), 0, 0);
+                image.Apply();
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+            }
+
+            // Encode a viewable SDR diagnostic after the real production
+            // bloom/URP/output passes. No game shader or camera is modified.
+            Color[] pixels = image.GetPixels();
+            readback?.Invoke((Color[])pixels.Clone());
+            for (int i = 0; i < pixels.Length; i++) { pixels[i] = pixels[i].gamma; }
+            image.SetPixels(pixels);
+            image.Apply();
+            string directory = System.IO.Path.Combine(Application.dataPath, "../Logs/Diagnostics/cell-destruction");
+            System.IO.Directory.CreateDirectory(directory);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(directory, name + ".png"), image.EncodeToPNG());
+        }
+        finally
+        {
+            camera.enabled = false;
+            camera.targetTexture = null;
+            target.Release();
+            Object.Destroy(target);
+            Object.Destroy(image);
+        }
+    }
+
+    [UnityTest]
+    [Timeout(120_000)]
+    public IEnumerator CellDestruction_EmitsAndRemovesDynamicWorldLight()
+    {
+        _walkingProbeLighting = PlayModeHarness.RequireInGame<LightingEngine>();
+        _walkingProbeDebugView = _walkingProbeLighting.ActiveDebugView;
+        _walkingProbeCamera = PlayModeHarness.RequireInGame<IGameplayCamera>().Camera;
+        _walkingProbeCameraPosition = _walkingProbeCamera.transform.position;
+        _walkingProbeOrthographicSize = _walkingProbeCamera.orthographicSize;
+        _walkingProbeAspect = _walkingProbeCamera.aspect;
+        _walkingProbeFollow = PlayModeHarness.RequireInGame<CameraFollow>();
+        _walkingProbeFollowWasEnabled = _walkingProbeFollow.enabled;
+        _walkingProbeFollow.enabled = false;
+        _walkingProbeCamera.aspect = 1f;
+        _walkingProbeCamera.orthographicSize = 4f;
+        _subcellRobots = Object.FindObjectsByType<Robot>();
+        _subcellRobotEnabled = _subcellRobots.Select(robot => robot.enabled).ToArray();
+        foreach (Robot robot in _subcellRobots) { robot.enabled = false; }
+        _walkingProbeLighting.ClearDynamicLights();
+        yield return SelectAndSettle(GraphicsPreset.Overdrive);
+        float previousTimeScale = Time.timeScale;
+        Time.timeScale = 0;
+        var clip = new CellDestructionClip();
+        Vector3 source = _walkingProbeCamera.transform.position;
+        source.z = 0;
+        var effect = new CellDestructionEffect(SFX.Destroy, source, clip,
+            PlayModeHarness.RequireInGame<ISceneObjectFactory>(), _walkingProbeLighting);
+        try
+        {
+            yield return PlayModeHarness.Frames(3);
+            LightingEngine lighting = _walkingProbeLighting;
+            Assert.That(lighting.DynamicLightCount, Is.EqualTo(1));
+            Assert.That(lighting.UploadedDynamicLightCount, Is.EqualTo(1));
+            RenderTexture dynamic = lighting.GPUResources.Direct.Dynamic!;
+            Vector4 rect = lighting.WorldRect;
+            int x = Mathf.FloorToInt((source.x - rect.x) / rect.z * dynamic.width) - 32;
+            int y = Mathf.FloorToInt((source.y - rect.y) / rect.w * dynamic.height) - 32;
+            ushort[] emitted = System.Array.Empty<ushort>();
+            yield return ReadHalfRegion(dynamic, x, y, 64, 64, pixels => emitted = pixels);
+            float peak = 0;
+            for (int pixel = 0; pixel < emitted.Length; pixel += 4)
+            {
+                peak = Mathf.Max(peak, Mathf.HalfToFloat(emitted[pixel]));
+            }
+
+            Assert.That(peak, Is.GreaterThan(0.0001f), "The real dynamic transport must carry the effect's emission into world radiance.");
+            effect.Advance(0.25f);
+            yield return PlayModeHarness.Frames(3);
+            Assert.That(lighting.DynamicLightCount, Is.Zero);
+            Assert.That(lighting.UploadedDynamicLightCount, Is.Zero);
+            ushort[] removed = System.Array.Empty<ushort>();
+            yield return ReadHalfRegion(dynamic, x, y, 64, 64, pixels => removed = pixels);
+            float remaining = 0;
+            for (int pixel = 0; pixel < removed.Length; pixel += 4)
+            {
+                remaining = Mathf.Max(remaining, Mathf.HalfToFloat(removed[pixel]));
+            }
+
+            Assert.That(remaining, Is.Zero, "DestroySelf must leave no stale dynamic radiance.");
+            TestContext.WriteLine($"effectEmissionPeak={peak:R}; removedPeak={remaining:R}; receiverPixels=4096; uploadedSources={lighting.UploadedDynamicLightCount}");
+        }
+        finally
+        {
+            effect.Dispose();
+            clip.Dispose();
+            Time.timeScale = previousTimeScale;
+        }
     }
 
     [UnityTest]

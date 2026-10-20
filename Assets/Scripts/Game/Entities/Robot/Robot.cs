@@ -44,8 +44,6 @@ namespace Kern.Game
         private string _skinPath = string.Empty;
         [SerializeField]
         private string _tailPath = string.Empty;
-        [SerializeField]
-        private float _rotationSpeed = ProjectRuntimeContracts.Movement.RobotRotationSpeed;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
@@ -151,15 +149,12 @@ namespace Kern.Game
             set
             {
                 _moveSpeed = value;
-                _movement.MoveSpeed = value;
             }
         }
 
         protected void Awake()
         {
             EnsureVisuals();
-            _movement.MoveSpeed = _moveSpeed;
-            _movement.RotationSpeed = _rotationSpeed;
 
             if (_spriteRenderer == null)
             {
@@ -294,12 +289,7 @@ namespace Kern.Game
                 return;
             }
 
-            var (finalPosition, nowRotationAngle, movementFactor, snapped) = _movement.Step(Time.deltaTime);
-
-            if (snapped)
-            {
-                _visuals.SnapTentacles(_movement.SmoothPosition);
-            }
+            var (finalPosition, nowRotationAngle, movementFactor) = _movement.Step(Time.deltaTime);
 
             transform.position = finalPosition;
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
