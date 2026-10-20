@@ -218,7 +218,14 @@ float TerrainRimBevel(TerrainSurfaceInputs surface)
         float2 p = uv - 0.5;
         int verticalSide = p.y >= 0.0 ? 1 : 4;
         int horizontalSide = p.x >= 0.0 ? 8 : 2;
-        bool exposedArc = (foreignSides & verticalSide) != 0 &&
+        // Contour continuation uses physical foreground neighbors, whereas
+        // foreignSides distinguishes rim materials. A different material can
+        // fill this quadrant too: it must not create a circular rim inside
+        // that filled area, especially outside the disk where arc distance is 0.
+        int contourSides = KernTerrainForegroundSides(
+            KernTerrainLightingFlags(surface.packedLightingFlags));
+        bool hasCircularBoundary = (contourSides & (verticalSide | horizontalSide)) == 0;
+        bool exposedArc = hasCircularBoundary && (foreignSides & verticalSide) != 0 &&
             (foreignSides & horizontalSide) != 0;
         if (exposedArc)
         {

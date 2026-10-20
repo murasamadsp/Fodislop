@@ -435,7 +435,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                             _TerrainDebugDeltaContrast),
                         1.0);
                 }
-                float finalAlpha = cellCoverage;
+                // The contour is only one part of coverage. Atlas filtering
+                // also produces fractional coverage along authored silhouettes
+                // (boulders, sand). Do not turn those dark edge texels opaque.
+                float finalAlpha = cellCoverage * texColor.a;
 
                 float4 worldLight = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRGB = finalRGB * worldLight.rgb;
@@ -445,11 +448,13 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     input.worldPosition.xy,
                     _WorldLightRect);
                 #endif
-                if (finalAlpha < 0.99 && finalAlpha > 0.01)
+                if (cellCoverage < 0.99 && cellCoverage > 0.01)
                 {
-                    litRGB /= max(finalAlpha, _PremultiplyAlphaFloor);
+                    litRGB /= max(cellCoverage, _PremultiplyAlphaFloor);
                 }
 
+                // Keep texture coverage in SrcAlpha blending; compensating
+                // RGB by texColor.a would cancel the authored transparency.
                 return half4(litRGB, finalAlpha);
             }
             ENDHLSL

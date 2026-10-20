@@ -51,7 +51,9 @@ namespace Kern.UI
         }
 
         [Inject]
-        private void Construct(ChatEventGateway chatEvents, TouchCommands touchCommands)
+        private void Construct(
+            ChatEventGateway chatEvents,
+            TouchCommands touchCommands)
         {
             // Кнопка «Чат» HUD — тач-аналог TAB.
             _touchCommands = touchCommands;
@@ -290,18 +292,18 @@ namespace Kern.UI
 
         private void OnSendClicked()
         {
-            if (_view?.InputField == null || _muteTracker.IsMuted)
-            {
-                return;
-            }
-
-            if (!CanSendToGlobalChannel)
+            if (_view?.InputField == null)
             {
                 return;
             }
 
             string text = _view.InputField.value.Trim();
             if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            if (_muteTracker.IsMuted || !CanSendToGlobalChannel)
             {
                 return;
             }

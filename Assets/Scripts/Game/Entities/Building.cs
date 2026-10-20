@@ -13,7 +13,6 @@ using Kern.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 using VContainer;
-using MinesServer.Data;
 
 namespace Kern.Game
 {

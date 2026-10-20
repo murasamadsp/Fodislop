@@ -159,6 +159,8 @@ public class ModalWindowHandler : IDisposable
             throw new InvalidOperationException(
                 "[ModalWindowHandler] Resources/UI/Overlays/ModalWindow.uxml is required.");
         TemplateContainer tree = template.Instantiate();
+        tree.AddToClassList("ui-fullscreen");
+        tree.pickingMode = PickingMode.Ignore;
 
         _overlay = tree.Q<VisualElement>("ModalOverlay") ??
             throw new InvalidOperationException(
